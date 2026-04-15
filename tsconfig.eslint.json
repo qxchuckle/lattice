@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": true,
+    "lib": ["ESNext"],
+    "types": ["node"]
+  },
+  "include": ["**/*", "**/.*.*"],
+  "exclude": [
+    "**/dist",
+    "**/node_modules",
+    "**/out",
+    "**/test",
+    "**/coverage",
+    "**/*.d.ts",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/out/**",
+    ".cursor/**",
+    ".claude/**"
+  ]
+}

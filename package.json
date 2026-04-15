@@ -1,0 +1,71 @@
+{
+  "name": "@qcqx/lattice-monorepo",
+  "private": true,
+  "description": "Lattice — 跨项目 AI 上下文管理工具",
+  "license": "MIT",
+  "author": {
+    "name": "qcqx",
+    "url": "https://github.com/qxchuckle"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qxchuckle/lattice.git"
+  },
+  "homepage": "https://github.com/qxchuckle/lattice#readme",
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
+  "keywords": [
+    "lattice",
+    "ai",
+    "context",
+    "cross-project",
+    "monorepo"
+  ],
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "better-sqlite3",
+      "onnxruntime-node",
+      "protobufjs",
+      "sharp"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "build:core": "pnpm --filter @qcqx/lattice-core run build",
+    "build:cli": "pnpm --filter @qcqx/lattice-cli run build",
+    "dev:core": "pnpm --filter @qcqx/lattice-core run dev",
+    "publish:core": "pnpm --filter @qcqx/lattice-core publish --no-git-checks",
+    "publish:cli": "pnpm --filter @qcqx/lattice-cli publish --no-git-checks",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint-staged": "lint-staged",
+    "check-types": "pnpm -r run check-types",
+    "rag:benchmark": "node scripts/rag-benchmark.mjs",
+    "clean": "pnpm -r run clean"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
+  "devDependencies": {
+    "@archoleat/prettier-define-config": "^1.2.1",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.15.2",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.58.1"
+  }
+}

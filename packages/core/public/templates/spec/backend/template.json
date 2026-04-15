@@ -1,0 +1,5 @@
+{
+  "description": "后端开发规范模板（含分层和数据库约定）",
+  "defaultScope": "user",
+  "source": "built-in"
+}

@@ -1,0 +1,5 @@
+{
+  "description": "API 规范模板（含接口总览与请求响应约定）",
+  "defaultScope": "project",
+  "source": "built-in"
+}
