@@ -10,6 +10,33 @@
 
 ## 常见流程
 
+### 需要建立任务链路时
+
+如果一个任务明显属于另一个任务的后续步骤，优先在创建时指定父任务，而不是只在 PRD 里靠文字描述关系。
+
+- 创建子任务时使用：
+
+```bash
+lattice task create "<title>" --current --parent <parent-task-id>
+```
+
+- 需要查看当前任务在整条链路中的位置时，使用：
+
+```bash
+lattice task lineage <task-id>
+lattice task tree <task-id>
+lattice task tree <task-id> --descendants
+```
+
+- 需要修改任务归属时，使用：
+
+```bash
+lattice task update <task-id> --parent <parent-task-id>
+lattice task update <task-id> --clear-parent
+```
+
+- 如果某个任务仍然挂着子任务，不要直接删除或忽略它的链路关系；先迁移、清空或完成这些子任务，再继续后续操作。
+
 ### 已有任务 ID
 
 运行：
@@ -54,6 +81,9 @@ lattice context --task <task-id>
 
 - 不要停留在默认生成的空白标题
 - 至少记录任务目标、约束、当前方案、关键待办和待确认点
+- `prd.md` 可以只承担任务主入口职责，不必把所有细节都堆在一个文件里
+- 当单个任务过大、`prd.md` 已经过长，或任务天然分成多个步骤时，可以把详细设计、计划、阶段记录、复盘等拆到该任务目录下的其他 Markdown 文件中，再由 `prd.md` 负责摘要、索引和跳转
+- 这种“渐进式加载”尤其适合大任务、长周期任务，以及按 plan / phase / step 分阶段推进的任务
 - 如果用户后续补充了设计、约束、边界条件、方案取舍或新的阶段结论，要自行判断是否需要同步更新 PRD
 - 如果在任务执行过程中发现实际涉及的项目范围发生变化，例如新增了其他关联项目，或确认某些项目已经不再相关，也要同步更新任务元数据里的 `projects` 字段
 - 如果 `prd.md` 变得过长，可以把详细内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须是任务的主入口，负责摘要、结构索引和子文档链接
@@ -103,7 +133,13 @@ lattice search "<根据当前对话和命令参数总结出的任务标题或主
 lattice task list
 lattice task list --current
 lattice task create "<title>" --current
+lattice task create "<title>" --current --parent <task-id>
 lattice task update <id> --add-project <project-id>
+lattice task update <id> --parent <task-id>
+lattice task update <id> --clear-parent
+lattice task tree <id>
+lattice task tree <id> --descendants
+lattice task lineage <id>
 lattice task start <id>
 lattice task complete <id>
 lattice task archive <id>

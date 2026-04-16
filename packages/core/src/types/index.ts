@@ -20,8 +20,21 @@ export interface TaskMeta {
   title: string;
   status: TaskStatus;
   projects?: string[];
+  parentTaskId?: string;
   created: string;
   updated?: string;
+}
+
+/** 任务树节点（运行时计算，不落盘） */
+export interface TaskTreeNode {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  projects?: string[];
+  parentTaskId?: string;
+  created: string;
+  updated?: string;
+  nextTasks: TaskTreeNode[];
 }
 
 /** Spec frontmatter 字段 */

@@ -2,6 +2,7 @@
 export type {
   ProjectMeta,
   TaskMeta,
+  TaskTreeNode,
   TaskStatus,
   SearchDocumentType,
   SearchDocumentMeta,
@@ -149,6 +150,9 @@ export {
   archiveTask,
   deleteTask,
   getTaskPrd,
+  getTaskLineage,
+  getTaskDescendantTree,
+  getTaskContainingTree,
 } from './task';
 
 // 模板

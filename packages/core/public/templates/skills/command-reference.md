@@ -101,10 +101,14 @@
 - `<title>`：任务标题
 - `-p, --project <ids...>`：关联一个或多个项目 ID
 - `--current`：自动关联当前目录对应项目
+- `--parent <id>`：指定父任务 ID，支持完整 ID 或前缀匹配
 
 ### `lattice task info <id>`
 
 - `<id>`：任务 ID
+- `--lineage`：显示父任务链路
+- `--tree`：显示当前任务所在的整颗任务树
+- `--descendants`：显示当前任务作为根的后代任务树
 - `--json`：以 JSON 输出
 
 ### `lattice task update <id>`
@@ -117,6 +121,19 @@
 - `--remove-project <ids...>`：移除关联项目 ID
 - `--clear-projects`：清空关联项目
 - `--add-current-project`：将当前目录对应项目加入关联项目
+- `--parent <id>`：修改父任务 ID，支持完整 ID 或前缀匹配
+- `--clear-parent`：清空父任务
+
+### `lattice task tree <id>`
+
+- `<id>`：任务 ID，支持前缀匹配
+- `--descendants`：只显示当前任务作为根的后代树
+- `--json`：以 JSON 输出任务树
+
+### `lattice task lineage <id>`
+
+- `<id>`：任务 ID，支持前缀匹配
+- `--json`：以 JSON 输出父任务链路
 
 ### `lattice task start <id>`
 

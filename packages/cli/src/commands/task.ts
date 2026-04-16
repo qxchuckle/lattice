@@ -9,10 +9,12 @@ import {
   getTaskMeta,
   updateTask,
   archiveTask,
-  deleteTask,
   getTaskPrd,
+  getTaskLineage,
+  getTaskDescendantTree,
+  getTaskContainingTree,
 } from '@qcqx/lattice-core';
-import type { TaskMeta, TaskStatus } from '@qcqx/lattice-core';
+import type { TaskMeta, TaskStatus, TaskTreeNode } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
@@ -32,6 +34,33 @@ async function resolveTaskById(username: string, input: string): Promise<TaskMet
 
 function normalizeProjectIds(ids: string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+function formatTaskTree(node: TaskTreeNode, depth = 0): string[] {
+  const prefix = `${'  '.repeat(depth)}- `;
+  const lines = [`${prefix}${node.title} [${node.status}] (${node.id})`];
+  for (const child of node.nextTasks) {
+    lines.push(...formatTaskTree(child, depth + 1));
+  }
+  return lines;
+}
+
+function formatLineage(lineage: TaskMeta[]): string[] {
+  return lineage.map((task, index) => `${index === 0 ? '- ' : '  -> '}${task.title} [${task.status}] (${task.id})`);
+}
+
+async function getTaskGraphViews(username: string, taskId: string): Promise<{
+  lineage: TaskMeta[] | null;
+  tree: TaskTreeNode | null;
+  descendants: TaskTreeNode | null;
+}> {
+  const [lineage, tree, descendants] = await Promise.all([
+    getTaskLineage(username, taskId),
+    getTaskContainingTree(username, taskId),
+    getTaskDescendantTree(username, taskId),
+  ]);
+
+  return { lineage, tree, descendants };
 }
 
 export function registerTaskCommand(program: Command): void {
@@ -108,6 +137,7 @@ export function registerTaskCommand(program: Command): void {
     .description('创建任务')
     .option('-p, --project <ids...>', '关联项目 ID')
     .option('--current', '关联当前目录对应的项目')
+    .option('--parent <id>', '指定父任务 ID')
     .action(async (title: string, opts) => {
       try {
         const username = await getUsername();
@@ -120,8 +150,20 @@ export function registerTaskCommand(program: Command): void {
           if (pid && !projects.includes(pid)) projects.push(pid);
         }
 
+        let parentTaskId: string | undefined;
+        if (typeof opts.parent === 'string') {
+          const parentTask = await resolveTaskById(username, opts.parent);
+          if (!parentTask) {
+            logger.raw(chalk.yellow(`未找到父任务：${opts.parent}`));
+            closeDb();
+            return;
+          }
+          parentTaskId = parentTask.id;
+        }
+
         const task = await createTask(username, title, {
           projects: projects.length > 0 ? projects : undefined,
+          parentTaskId,
         });
 
         closeDb();
@@ -129,6 +171,9 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.green('✓ 任务已创建'));
         logger.raw(chalk.dim(`  ID：${task.id}`));
         logger.raw(chalk.dim(`  标题：${task.title}`));
+        if (task.parentTaskId) {
+          logger.raw(chalk.dim(`  父任务：${task.parentTaskId}`));
+        }
         if (task.projects?.length) {
           logger.raw(chalk.dim(`  关联项目：${task.projects.join(', ')}`));
         }
@@ -142,21 +187,44 @@ export function registerTaskCommand(program: Command): void {
   cmd
     .command('info <id>')
     .description('查看任务详情')
+    .option('--lineage', '显示父任务链路')
+    .option('--tree', '显示当前任务所在整棵任务树')
+    .option('--descendants', '显示当前任务的后代树')
     .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
-        const meta = await getTaskMeta(username, id);
-
-        if (!meta) {
+        const match = await resolveTaskById(username, id);
+        if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
           return;
         }
 
-        const prd = await getTaskPrd(username, id);
+        const meta = await getTaskMeta(username, match.id);
+
+        if (!meta) {
+          logger.raw(chalk.yellow(`未找到任务：${match.id}`));
+          return;
+        }
+
+        const prd = await getTaskPrd(username, match.id);
+        const shouldLoadViews = opts.json || opts.lineage || opts.tree || opts.descendants;
+        const views = shouldLoadViews ? await getTaskGraphViews(username, match.id) : null;
 
         if (opts.json) {
-          logger.raw(JSON.stringify({ meta, prd }, null, 2));
+          logger.raw(
+            JSON.stringify(
+              {
+                meta,
+                prd,
+                lineage: views?.lineage ?? null,
+                tree: views?.tree ?? null,
+                descendants: views?.descendants ?? null,
+              },
+              null,
+              2,
+            ),
+          );
           return;
         }
 
@@ -167,12 +235,30 @@ export function registerTaskCommand(program: Command): void {
         if (meta.projects?.length) {
           logger.raw(`  关联项目：${meta.projects.join(', ')}`);
         }
+        if (meta.parentTaskId) {
+          logger.raw(`  父任务：${meta.parentTaskId}`);
+        }
         logger.raw(`  创建：${meta.created}`);
         if (meta.updated) logger.raw(`  更新：${meta.updated}`);
 
         if (prd) {
           logger.raw(chalk.dim('\n─── PRD ───'));
           logger.raw(prd);
+        }
+
+        if (opts.lineage && views?.lineage) {
+          logger.raw(chalk.dim('\n─── 父任务链路 ───'));
+          logger.raw(formatLineage(views.lineage).join('\n'));
+        }
+
+        if (opts.tree && views?.tree) {
+          logger.raw(chalk.dim('\n─── 所在任务树 ───'));
+          logger.raw(formatTaskTree(views.tree).join('\n'));
+        }
+
+        if (opts.descendants && views?.descendants) {
+          logger.raw(chalk.dim('\n─── 后代任务树 ───'));
+          logger.raw(formatTaskTree(views.descendants).join('\n'));
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -191,6 +277,8 @@ export function registerTaskCommand(program: Command): void {
     .option('--remove-project <ids...>', '移除关联项目 ID')
     .option('--clear-projects', '清空关联项目')
     .option('--add-current-project', '将当前目录对应项目加入关联项目')
+    .option('--parent <id>', '修改父任务 ID')
+    .option('--clear-parent', '清空父任务')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -264,6 +352,24 @@ export function registerTaskCommand(program: Command): void {
           updates.projects = projects;
         }
 
+        if (opts.parent && opts.clearParent) {
+          logger.raw(chalk.yellow('不能同时指定 --parent 和 --clear-parent'));
+          closeDb();
+          return;
+        }
+
+        if (typeof opts.parent === 'string') {
+          const parentTask = await resolveTaskById(username, opts.parent);
+          if (!parentTask) {
+            logger.raw(chalk.yellow(`未找到父任务：${opts.parent}`));
+            closeDb();
+            return;
+          }
+          updates.parentTaskId = parentTask.id;
+        } else if (opts.clearParent) {
+          updates.parentTaskId = undefined;
+        }
+
         if (Object.keys(updates).length === 0) {
           logger.raw(chalk.yellow('没有可更新的字段'));
           closeDb();
@@ -281,6 +387,7 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 任务 ${updated.title} 已更新`));
         logger.raw(chalk.dim(`  ID：${updated.id}`));
         logger.raw(chalk.dim(`  状态：${updated.status}`));
+        logger.raw(chalk.dim(`  父任务：${updated.parentTaskId ?? '无'}`));
         logger.raw(
           chalk.dim(`  关联项目：${updated.projects?.length ? updated.projects.join(', ') : '无'}`),
         );
@@ -368,6 +475,78 @@ export function registerTaskCommand(program: Command): void {
         } else {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
         }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // tree
+  cmd
+    .command('tree <id>')
+    .description('查看任务树')
+    .option('--descendants', '只显示当前任务为根的后代树')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          return;
+        }
+
+        const tree = opts.descendants
+          ? await getTaskDescendantTree(username, match.id)
+          : await getTaskContainingTree(username, match.id);
+
+        if (!tree) {
+          logger.raw(chalk.yellow(`未找到任务树：${match.id}`));
+          return;
+        }
+
+        if (opts.json) {
+          logger.raw(JSON.stringify(tree, null, 2));
+          return;
+        }
+
+        logger.raw(chalk.bold(`\n${opts.descendants ? '后代任务树' : '所在任务树'}`));
+        logger.raw(chalk.dim('─'.repeat(40)));
+        logger.raw(formatTaskTree(tree).join('\n'));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // lineage
+  cmd
+    .command('lineage <id>')
+    .description('查看父任务链路')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          return;
+        }
+
+        const lineage = await getTaskLineage(username, match.id);
+        if (!lineage) {
+          logger.raw(chalk.yellow(`未找到任务链路：${match.id}`));
+          return;
+        }
+
+        if (opts.json) {
+          logger.raw(JSON.stringify(lineage, null, 2));
+          return;
+        }
+
+        logger.raw(chalk.bold('\n父任务链路'));
+        logger.raw(chalk.dim('─'.repeat(40)));
+        logger.raw(formatLineage(lineage).join('\n'));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
