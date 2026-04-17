@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { confirm, input } from '@inquirer/prompts';
+import { checkbox, confirm, input } from '@inquirer/prompts';
 import ignore from 'ignore';
 import { execSync } from 'node:child_process';
 import { cp, rm } from 'node:fs/promises';
@@ -317,13 +317,16 @@ function renderGitignoreSections(sections: GitignoreSection[]): string {
 }
 
 interface AIToolConfig {
+  id: string;
   name: string;
   detectPath: string;
+  detectPaths?: string[];
   rulesPath: string;
   rulesContent: string;
   skillPath?: string;
   commandsRoot?: string;
   appendRules?: boolean;
+  defaultChecked?: boolean;
 }
 
 async function detectAndConfigureAITools(): Promise<void> {
@@ -331,6 +334,7 @@ async function detectAndConfigureAITools(): Promise<void> {
 
   const tools: AIToolConfig[] = [
     {
+      id: 'cursor',
       name: 'Cursor',
       detectPath: join(home, '.cursor'),
       rulesPath: join(home, '.cursor', 'rules', 'lattice.mdc'),
@@ -339,6 +343,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       commandsRoot: join(home, '.cursor', 'commands'),
     },
     {
+      id: 'claude-code',
       name: 'Claude Code',
       detectPath: join(home, '.claude'),
       rulesPath: join(home, '.claude', 'CLAUDE.md'),
@@ -348,48 +353,135 @@ async function detectAndConfigureAITools(): Promise<void> {
       appendRules: true,
     },
     {
+      id: 'windsurf',
       name: 'Windsurf',
       detectPath: join(home, '.windsurf'),
       rulesPath: join(home, '.windsurf', 'rules', 'lattice.md'),
       rulesContent: renderWindsurfRules(),
     },
     {
+      id: 'kiro',
       name: 'Kiro',
       detectPath: join(home, '.kiro'),
       rulesPath: join(home, '.kiro', 'steering', 'lattice.md'),
       rulesContent: renderKiroSteering(),
     },
+    {
+      id: 'agent',
+      name: 'Agent (~/.agent)',
+      detectPath: join(home, '.agent'),
+      detectPaths: [join(home, '.agents')],
+      rulesPath: join(home, '.agent', 'AGENT.md'),
+      rulesContent: renderClaudeCode(),
+      commandsRoot: join(home, '.agent', 'commands'),
+      skillPath: join(home, '.agent', 'skills', 'lattice', 'SKILL.md'),
+      defaultChecked: true,
+    },
+    {
+      id: 'qoder',
+      name: 'Qoder',
+      detectPath: join(home, '.qoder'),
+      rulesPath: join(home, '.qoder', 'AGENT.md'),
+      rulesContent: renderClaudeCode(),
+      commandsRoot: join(home, '.qoder', 'commands'),
+      skillPath: join(home, '.qoder', 'skills', 'lattice', 'SKILL.md'),
+    },
+    {
+      id: 'trae',
+      name: 'Trae',
+      detectPath: join(home, '.trae'),
+      detectPaths: [join(home, '.trae-cn')],
+      rulesPath: join(home, '.trae', 'AGENT.md'),
+      rulesContent: renderClaudeCode(),
+      commandsRoot: join(home, '.trae', 'commands'),
+      skillPath: join(home, '.trae', 'skills', 'lattice', 'SKILL.md'),
+    },
   ];
 
+  const detectedToolIds = new Set<string>();
+  const detectedToolRoots = new Map<string, string>();
   for (const tool of tools) {
-    if (await dirExists(tool.detectPath)) {
-      logger.raw(chalk.green(`  ✓ 检测到 ${tool.name}`));
+    const candidates = new Set([tool.detectPath, ...(tool.detectPaths ?? [])]);
+    let matchedRoot: string | null = null;
+    for (const candidate of candidates) {
+      if (await dirExists(candidate)) {
+        matchedRoot = candidate;
+        break;
+      }
+    }
 
-      if (tool.appendRules) {
-        const existing = await fileExists(tool.rulesPath);
-        if (existing) {
-          const content = await readText(tool.rulesPath);
-          if (content && !content.includes('Lattice')) {
-            await writeText(tool.rulesPath, content + '\n' + tool.rulesContent);
-          }
-        } else {
-          await writeText(tool.rulesPath, tool.rulesContent);
+    if (matchedRoot) {
+      detectedToolIds.add(tool.id);
+      detectedToolRoots.set(tool.id, matchedRoot);
+      logger.raw(chalk.green(`  ✓ 检测到 ${tool.name}`));
+    } else {
+      logger.raw(chalk.dim(`  - 未检测到 ${tool.name}（可手动选择注入）`));
+    }
+  }
+
+  const selectedToolIds = await checkbox({
+    message: '请选择要注入的 AI 工具（可多选）：',
+    choices: tools.map((tool) => {
+      const detected = detectedToolIds.has(tool.id);
+      return {
+        name: detected ? `${tool.name}（已检测）` : `${tool.name}（未检测）`,
+        value: tool.id,
+        checked: detected || tool.defaultChecked === true,
+      };
+    }),
+  });
+
+  if (selectedToolIds.length === 0) {
+    logger.raw(chalk.yellow('  已跳过 AI 工具注入。'));
+    return;
+  }
+
+  for (const tool of tools) {
+    if (!selectedToolIds.includes(tool.id)) {
+      continue;
+    }
+
+    const targetRoot = detectedToolRoots.get(tool.id) ?? tool.detectPath;
+    const resolveToolPath = (toolPath: string): string =>
+      toolPath.startsWith(tool.detectPath)
+        ? join(targetRoot, toolPath.slice(tool.detectPath.length))
+        : toolPath;
+    const rulesPath = resolveToolPath(tool.rulesPath);
+    const skillPath = tool.skillPath ? resolveToolPath(tool.skillPath) : undefined;
+    const commandsRoot = tool.commandsRoot ? resolveToolPath(tool.commandsRoot) : undefined;
+
+    await ensureDir(targetRoot);
+
+    if (tool.appendRules) {
+      const existing = await fileExists(rulesPath);
+      if (existing) {
+        const content = await readText(rulesPath);
+        if (content && !content.includes('Lattice')) {
+          await writeText(rulesPath, content + '\n' + tool.rulesContent);
         }
       } else {
-        await writeText(tool.rulesPath, tool.rulesContent);
+        await writeText(rulesPath, tool.rulesContent);
       }
+    } else {
+      await writeText(rulesPath, tool.rulesContent);
+    }
 
-      if (tool.skillPath) {
-        const skillRoot = join(tool.skillPath, '..');
-        await rm(skillRoot, { recursive: true, force: true });
-        await cp(getBundledTemplateDir('skills'), skillRoot, { recursive: true });
-      }
+    if (skillPath) {
+      const skillRoot = join(skillPath, '..');
+      await rm(skillRoot, { recursive: true, force: true });
+      await cp(getBundledTemplateDir('skills'), skillRoot, { recursive: true });
+    }
 
-      if (tool.commandsRoot) {
-        const latticeCommandsRoot = join(tool.commandsRoot, 'lattice');
-        await rm(latticeCommandsRoot, { recursive: true, force: true });
-        await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
-      }
+    if (commandsRoot) {
+      const latticeCommandsRoot = join(commandsRoot, 'lattice');
+      await rm(latticeCommandsRoot, { recursive: true, force: true });
+      await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
+    }
+
+    if (detectedToolIds.has(tool.id)) {
+      logger.raw(chalk.green(`  ✓ 已注入 ${tool.name}`));
+    } else {
+      logger.raw(chalk.green(`  ✓ 已为 ${tool.name} 创建目录并注入`));
     }
   }
 }
