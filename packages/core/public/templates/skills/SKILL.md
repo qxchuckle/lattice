@@ -69,6 +69,8 @@ lattice context
 lattice context --task <id>
 lattice status
 lattice search <query> --json
+lattice search <query> --type checkpoint --json
+lattice search <query> --type relation --json
 
 # 项目
 lattice link
