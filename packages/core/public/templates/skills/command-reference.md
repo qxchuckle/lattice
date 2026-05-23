@@ -2,10 +2,26 @@
 
 本文件用于快速查阅 Lattice CLI 的主要命令、位置参数和选项参数。
 
+## 通用约定：`-f, --force` 跳过二次确认
+
+以下命令包含交互式二次确认提示，**AI / Agent 调用时必须加 `-f` 或 `--force`**，否则命令会阻塞等待用户输入：
+
+| 命令 | 确认内容 |
+|------|----------|
+| `lattice init` | 是否下载 embedding 模型 |
+| `lattice unlink` | 确认取消项目注册 |
+| `lattice project remove <id>` | 确认删除项目数据 |
+| `lattice project relation remove <a> <b>` | 确认删除项目关系 |
+| `lattice task delete <id>` | 确认彻底删除任务 |
+| `lattice user remove <name>` | 确认删除用户 |
+
+> **规则**：当 AI 自主执行上述命令时，始终带 `-f` 以避免交互阻塞。
+
 ## `lattice init`
 
 初始化 `~/.lattice/`。
 
+- `-f, --force`：跳过确认（如是否下载模型）
 - `--username <name>`：指定用户名
 - `--git [boolean]`：是否启用 Git 管理，默认开启
 - `--git-remote <url>`：配置 Git 远程仓库

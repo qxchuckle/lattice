@@ -16,6 +16,7 @@ import {
   listSpecTemplates,
   applySpecTemplate,
   parseSpec,
+  findSpecByName,
   syncSpecTemplateRegistry,
   listSpecTemplateRegistries,
   removeSpecTemplateRegistry,
@@ -130,38 +131,9 @@ export function registerSpecCommand(program: Command): void {
         await initDb();
         const projectId = await resolveCurrentProjectId();
 
-        // 收集所有层级的匹配结果
-        const matches: {
-          scope: string;
-          spec: NonNullable<Awaited<ReturnType<typeof parseSpec>>>;
-        }[] = [];
-
-        // 先尝试作为完整路径解析
-        const directSpec = await parseSpec(file);
-        if (directSpec) {
-          matches.push({ scope: 'direct', spec: directSpec });
-        } else {
-          // 在三个层级中查找所有匹配
-          const levels: { scope: string; specs: Awaited<ReturnType<typeof getGlobalSpecs>> }[] = [];
-
-          if (!opts.scope || opts.scope === 'project') {
-            if (projectId)
-              levels.push({ scope: 'project', specs: await getProjectSpecs(username, projectId) });
-          }
-          if (!opts.scope || opts.scope === 'user') {
-            levels.push({ scope: 'user', specs: await getUserSpecs(username) });
-          }
-          if (!opts.scope || opts.scope === 'global') {
-            levels.push({ scope: 'global', specs: await getGlobalSpecs() });
-          }
-
-          for (const level of levels) {
-            const match = level.specs.find((s) => s.relativePath === file || s.fileName === file);
-            if (match) {
-              matches.push({ scope: level.scope, spec: match });
-            }
-          }
-        }
+        const matches = await findSpecByName(username, projectId, file, {
+          scope: opts.scope,
+        });
 
         closeDb();
 

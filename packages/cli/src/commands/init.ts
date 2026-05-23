@@ -82,7 +82,7 @@ export function registerInitCommand(program: Command): void {
   program
     .command('init')
     .description('初始化 Lattice（~/.lattice/）')
-    .option('-f, --fore', '跳过确认')
+    .option('-f, --force', '跳过确认')
     .option('--username <name>', '指定用户名')
     .option('--git [boolean]', '是否使用 git 管理', true)
     .option('--git-remote <url>', 'git 远程仓库地址')

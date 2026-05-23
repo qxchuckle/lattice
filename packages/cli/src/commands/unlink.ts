@@ -15,7 +15,7 @@ export function registerUnlinkCommand(program: Command): void {
   program
     .command('unlink')
     .description('取消当前项目的 Lattice 注册')
-    .option('-f, --fore', '跳过二次确认')
+    .option('-f, --force', '跳过二次确认')
     .option('--remove-data', '同时删除 Lattice 中的项目数据')
     .action(async (opts) => {
       try {

@@ -145,7 +145,7 @@ export function registerUserCommand(program: Command): void {
     .command('remove <name>')
     .alias('rm')
     .description('删除用户')
-    .option('-f, --fore', '跳过确认')
+    .option('-f, --force', '跳过确认')
     .action(async (name: string, opts) => {
       try {
         const currentUser = await getUsername();

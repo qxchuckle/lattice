@@ -5,6 +5,9 @@ import {
   getUsername,
   listProjects,
   findProjectById,
+  resolveProjectById,
+  getAllUniqueRelations,
+  parseProjectRow,
   getProjectMeta,
   updateProjectMeta,
   unregisterProject,
@@ -34,21 +37,10 @@ export function registerProjectCommand(program: Command): void {
         const username = await getUsername();
         await initDb();
 
-        let projects = listProjects(username);
-
-        if (opts.group) {
-          projects = projects.filter((p) => {
-            const groups = p.groups ? JSON.parse(p.groups) : [];
-            return groups.includes(opts.group);
-          });
-        }
-
-        if (opts.tag) {
-          projects = projects.filter((p) => {
-            const tags = p.tags ? JSON.parse(p.tags) : [];
-            return tags.includes(opts.tag);
-          });
-        }
+        let projects = listProjects(username, {
+          group: opts.group,
+          tag: opts.tag,
+        });
 
         // 收集关系信息
         const relationsMap = new Map<
@@ -88,8 +80,7 @@ export function registerProjectCommand(program: Command): void {
 
         logger.raw(chalk.blue(`共 ${projects.length} 个项目：\n`));
         for (const p of projects) {
-          const groups = p.groups ? JSON.parse(p.groups) : [];
-          const tags = p.tags ? JSON.parse(p.tags) : [];
+          const { parsedGroups: groups, parsedTags: tags } = parseProjectRow(p);
           logger.raw(`  ${chalk.bold(p.name)} ${chalk.dim(`(${p.id})`)}`);
           logger.raw(`    ${chalk.dim(p.local_path)}`);
           if (groups.length) logger.raw(`    ${chalk.cyan('分组：')}${groups.join(', ')}`);
@@ -126,8 +117,7 @@ export function registerProjectCommand(program: Command): void {
         const row = findProjectById(id);
         if (!row) {
           // 尝试前缀匹配
-          const projects = listProjects(username);
-          const match = projects.find((p) => p.id.startsWith(id));
+          const match = resolveProjectById(username, id);
           if (!match) {
             logger.raw(chalk.yellow(`未找到项目：${id}`));
             closeDb();
@@ -185,8 +175,7 @@ export function registerProjectCommand(program: Command): void {
         await initDb();
 
         // 前缀匹配
-        const projects = listProjects(username);
-        const match = projects.find((p) => p.id.startsWith(id));
+        const match = resolveProjectById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到项目：${id}`));
           closeDb();
@@ -219,14 +208,14 @@ export function registerProjectCommand(program: Command): void {
     .command('remove <id>')
     .alias('rm')
     .description('删除项目数据')
-    .option('-f, --fore', '跳过确认')
+    .option('-f, --force', '跳过确认')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
         await initDb();
 
         const projects = listProjects(username);
-        const match = projects.find((p) => p.id.startsWith(id));
+        const match = resolveProjectById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到项目：${id}`));
           closeDb();
@@ -272,7 +261,7 @@ export function registerProjectCommand(program: Command): void {
         const projects = listProjects(username);
 
         if (id) {
-          const match = projects.find((p) => p.id === id || p.id.startsWith(id));
+          const match = resolveProjectById(username, id);
           if (!match) {
             logger.raw(chalk.yellow(`未找到项目：${id}`));
             closeDb();
@@ -307,24 +296,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw('');
         } else {
           // 列出所有有关系的项目
-          const allRelations = new Set<string>();
-          const relationRows: {
-            project_a: string;
-            project_b: string;
-            relation_type: string;
-            description: string | null;
-          }[] = [];
-
-          for (const p of projects) {
-            const relations = getRelationsForProject(p.id);
-            for (const r of relations) {
-              const key = [r.project_a, r.project_b].sort().join(':');
-              if (!allRelations.has(key)) {
-                allRelations.add(key);
-                relationRows.push(r);
-              }
-            }
-          }
+          const relationRows = getAllUniqueRelations(username);
           closeDb();
 
           if (opts.json) {
@@ -365,9 +337,8 @@ export function registerProjectCommand(program: Command): void {
         const username = await getUsername();
         await initDb();
 
-        const projects = listProjects(username);
-        const matchA = projects.find((p) => p.id === projectA || p.id.startsWith(projectA));
-        const matchB = projects.find((p) => p.id === projectB || p.id.startsWith(projectB));
+        const matchA = resolveProjectById(username, projectA);
+        const matchB = resolveProjectById(username, projectB);
 
         if (!matchA) {
           logger.raw(chalk.yellow(`未找到项目 A：${projectA}`));
@@ -413,9 +384,8 @@ export function registerProjectCommand(program: Command): void {
         const username = await getUsername();
         await initDb();
 
-        const projects = listProjects(username);
-        const matchA = projects.find((p) => p.id === projectA || p.id.startsWith(projectA));
-        const matchB = projects.find((p) => p.id === projectB || p.id.startsWith(projectB));
+        const matchA = resolveProjectById(username, projectA);
+        const matchB = resolveProjectById(username, projectB);
 
         if (!matchA) {
           logger.raw(chalk.yellow(`未找到项目 A：${projectA}`));

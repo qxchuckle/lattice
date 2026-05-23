@@ -23,6 +23,7 @@ import {
   getProjectById as dbGetProjectById,
   getProjectByPath as dbGetProjectByPath,
   listAllProjects as dbListAllProjects,
+  getRelationsForProject,
 } from '../db';
 
 // ─── ID 生成 ───
@@ -162,8 +163,24 @@ export async function updateProjectMeta(
   return updated;
 }
 
-export function listProjects(username: string): ProjectRow[] {
-  return dbListAllProjects(username);
+export function listProjects(
+  username: string,
+  filter?: { group?: string; tag?: string },
+): ProjectRow[] {
+  let projects = dbListAllProjects(username);
+  if (filter?.group) {
+    projects = projects.filter((p) => {
+      const groups: string[] = p.groups ? JSON.parse(p.groups) : [];
+      return groups.includes(filter.group!);
+    });
+  }
+  if (filter?.tag) {
+    projects = projects.filter((p) => {
+      const tags: string[] = p.tags ? JSON.parse(p.tags) : [];
+      return tags.includes(filter.tag!);
+    });
+  }
+  return projects;
 }
 
 export function findProjectByPath(localPath: string): ProjectRow | undefined {
@@ -172,6 +189,50 @@ export function findProjectByPath(localPath: string): ProjectRow | undefined {
 
 export function findProjectById(id: string): ProjectRow | undefined {
   return dbGetProjectById(id);
+}
+
+/** 通过精确 ID 或前缀匹配解析项目 */
+export function resolveProjectById(username: string, input: string): ProjectRow | undefined {
+  const projects = dbListAllProjects(username);
+  return projects.find((p) => p.id === input) ?? projects.find((p) => p.id.startsWith(input));
+}
+
+/** 获取所有项目关系（去重） */
+export function getAllUniqueRelations(
+  username: string,
+  projectIds?: string[],
+): { project_a: string; project_b: string; relation_type: string; description: string | null }[] {
+  const projects = projectIds ?? dbListAllProjects(username).map((p) => p.id);
+  const seen = new Set<string>();
+  const results: {
+    project_a: string;
+    project_b: string;
+    relation_type: string;
+    description: string | null;
+  }[] = [];
+
+  for (const pid of projects) {
+    const relations = getRelationsForProject(pid);
+    for (const r of relations) {
+      const key = [r.project_a, r.project_b].sort().join(':');
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(r);
+      }
+    }
+  }
+  return results;
+}
+
+/** 解析项目行的 tags/groups JSON 字符串为数组 */
+export function parseProjectRow(
+  row: ProjectRow,
+): ProjectRow & { parsedTags: string[]; parsedGroups: string[] } {
+  return {
+    ...row,
+    parsedTags: row.tags ? JSON.parse(row.tags) : [],
+    parsedGroups: row.groups ? JSON.parse(row.groups) : [],
+  };
 }
 
 // ─── 扫描发现 ───

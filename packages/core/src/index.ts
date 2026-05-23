@@ -77,6 +77,15 @@ export {
   isInitialized,
 } from './config';
 
+export {
+  getByPath,
+  setByPath,
+  deleteByPath,
+  deepEqual,
+  diffConfig,
+  isPlainObject,
+} from './config/utils';
+
 // 数据库
 export {
   initDb,
@@ -125,6 +134,9 @@ export {
   findProjectById,
   findProjectDirName,
   scanForProjects,
+  resolveProjectById,
+  getAllUniqueRelations,
+  parseProjectRow,
 } from './project';
 
 // Spec
@@ -139,7 +151,9 @@ export {
   getProjectSpecs,
   getCascadedSpecs,
   detectSpecConflicts,
+  findSpecByName,
 } from './spec';
+export type { SpecMatch, FindSpecOptions } from './spec';
 
 // 任务
 export {
@@ -151,6 +165,8 @@ export {
   archiveTask,
   deleteTask,
   getTaskPrd,
+  resolveTaskById,
+  getTaskGraphViews,
   getTaskLineage,
   getTaskDescendantTree,
   getTaskContainingTree,
@@ -205,8 +221,9 @@ export {
   isModelInstalled,
   isModelLoaded,
   removeInstalledModel,
+  collectAllSearchDocuments,
 } from './rag';
-export type { IncrementalIndexResult } from './rag';
+export type { IncrementalIndexResult, SearchDocumentInput } from './rag';
 
 // 维护
 export { runStartupSelfCheck } from './maintenance/startup-self-check';

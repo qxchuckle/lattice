@@ -14,6 +14,8 @@ import {
   getTaskPrd,
   getTaskPrdPath,
   getTaskDir,
+  resolveTaskById,
+  getTaskGraphViews,
   getTaskLineage,
   getTaskDescendantTree,
   getTaskContainingTree,
@@ -25,15 +27,6 @@ const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'ar
 
 async function resolveCurrentProjectId(): Promise<string | null> {
   return (await resolveCurrentProject())?.id ?? null;
-}
-
-async function resolveTaskById(username: string, input: string): Promise<TaskMeta | null> {
-  const tasks = await listTasks(username);
-  return (
-    tasks.find((task) => task.id === input) ??
-    tasks.find((task) => task.id.startsWith(input)) ??
-    null
-  );
 }
 
 function normalizeProjectIds(ids: string[]): string[] {
@@ -53,23 +46,6 @@ function formatLineage(lineage: TaskMeta[]): string[] {
   return lineage.map(
     (task, index) => `${index === 0 ? '- ' : '  -> '}${task.title} [${task.status}] (${task.id})`,
   );
-}
-
-async function getTaskGraphViews(
-  username: string,
-  taskId: string,
-): Promise<{
-  lineage: TaskMeta[] | null;
-  tree: TaskTreeNode | null;
-  descendants: TaskTreeNode | null;
-}> {
-  const [lineage, tree, descendants] = await Promise.all([
-    getTaskLineage(username, taskId),
-    getTaskContainingTree(username, taskId),
-    getTaskDescendantTree(username, taskId),
-  ]);
-
-  return { lineage, tree, descendants };
 }
 
 export function registerTaskCommand(program: Command): void {

@@ -45,6 +45,9 @@ export {
   resolveEmbeddingProxy,
 } from './embeddings';
 
+export { collectAllSearchDocuments } from './collector';
+export type { SearchDocumentInput } from './collector';
+
 function extractHeadings(content: string, limit = 6): string[] {
   return content
     .split('\n')

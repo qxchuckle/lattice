@@ -194,9 +194,10 @@ export async function updateTask(
   const existing = await getTaskMeta(username, taskId);
   if (!existing) return null;
 
-  const parentTaskId = 'parentTaskId' in updates
-    ? await validateParentTask(username, taskId, updates.parentTaskId)
-    : existing.parentTaskId;
+  const parentTaskId =
+    'parentTaskId' in updates
+      ? await validateParentTask(username, taskId, updates.parentTaskId)
+      : existing.parentTaskId;
 
   const updated: TaskMeta = {
     ...existing,
@@ -250,6 +251,33 @@ export async function deleteTask(username: string, taskId: string): Promise<void
 export async function getTaskPrd(username: string, taskId: string): Promise<string | null> {
   const { readText } = await import('../paths');
   return readText(getTaskPrdPath(username, taskId));
+}
+
+/** 通过精确 ID 或前缀匹配解析任务 */
+export async function resolveTaskById(username: string, input: string): Promise<TaskMeta | null> {
+  const tasks = await listTasks(username);
+  return (
+    tasks.find((task) => task.id === input) ??
+    tasks.find((task) => task.id.startsWith(input)) ??
+    null
+  );
+}
+
+/** 并发获取任务的三种图视图 */
+export async function getTaskGraphViews(
+  username: string,
+  taskId: string,
+): Promise<{
+  lineage: TaskMeta[] | null;
+  tree: TaskTreeNode | null;
+  descendants: TaskTreeNode | null;
+}> {
+  const [lineage, tree, descendants] = await Promise.all([
+    getTaskLineage(username, taskId),
+    getTaskContainingTree(username, taskId),
+    getTaskDescendantTree(username, taskId),
+  ]);
+  return { lineage, tree, descendants };
 }
 
 /** 获取任务的父任务链路（从根到当前任务） */
