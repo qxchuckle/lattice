@@ -192,6 +192,22 @@
 - `-f, --force`：跳过确认
 - 如果任务仍有子任务，会拒绝删除
 
+### `lattice task checkpoint <id>`
+
+- `<id>`：任务 ID，支持前缀匹配
+- `--type <type>`：检查点类型，必填。可选值：`decision` / `issue` / `pivot` / `summary` / `milestone` / `note`
+- `--title <title>`：检查点标题，必填
+- `-m, --message <message>`：检查点内容，可选
+- `--json`：以 JSON 输出创建的检查点
+
+### `lattice task progress <id>`
+
+- `<id>`：任务 ID，支持前缀匹配
+- `--last <n>`：只显示最近 N 条
+- `--type <type>`：按类型过滤（decision / issue / pivot / summary / milestone / note）
+- `--id <checkpointId>`：查看指定检查点的详细内容
+- `--json`：以 JSON 输出
+
 ## `lattice spec`
 
 Spec 管理。

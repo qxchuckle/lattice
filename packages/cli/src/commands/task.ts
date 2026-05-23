@@ -14,16 +14,28 @@ import {
   getTaskPrd,
   getTaskPrdPath,
   getTaskDir,
+  getTaskProgressPath,
   resolveTaskById,
   getTaskGraphViews,
   getTaskLineage,
   getTaskDescendantTree,
   getTaskContainingTree,
+  addCheckpoint,
+  listCheckpoints,
+  getCheckpoint,
 } from '@qcqx/lattice-core';
-import type { TaskMeta, TaskStatus, TaskTreeNode } from '@qcqx/lattice-core';
+import type { TaskMeta, TaskStatus, TaskTreeNode, CheckpointType } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
+const CHECKPOINT_TYPES: CheckpointType[] = [
+  'decision',
+  'issue',
+  'pivot',
+  'summary',
+  'milestone',
+  'note',
+];
 
 async function resolveCurrentProjectId(): Promise<string | null> {
   return (await resolveCurrentProject())?.id ?? null;
@@ -576,6 +588,142 @@ export function registerTaskCommand(program: Command): void {
         closeDb();
 
         logger.raw(chalk.green(`✓ 任务「${match.title}」已彻底删除`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // checkpoint
+  cmd
+    .command('checkpoint <id>')
+    .description('添加任务检查点记录')
+    .requiredOption('--type <type>', `检查点类型（${CHECKPOINT_TYPES.join(' / ')}）`)
+    .requiredOption('--title <title>', '检查点标题')
+    .option('-m, --message <message>', '检查点内容')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          return;
+        }
+
+        if (!CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
+          logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
+          logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
+          return;
+        }
+
+        const entry = await addCheckpoint(username, match.id, {
+          type: opts.type,
+          title: opts.title,
+          message: opts.message || '',
+        });
+
+        if (opts.json) {
+          logger.raw(JSON.stringify(entry, null, 2));
+          return;
+        }
+
+        logger.raw(chalk.green(`✓ 检查点已添加`));
+        logger.raw(chalk.dim(`  ID：${entry.id}`));
+        logger.raw(chalk.dim(`  类型：${entry.type}`));
+        logger.raw(chalk.dim(`  标题：${entry.title}`));
+        logger.raw(chalk.dim(`  时间：${entry.time}`));
+        logger.raw(chalk.dim(`  文件：${getTaskProgressPath(username, match.id)}`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // progress
+  cmd
+    .command('progress <id>')
+    .description('查看任务进展记录')
+    .option('--last <n>', '只显示最近 N 条', parseInt)
+    .option('--type <type>', '按类型过滤')
+    .option('--id <checkpointId>', '查看指定检查点')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          return;
+        }
+
+        // 查看单条
+        if (opts.id) {
+          const entry = await getCheckpoint(username, match.id, opts.id);
+          if (!entry) {
+            logger.raw(chalk.yellow(`未找到检查点：${opts.id}`));
+            return;
+          }
+          if (opts.json) {
+            logger.raw(JSON.stringify(entry, null, 2));
+            return;
+          }
+          logger.raw(chalk.bold(`\n[${entry.type}] ${entry.title}`));
+          logger.raw(chalk.dim(`  ID：${entry.id}`));
+          logger.raw(chalk.dim(`  时间：${entry.time}`));
+          if (entry.message) {
+            logger.raw(`\n${entry.message}`);
+          }
+          return;
+        }
+
+        // 列表
+        if (opts.type && !CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
+          logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
+          logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
+          return;
+        }
+
+        const entries = await listCheckpoints(username, match.id, {
+          last: opts.last,
+          type: opts.type as CheckpointType | undefined,
+        });
+
+        if (opts.json) {
+          logger.raw(JSON.stringify(entries, null, 2));
+          return;
+        }
+
+        if (entries.length === 0) {
+          logger.raw(chalk.dim('暂无检查点记录。'));
+          return;
+        }
+
+        const typeIcon: Record<string, string> = {
+          decision: '🎯',
+          issue: '⚠️',
+          pivot: '🔄',
+          summary: '📝',
+          milestone: '🏁',
+          note: '📌',
+        };
+
+        logger.raw(chalk.blue(`\n任务「${match.title}」的进展记录（共 ${entries.length} 条）：\n`));
+
+        for (const entry of entries) {
+          const icon = typeIcon[entry.type] ?? '•';
+          const timeStr = entry.time.slice(0, 16).replace('T', ' ');
+          logger.raw(
+            `  ${icon} ${chalk.dim(timeStr)} ${chalk.bold(entry.title)} ${chalk.dim(`[${entry.type}]`)}`,
+          );
+          logger.raw(chalk.dim(`    ${entry.id}`));
+          if (entry.message) {
+            const preview =
+              entry.message.length > 80 ? entry.message.slice(0, 80) + '...' : entry.message;
+            logger.raw(chalk.dim(`    ${preview}`));
+          }
+          logger.raw('');
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

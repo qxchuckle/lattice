@@ -1,8 +1,4 @@
-import type {
-  SearchDocumentMeta,
-  SearchDocumentType,
-  SearchResult,
-} from '../types';
+import type { SearchDocumentMeta, SearchDocumentType, SearchResult } from '../types';
 import { getSpecSearchMeta, searchFts, searchSpecsFallback } from '../db';
 import { semanticSearch } from '../rag';
 
@@ -147,10 +143,7 @@ function getTitleBoost(query: string, title: string): number {
   if (!normalizedQuery || !normalizedTitle) return 0;
 
   if (normalizedTitle === normalizedQuery) return TITLE_EXACT_BOOST;
-  if (
-    normalizedTitle.includes(normalizedQuery) ||
-    normalizedQuery.includes(normalizedTitle)
-  ) {
+  if (normalizedTitle.includes(normalizedQuery) || normalizedQuery.includes(normalizedTitle)) {
     return TITLE_PARTIAL_BOOST;
   }
 
@@ -159,7 +152,9 @@ function getTitleBoost(query: string, title: string): number {
   return overlap > 0 ? TITLE_KEYWORD_BOOST * overlap : 0;
 }
 
-function resolveSource(sources: Set<'fts' | 'fallback' | 'semantic'>): 'fts' | 'semantic' | 'hybrid' {
+function resolveSource(
+  sources: Set<'fts' | 'fallback' | 'semantic'>,
+): 'fts' | 'semantic' | 'hybrid' {
   if (sources.size > 1) return 'hybrid';
   return sources.has('semantic') ? 'semantic' : 'fts';
 }
@@ -217,7 +212,9 @@ function buildScopePrototypes(metas: SearchDocumentMeta[]): Map<string, ScopePro
     groupedSize.set(scopeKey, (groupedSize.get(scopeKey) ?? 0) + 1);
 
     const coverage = groupedTermCoverage.get(scopeKey) ?? new Map<string, number>();
-    const docTerms = new Set(extractFacetTerms([...meta.scopeTerms, ...meta.titleTerms, ...meta.headings]));
+    const docTerms = new Set(
+      extractFacetTerms([...meta.scopeTerms, ...meta.titleTerms, ...meta.headings]),
+    );
 
     for (const term of docTerms) {
       coverage.set(term, (coverage.get(term) ?? 0) + 1);
@@ -429,7 +426,8 @@ export async function hybridSearch(
       if (existing) {
         existing.semanticRank = rank + 1;
         existing.semanticDistance = r.distance;
-        if (existing.projectIds.length === 0) existing.projectIds = r.projectIds ?? (r.projectId ? [r.projectId] : []);
+        if (existing.projectIds.length === 0)
+          existing.projectIds = r.projectIds ?? (r.projectId ? [r.projectId] : []);
         if (!existing.username && r.username) {
           existing.username = r.username;
         }
@@ -533,9 +531,38 @@ export async function hybridSearch(
 
   if (opts?.projectId) {
     sorted = sorted.filter((r) => {
-      const projectIds = ((r.meta as Record<string, unknown>).projectIds as string[] | undefined) ?? [];
+      const projectIds =
+        ((r.meta as Record<string, unknown>).projectIds as string[] | undefined) ?? [];
       return projectIds.includes(opts.projectId as string);
     });
+  }
+
+  // 后处理增强：为 checkpoint/relation 结果添加结构化上下文
+  for (const r of sorted) {
+    const meta = r.meta as Record<string, unknown>;
+    const fp = (meta.filePath as string) ?? '';
+
+    if (r.type === 'checkpoint') {
+      // 解析 filePath: user/{username}/task/{taskId}/checkpoint/{cpId}
+      const parts = fp.split('/');
+      const taskIdx = parts.indexOf('task');
+      if (taskIdx >= 0 && taskIdx + 1 < parts.length) {
+        meta.taskId = parts[taskIdx + 1];
+      }
+      const cpIdx = parts.indexOf('checkpoint');
+      if (cpIdx >= 0 && cpIdx + 1 < parts.length) {
+        meta.checkpointId = parts[cpIdx + 1];
+      }
+    } else if (r.type === 'relation') {
+      // 解析 filePath: user/{username}/relation/{projectA}:{projectB}
+      const parts = fp.split('/');
+      const relIdx = parts.indexOf('relation');
+      if (relIdx >= 0 && relIdx + 1 < parts.length) {
+        const [projA, projB] = parts[relIdx + 1].split(':');
+        meta.projectA = projA;
+        meta.projectB = projB;
+      }
+    }
   }
 
   return sorted.slice(0, limit);

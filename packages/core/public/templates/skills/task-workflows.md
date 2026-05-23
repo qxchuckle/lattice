@@ -1,23 +1,29 @@
 # 任务工作流
 
-本文件用于处理任务的创建、开始、完成和归档。
+本文件用于处理任务的创建、开始、进展追踪、完成和归档。
 
 ## 目标
 
 - 让当前会话和任务状态保持一致
 - 把任务上下文接入当前工作
+- 在任务执行过程中持续记录关键进展，确保跨会话不丢失上下文
 - 在任务结束时判断是否需要沉淀新的 spec
 
-## 任务目录与 PRD 路径约定
+## 任务目录与文件约定
 
 每个任务的数据存储在：
 
 ```
 ~/.lattice/users/<username>/tasks/<task-id>/
-├── task.json    # 任务元数据
-├── prd.md       # 任务主文档（必须存在）
-└── ...          # 可拆分的子文档
+├── task.json       # 任务元数据
+├── prd.md          # 任务主文档（收敛型内容：目标、约束、方案、索引）
+├── progress.yaml   # 进展日志（追加型内容：决策、问题、摘要）
+└── ...             # 可拆分的子文档
 ```
+
+- `prd.md`：记录收敛型内容——目标、约束、关键设计、最终方案概览、文件索引
+- `progress.yaml`：记录追加型过程信息——决策、问题、方案调整、会话摘要、里程碑
+- 两者职责不重叠：PRD 管“是什么”，progress 管“发生了什么”
 
 `lattice task create` 和 `lattice task info` 会输出 PRD 的完整路径。你应直接使用该路径读写 PRD 文件。
 
@@ -93,23 +99,67 @@ lattice context --task <task-id>
 开始任务后，应主动完善该任务的 `prd.md`，并运行 `lattice rag update` 确保新任务被索引。
 
 - 不要停留在默认生成的空白标题
-- 至少记录任务目标、约束、当前方案、关键待办和待确认点
+- PRD 只记录收敛型内容：任务目标、约束、当前方案、关键待办和文件索引
 - `prd.md` 可以只承担任务主入口职责，不必把所有细节都堆在一个文件里
 - 当单个任务过大、`prd.md` 已经过长，或任务天然分成多个步骤时，可以把详细设计、计划、阶段记录、复盘等拆到该任务目录下的其他 Markdown 文件中，再由 `prd.md` 负责摘要、索引和跳转
-- 这种“渐进式加载”尤其适合大任务、长周期任务，以及按 plan / phase / step 分阶段推进的任务
 - 如果用户后续补充了设计、约束、边界条件、方案取舍或新的阶段结论，要自行判断是否需要同步更新 PRD
-- 如果在任务执行过程中发现实际涉及的项目范围发生变化，例如新增了其他关联项目，或确认某些项目已经不再相关，也要同步更新任务元数据里的 `projects` 字段
-- 如果 `prd.md` 变得过长，可以把详细内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须是任务的主入口，负责摘要、结构索引和子文档链接
+- 如果在任务执行过程中发现实际涉及的项目范围发生变化，也要同步更新任务元数据里的 `projects` 字段
 - 当任务理解发生变化时，优先更新 PRD，再继续后续实现或分析
+
+### 任务进展追踪
+
+任务执行过程中，应主动通过 `lattice task checkpoint` 记录关键进展。这是确保跨会话上下文不丢失的核心机制：
+
+```bash
+lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
+```
+
+可用类型：
+
+| type | 含义 | 典型场景 |
+|------|------|----------|
+| `decision` | 设计/技术决策 | 确认方案、选型、取舍 |
+| `issue` | 发现问题/踩坑 | Bug、兼容性问题、性能瓶颈 |
+| `pivot` | 方案调整 | 从 A 方案切换到 B 方案 |
+| `summary` | 会话/阶段摘要 | 会话结束、阶段性总结 |
+| `milestone` | 里程碑达成 | 模块完成、测试通过 |
+| `note` | 一般记录 | 其他值得记住的信息 |
+
+**隐式触发时机**（Agent 应主动执行，无需用户显式要求）：
+
+- 用户确认了一个设计决策或技术选型
+- 发现了意料外的问题、Bug 或兼容性坑
+- 方案从 A 调整为 B（pivot）
+- 一个阶段性目标完成（模块实现完毕、测试通过等）
+- 会话即将结束，或用户表示“先到这”“下次继续”
+- 用户反馈了重要约束或修正
+
+**注意：** 不要在每次对话轮都记录，只在有实质性进展时记录。
+
+查看已记录的进展：
+
+```bash
+lattice task progress <task-id>              # 全部
+lattice task progress <task-id> --last 3     # 最近 3 条
+lattice task progress <task-id> --type decision  # 只看决策
+```
+
+新会话 resume 任务时，应读取最近进展快速对齐上下文：
+
+```bash
+lattice context --task <task-id>
+lattice task progress <task-id> --last 5
+```
 
 ### 任务完成时
 
 归档前，先更新一次该任务的 `prd.md`。
 
+- 查看任务进展记录，确保关键决策和问题已在 PRD 中体现：`lattice task progress <task-id>`
 - 补充最终采用的设计或执行方案
 - 记录关键结果、主要取舍和仍待后续处理的问题
 - 增加“任务完成总结”，明确这次任务实际交付了什么
-- 如果 `prd.md` 过长，可以把详细复盘内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须作为必要入口，负责摘要、索引和最终总结
+- 如果 `prd.md` 过长，可以把详细复盘内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须作为必要入口
 
 先完成，再归档：
 
@@ -157,6 +207,10 @@ lattice task tree <id>
 lattice task tree <id> --descendants
 lattice task lineage <id>
 lattice task start <id>
+lattice task checkpoint <id> --type <type> --title "..." -m "..."
+lattice task progress <id>
+lattice task progress <id> --last <n>
+lattice task progress <id> --type <type>
 lattice task complete <id>
 lattice task archive <id>
 lattice task reopen <id>

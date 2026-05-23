@@ -36,7 +36,8 @@
     "gray-matter": "^4.0.3",
     "node-machine-id": "^1.1.12",
     "sqlite-vec": "^0.1.9",
-    "undici": "^6.24.1"
+    "undici": "^6.24.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -96,6 +96,10 @@ export function getTaskPrdPath(username: string, taskId: string): string {
   return pathJoin(getTaskDir(username, taskId), 'prd.md');
 }
 
+export function getTaskProgressPath(username: string, taskId: string): string {
+  return pathJoin(getTaskDir(username, taskId), 'progress.yaml');
+}
+
 // ─── 生成目录名 ───
 
 export function makeProjectDirName(id: string): string {

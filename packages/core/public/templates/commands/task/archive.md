@@ -22,6 +22,12 @@ lattice task info <task-id>
 - 补充本次任务最终采用的方案
 - 记录关键实现结果、取舍和遗留问题
 - 增加一段“任务完成总结”，说明这次任务实际完成了什么
+- 查看任务进展记录，确保关键决策和问题已在 PRD 中体现：
+
+```bash
+lattice task progress <task-id>
+```
+
 - 如果这个任务采用了“`prd.md` 作为入口 + 其他 Markdown 渐进式加载”的组织方式，归档前要确认 `prd.md` 仍然保留摘要、索引和最终总结，且能带用户继续读到相关子文档
 - 如果 `prd.md` 过长，可以把详细复盘、设计附录或交付清单拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍然必须是该任务的必要入口，并保留摘要、索引和总结
 - 如果任务存在父任务或子任务，先确认链路关系仍然合理；必要时使用 `lattice task lineage <task-id>` 或 `lattice task tree <task-id> --descendants` 检查上下游任务

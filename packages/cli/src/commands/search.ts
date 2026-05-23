@@ -24,8 +24,8 @@ function parseUsersOption(input?: string): string[] {
 export function registerSearchCommand(program: Command): void {
   program
     .command('search <query>')
-    .description('搜索 spec、任务和项目')
-    .option('--type <type>', '限制搜索类型（spec / task / project）')
+    .description('搜索 spec、任务、项目、检查点和关联关系')
+    .option('--type <type>', '限制搜索类型（spec / task / project / checkpoint / relation）')
     .option('--project <id>', '限制在指定项目范围内')
     .option('--users <names>', '只搜索指定用户内容，逗号分隔')
     .option('--all-user', '搜索所有用户内容')
@@ -85,15 +85,21 @@ export function registerSearchCommand(program: Command): void {
         logger.raw(chalk.blue(`\n找到 ${results.length} 个结果：\n`));
 
         for (const r of results) {
-          const typeLabel = { spec: '📄', task: '📋', project: '📁' }[r.type] ?? '•';
+          const typeLabel =
+            { spec: '📄', task: '📋', project: '📁', checkpoint: '🏷️', relation: '🔗' }[r.type] ??
+            '•';
           logger.raw(`  ${typeLabel} ${chalk.bold(r.title)} ${chalk.dim(`[${r.type}]`)}`);
           if (r.snippet) {
             logger.raw(`    ${chalk.dim(r.snippet.slice(0, 120))}`);
           }
           const filePath = (r.meta as Record<string, unknown>).filePath;
           const username = (r.meta as Record<string, unknown>).username;
+          const taskId = (r.meta as Record<string, unknown>).taskId;
           if (showUsername) {
             logger.raw(`    ${chalk.dim(`用户: ${(username as string) || 'global'}`)}`);
+          }
+          if (taskId) {
+            logger.raw(`    ${chalk.dim(`任务: ${taskId as string}`)}`);
           }
           if (filePath) {
             logger.raw(`    ${chalk.dim(filePath as string)}`);
@@ -115,6 +121,8 @@ export function registerSearchCommand(program: Command): void {
 function outputRagRefreshHint(lastUpdated: string | null): void {
   const updatedLabel = formatRagTimestamp(lastUpdated);
   logger.raw(chalk.dim(`RAG 上次构建时间：${updatedLabel}`));
-  logger.raw(chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag rebuild`。'));
+  logger.raw(
+    chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag rebuild`。'),
+  );
   logger.raw('');
 }

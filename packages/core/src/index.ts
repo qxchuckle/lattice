@@ -4,6 +4,9 @@ export type {
   TaskMeta,
   TaskTreeNode,
   TaskStatus,
+  CheckpointType,
+  CheckpointEntry,
+  ProgressFile,
   SearchDocumentType,
   SearchDocumentMeta,
   SpecFrontmatter,
@@ -49,6 +52,7 @@ export {
   getTaskDir,
   getTaskMetaPath,
   getTaskPrdPath,
+  getTaskProgressPath,
   makeProjectDirName,
   toKebabCase,
   ensureDir,
@@ -171,6 +175,10 @@ export {
   getTaskDescendantTree,
   getTaskContainingTree,
 } from './task';
+
+// 任务检查点
+export { addCheckpoint, listCheckpoints, getCheckpoint, readProgress } from './task/checkpoint';
+export type { AddCheckpointOptions, ListCheckpointsOptions } from './task/checkpoint';
 
 // 模板
 export type {

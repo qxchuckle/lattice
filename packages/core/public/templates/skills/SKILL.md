@@ -84,6 +84,9 @@ lattice task list
 lattice task create "<title>" --current
 lattice task update <id> --add-project <project-id>
 lattice task start <id>
+lattice task checkpoint <id> --type <type> --title "..." -m "..."
+lattice task progress <id>
+lattice task progress <id> --last <n>
 lattice task complete <id>
 lattice task archive <id>
 lattice task reopen <id>
@@ -128,6 +131,6 @@ lattice doctor
 
 - 项目上下文、任务上下文、相似案例搜索：[project-context.md](project-context.md)
 - spec 层级、冲突判断、模板和规则沉淀：[spec-workflows.md](spec-workflows.md)
-- 任务创建、开始、完成、归档：[task-workflows.md](task-workflows.md)
+- 任务创建、开始、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
 - Agent Commands 的用途与使用边界：[agent-commands.md](agent-commands.md)
 - 所有 CLI 配套命令的参数与功能：[command-reference.md](command-reference.md)

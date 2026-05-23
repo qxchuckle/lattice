@@ -60,13 +60,40 @@ lattice context --task <task-id>
 ## 开始任务后
 
 - 任务开始后，应尽快完善该任务目录下的 `prd.md`，不要只保留创建时的空白标题。
-- PRD 至少应覆盖当前已知的目标、约束、关键设计思路、待确认点和阶段性结论。
+- PRD 只记录收敛型内容：目标、约束、关键设计思路、最终方案概览、文件索引。
 - `prd.md` 可以只是这个任务目录的主入口，不要求把所有内容都写在一个文件里。
 - 如果任务太大、单个 `prd.md` 已经过长，或者任务本身分成多个步骤、多个阶段或 plan 形式推进，可以把详细内容拆到该任务目录下的其他 Markdown 文件中，再由 `prd.md` 负责概览、索引和跳转。
 - 如果后续对话中用户补充了需求、边界、设计方案、取舍理由或实现计划，应自行判断这些信息是否会影响任务理解；如果会，就同步更新 `prd.md`。
 - 如果在任务执行过程中发现实际涉及的项目范围发生了变化，例如新增了其他关联项目，或确认某些项目不再相关，应同步更新该任务元数据里的 `projects` 字段，不要让任务关联项目与实际工作范围脱节。
 - 如果 `prd.md` 过长，可以把详细设计、方案对比、实施计划等拆到其他 Markdown 文件中做渐进式加载；但 `prd.md` 仍然必须是该任务的必要入口，负责概览、索引和跳转关系。
 - 当设计发生明显变化时，优先更新 PRD，再继续执行实现或分析，避免任务上下文和实际方案脱节。
+
+## 任务进展追踪
+
+任务执行过程中，应主动通过 `lattice task checkpoint` 命令记录关键进展，确保过程信息不丢失：
+
+```bash
+lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
+```
+
+可用类型：`decision` / `issue` / `pivot` / `summary` / `milestone` / `note`
+
+建议在以下时机主动记录：
+
+- 做出了关键设计/技术决策（type: decision）
+- 发现了意料外的问题或坑（type: issue）
+- 方案发生了重大调整（type: pivot）
+- 一个阶段性里程碑完成（type: milestone）
+- 会话即将结束或用户明确表示“先到这”（type: summary）
+- 用户手动要求记录当前状态（type: summary 或 note）
+
+查看已记录的进展：
+
+```bash
+lattice task progress <task-id>            # 全部
+lattice task progress <task-id> --last 3   # 最近 3 条
+lattice task progress <task-id> --type decision  # 只看决策
+```
 
 ## 输出要求
 

@@ -37,6 +37,23 @@ export interface TaskTreeNode {
   nextTasks: TaskTreeNode[];
 }
 
+/** 检查点类型 */
+export type CheckpointType = 'decision' | 'issue' | 'pivot' | 'summary' | 'milestone' | 'note';
+
+/** 检查点条目，存储在 progress.yaml */
+export interface CheckpointEntry {
+  id: string;
+  time: string;
+  type: CheckpointType;
+  title: string;
+  message: string;
+}
+
+/** progress.yaml 文件结构 */
+export interface ProgressFile {
+  entries: CheckpointEntry[];
+}
+
 /** Spec frontmatter 字段 */
 export interface SpecFrontmatter {
   title?: string;
@@ -151,7 +168,7 @@ export interface SpecTemplate {
 }
 
 /** 搜索结果条目 */
-export type SearchDocumentType = 'spec' | 'task' | 'project';
+export type SearchDocumentType = 'spec' | 'task' | 'project' | 'checkpoint' | 'relation';
 
 export interface SearchResult {
   type: SearchDocumentType;

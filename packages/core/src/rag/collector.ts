@@ -2,7 +2,8 @@ import type { SearchDocumentType } from '../types';
 import { getUsersDir, listDir } from '../paths';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from '../spec';
 import { listTasks, getTaskPrd } from '../task';
-import { listProjects } from '../project';
+import { readProgress } from '../task/checkpoint';
+import { listProjects, getAllUniqueRelations } from '../project';
 
 export interface SearchDocumentInput {
   filePath: string;
@@ -88,6 +89,25 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
       });
     }
 
+    // 任务检查点（逐条索引）
+    for (const task of tasks) {
+      const progress = await readProgress(username, task.id);
+      for (const entry of progress.entries) {
+        const cpContent = [`任务：${task.title}`, `类型：${entry.type}`, entry.title, entry.message]
+          .filter(Boolean)
+          .join('\n\n');
+        allDocs.push({
+          filePath: `user/${username}/task/${task.id}/checkpoint/${entry.id}`,
+          content: cpContent,
+          title: `[${entry.type}] ${entry.title}`,
+          tags: ['checkpoint', entry.type, task.status],
+          username,
+          sourceType: 'checkpoint',
+          projectIds: task.projects,
+        });
+      }
+    }
+
     // 项目本身
     for (const project of projects) {
       const tags: string[] = project.tags ? JSON.parse(project.tags) : [];
@@ -112,6 +132,31 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
         sourceType: 'project',
         projectId: project.id,
         projectIds: [project.id],
+      });
+    }
+
+    // 项目关联关系
+    const relations = getAllUniqueRelations(username);
+    for (const rel of relations) {
+      const projectA = projects.find((p) => p.id === rel.project_a);
+      const projectB = projects.find((p) => p.id === rel.project_b);
+      const nameA = projectA?.name ?? rel.project_a;
+      const nameB = projectB?.name ?? rel.project_b;
+      const relationContent = [
+        `${nameA} ↔ ${nameB}`,
+        `关系类型：${rel.relation_type}`,
+        rel.description ? `描述：${rel.description}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      allDocs.push({
+        filePath: `user/${username}/relation/${rel.project_a}:${rel.project_b}`,
+        content: relationContent,
+        title: `${nameA} ↔ ${nameB}`,
+        tags: ['relation', rel.relation_type],
+        username,
+        sourceType: 'relation',
+        projectIds: [rel.project_a, rel.project_b],
       });
     }
   }
