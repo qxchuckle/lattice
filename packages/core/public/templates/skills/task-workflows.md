@@ -23,7 +23,8 @@
 
 - `prd.md`：记录收敛型内容——目标、约束、关键设计、最终方案概览、文件索引
 - `progress.yaml`：记录追加型过程信息——决策、问题、方案调整、会话摘要、里程碑
-- 两者职责不重叠：PRD 管“是什么”，progress 管“发生了什么”
+- 两者职责不重叠：PRD 管"是什么"，progress 管"发生了什么"
+- **`prd.md` 不得包含 YAML frontmatter 元数据**（如 id、title、status、created_at、projects 等）。这些信息的唯一来源是 `task.json`，在 PRD 中重复会导致数据不一致且增加维护负担
 
 `lattice task create` 和 `lattice task info` 会输出 PRD 的完整路径。你应直接使用该路径读写 PRD 文件。
 

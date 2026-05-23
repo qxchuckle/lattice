@@ -44,6 +44,23 @@ registerSyncCommand(program);
 registerUserCommand(program);
 registerRagCommand(program);
 
+// 确保所有可执行命令都接受 --force 选项，避免 AI 调用时因 unknown option 报错
+function ensureForceOption(cmd: Command): void {
+  // 叶子命令：直接添加
+  if (cmd.commands.length === 0) {
+    const hasForce = cmd.options.some((opt) => opt.long === '--force');
+    if (!hasForce) {
+      cmd.option('-f, --force', '跳过确认');
+    }
+  } else {
+    // 父命令：不给父级加 --force（避免拦截子命令的 --force），仅递归子命令
+    for (const sub of cmd.commands) {
+      ensureForceOption(sub);
+    }
+  }
+}
+ensureForceOption(program);
+
 async function main(): Promise<void> {
   try {
     await runStartupSelfCheck();
