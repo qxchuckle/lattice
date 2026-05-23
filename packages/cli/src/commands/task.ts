@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { confirm } from '@inquirer/prompts';
 import {
   getUsername,
   initDb,
@@ -9,13 +10,16 @@ import {
   getTaskMeta,
   updateTask,
   archiveTask,
+  deleteTask,
   getTaskPrd,
+  getTaskPrdPath,
+  getTaskDir,
   getTaskLineage,
   getTaskDescendantTree,
   getTaskContainingTree,
 } from '@qcqx/lattice-core';
 import type { TaskMeta, TaskStatus, TaskTreeNode } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject } from '../utils';
+import { logger, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 
@@ -46,10 +50,15 @@ function formatTaskTree(node: TaskTreeNode, depth = 0): string[] {
 }
 
 function formatLineage(lineage: TaskMeta[]): string[] {
-  return lineage.map((task, index) => `${index === 0 ? '- ' : '  -> '}${task.title} [${task.status}] (${task.id})`);
+  return lineage.map(
+    (task, index) => `${index === 0 ? '- ' : '  -> '}${task.title} [${task.status}] (${task.id})`,
+  );
 }
 
-async function getTaskGraphViews(username: string, taskId: string): Promise<{
+async function getTaskGraphViews(
+  username: string,
+  taskId: string,
+): Promise<{
   lineage: TaskMeta[] | null;
   tree: TaskTreeNode | null;
   descendants: TaskTreeNode | null;
@@ -171,6 +180,8 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.green('✓ 任务已创建'));
         logger.raw(chalk.dim(`  ID：${task.id}`));
         logger.raw(chalk.dim(`  标题：${task.title}`));
+        logger.raw(chalk.dim(`  PRD：${getTaskPrdPath(username, task.id)}`));
+        logger.raw(chalk.dim(`  目录：${getTaskDir(username, task.id)}`));
         if (task.parentTaskId) {
           logger.raw(chalk.dim(`  父任务：${task.parentTaskId}`));
         }
@@ -232,6 +243,8 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.dim('─'.repeat(40)));
         logger.raw(`  ID：${meta.id}`);
         logger.raw(`  状态：${meta.status}`);
+        logger.raw(`  PRD：${getTaskPrdPath(username, meta.id)}`);
+        logger.raw(`  目录：${getTaskDir(username, meta.id)}`);
         if (meta.projects?.length) {
           logger.raw(`  关联项目：${meta.projects.join(', ')}`);
         }
@@ -547,6 +560,46 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.bold('\n父任务链路'));
         logger.raw(chalk.dim('─'.repeat(40)));
         logger.raw(formatLineage(lineage).join('\n'));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // delete
+  cmd
+    .command('delete <id>')
+    .alias('rm')
+    .description('彻底删除任务及其数据')
+    .option('-f, --force', '跳过确认')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          closeDb();
+          return;
+        }
+
+        if (!shouldSkipConfirm(opts)) {
+          const confirmed = await confirm({
+            message: `确认彻底删除任务「${match.title}」（${match.id}）？此操作不可恢复。`,
+            default: false,
+          });
+          if (!confirmed) {
+            logger.raw(chalk.dim('已取消'));
+            closeDb();
+            return;
+          }
+        }
+
+        await deleteTask(username, match.id);
+        closeDb();
+
+        logger.raw(chalk.green(`✓ 任务「${match.title}」已彻底删除`));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

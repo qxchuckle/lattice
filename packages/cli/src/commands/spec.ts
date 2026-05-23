@@ -120,23 +120,100 @@ export function registerSpecCommand(program: Command): void {
   // show
   cmd
     .command('show <file>')
-    .description('查看 spec 内容')
-    .action(async (file: string) => {
+    .description('查看 spec 信息（默认只显示元数据和位置）')
+    .option('--scope <scope>', '限定层级（project / user / global）')
+    .option('--detail', '输出文件内容')
+    .option('--json', 'JSON 格式输出')
+    .action(async (file: string, opts) => {
       try {
-        const spec = await parseSpec(file);
-        if (!spec) {
-          logger.raw(chalk.yellow(`未找到文件：${file}`));
+        const username = await getUsername();
+        await initDb();
+        const projectId = await resolveCurrentProjectId();
+
+        // 收集所有层级的匹配结果
+        const matches: {
+          scope: string;
+          spec: NonNullable<Awaited<ReturnType<typeof parseSpec>>>;
+        }[] = [];
+
+        // 先尝试作为完整路径解析
+        const directSpec = await parseSpec(file);
+        if (directSpec) {
+          matches.push({ scope: 'direct', spec: directSpec });
+        } else {
+          // 在三个层级中查找所有匹配
+          const levels: { scope: string; specs: Awaited<ReturnType<typeof getGlobalSpecs>> }[] = [];
+
+          if (!opts.scope || opts.scope === 'project') {
+            if (projectId)
+              levels.push({ scope: 'project', specs: await getProjectSpecs(username, projectId) });
+          }
+          if (!opts.scope || opts.scope === 'user') {
+            levels.push({ scope: 'user', specs: await getUserSpecs(username) });
+          }
+          if (!opts.scope || opts.scope === 'global') {
+            levels.push({ scope: 'global', specs: await getGlobalSpecs() });
+          }
+
+          for (const level of levels) {
+            const match = level.specs.find((s) => s.relativePath === file || s.fileName === file);
+            if (match) {
+              matches.push({ scope: level.scope, spec: match });
+            }
+          }
+        }
+
+        closeDb();
+
+        if (matches.length === 0) {
+          logger.raw(chalk.yellow(`未找到 spec：${file}`));
           return;
         }
 
-        const title = spec.frontmatter.title ?? spec.fileName;
-        logger.raw(chalk.bold(`\n${title}`));
-        if (spec.frontmatter.tags?.length) {
-          logger.raw(chalk.dim(`标签：${spec.frontmatter.tags.join(', ')}`));
+        // JSON 输出
+        if (opts.json) {
+          const result = matches.map((m) => ({
+            scope: m.scope,
+            filePath: m.spec.filePath,
+            relativePath: m.spec.relativePath,
+            fileName: m.spec.fileName,
+            title: m.spec.frontmatter.title ?? m.spec.fileName,
+            tags: m.spec.frontmatter.tags ?? [],
+            description: m.spec.frontmatter.description ?? null,
+            ...(opts.detail ? { content: m.spec.content } : {}),
+          }));
+          logger.raw(JSON.stringify(result, null, 2));
+          return;
         }
-        logger.raw(chalk.dim('─'.repeat(40)));
-        logger.raw(spec.content);
-        logger.raw('');
+
+        // 普通输出
+        for (const m of matches) {
+          const s = m.spec;
+          const title = s.frontmatter.title ?? s.fileName;
+          logger.raw(chalk.bold(`\n${title}`));
+          logger.raw(`  层级：${chalk.cyan(m.scope)}`);
+          logger.raw(`  路径：${chalk.dim(s.filePath)}`);
+          if (s.frontmatter.tags?.length) {
+            logger.raw(`  标签：${s.frontmatter.tags.join(', ')}`);
+          }
+          if (s.frontmatter.description) {
+            logger.raw(`  描述：${s.frontmatter.description}`);
+          }
+
+          if (opts.detail) {
+            logger.raw(chalk.dim('\n' + '─'.repeat(40)));
+            logger.raw(s.content);
+          }
+          logger.raw('');
+        }
+
+        if (matches.length > 1) {
+          logger.raw(
+            chalk.yellow(
+              `ℹ 在 ${matches.length} 个层级找到同名 spec，高优先级覆盖低优先级（project > user > global）`,
+            ),
+          );
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

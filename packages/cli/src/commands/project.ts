@@ -12,6 +12,8 @@ import {
   closeDb,
   getRelationsForProject,
   getTasksForProject,
+  upsertRelation,
+  deleteRelation,
 } from '@qcqx/lattice-core';
 import { logger, shouldSkipConfirm } from '../utils';
 
@@ -25,6 +27,7 @@ export function registerProjectCommand(program: Command): void {
     .description('列出所有已注册项目')
     .option('--group <group>', '按分组过滤')
     .option('--tag <tag>', '按标签过滤')
+    .option('--with-relations', '附带显示项目关系')
     .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
@@ -47,10 +50,34 @@ export function registerProjectCommand(program: Command): void {
           });
         }
 
+        // 收集关系信息
+        const relationsMap = new Map<
+          string,
+          {
+            project_a: string;
+            project_b: string;
+            relation_type: string;
+            description: string | null;
+          }[]
+        >();
+        if (opts.withRelations) {
+          for (const p of projects) {
+            relationsMap.set(p.id, getRelationsForProject(p.id));
+          }
+        }
+
         closeDb();
 
         if (opts.json) {
-          logger.raw(JSON.stringify(projects, null, 2));
+          if (opts.withRelations) {
+            const result = projects.map((p) => ({
+              ...p,
+              relations: relationsMap.get(p.id) ?? [],
+            }));
+            logger.raw(JSON.stringify(result, null, 2));
+          } else {
+            logger.raw(JSON.stringify(projects, null, 2));
+          }
           return;
         }
 
@@ -67,6 +94,17 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(`    ${chalk.dim(p.local_path)}`);
           if (groups.length) logger.raw(`    ${chalk.cyan('分组：')}${groups.join(', ')}`);
           if (tags.length) logger.raw(`    ${chalk.cyan('标签：')}${tags.join(', ')}`);
+          if (opts.withRelations) {
+            const relations = relationsMap.get(p.id) ?? [];
+            if (relations.length > 0) {
+              const relStrs = relations.map((r) => {
+                const otherId = r.project_a === p.id ? r.project_b : r.project_a;
+                const other = projects.find((pp) => pp.id === otherId);
+                return `${other?.name ?? otherId}(${r.relation_type})`;
+              });
+              logger.raw(`    ${chalk.cyan('关系：')}${relStrs.join(', ')}`);
+            }
+          }
           logger.raw('');
         }
       } catch (err) {
@@ -211,6 +249,205 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         logger.raw(chalk.green(`✓ 项目 ${match.name} 已删除`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── relation 子命令组 ───
+  const relationCmd = cmd.command('relation').description('管理项目间关系');
+
+  // relation list
+  relationCmd
+    .command('list [id]')
+    .alias('ls')
+    .description('查看项目关系')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string | undefined, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        const projects = listProjects(username);
+
+        if (id) {
+          const match = projects.find((p) => p.id === id || p.id.startsWith(id));
+          if (!match) {
+            logger.raw(chalk.yellow(`未找到项目：${id}`));
+            closeDb();
+            return;
+          }
+
+          const relations = getRelationsForProject(match.id);
+          closeDb();
+
+          if (opts.json) {
+            logger.raw(JSON.stringify(relations, null, 2));
+            return;
+          }
+
+          if (relations.length === 0) {
+            logger.raw(chalk.dim(`项目 ${match.name} 暂无关系。`));
+            return;
+          }
+
+          logger.raw(
+            chalk.blue(`\n项目 ${chalk.bold(match.name)} 的关系（${relations.length} 个）：\n`),
+          );
+          for (const r of relations) {
+            const otherId = r.project_a === match.id ? r.project_b : r.project_a;
+            const otherProject = projects.find((p) => p.id === otherId);
+            const otherName = otherProject?.name ?? otherId;
+            logger.raw(`  ${chalk.bold(otherName)} ${chalk.dim(`(${otherId})`)}`);
+            logger.raw(
+              `    ${chalk.cyan('类型：')}${r.relation_type}${r.description ? `  ${chalk.dim(r.description)}` : ''}`,
+            );
+          }
+          logger.raw('');
+        } else {
+          // 列出所有有关系的项目
+          const allRelations = new Set<string>();
+          const relationRows: {
+            project_a: string;
+            project_b: string;
+            relation_type: string;
+            description: string | null;
+          }[] = [];
+
+          for (const p of projects) {
+            const relations = getRelationsForProject(p.id);
+            for (const r of relations) {
+              const key = [r.project_a, r.project_b].sort().join(':');
+              if (!allRelations.has(key)) {
+                allRelations.add(key);
+                relationRows.push(r);
+              }
+            }
+          }
+          closeDb();
+
+          if (opts.json) {
+            logger.raw(JSON.stringify(relationRows, null, 2));
+            return;
+          }
+
+          if (relationRows.length === 0) {
+            logger.raw(chalk.dim('暂无项目关系。使用 lattice project relation add 创建。'));
+            return;
+          }
+
+          logger.raw(chalk.blue(`\n共 ${relationRows.length} 个项目关系：\n`));
+          for (const r of relationRows) {
+            const nameA = projects.find((p) => p.id === r.project_a)?.name ?? r.project_a;
+            const nameB = projects.find((p) => p.id === r.project_b)?.name ?? r.project_b;
+            logger.raw(`  ${chalk.bold(nameA)} ↔ ${chalk.bold(nameB)}`);
+            logger.raw(
+              `    ${chalk.cyan('类型：')}${r.relation_type}${r.description ? `  ${chalk.dim(r.description)}` : ''}`,
+            );
+          }
+          logger.raw('');
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // relation add
+  relationCmd
+    .command('add <project-a> <project-b>')
+    .description('创建项目间关系')
+    .option('--type <type>', '关系类型', 'related')
+    .option('--description <desc>', '关系描述')
+    .action(async (projectA: string, projectB: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        const projects = listProjects(username);
+        const matchA = projects.find((p) => p.id === projectA || p.id.startsWith(projectA));
+        const matchB = projects.find((p) => p.id === projectB || p.id.startsWith(projectB));
+
+        if (!matchA) {
+          logger.raw(chalk.yellow(`未找到项目 A：${projectA}`));
+          closeDb();
+          return;
+        }
+        if (!matchB) {
+          logger.raw(chalk.yellow(`未找到项目 B：${projectB}`));
+          closeDb();
+          return;
+        }
+        if (matchA.id === matchB.id) {
+          logger.raw(chalk.yellow('不能创建项目与自身的关系'));
+          closeDb();
+          return;
+        }
+
+        upsertRelation({
+          project_a: matchA.id,
+          project_b: matchB.id,
+          relation_type: opts.type as string,
+          description: (opts.description as string) ?? null,
+        });
+        closeDb();
+
+        logger.raw(chalk.green(`✓ 已创建关系：${matchA.name} ↔ ${matchB.name}`));
+        logger.raw(chalk.dim(`  类型：${opts.type}`));
+        if (opts.description) logger.raw(chalk.dim(`  描述：${opts.description}`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // relation remove
+  relationCmd
+    .command('remove <project-a> <project-b>')
+    .alias('rm')
+    .description('删除项目间关系')
+    .option('-f, --force', '跳过确认')
+    .action(async (projectA: string, projectB: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        const projects = listProjects(username);
+        const matchA = projects.find((p) => p.id === projectA || p.id.startsWith(projectA));
+        const matchB = projects.find((p) => p.id === projectB || p.id.startsWith(projectB));
+
+        if (!matchA) {
+          logger.raw(chalk.yellow(`未找到项目 A：${projectA}`));
+          closeDb();
+          return;
+        }
+        if (!matchB) {
+          logger.raw(chalk.yellow(`未找到项目 B：${projectB}`));
+          closeDb();
+          return;
+        }
+
+        if (!shouldSkipConfirm(opts)) {
+          const confirmed = await confirm({
+            message: `确认删除 ${matchA.name} 与 ${matchB.name} 之间的关系？`,
+            default: false,
+          });
+          if (!confirmed) {
+            logger.raw(chalk.dim('已取消'));
+            closeDb();
+            return;
+          }
+        }
+
+        const deleted = deleteRelation(matchA.id, matchB.id);
+        closeDb();
+
+        if (deleted) {
+          logger.raw(chalk.green(`✓ 已删除关系：${matchA.name} ↔ ${matchB.name}`));
+        } else {
+          logger.raw(chalk.yellow(`未找到 ${matchA.name} 与 ${matchB.name} 之间的关系`));
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

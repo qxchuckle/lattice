@@ -23,7 +23,23 @@ lattice search "<相关主题>"
 lattice spec list --scope user
 ```
 
-3. 更新或新建用户级 spec 文件
+3. 如果是**新建** spec，先检查是否有可参考的模板结构：
+
+```bash
+lattice spec template list
+```
+
+如果有匹配的模板，参考其文件组织和内容结构，保持跨项目的一致性。
+
+4. 更新或新建用户级 spec 文件
+5. **冲突检测**：写入前读取全局级和已有项目级 spec 的内容，判断是否存在语义矛盾：
+
+```bash
+lattice spec list --scope global
+lattice spec show <相关文件>
+```
+
+不仅检查同名文件，更要读取内容判断规则是否互斥。如果新规则与全局级不一致，要说明这是刻意覆盖还是应合并。
 
 ## 写入原则
 
@@ -35,4 +51,5 @@ lattice spec list --scope user
 
 - 明确说明这条规则为什么适合用户级而不是项目级
 - 说明更新了哪个文件
+- 如检测到语义冲突，必须明确告知用户：冲突点、影响范围、建议处理方式
 - 提醒用户项目级 spec 仍然可以覆盖该规则

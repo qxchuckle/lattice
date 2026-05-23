@@ -18,7 +18,24 @@ lattice spec list --scope global
 ```
 
 2. 检查是否已经有类似的全局规则，优先补充而不是重复创建
-3. 写入或更新全局 spec 文件
+3. 如果是**新建** spec，先检查是否有可参考的模板结构：
+
+```bash
+lattice spec template list
+```
+
+如果有匹配的模板（如 conventions、architecture 等），参考其结构作为全局规范的骨架。
+
+4. 写入或更新全局 spec 文件
+5. **冲突检测**：写入前读取用户级和项目级已有 spec 的内容，判断是否存在语义矛盾：
+
+```bash
+lattice spec list --scope user
+lattice spec list --scope project
+lattice spec show <相关文件>
+```
+
+全局规则是默认值，但下层可能已经有更具体的规则。读取内容确认新规则不会与下层产生混淂，如果下层已有更严格的特例，确认全局规则是否作为合理默认值。
 
 ## 写入原则
 
@@ -30,4 +47,5 @@ lattice spec list --scope global
 
 - 说明为什么这条规则适合全局级
 - 说明更新了哪个全局 spec 文件
+- 如检测到与下层 spec 的语义冲突，必须明确告知用户：冲突点、建议处理方式
 - 提醒用户项目级和用户级规则仍然可以覆盖全局默认规则

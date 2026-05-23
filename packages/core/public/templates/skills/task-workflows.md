@@ -8,6 +8,19 @@
 - 把任务上下文接入当前工作
 - 在任务结束时判断是否需要沉淀新的 spec
 
+## 任务目录与 PRD 路径约定
+
+每个任务的数据存储在：
+
+```
+~/.lattice/users/<username>/tasks/<task-id>/
+├── task.json    # 任务元数据
+├── prd.md       # 任务主文档（必须存在）
+└── ...          # 可拆分的子文档
+```
+
+`lattice task create` 和 `lattice task info` 会输出 PRD 的完整路径。你应直接使用该路径读写 PRD 文件。
+
 ## 常见流程
 
 ### 需要建立任务链路时
@@ -77,7 +90,7 @@ lattice task start <task-id>
 lattice context --task <task-id>
 ```
 
-开始任务后，应主动完善该任务的 `prd.md`。
+开始任务后，应主动完善该任务的 `prd.md`，并运行 `lattice rag update` 确保新任务被索引。
 
 - 不要停留在默认生成的空白标题
 - 至少记录任务目标、约束、当前方案、关键待办和待确认点
@@ -103,7 +116,10 @@ lattice context --task <task-id>
 ```bash
 lattice task complete <task-id>
 lattice task archive <task-id>
+lattice rag update
 ```
+
+归档后运行 `rag update`，因为 PRD 通常在归档前补充了完成总结，需要重新索引。如果 `rag update` 报错，降级使用 `lattice rag rebuild`。
 
 如果用户没有提供任务 ID，或提供的内容不是任务 ID，则先运行：
 
@@ -144,7 +160,9 @@ lattice task start <id>
 lattice task complete <id>
 lattice task archive <id>
 lattice task reopen <id>
+lattice task delete <id>
 lattice context --task <id>
+lattice rag update
 ```
 
 ## 输出要求

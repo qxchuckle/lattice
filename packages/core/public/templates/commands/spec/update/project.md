@@ -18,12 +18,24 @@ lattice spec list --scope project
 ```
 
 2. 判断应该更新现有 spec 还是新建一个更聚焦的 spec 文件
-3. 将规则写入当前项目对应的 spec 目录
-4. 如果涉及已有同名 spec，检查是否会与用户级 / 全局级冲突：
+3. 如果是**新建** spec，先检查是否有可参考的模板结构：
 
 ```bash
-lattice spec conflicts
+lattice spec template list
 ```
+
+如果有匹配的模板（如 frontend、backend、api 等），参考其文件组织和内容结构，不必完全照搬但应保持一致性。
+
+4. 将规则写入当前项目对应的 spec 目录
+5. **冲突检测**：写入前读取同层级及上层级已有 spec 的内容，判断新规则是否与已有规则存在矛盾：
+
+```bash
+lattice spec list --scope user
+lattice spec list --scope global
+lattice spec show <相关文件>
+```
+
+不仅检查同名文件，更要读取内容判断语义冲突（如：项目级写“用 tabs”但用户级写“用 spaces”）。
 
 ## 写入原则
 
@@ -36,4 +48,4 @@ lattice spec conflicts
 
 - 说明你更新了哪个 spec 文件
 - 说明新增/修改的核心规则
-- 如有冲突，明确告诉用户项目级会覆盖上层规则
+- 如检测到语义冲突，必须明确告知用户：冲突点是什么、项目级会覆盖上层规则、建议如何处理（保留特例 / 合并规则 / 删除冗余）

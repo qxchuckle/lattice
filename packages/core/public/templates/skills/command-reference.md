@@ -65,6 +65,7 @@
 
 - `--group <group>`：按分组过滤
 - `--tag <tag>`：按标签过滤
+- `--with-relations`：附带显示项目关系
 - `--json`：以 JSON 输出
 
 ### `lattice project info <id>`
@@ -83,6 +84,24 @@
 ### `lattice project remove <id>`
 
 - `<id>`：项目 ID
+- `--force`：跳过确认
+
+### `lattice project relation list [id]`
+
+- `[id]`：可选，指定项目 ID 只看该项目的关系；不传则列出所有关系
+- `--json`：以 JSON 输出
+
+### `lattice project relation add <project-a> <project-b>`
+
+- `<project-a>`：项目 A的 ID
+- `<project-b>`：项目 B 的 ID
+- `--type <type>`：关系类型，默认 `related`
+- `--description <desc>`：关系描述
+
+### `lattice project relation remove <project-a> <project-b>`
+
+- `<project-a>`：项目 A 的 ID
+- `<project-b>`：项目 B 的 ID
 - `--force`：跳过确认
 
 ## `lattice task`
@@ -150,6 +169,12 @@
 ### `lattice task reopen <id>`
 
 - `<id>`：重新打开任务，并将状态设为 `in_progress`
+
+### `lattice task delete <id>`
+
+- `<id>`：彻底删除任务及其数据（包括 PRD、关联项目链接）
+- `-f, --force`：跳过确认
+- 如果任务仍有子任务，会拒绝删除
 
 ## `lattice spec`
 
@@ -292,6 +317,12 @@ RAG 索引管理。
 
 - `--json`：以 JSON 输出
 
+### `lattice rag update`
+
+- 无参数，增量更新索引（只处理变更的文档，未变文档跳过）
+- 输出新增/更新/删除/跳过的统计
+- 如果报错，降级使用 `rag rebuild`
+
 ### `lattice rag rebuild`
 
-- 无参数，重建索引
+- 无参数，全量重建索引

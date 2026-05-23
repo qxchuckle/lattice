@@ -73,8 +73,11 @@ lattice search <query> --json
 # 项目
 lattice link
 lattice unlink
-lattice project list
+lattice project list [--with-relations]
 lattice project info <id>
+lattice project relation list [id]
+lattice project relation add <a> <b> [--type <type>]
+lattice project relation remove <a> <b>
 
 # 任务
 lattice task list
@@ -84,18 +87,32 @@ lattice task start <id>
 lattice task complete <id>
 lattice task archive <id>
 lattice task reopen <id>
+lattice task delete <id>
 
 # Spec
 lattice spec list
+lattice spec show <file>
 lattice spec conflicts
 lattice spec template list
 lattice spec template apply <name>
 
-# 维护
-lattice doctor
+# 索引维护
 lattice rag status
+lattice rag update
 lattice rag rebuild
+lattice doctor
 ```
+
+## 索引维护原则
+
+以下操作会产生新内容，完成后应运行 `lattice rag update` 确保搜索索引是最新的：
+
+- 新建或修改 spec 文件
+- 创建任务或更新任务 PRD
+- 任务归档后（因为 PRD 通常在归档前补充了总结）
+- 新注册或删除项目
+
+如果 `rag update` 报错或搜索结果明显不对，降级使用 `lattice rag rebuild` 全量重建。
 
 ## 读取原则
 
@@ -103,6 +120,7 @@ lattice rag rebuild
 - spec 优先级始终是 `project > user > global`
 - 遇到同名 spec 覆盖时，要提醒用户覆盖关系
 - 只有长期稳定、可复用的信息才应沉淀为 spec
+- 产生新内容后及时 `rag update`，确保搜索可用
 
 ## 渐进式加载
 

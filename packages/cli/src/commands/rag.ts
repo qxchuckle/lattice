@@ -6,6 +6,7 @@ import {
   closeDb,
   getRAGStatus,
   rebuildIndex,
+  incrementalIndex,
   deleteSearchDocumentsByPrefixes,
   listProjects,
   listTasks,
@@ -15,6 +16,7 @@ import {
   getGlobalSpecs,
   getUsersDir,
   listDir,
+  isModelLoaded,
 } from '@qcqx/lattice-core';
 import { formatRagTimestamp, logger } from '../utils';
 
@@ -185,4 +187,159 @@ export function registerRagCommand(program: Command): void {
         process.exitCode = 1;
       }
     });
+
+  // update
+  cmd
+    .command('update')
+    .description('增量更新 RAG 索引（仅处理变更文档）')
+    .action(async () => {
+      try {
+        await getUsername();
+        await initDb();
+
+        const modelLoaded = isModelLoaded();
+        logger.spin(
+          modelLoaded ? '正在收集文档并检测变更...' : '首次需要加载 embedding 模型，正在准备...',
+        );
+
+        const allDocs = await collectAllSearchDocuments();
+        const result = await incrementalIndex(allDocs);
+        closeDb();
+
+        logger.spinSuccess('增量更新完成');
+        const parts: string[] = [];
+        if (result.added > 0) parts.push(chalk.green(`新增 ${result.added}`));
+        if (result.updated > 0) parts.push(chalk.yellow(`更新 ${result.updated}`));
+        if (result.removed > 0) parts.push(chalk.red(`删除 ${result.removed}`));
+        parts.push(chalk.dim(`跳过 ${result.skipped}`));
+
+        logger.raw(`  ${parts.join(' / ')}`);
+      } catch (err) {
+        if ((err as Error).message) {
+          logger.spinFail('增量更新失败');
+        }
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+}
+
+/** 收集所有待索引文档 */
+async function collectAllSearchDocuments(): Promise<
+  {
+    filePath: string;
+    content: string;
+    title: string;
+    tags?: string[];
+    username: string;
+    sourceType?: 'spec' | 'task' | 'project';
+    projectId?: string;
+    projectIds?: string[];
+  }[]
+> {
+  const allDocs: {
+    filePath: string;
+    content: string;
+    title: string;
+    tags?: string[];
+    username: string;
+    sourceType?: 'spec' | 'task' | 'project';
+    projectId?: string;
+    projectIds?: string[];
+  }[] = [];
+
+  // 全局 spec
+  const globalSpecs = await getGlobalSpecs();
+  for (const s of globalSpecs) {
+    allDocs.push({
+      filePath: s.filePath,
+      content: s.content,
+      title: s.frontmatter.title ?? s.fileName,
+      tags: s.frontmatter.tags,
+      username: '',
+      sourceType: 'spec',
+    });
+  }
+
+  const usernames = await listDir(getUsersDir());
+  for (const username of usernames) {
+    const userSpecs = await getUserSpecs(username);
+    for (const s of userSpecs) {
+      allDocs.push({
+        filePath: s.filePath,
+        content: s.content,
+        title: s.frontmatter.title ?? s.fileName,
+        tags: s.frontmatter.tags,
+        username,
+        sourceType: 'spec',
+      });
+    }
+
+    const projects = listProjects(username);
+    for (const project of projects) {
+      const specs = await getProjectSpecs(username, project.id);
+      for (const s of specs) {
+        allDocs.push({
+          filePath: s.filePath,
+          content: s.content,
+          title: s.frontmatter.title ?? s.fileName,
+          tags: s.frontmatter.tags,
+          username,
+          sourceType: 'spec',
+          projectId: project.id,
+          projectIds: [project.id],
+        });
+      }
+    }
+
+    const tasks = await listTasks(username);
+    for (const task of tasks) {
+      const prd = (await getTaskPrd(username, task.id)) ?? '';
+      const taskContent = [
+        `任务标题：${task.title}`,
+        `任务状态：${task.status}`,
+        task.projects?.length ? `关联项目：${task.projects.join(', ')}` : '',
+        prd,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      allDocs.push({
+        filePath: `user/${username}/task/${task.id}/prd.md`,
+        content: taskContent,
+        title: task.title,
+        tags: ['task', task.status],
+        username,
+        sourceType: 'task',
+        projectIds: task.projects,
+      });
+    }
+
+    for (const project of projects) {
+      const tags = project.tags ? (JSON.parse(project.tags) as string[]) : [];
+      const groups = project.groups ? (JSON.parse(project.groups) as string[]) : [];
+      const projectContent = [
+        `项目名称：${project.name}`,
+        `项目 ID：${project.id}`,
+        project.description ? `项目描述：${project.description}` : '',
+        project.git_remote ? `Git 仓库：${project.git_remote}` : '',
+        groups.length > 0 ? `分组：${groups.join(', ')}` : '',
+        tags.length > 0 ? `标签：${tags.join(', ')}` : '',
+        `本地路径：${project.local_path}`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      allDocs.push({
+        filePath: `user/${username}/project/${project.id}/project.md`,
+        content: projectContent,
+        title: project.name,
+        tags: ['project', ...tags, ...groups],
+        username,
+        sourceType: 'project',
+        projectId: project.id,
+        projectIds: [project.id],
+      });
+    }
+  }
+
+  return allDocs;
 }

@@ -248,6 +248,15 @@ export function getRelationsForProject(projectId: string): ProjectRelationRow[] 
     .all(projectId, projectId) as ProjectRelationRow[];
 }
 
+export function deleteRelation(projectA: string, projectB: string): boolean {
+  const result = getDb()
+    .prepare(
+      'DELETE FROM project_relations WHERE (project_a = ? AND project_b = ?) OR (project_a = ? AND project_b = ?)',
+    )
+    .run(projectA, projectB, projectB, projectA);
+  return result.changes > 0;
+}
+
 // ─── 任务-项目关联 CRUD ───
 
 export function linkTaskProject(taskId: string, projectId: string): void {
@@ -281,9 +290,7 @@ export function deleteTaskLinks(taskId: string): void {
 }
 
 export function listTaskProjectLinks(): TaskProjectRow[] {
-  return getDb()
-    .prepare('SELECT task_id, project_id FROM task_projects')
-    .all() as TaskProjectRow[];
+  return getDb().prepare('SELECT task_id, project_id FROM task_projects').all() as TaskProjectRow[];
 }
 
 // ─── FTS5 全文索引 CRUD ───
@@ -630,24 +637,24 @@ export function deleteSearchDocumentsByPrefixes(prefixes: string[]): void {
 export function listIndexedDocumentPaths(): string[] {
   const paths = new Set<string>();
 
-  const embeddingRows = getDb()
-    .prepare('SELECT DISTINCT file_path FROM embeddings')
-    .all() as { file_path: string }[];
+  const embeddingRows = getDb().prepare('SELECT DISTINCT file_path FROM embeddings').all() as {
+    file_path: string;
+  }[];
   for (const row of embeddingRows) {
     if (row.file_path) paths.add(row.file_path);
   }
 
-  const metaRows = getDb()
-    .prepare('SELECT DISTINCT file_path FROM spec_search_meta')
-    .all() as { file_path: string }[];
+  const metaRows = getDb().prepare('SELECT DISTINCT file_path FROM spec_search_meta').all() as {
+    file_path: string;
+  }[];
   for (const row of metaRows) {
     if (row.file_path) paths.add(row.file_path);
   }
 
   try {
-    const ftsRows = getDb()
-      .prepare('SELECT DISTINCT file_path FROM specs_fts')
-      .all() as { file_path: string }[];
+    const ftsRows = getDb().prepare('SELECT DISTINCT file_path FROM specs_fts').all() as {
+      file_path: string;
+    }[];
     for (const row of ftsRows) {
       if (row.file_path) paths.add(row.file_path);
     }

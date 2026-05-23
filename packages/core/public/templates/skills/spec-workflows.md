@@ -23,8 +23,16 @@ spec 读取顺序：
 ```bash
 lattice context
 lattice spec list
-lattice spec conflicts
+lattice spec show <相关文件>
 ```
+
+## 冲突检测原则
+
+`lattice spec conflicts` 只检测同名文件冲突，但真正的冲突往往是语义层面的。写入新 spec 前必须：
+
+1. 读取目标层级及其他层级的相关 spec 内容
+2. 判断新规则是否与已有规则存在矛盾（而不仅仅是同名）
+3. 如有冲突，明确告知用户：冲突点、影响范围、建议处理方式（保留特例 / 合并规则 / 删除冗余）
 
 ## 何时写入 spec
 
@@ -46,6 +54,16 @@ lattice spec conflicts
 - 跨多个项目可复用，但仍属于当前用户/团队习惯：用户级
 - 对多用户、多项目都成立的默认规则：全局级
 
+## 模板与新建 spec
+
+新建 spec 前应先检查是否有可参考的模板：
+
+```bash
+lattice spec template list
+```
+
+如果有匹配的模板（如 frontend、backend、api、conventions 等），参考其文件组织和内容结构再写入。不必完全照搬，但应保持一致性。
+
 ## 模板相关命令
 
 ```bash
@@ -61,3 +79,13 @@ lattice spec template registry list
 - 说明你读取或更新了哪个 spec 文件
 - 提炼核心规则，不要只罗列文件名
 - 如果发现更合适的层级，明确给出建议
+
+## 索引更新
+
+新建或修改 spec 文件后，应运行：
+
+```bash
+lattice rag update
+```
+
+确保新写入的规范能被 `lattice search` 检索到。如果 `rag update` 报错，降级使用 `lattice rag rebuild`。

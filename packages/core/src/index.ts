@@ -89,6 +89,7 @@ export {
   listAllProjects,
   upsertRelation,
   getRelationsForProject,
+  deleteRelation,
   linkTaskProject,
   unlinkTaskProject,
   getProjectsForTask,
@@ -197,6 +198,7 @@ export {
   removeSearchDocumentIndex,
   semanticSearch,
   rebuildIndex,
+  incrementalIndex,
   getRAGStatus,
   generateEmbedding,
   contentHash,
@@ -204,6 +206,7 @@ export {
   isModelLoaded,
   removeInstalledModel,
 } from './rag';
+export type { IncrementalIndexResult } from './rag';
 
 // 维护
 export { runStartupSelfCheck } from './maintenance/startup-self-check';

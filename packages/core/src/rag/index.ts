@@ -119,9 +119,7 @@ function extractKeywordCandidates(text: string): string[] {
 
   return Array.from(
     new Set(
-      expanded
-        .map((token) => token.trim().toLowerCase())
-        .filter((token) => token.length >= 2),
+      expanded.map((token) => token.trim().toLowerCase()).filter((token) => token.length >= 2),
     ),
   ).slice(0, 64);
 }
@@ -157,12 +155,16 @@ function buildSearchMeta(
   const domainTerms = Array.from(
     new Set(
       extractKeywordCandidates(
-        [fileStem.replace(/[-_]/g, ' '), title, ...headings.slice(0, 6), ...(tags ?? [])].join('\n'),
+        [fileStem.replace(/[-_]/g, ' '), title, ...headings.slice(0, 6), ...(tags ?? [])].join(
+          '\n',
+        ),
       ),
     ),
   ).slice(0, 48);
   const keywords = extractKeywordCandidates(
-    [sourceType, title, ...(tags ?? []), ...headings, relativePath.replace(/[\\/]/g, ' ')].join('\n'),
+    [sourceType, title, ...(tags ?? []), ...headings, relativePath.replace(/[\\/]/g, ' ')].join(
+      '\n',
+    ),
   );
 
   return {
@@ -366,6 +368,73 @@ export async function rebuildIndex(
     indexed++;
   }
   return indexed;
+}
+
+/** 增量更新索引结果 */
+export interface IncrementalIndexResult {
+  added: number;
+  updated: number;
+  skipped: number;
+  removed: number;
+}
+
+/** 增量更新索引：跳过未变文档，清理已删除文档 */
+export async function incrementalIndex(
+  docs: {
+    filePath: string;
+    content: string;
+    title: string;
+    tags?: string[];
+    username: string;
+    sourceType?: SearchDocumentType;
+    projectId?: string;
+    projectIds?: string[];
+  }[],
+): Promise<IncrementalIndexResult> {
+  const result: IncrementalIndexResult = { added: 0, updated: 0, skipped: 0, removed: 0 };
+
+  // 收集当前文档路径集合
+  const currentPaths = new Set(docs.map((d) => d.filePath));
+
+  // 获取已索引的文档路径
+  const { listIndexedDocumentPaths } = await import('../db');
+  const indexedPaths = listIndexedDocumentPaths();
+
+  // 对每个文档检查是否需要更新
+  for (const doc of docs) {
+    const hash = contentHash(doc.content);
+    const existing = getEmbeddingByPath(doc.filePath);
+
+    if (existing?.content_hash === hash && existing.vector_indexed === 1) {
+      result.skipped++;
+      continue;
+    }
+
+    await indexSearchDocument(doc.filePath, doc.content, {
+      title: doc.title,
+      tags: doc.tags,
+      username: doc.username,
+      sourceType: doc.sourceType ?? 'spec',
+      projectId: doc.projectId,
+      projectIds: doc.projectIds,
+    });
+
+    if (existing) {
+      result.updated++;
+    } else {
+      result.added++;
+    }
+  }
+
+  // 清理已不存在的文档索引
+  for (const indexedPath of indexedPaths) {
+    if (!currentPaths.has(indexedPath)) {
+      removeSearchDocumentIndex(indexedPath);
+      result.removed++;
+    }
+  }
+
+  return result;
 }
 
 /** 获取 RAG 索引状态 */

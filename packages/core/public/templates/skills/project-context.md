@@ -33,6 +33,21 @@ lattice task list --current
 lattice context --task <id>
 ```
 
+## 项目关系
+
+当工作涉及多个项目、共享组件或跨仓库依赖时，查看项目关系：
+
+```bash
+lattice project list --with-relations
+lattice project relation list <id>
+```
+
+如果发现项目间存在未记录的依赖或协作关系，主动建议用户添加：
+
+```bash
+lattice project relation add <project-a> <project-b> --type <type>
+```
+
 ## 输出要求
 
 - 不要直接转储整份上下文
@@ -47,6 +62,7 @@ lattice context
 lattice context --task <id>
 lattice status
 lattice search <query> --json
-lattice project list
+lattice project list [--with-relations]
 lattice project info <id>
+lattice project relation list [id]
 ```
