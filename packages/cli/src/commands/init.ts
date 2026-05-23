@@ -329,6 +329,71 @@ interface AIToolConfig {
   defaultChecked?: boolean;
 }
 
+const LATTICE_BEGIN_MARKER = '<!-- LATTICE:BEGIN -->';
+const LATTICE_END_MARKER = '<!-- LATTICE:END -->';
+
+/**
+ * 把 markdown frontmatter 与正文拆开，便于把 BEGIN/END 标记只包裹正文。
+ * frontmatter 必须紧贴文件开头，否则视为不存在。
+ */
+function splitFrontmatter(content: string): { frontmatter: string; body: string } {
+  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) {
+    return { frontmatter: '', body: content };
+  }
+  const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/);
+  if (!match) {
+    return { frontmatter: '', body: content };
+  }
+  const frontmatter = match[0];
+  const body = content.slice(frontmatter.length).replace(/^\s*\n/, '');
+  return { frontmatter, body };
+}
+
+/**
+ * 把 Lattice 引导词写入目标文件，并用 BEGIN/END 标记包裹正文，便于后续整段替换。
+ *
+ * 行为：
+ * - 文件已含完整的 BEGIN/END 标记 → 仅替换标记之间的正文，标记之外的用户内容保留；
+ * - 文件不存在或为空 → 写入完整内容（含 frontmatter）；
+ * - 没标记 + 覆盖模式 → 整文件覆盖为带标记的内容；
+ * - 没标记 + 追加模式 → 在原内容末尾追加带标记的块（不重复写入 frontmatter）。
+ */
+async function injectLatticeBlock(
+  filePath: string,
+  rulesContent: string,
+  mode: 'append' | 'overwrite',
+): Promise<void> {
+  const { frontmatter, body } = splitFrontmatter(rulesContent);
+  const wrappedBlock = `${LATTICE_BEGIN_MARKER}\n${body.trim()}\n${LATTICE_END_MARKER}`;
+
+  const existing = (await fileExists(filePath)) ? ((await readText(filePath)) ?? '') : '';
+
+  const beginIdx = existing.indexOf(LATTICE_BEGIN_MARKER);
+  const endIdx = existing.indexOf(LATTICE_END_MARKER);
+  if (beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx) {
+    const before = existing.slice(0, beginIdx);
+    const after = existing.slice(endIdx + LATTICE_END_MARKER.length);
+    await writeText(filePath, `${before}${wrappedBlock}${after}`);
+    return;
+  }
+
+  if (!existing.trim()) {
+    const full = frontmatter ? `${frontmatter}\n${wrappedBlock}\n` : `${wrappedBlock}\n`;
+    await writeText(filePath, full);
+    return;
+  }
+
+  if (mode === 'overwrite') {
+    const full = frontmatter ? `${frontmatter}\n${wrappedBlock}\n` : `${wrappedBlock}\n`;
+    await writeText(filePath, full);
+    return;
+  }
+
+  // append 模式：保留原文件内容，只在末尾追加带标记的块；不重复注入 frontmatter。
+  const trimmed = existing.replace(/\s+$/, '');
+  await writeText(filePath, `${trimmed}\n\n${wrappedBlock}\n`);
+}
+
 async function detectAndConfigureAITools(): Promise<void> {
   const home = homedir();
 
@@ -452,19 +517,11 @@ async function detectAndConfigureAITools(): Promise<void> {
 
     await ensureDir(targetRoot);
 
-    if (tool.appendRules) {
-      const existing = await fileExists(rulesPath);
-      if (existing) {
-        const content = await readText(rulesPath);
-        if (content && !content.includes('Lattice')) {
-          await writeText(rulesPath, content + '\n' + tool.rulesContent);
-        }
-      } else {
-        await writeText(rulesPath, tool.rulesContent);
-      }
-    } else {
-      await writeText(rulesPath, tool.rulesContent);
-    }
+    await injectLatticeBlock(
+      rulesPath,
+      tool.rulesContent,
+      tool.appendRules ? 'append' : 'overwrite',
+    );
 
     if (skillPath) {
       const skillRoot = join(skillPath, '..');
