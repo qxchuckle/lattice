@@ -25,6 +25,7 @@ import {
   listAllProjects as dbListAllProjects,
   getRelationsForProject,
 } from '../db';
+import { moveToTrash } from '../trash';
 
 // ─── ID 生成 ───
 
@@ -123,6 +124,24 @@ export async function registerProject(
 // ─── 取消注册 ───
 
 export async function unregisterProject(username: string, id: string): Promise<void> {
+  const dirName = await findProjectDirName(username, id);
+  if (dirName) {
+    const projectDir = getProjectDir(username, dirName);
+    const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+    await moveToTrash(projectDir, {
+      type: 'project',
+      originalPath: projectDir,
+      title: meta?.name ?? id,
+      username,
+      entityId: id,
+      restoreHints: { localPath: meta?.localPath },
+    });
+  }
+  dbDeleteProject(id);
+}
+
+/** 彻底删除项目（跳过垃圾桶） */
+export async function purgeProject(username: string, id: string): Promise<void> {
   dbDeleteProject(id);
   const dirName = await findProjectDirName(username, id);
   if (dirName) {

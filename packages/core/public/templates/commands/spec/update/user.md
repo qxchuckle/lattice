@@ -1,5 +1,7 @@
 # /lattice/spec/update/user
 
+> **[执行前必读]** 执行本命令前，必须先使用 Skill 工具调用 `lattice` skill，阅读完整的 Lattice 使用说明，再继续执行后续步骤。
+
 目标：把跨多个项目可复用、但仍属于当前用户工作方式的经验沉淀到用户级 spec。
 
 ## 什么时候使用

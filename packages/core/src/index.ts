@@ -131,6 +131,7 @@ export {
   detectProjectInfo,
   registerProject,
   unregisterProject,
+  purgeProject,
   getProjectMeta,
   updateProjectMeta,
   listProjects,
@@ -168,6 +169,7 @@ export {
   updateTask,
   archiveTask,
   deleteTask,
+  purgeTask,
   getTaskPrd,
   resolveTaskById,
   getTaskGraphViews,
@@ -232,6 +234,19 @@ export {
   collectAllSearchDocuments,
 } from './rag';
 export type { IncrementalIndexResult, SearchDocumentInput } from './rag';
+
+// 垃圾桶
+export type { TrashMeta } from './trash';
+export {
+  getTrashDir,
+  moveToTrash,
+  listTrashItems,
+  getTrashItem,
+  restoreFromTrash,
+  purgeTrashItem,
+  emptyTrash,
+  resolveTrashById,
+} from './trash';
 
 // 维护
 export { runStartupSelfCheck } from './maintenance/startup-self-check';

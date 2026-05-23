@@ -1,5 +1,7 @@
 # /lattice/spec/update/global
 
+> **[执行前必读]** 执行本命令前，必须先使用 Skill 工具调用 `lattice` skill，阅读完整的 Lattice 使用说明，再继续执行后续步骤。
+
 目标：把对多用户、多项目都成立的高层规则沉淀到全局 spec。
 
 ## 什么时候使用

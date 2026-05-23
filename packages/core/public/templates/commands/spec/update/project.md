@@ -1,5 +1,7 @@
 # /lattice/spec/update/project
 
+> **[执行前必读]** 执行本命令前，必须先使用 Skill 工具调用 `lattice` skill，阅读完整的 Lattice 使用说明，再继续执行后续步骤。
+
 目标：把当前会话中对“当前项目”长期有效的经验沉淀到项目级 spec。
 
 ## 什么时候使用

@@ -207,14 +207,12 @@ export function registerProjectCommand(program: Command): void {
   cmd
     .command('remove <id>')
     .alias('rm')
-    .description('删除项目数据')
-    .option('-f, --force', '跳过确认')
-    .action(async (id: string, opts) => {
+    .description('删除项目数据（移入垃圾桶，可恢复）')
+    .action(async (id: string) => {
       try {
         const username = await getUsername();
         await initDb();
 
-        const projects = listProjects(username);
         const match = resolveProjectById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到项目：${id}`));
@@ -222,22 +220,11 @@ export function registerProjectCommand(program: Command): void {
           return;
         }
 
-        if (!shouldSkipConfirm(opts)) {
-          const confirmed = await confirm({
-            message: `确认删除项目 ${match.name}（${match.id}）的所有数据？`,
-            default: false,
-          });
-          if (!confirmed) {
-            logger.raw(chalk.dim('已取消'));
-            closeDb();
-            return;
-          }
-        }
-
         await unregisterProject(username, match.id);
         closeDb();
 
-        logger.raw(chalk.green(`✓ 项目 ${match.name} 已删除`));
+        logger.raw(chalk.green(`✓ 项目 ${match.name} 已移入垃圾桶`));
+        logger.raw(chalk.dim('  使用 lattice trash list 查看，lattice trash restore <id> 恢复'));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

@@ -558,9 +558,8 @@ export function registerTaskCommand(program: Command): void {
   cmd
     .command('delete <id>')
     .alias('rm')
-    .description('彻底删除任务及其数据')
-    .option('-f, --force', '跳过确认')
-    .action(async (id: string, opts) => {
+    .description('删除任务（移入垃圾桶，可恢复）')
+    .action(async (id: string) => {
       try {
         const username = await getUsername();
         await initDb();
@@ -572,22 +571,11 @@ export function registerTaskCommand(program: Command): void {
           return;
         }
 
-        if (!shouldSkipConfirm(opts)) {
-          const confirmed = await confirm({
-            message: `确认彻底删除任务「${match.title}」（${match.id}）？此操作不可恢复。`,
-            default: false,
-          });
-          if (!confirmed) {
-            logger.raw(chalk.dim('已取消'));
-            closeDb();
-            return;
-          }
-        }
-
         await deleteTask(username, match.id);
         closeDb();
 
-        logger.raw(chalk.green(`✓ 任务「${match.title}」已彻底删除`));
+        logger.raw(chalk.green(`✓ 任务「${match.title}」已移入垃圾桶`));
+        logger.raw(chalk.dim('  使用 lattice trash list 查看，lattice trash restore <id> 恢复'));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

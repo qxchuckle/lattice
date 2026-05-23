@@ -14,6 +14,7 @@ import {
   toKebabCase,
 } from '../paths';
 import { linkTaskProject, deleteTaskLinks } from '../db';
+import { moveToTrash } from '../trash';
 
 interface TaskGraphSnapshot {
   tasks: TaskMeta[];
@@ -230,8 +231,35 @@ export async function archiveTask(username: string, taskId: string): Promise<Tas
   return updateTask(username, taskId, { status: 'archived' });
 }
 
-/** 删除任务 */
+/** 删除任务（移入垃圾桶） */
 export async function deleteTask(username: string, taskId: string): Promise<void> {
+  const tasks = await readAllTaskMeta(username);
+  const childTask = tasks.find((task) => task.parentTaskId === taskId);
+  if (childTask) {
+    throw new Error(`任务仍有子任务，无法删除：${childTask.id}`);
+  }
+
+  const taskMeta = await readJSON<TaskMeta>(getTaskMetaPath(username, taskId));
+  const taskDir = getTaskDir(username, taskId);
+
+  await moveToTrash(taskDir, {
+    type: 'task',
+    originalPath: taskDir,
+    title: taskMeta?.title ?? taskId,
+    username,
+    entityId: taskId,
+    restoreHints: { projects: taskMeta?.projects },
+  });
+
+  try {
+    deleteTaskLinks(taskId);
+  } catch {
+    // 数据库可能未初始化
+  }
+}
+
+/** 彻底删除任务（跳过垃圾桶） */
+export async function purgeTask(username: string, taskId: string): Promise<void> {
   const tasks = await readAllTaskMeta(username);
   const childTask = tasks.find((task) => task.parentTaskId === taskId);
   if (childTask) {
