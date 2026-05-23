@@ -1,5 +1,7 @@
 import { Command } from 'commander';
-import { basename } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck } from '@qcqx/lattice-core';
 import { registerInitCommand } from './commands/init';
 import { registerLinkCommand } from './commands/link';
@@ -21,7 +23,10 @@ const program = new Command();
 const invokedAs = process.argv[1] ? basename(process.argv[1]) : 'lattice';
 const cliName = invokedAs === 'index.js' ? 'lattice' : invokedAs;
 
-program.name(cliName).description('Lattice — 跨项目 AI 上下文管理工具').version('0.1.0');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-8'));
+
+program.name(cliName).description('Lattice — 跨项目 AI 上下文管理工具').version(pkg.version);
 
 registerInitCommand(program);
 registerLinkCommand(program);
