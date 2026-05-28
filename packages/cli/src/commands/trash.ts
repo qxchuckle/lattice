@@ -82,16 +82,29 @@ export function registerTrashCommand(program: Command): void {
           }
         }
 
-        if (restored.type === 'project' && restored.restoreHints?.localPath) {
+        if (restored.type === 'project' && restored.restoreHints) {
           const username = await getUsername();
-          try {
-            await registerProject(
-              username,
-              restored.entityId,
-              restored.restoreHints.localPath as string,
-            );
-          } catch {
-            // 注册可能失败（如路径已不存在），文件已恢复就行
+          const localPaths =
+            (restored.restoreHints.localPaths as string[] | undefined) ??
+            (restored.restoreHints.localPath ? [restored.restoreHints.localPath as string] : []);
+          // 选取仍然存在的路径作为主路径
+          let primary: string | null = null;
+          for (const p of localPaths) {
+            try {
+              const { stat } = await import('node:fs/promises');
+              await stat(p);
+              primary = p;
+              break;
+            } catch {
+              // 跳过不存在的路径
+            }
+          }
+          if (primary) {
+            try {
+              await registerProject(username, restored.entityId, primary);
+            } catch {
+              // 注册可能失败（如路径已不存在），文件已恢复就行
+            }
           }
         }
 

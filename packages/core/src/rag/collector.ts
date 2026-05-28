@@ -112,14 +112,20 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
     for (const project of projects) {
       const tags: string[] = project.tags ? JSON.parse(project.tags) : [];
       const groups: string[] = project.groups ? JSON.parse(project.groups) : [];
+      const localPaths = parseJsonArray(project.local_path);
+      const gitRemotes = parseJsonArray(project.git_remote);
+      const packageNames = parseJsonArray(project.package_names);
+      const monorepoPackages = parseJsonArray(project.monorepo_packages);
       const projectContent = [
         `项目名称：${project.name}`,
         `项目 ID：${project.id}`,
         project.description ? `项目描述：${project.description}` : '',
-        project.git_remote ? `Git 仓库：${project.git_remote}` : '',
+        gitRemotes.length > 0 ? `Git 仓库：${gitRemotes.join(', ')}` : '',
         groups.length > 0 ? `分组：${groups.join(', ')}` : '',
         tags.length > 0 ? `标签：${tags.join(', ')}` : '',
-        `本地路径：${project.local_path}`,
+        packageNames.length > 0 ? `包名：${packageNames.join(', ')}` : '',
+        monorepoPackages.length > 0 ? `monorepo 包：${monorepoPackages.join(', ')}` : '',
+        localPaths.length > 0 ? `本地路径：${localPaths.join(', ')}` : '',
       ]
         .filter(Boolean)
         .join('\n\n');
@@ -136,7 +142,7 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
     }
 
     // 项目关联关系
-    const relations = getAllUniqueRelations(username);
+    const relations = await getAllUniqueRelations(username);
     for (const rel of relations) {
       const projectA = projects.find((p) => p.id === rel.project_a);
       const projectB = projects.find((p) => p.id === rel.project_b);
@@ -150,7 +156,7 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
         .filter(Boolean)
         .join('\n\n');
       allDocs.push({
-        filePath: `user/${username}/relation/${rel.project_a}:${rel.project_b}`,
+        filePath: `user/${username}/relation/${rel.id}`,
         content: relationContent,
         title: `${nameA} ↔ ${nameB}`,
         tags: ['relation', rel.relation_type],
@@ -162,4 +168,14 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
   }
 
   return allDocs;
+}
+
+function parseJsonArray(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
 }

@@ -554,13 +554,11 @@ export async function hybridSearch(
         meta.checkpointId = parts[cpIdx + 1];
       }
     } else if (r.type === 'relation') {
-      // 解析 filePath: user/{username}/relation/{projectA}:{projectB}
+      // 解析 filePath: user/{username}/relation/{relId}
       const parts = fp.split('/');
       const relIdx = parts.indexOf('relation');
       if (relIdx >= 0 && relIdx + 1 < parts.length) {
-        const [projA, projB] = parts[relIdx + 1].split(':');
-        meta.projectA = projA;
-        meta.projectB = projB;
+        meta.relationId = parts[relIdx + 1];
       }
     }
   }

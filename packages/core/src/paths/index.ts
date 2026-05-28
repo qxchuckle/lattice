@@ -68,6 +68,11 @@ export function getUserTasksDir(username: string): string {
   return pathJoin(getUserDir(username), 'tasks');
 }
 
+/** 项目间关系真源文件 */
+export function getRelationsFilePath(username: string): string {
+  return pathJoin(getUserDir(username), 'relations.json');
+}
+
 // ─── 项目 ───
 
 export function getProjectDir(username: string, projectDirName: string): string {

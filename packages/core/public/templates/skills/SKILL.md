@@ -74,17 +74,23 @@ lattice search <query> --type relation --json
 
 # 项目
 lattice link
+lattice link --restore <id>
+lattice link --force-new
 lattice unlink
-lattice project list [--with-relations]
+lattice unlink --remove-data
+lattice project list [--has-git] [--orphaned] [--with-relations]
 lattice project info <id>
+lattice project where <path>
 lattice project relation list [id]
-lattice project relation add <a> <b> [--type <type>]
-lattice project relation remove <a> <b>
+lattice project relation add <a> <b> [--type <type>] [--from-task <taskId>] [--ai-inferred]
+lattice project relation remove <relation-id>
 
 # 任务
 lattice task list
 lattice task create "<title>" --current
 lattice task update <id> --add-project <project-id>
+lattice task associate <id> --paths <p1> <p2> --note <note>
+lattice task associate <id> --project <project-id>
 lattice task start <id>
 lattice task checkpoint <id> --type <type> --title "..." -m "..."
 lattice task progress <id>
@@ -106,6 +112,9 @@ lattice rag status
 lattice rag update
 lattice rag rebuild
 lattice doctor
+lattice doctor --migrate
+lattice doctor --rebuild-fingerprints
+lattice doctor --recheck-scope-paths
 ```
 
 ## 索引维护原则
@@ -132,6 +141,7 @@ lattice doctor
 默认只读本文件；遇到具体场景时再继续读取对应子文档：
 
 - 项目上下文、任务上下文、相似案例搜索：[project-context.md](project-context.md)
+- 项目查找/识别、多路径绑定、指纹选单、AI 推断项目关系：[project-discovery.md](project-discovery.md)
 - spec 层级、冲突判断、模板和规则沉淀：[spec-workflows.md](spec-workflows.md)
 - 任务创建、开始、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
 - Agent Commands 的用途与使用边界：[agent-commands.md](agent-commands.md)

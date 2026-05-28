@@ -60,20 +60,23 @@
 
 ## `lattice link`
 
-将当前目录注册为 Lattice 项目。
+将当前目录注册为 Lattice 项目（默认会采集指纹并检测重复候选项目，必要时弹出选单）。
 
 - `--name <name>`：手动指定项目名
 - `--description <desc>`：项目描述
 - `--groups <groups>`：项目分组，逗号分隔
 - `--tags <tags>`：项目标签，逗号分隔
 - `--template <templates>`：应用 spec 模板，逗号分隔，或传 `all`
+- `--restore <id>`：直接重新绑定到已有项目 id（不交互）
+- `--force-new`：强制创建新项目，跳过指纹相似检测
+- `-y, --yes`：检测到候选时仅警告并创建新项目（非交互模式）
 
 ## `lattice unlink`
 
 解除当前目录和 Lattice 项目的绑定。
 
 - `--force`：跳过二次确认
-- `--remove-data`：同时删除 Lattice 中的项目数据
+- `--remove-data`：同时删除 Lattice 中的项目数据（关系与指纹会联动清理，仍可通过 trash restore 恢复）
 
 ## `lattice project`
 
@@ -83,7 +86,16 @@
 
 - `--group <group>`：按分组过滤
 - `--tag <tag>`：按标签过滤
+- `--has-git`：只显示含 git remote 的项目
+- `--orphaned`：只显示所有 localPath 都已失效的项目
 - `--with-relations`：附带显示项目关系
+- `--json`：以 JSON 输出
+
+### `lattice project where <path>`
+
+查询指定路径属于哪个项目（含父目录前缀匹配与指纹候选）。
+
+- `<path>`：要查询的路径，可相对可绝对
 - `--json`：以 JSON 输出
 
 ### `lattice project info <id>`
@@ -113,13 +125,14 @@
 
 - `<project-a>`：项目 A的 ID
 - `<project-b>`：项目 B 的 ID
-- `--type <type>`：关系类型，默认 `related`
+- `--type <type>`：关系类型，默认 `related`（常用：forked-from / depends-on / shares-component / related）
 - `--description <desc>`：关系描述
+- `--from-task <taskId>`：记录关系推断来源任务 ID
+- `--ai-inferred`：标记为 AI 推断的关系（`createdBy=ai-inferred`）
 
-### `lattice project relation remove <project-a> <project-b>`
+### `lattice project relation remove <relation-id>`
 
-- `<project-a>`：项目 A 的 ID
-- `<project-b>`：项目 B 的 ID
+- `<relation-id>`：关系的唯一 id（可从 `lattice project relation list` 返回中获得）
 - `--force`：跳过确认
 
 ## `lattice task`
@@ -208,6 +221,20 @@
 - `--last <n>`：只显示最近 N 条
 - `--type <type>`：按类型过滤（decision / issue / pivot / summary / milestone / note）
 - `--id <checkpointId>`：查看指定检查点的详细内容
+- `--json`：以 JSON 输出
+
+### `lattice task associate <id>`
+
+为任务关联项目或路径（路径智能识别：high 置信度则进 projects，否则进 scopePaths）。
+
+- `<id>`：任务 ID，支持前缀匹配
+- `-p, --project <ids...>`：追加关联项目 ID
+- `--current`：追加当前目录对应的项目
+- `--paths <paths...>`：追加额外路径（可多个，其中命中已注册项目的会自动进 projects）
+- `--note <note>`：赋予本次新增 scopePath 的备注
+- `--remove-path <path>`：从 scopePaths 中移除指定路径
+- `--remove-project <id>`：从 projects 中移除指定项目
+- `--clear-paths`：清空任务的 scopePaths
 - `--json`：以 JSON 输出
 
 ## `lattice spec`
@@ -341,6 +368,9 @@ Spec 管理。
 检查当前安装和索引状态。
 
 - `--fix`：自动修复安全可修复的问题
+- `--migrate`：迁移旧版项目数据（单字符串 localPath / gitRemote → 数组）
+- `--rebuild-fingerprints`：重新采集所有项目的指纹
+- `--recheck-scope-paths`：重新检查任务 scopePaths 是否已升格为已注册项目
 - `--json`：以 JSON 输出
 
 ## `lattice rag`

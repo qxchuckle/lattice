@@ -4,10 +4,10 @@ import { basename as pathBasename, resolve as pathResolve } from 'node:path';
 import machineIdPkg from 'node-machine-id';
 import type { ProjectMeta, ProjectRow } from '../types';
 import {
-  getUserProjectsDir,
   getProjectDir,
   getProjectMetaPath,
   getProjectSpecDir,
+  getUserProjectsDir,
   makeProjectDirName,
   readJSON,
   writeJSON,
@@ -23,8 +23,17 @@ import {
   getProjectById as dbGetProjectById,
   getProjectByPath as dbGetProjectByPath,
   listAllProjects as dbListAllProjects,
-  getRelationsForProject,
 } from '../db';
+import {
+  collectFingerprint,
+  persistFingerprints,
+  normalizeGitRemote,
+  normalizeLocalPath,
+  findProjectByPathSmart,
+  isPathPrefixOf,
+} from './fingerprint';
+import { deleteRelationsByProject, listRelations as listRelationsFromFile } from './relation';
+import type { ProjectRelation } from '../types';
 import { moveToTrash } from '../trash';
 
 // ─── ID 生成 ───
@@ -48,18 +57,18 @@ export function generateProjectId(projectPath: string): string {
   return `${getMachineCode()}${getDirectoryCode(projectPath)}${randomBytes(4).toString('hex')}`;
 }
 
-// ─── 项目信息自动检测 ───
+// ─── 项目信息自动检测（轻量）───
 
 export interface DetectedProjectInfo {
   name: string;
   description?: string;
-  gitRemote?: string;
+  gitRemotes: string[];
 }
 
 export async function detectProjectInfo(projectPath: string): Promise<DetectedProjectInfo> {
   const name = pathBasename(projectPath);
   let description: string | undefined;
-  let gitRemote: string | undefined;
+  const gitRemotes: string[] = [];
 
   const pkgPath = join(projectPath, 'package.json');
   if (await fileExists(pkgPath)) {
@@ -67,22 +76,37 @@ export async function detectProjectInfo(projectPath: string): Promise<DetectedPr
     if (pkg?.description) description = pkg.description;
   }
 
-  const cargoPath = join(projectPath, 'Cargo.toml');
-  if (!description && (await fileExists(cargoPath))) {
-    // Cargo.toml 简单读取不解析 TOML，只做最基本的检测
-  }
-
   try {
-    gitRemote = execSync('git remote get-url origin', {
+    const remoteNames = execSync('git remote', {
       cwd: projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
       encoding: 'utf-8',
-    }).trim();
+      timeout: 3000,
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    for (const r of remoteNames) {
+      try {
+        const url = execSync(`git remote get-url ${r}`, {
+          cwd: projectPath,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          encoding: 'utf-8',
+          timeout: 3000,
+        }).trim();
+        if (url) {
+          const normalized = normalizeGitRemote(url);
+          if (normalized && !gitRemotes.includes(normalized)) gitRemotes.push(normalized);
+        }
+      } catch {
+        // 忽略
+      }
+    }
   } catch {
-    // 没有 git remote 也不报错
+    // 不是 git 仓库
   }
 
-  return { name, description, gitRemote };
+  return { name, description, gitRemotes };
 }
 
 // ─── 项目注册 ───
@@ -91,25 +115,58 @@ export async function registerProject(
   username: string,
   id: string,
   localPath: string,
-  opts?: Partial<Pick<ProjectMeta, 'name' | 'description' | 'groups' | 'tags' | 'gitRemote'>>,
+  opts?: Partial<Pick<ProjectMeta, 'name' | 'description' | 'groups' | 'tags'>> & {
+    gitRemotes?: string[];
+  },
 ): Promise<ProjectMeta> {
   const detected = await detectProjectInfo(localPath);
+  const fingerprint = await collectFingerprint(localPath);
   const now = new Date().toISOString();
   const dirName = makeProjectDirName(id);
   const existingMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
   const name = opts?.name ?? detected.name ?? existingMeta?.name;
+  const normalizedPath = normalizeLocalPath(localPath);
+
+  // localPaths 合并（去重）
+  const localPaths = new Set<string>();
+  if (existingMeta?.localPaths) {
+    for (const p of existingMeta.localPaths) localPaths.add(p);
+  }
+  localPaths.add(normalizedPath);
+
+  // gitRemotes 合并
+  const gitRemotes = new Set<string>();
+  if (existingMeta?.gitRemotes) {
+    for (const r of existingMeta.gitRemotes) gitRemotes.add(r);
+  }
+  for (const r of opts?.gitRemotes ?? []) gitRemotes.add(normalizeGitRemote(r));
+  for (const r of detected.gitRemotes) gitRemotes.add(r);
 
   const meta: ProjectMeta = {
     id,
     name,
-    description: opts?.description ?? detected.description ?? existingMeta?.description,
-    localPath,
-    gitRemote: opts?.gitRemote ?? detected.gitRemote ?? existingMeta?.gitRemote,
+    description: opts?.description ?? existingMeta?.description ?? undefined,
+    localPaths: [...localPaths],
+    gitRemotes: gitRemotes.size > 0 ? [...gitRemotes] : undefined,
+    gitFirstCommit: fingerprint.derived.gitFirstCommit ?? existingMeta?.gitFirstCommit,
+    gitDefaultBranch: fingerprint.derived.gitDefaultBranch ?? existingMeta?.gitDefaultBranch,
+    packageNames:
+      fingerprint.derived.packageNames.length > 0
+        ? fingerprint.derived.packageNames
+        : existingMeta?.packageNames,
+    monorepoPackages:
+      fingerprint.derived.monorepoPackages.length > 0
+        ? fingerprint.derived.monorepoPackages
+        : existingMeta?.monorepoPackages,
+    fingerprintsUpdated: now,
     groups: opts?.groups ?? existingMeta?.groups,
     tags: opts?.tags ?? existingMeta?.tags,
     created: existingMeta?.created ?? now,
     updated: existingMeta ? now : undefined,
   };
+
+  if (!meta.description && existingMeta?.description) meta.description = existingMeta.description;
+  if (!meta.description && detected.description) meta.description = detected.description;
 
   const projectDir = getProjectDir(username, dirName);
   await ensureDir(projectDir);
@@ -117,6 +174,7 @@ export async function registerProject(
   await writeJSON(getProjectMetaPath(username, dirName), meta);
 
   syncProjectToDb(username, meta);
+  persistFingerprints(id, fingerprint.entries);
 
   return meta;
 }
@@ -134,14 +192,24 @@ export async function unregisterProject(username: string, id: string): Promise<v
       title: meta?.name ?? id,
       username,
       entityId: id,
-      restoreHints: { localPath: meta?.localPath },
+      restoreHints: { localPaths: meta?.localPaths ?? [] },
     });
+  }
+  try {
+    await deleteRelationsByProject(username, id);
+  } catch {
+    // relations.json 不存在时忽略
   }
   dbDeleteProject(id);
 }
 
 /** 彻底删除项目（跳过垃圾桶） */
 export async function purgeProject(username: string, id: string): Promise<void> {
+  try {
+    await deleteRelationsByProject(username, id);
+  } catch {
+    // ignore
+  }
   dbDeleteProject(id);
   const dirName = await findProjectDirName(username, id);
   if (dirName) {
@@ -202,8 +270,20 @@ export function listProjects(
   return projects;
 }
 
+/**
+ * 按本地路径查找项目：
+ * 1. 先走 db 的 LIKE 精确包含查询（localPaths 存为 JSON 字符串）
+ * 2. 如果未命中，再走 fingerprint 反查（父目录前缀 / basename / monorepo 包名）
+ */
 export function findProjectByPath(localPath: string): ProjectRow | undefined {
-  return dbGetProjectByPath(localPath);
+  const direct = dbGetProjectByPath(localPath);
+  if (direct) return direct;
+  return undefined;
+}
+
+/** 智能查找：返回带评分的候选列表 */
+export async function findProjectsByPathSmart(localPath: string) {
+  return findProjectByPathSmart(localPath);
 }
 
 export function findProjectById(id: string): ProjectRow | undefined {
@@ -216,29 +296,51 @@ export function resolveProjectById(username: string, input: string): ProjectRow 
   return projects.find((p) => p.id === input) ?? projects.find((p) => p.id.startsWith(input));
 }
 
-/** 获取所有项目关系（去重） */
-export function getAllUniqueRelations(
+/**
+ * 获取所有项目关系（从 relations.json 单一真源读取）
+ * 返回格式保持与原同，但额外带 id。
+ */
+export async function getAllUniqueRelations(
   username: string,
   projectIds?: string[],
-): { project_a: string; project_b: string; relation_type: string; description: string | null }[] {
-  const projects = projectIds ?? dbListAllProjects(username).map((p) => p.id);
+): Promise<
+  {
+    id: string;
+    project_a: string;
+    project_b: string;
+    relation_type: string;
+    description: string | null;
+  }[]
+> {
+  let relations: ProjectRelation[];
+  try {
+    relations = await listRelationsFromFile(username);
+  } catch {
+    relations = [];
+  }
+
+  const projectFilter = projectIds ? new Set(projectIds) : null;
   const seen = new Set<string>();
   const results: {
+    id: string;
     project_a: string;
     project_b: string;
     relation_type: string;
     description: string | null;
   }[] = [];
 
-  for (const pid of projects) {
-    const relations = getRelationsForProject(pid);
-    for (const r of relations) {
-      const key = [r.project_a, r.project_b].sort().join(':');
-      if (!seen.has(key)) {
-        seen.add(key);
-        results.push(r);
-      }
-    }
+  for (const r of relations) {
+    if (projectFilter && !projectFilter.has(r.projectA) && !projectFilter.has(r.projectB)) continue;
+    const key = `${r.projectA}:${r.projectB}:${r.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push({
+      id: r.id,
+      project_a: r.projectA,
+      project_b: r.projectB,
+      relation_type: r.type,
+      description: r.description ?? null,
+    });
   }
   return results;
 }
@@ -283,20 +385,25 @@ async function scanDir(
     if (data?.id && PROJECT_ID_PATTERN.test(data.id)) {
       const existing = dbGetProjectById(data.id);
       if (existing) {
-        if (existing.local_path !== dir) {
-          // 路径变更了，更新
-          const dirName = await findProjectDirName(username, data.id);
-          if (dirName) {
-            const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
-            if (meta) {
-              meta.localPath = dir;
+        // 检查当前路径是否在 localPaths 中；不在则追加
+        const dirName = await findProjectDirName(username, data.id);
+        let pathChanged = false;
+        if (dirName) {
+          const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+          if (meta) {
+            const norm = normalizeLocalPath(dir);
+            const existingPaths = new Set(meta.localPaths ?? []);
+            if (!existingPaths.has(norm)) {
+              existingPaths.add(norm);
+              meta.localPaths = [...existingPaths];
               meta.updated = new Date().toISOString();
               await writeJSON(getProjectMetaPath(username, dirName), meta);
               syncProjectToDb(username, meta);
+              pathChanged = true;
             }
           }
-          updated.push(dir);
         }
+        if (pathChanged) updated.push(dir);
       } else {
         await registerProject(username, data.id, dir);
         added.push(dir);
@@ -340,10 +447,29 @@ async function scanDir(
 
 // ─── 工具函数 ───
 
-/** 当前开发阶段直接使用项目 ID 作为目录名 */
+/**
+ * 解析项目 id 对应的目录名。
+ * 主路径：dirName === makeProjectDirName(id)（当前为 id 本身）。
+ * 兼容回退：扫描 projects 目录，匹配 project.json 中 id 一致的 legacy 短前缀目录。
+ */
 async function findProjectDirName(username: string, id: string): Promise<string | null> {
-  const dirName = makeProjectDirName(id);
-  return (await fileExists(getProjectMetaPath(username, dirName))) ? dirName : null;
+  const direct = makeProjectDirName(id);
+  if (await fileExists(getProjectMetaPath(username, direct))) {
+    return direct;
+  }
+  try {
+    const entries = await listDir(getUserProjectsDir(username));
+    for (const entry of entries) {
+      if (entry === direct) continue;
+      const metaPath = getProjectMetaPath(username, entry);
+      if (!(await fileExists(metaPath))) continue;
+      const meta = await readJSON<ProjectMeta>(metaPath);
+      if (meta?.id === id) return entry;
+    }
+  } catch {
+    // projects 目录不存在或不可读，安静失败
+  }
+  return null;
 }
 
 function syncProjectToDb(username: string, meta: ProjectMeta): void {
@@ -351,9 +477,20 @@ function syncProjectToDb(username: string, meta: ProjectMeta): void {
     upsertProject({
       id: meta.id,
       name: meta.name,
-      local_path: meta.localPath,
+      local_path: JSON.stringify(meta.localPaths ?? []),
       description: meta.description ?? null,
-      git_remote: meta.gitRemote ?? null,
+      git_remote:
+        meta.gitRemotes && meta.gitRemotes.length > 0 ? JSON.stringify(meta.gitRemotes) : null,
+      git_first_commit: meta.gitFirstCommit ?? null,
+      git_default_branch: meta.gitDefaultBranch ?? null,
+      package_names:
+        meta.packageNames && meta.packageNames.length > 0
+          ? JSON.stringify(meta.packageNames)
+          : null,
+      monorepo_packages:
+        meta.monorepoPackages && meta.monorepoPackages.length > 0
+          ? JSON.stringify(meta.monorepoPackages)
+          : null,
       groups: meta.groups ? JSON.stringify(meta.groups) : null,
       tags: meta.tags ? JSON.stringify(meta.tags) : null,
       username,
@@ -364,5 +501,8 @@ function syncProjectToDb(username: string, meta: ProjectMeta): void {
     // 数据库可能未初始化（scan 时），静默跳过
   }
 }
+
+// 指针导出：路径阅读辅助
+export { isPathPrefixOf };
 
 export { findProjectDirName };

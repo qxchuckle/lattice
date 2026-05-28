@@ -13,14 +13,13 @@ import {
 } from '../db';
 import {
   fileExists,
-  getProjectMetaPath,
   getTaskMetaPath,
   getTaskPrdPath,
   getUsersDir,
   listDir,
-  makeProjectDirName,
   readJSON,
 } from '../paths';
+import { findProjectDirName } from '../project';
 import { removeSearchDocumentIndex } from '../rag';
 
 export interface StartupSelfCheckResult {
@@ -80,22 +79,18 @@ export async function runStartupSelfCheck(): Promise<StartupSelfCheckResult> {
   }
 }
 
+/**
+ * 启动自检对项目是否孤儿的判定。
+ *
+ * 设计原则：**磁盘 project.json 是真源**。
+ * - 必要条件（允许 db DELETE）：projects/<dir>/project.json 不存在（包含 legacy 短前缀目录扫描）。
+ * - 其余不一致（本地路径丢失 / lattice.json 被他人接管）不视为启动阶段孤儿，
+ *   交由 `doctor` / `project list --orphaned` / `unlink --remove-data` 走 trash 可恢复流程。
+ * - 这避免了与 `doctor --migrate` 的「回填 ↔ 静默删除」拉锯。
+ */
 async function isOrphanProject(project: ProjectRow): Promise<boolean> {
-  const metaPath = getProjectMetaPath(project.username, makeProjectDirName(project.id));
-  if (!(await fileExists(metaPath))) {
-    return true;
-  }
-
-  if (!(await fileExists(project.local_path))) {
-    return false;
-  }
-
-  const latticeJson = await readJSON<{ id?: string }>(join(project.local_path, 'lattice.json'));
-  if (!latticeJson?.id) {
-    return true;
-  }
-
-  return latticeJson.id !== project.id;
+  const dirName = await findProjectDirName(project.username, project.id);
+  return dirName === null;
 }
 
 async function isOrphanTaskLink(link: TaskProjectRow, usernames: Set<string>): Promise<boolean> {
@@ -112,10 +107,7 @@ async function isOrphanTaskLink(link: TaskProjectRow, usernames: Set<string>): P
   return true;
 }
 
-async function isOrphanIndexedDocument(
-  filePath: string,
-  usernames: Set<string>,
-): Promise<boolean> {
+async function isOrphanIndexedDocument(filePath: string, usernames: Set<string>): Promise<boolean> {
   if (isAbsolute(filePath)) {
     return !(await fileExists(filePath));
   }
@@ -137,7 +129,8 @@ async function isOrphanIndexedDocument(
   ) {
     const [, username, , projectId] = parts;
     if (!usernames.has(username)) return true;
-    return !(await fileExists(getProjectMetaPath(username, makeProjectDirName(projectId))));
+    // 兼容 legacy 短前缀目录：findProjectDirName 会回退扫描
+    return (await findProjectDirName(username, projectId)) === null;
   }
 
   return false;

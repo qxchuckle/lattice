@@ -1,8 +1,16 @@
-import type { ParsedSpec, TaskMeta, ProjectContext, SmartContext } from '../types';
+import type {
+  ParsedSpec,
+  TaskMeta,
+  ProjectContext,
+  SmartContext,
+  RelatedProjectEntry,
+  RelatedProjectRelationEntry,
+} from '../types';
 import { getProjectSpecs, getUserSpecs, getGlobalSpecs, getCascadedSpecs } from '../spec';
 import { listTasks, getTaskMeta } from '../task';
-import { getProjectMeta, listProjects, findProjectDirName } from '../project';
-import { getRelationsForProject, getTasksForProject } from '../db';
+import { getProjectMeta, listProjects } from '../project';
+import { getRelationsByProject } from '../project/relation';
+import { getTasksForProject } from '../db';
 
 /** 获取项目的完整上下文（三层 spec 聚合 + 关联信息） */
 export async function getContextForProject(
@@ -28,23 +36,30 @@ export async function getContextForProject(
     // 数据库可能未初始化
   }
 
-  // 查找关联项目
-  const relatedProjects: { id: string; name: string; relation?: string }[] = [];
+  // 查找关联项目（同一项目可能有多条关系）
+  const relatedProjects: RelatedProjectEntry[] = [];
+  const relatedMap = new Map<string, RelatedProjectEntry>();
   try {
-    const relations = getRelationsForProject(projectId);
+    const relations = await getRelationsByProject(username, projectId);
     for (const r of relations) {
-      const relatedId = r.project_a === projectId ? r.project_b : r.project_a;
-      const meta = await getProjectMeta(username, relatedId);
-      if (meta) {
-        relatedProjects.push({
-          id: meta.id,
-          name: meta.name,
-          relation: r.description ?? r.relation_type,
-        });
+      const relatedId = r.projectA === projectId ? r.projectB : r.projectA;
+      let entry = relatedMap.get(relatedId);
+      if (!entry) {
+        const meta = await getProjectMeta(username, relatedId);
+        if (!meta) continue;
+        entry = { id: meta.id, name: meta.name, relations: [] };
+        relatedMap.set(relatedId, entry);
+        relatedProjects.push(entry);
       }
+      const relEntry: RelatedProjectRelationEntry = {
+        relId: r.id,
+        type: r.type,
+        description: r.description,
+      };
+      entry.relations.push(relEntry);
     }
   } catch {
-    // 数据库可能未初始化
+    // relations.json 未初始化
   }
 
   // 同组项目
@@ -53,14 +68,20 @@ export async function getContextForProject(
     const allProjects = listProjects(username);
     for (const p of allProjects) {
       if (p.id === projectId) continue;
-      if (relatedProjects.some((r) => r.id === p.id)) continue;
+      if (relatedMap.has(p.id)) continue;
       const groups = p.groups ? JSON.parse(p.groups) : [];
       const shared = projectMeta.groups.filter((g) => groups.includes(g));
       if (shared.length > 0) {
         relatedProjects.push({
           id: p.id,
           name: p.name,
-          relation: `同组：${shared.join(', ')}`,
+          relations: [
+            {
+              relId: '',
+              type: 'same-group',
+              description: `同组：${shared.join(', ')}`,
+            },
+          ],
         });
       }
     }
@@ -153,7 +174,8 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
   if (ctx.relatedProjects.length > 0) {
     lines.push('## 关联项目\n');
     for (const p of ctx.relatedProjects) {
-      lines.push(`- **${p.name}** — ${p.relation ?? '相关'}`);
+      const relStrs = p.relations.map((r) => r.description ?? r.type);
+      lines.push(`- **${p.name}** — ${relStrs.join(' / ')}`);
     }
     lines.push('');
   }

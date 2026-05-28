@@ -14,6 +14,8 @@ import {
   getDbPath,
   getTasksForProject,
   getTaskMeta,
+  findProjectById,
+  dirExists,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 
@@ -94,6 +96,22 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
     return;
   }
 
+  // 检查绑定状态：db 中是否存在该 id
+  const dbRow = findProjectById(project.id);
+  if (!dbRow) {
+    logger.raw(
+      chalk.yellow(
+        `⚠ 当前 lattice.json 指向项目 ${project.id.slice(0, 8)}…，但 Lattice 中未找到对应项目`,
+      ),
+    );
+    logger.raw(
+      chalk.dim(
+        '  修复建议：\n    1) lattice link --restore <id>  恢复绑定\n    2) lattice link              走指纹识别选单\n    3) lattice link --force-new   强制创建新项目',
+      ),
+    );
+    return;
+  }
+
   const meta = await getProjectMeta(username, project.id);
   if (!meta) {
     logger.raw(chalk.yellow('项目元数据不存在，可能需要重新 scan'));
@@ -113,7 +131,18 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
     // 忽略
   }
 
-  const status = { meta, specs: specs.map((s) => s.fileName), activeTasks };
+  // 收集路径存在性检测
+  const pathStatus: { path: string; exists: boolean }[] = [];
+  for (const p of meta.localPaths ?? []) {
+    pathStatus.push({ path: p, exists: await dirExists(p) });
+  }
+
+  const status = {
+    meta,
+    specs: specs.map((s) => s.fileName),
+    activeTasks,
+    binding: { current: project.root, pathStatus },
+  };
 
   if (json) {
     logger.raw(JSON.stringify(status, null, 2));
@@ -122,8 +151,19 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
 
   logger.raw(chalk.bold(`\n${meta.name}\n`));
   logger.raw(`  ID：${meta.id}`);
-  logger.raw(`  路径：${meta.localPath}`);
+  logger.raw(`  当前绑定路径：${project.root}`);
+  if (pathStatus.length > 1) {
+    logger.raw(chalk.cyan(`  所有路径（${pathStatus.length}）：`));
+    for (const ps of pathStatus) {
+      logger.raw(`    ${ps.exists ? chalk.green('●') : chalk.red('○')} ${ps.path}`);
+    }
+  } else if (pathStatus.length === 1) {
+    const ps = pathStatus[0];
+    logger.raw(`  路径状态：${ps.exists ? chalk.green('存在') : chalk.red('已失效')}`);
+  }
   if (meta.description) logger.raw(`  描述：${meta.description}`);
+  if (meta.gitRemotes?.length) logger.raw(`  Git remote：${meta.gitRemotes.join(', ')}`);
+  if (meta.packageNames?.length) logger.raw(`  Package：${meta.packageNames.join(', ')}`);
   if (meta.groups?.length) logger.raw(`  分组：${meta.groups.join(', ')}`);
   if (meta.tags?.length) logger.raw(`  标签：${meta.tags.join(', ')}`);
 

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { resolve as pathResolve } from 'node:path';
 import { confirm } from '@inquirer/prompts';
 import {
   getUsername,
@@ -23,8 +24,18 @@ import {
   addCheckpoint,
   listCheckpoints,
   getCheckpoint,
+  findProjectsByPathSmart,
+  normalizeLocalPath,
+  resolveProjectById,
+  CONFIDENCE_THRESHOLDS,
 } from '@qcqx/lattice-core';
-import type { TaskMeta, TaskStatus, TaskTreeNode, CheckpointType } from '@qcqx/lattice-core';
+import type {
+  TaskMeta,
+  TaskStatus,
+  TaskTreeNode,
+  CheckpointType,
+  ScopePath,
+} from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
@@ -711,6 +722,135 @@ export function registerTaskCommand(program: Command): void {
             logger.raw(chalk.dim(`    ${preview}`));
           }
           logger.raw('');
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── associate <id> ───
+  cmd
+    .command('associate <id>')
+    .description(
+      '为任务关联项目或路径（路径智能识别：命中已注册项目记到 projects，未命中记到 scopePaths）',
+    )
+    .option('-p, --project <ids...>', '追加关联项目 ID')
+    .option('--current', '追加当前目录对应的项目')
+    .option('--paths <paths...>', '追加额外路径（可多个，会依次智能识别是否属于某个已注册项目）')
+    .option('--note <note>', '赋予本次新增路径的备注')
+    .option('--remove-path <path>', '从 scopePaths 中移除指定路径')
+    .option('--remove-project <id>', '从 projects 中移除指定项目')
+    .option('--clear-paths', '清空任务的 scopePaths')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        const match = await resolveTaskById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          closeDb();
+          return;
+        }
+        const meta = match;
+        const updates: Partial<TaskMeta> = {};
+
+        // 1) projects 演变
+        const currentProjects = new Set(meta.projects ?? []);
+        if (opts.project) {
+          for (const raw of opts.project as string[]) {
+            const r = resolveProjectById(username, raw);
+            if (!r) {
+              logger.raw(chalk.yellow(`跳过未知项目：${raw}`));
+              continue;
+            }
+            currentProjects.add(r.id);
+          }
+        }
+        if (opts.current) {
+          const cur = await resolveCurrentProject();
+          if (cur) currentProjects.add(cur.id);
+        }
+        if (opts.removeProject) {
+          const r = resolveProjectById(username, opts.removeProject as string);
+          if (r) currentProjects.delete(r.id);
+          else currentProjects.delete(opts.removeProject as string);
+        }
+
+        // 2) scopePaths 演变
+        let scopePaths: ScopePath[] = [...(meta.scopePaths ?? [])];
+        if (opts.clearPaths) scopePaths = [];
+        if (opts.removePath) {
+          const norm = normalizeLocalPath(pathResolve(opts.removePath as string));
+          scopePaths = scopePaths.filter((s) => s.path !== norm);
+        }
+        const recognized: {
+          path: string;
+          projectName: string;
+          projectId: string;
+          score: number;
+        }[] = [];
+        const unrecognized: { path: string; note?: string }[] = [];
+        if (opts.paths) {
+          for (const raw of opts.paths as string[]) {
+            const norm = normalizeLocalPath(pathResolve(raw));
+            const candidates = await findProjectsByPathSmart(norm);
+            const top = candidates[0];
+            if (top && top.score >= CONFIDENCE_THRESHOLDS.high) {
+              currentProjects.add(top.projectId);
+              recognized.push({
+                path: norm,
+                projectName: top.projectName,
+                projectId: top.projectId,
+                score: top.score,
+              });
+            } else {
+              if (!scopePaths.find((s) => s.path === norm)) {
+                scopePaths.push({
+                  path: norm,
+                  note: (opts.note as string | undefined) ?? undefined,
+                  addedAt: new Date().toISOString(),
+                });
+              }
+              unrecognized.push({ path: norm, note: opts.note as string | undefined });
+            }
+          }
+        }
+
+        updates.projects = [...currentProjects];
+        updates.scopePaths = scopePaths;
+
+        const updated = await updateTask(username, meta.id, updates);
+        closeDb();
+
+        if (opts.json) {
+          logger.raw(
+            JSON.stringify({ task: updated, recognized, unrecognized, scopePaths }, null, 2),
+          );
+          return;
+        }
+
+        if (!updated) {
+          logger.raw(chalk.yellow('更新失败'));
+          return;
+        }
+
+        logger.raw(chalk.green(`✓ 任务 ${updated.title} 关联已更新`));
+        logger.raw(chalk.dim(`  关联项目：${updated.projects?.length ?? 0} 个`));
+        logger.raw(chalk.dim(`  scopePaths：${updated.scopePaths?.length ?? 0} 个`));
+        if (recognized.length > 0) {
+          logger.raw(chalk.cyan(`\n  → 路径识别为项目（${recognized.length}）：`));
+          for (const r of recognized) {
+            logger.raw(`    ${r.path} ${chalk.dim(`→ ${r.projectName} (score=${r.score})`)}`);
+          }
+        }
+        if (unrecognized.length > 0) {
+          logger.raw(chalk.cyan(`\n  → 记为额外路径（${unrecognized.length}）：`));
+          for (const u of unrecognized) {
+            logger.raw(`    ${u.path}${u.note ? chalk.dim(` (${u.note})`) : ''}`);
+          }
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);

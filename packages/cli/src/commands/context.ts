@@ -7,6 +7,7 @@ import {
   getContextForProject,
   getSmartContext,
   formatContextAsMarkdown,
+  findProjectById,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 
@@ -70,6 +71,24 @@ export function registerContextCommand(program: Command): void {
         if (!projectId) {
           logger.raw(chalk.yellow('无法确定项目 ID'));
           closeDb();
+          return;
+        }
+
+        // 绑定丢失自检：db 中不存在该项目时给出修复建议
+        const dbRow = findProjectById(projectId);
+        if (!dbRow) {
+          closeDb();
+          logger.raw(
+            chalk.yellow(
+              `⚠ 未在 Lattice 中找到项目 ${projectId.slice(0, 8)}… （lattice.json 指向的 id 不存在）`,
+            ),
+          );
+          logger.raw(
+            chalk.dim(
+              '  修复建议：\n    1) lattice link --restore <id>  恢复绑定\n    2) lattice link              走指纹识别选单\n    3) lattice link --force-new   强制创建新项目',
+            ),
+          );
+          process.exitCode = 1;
           return;
         }
 

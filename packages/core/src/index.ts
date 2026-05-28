@@ -4,6 +4,7 @@ export type {
   TaskMeta,
   TaskTreeNode,
   TaskStatus,
+  ScopePath,
   CheckpointType,
   CheckpointEntry,
   ProgressFile,
@@ -18,6 +19,8 @@ export type {
   DoctorEntry,
   SpecConflict,
   ProjectContext,
+  RelatedProjectEntry,
+  RelatedProjectRelationEntry,
   SmartContext,
   SpecTemplateFile,
   SpecTemplate,
@@ -26,7 +29,12 @@ export type {
   RAGStatus,
   EmbeddingRecord,
   ProjectRow,
-  ProjectRelationRow,
+  ProjectRelation,
+  ProjectFingerprintEntry,
+  ProjectFingerprint,
+  ProjectFingerprintRow,
+  ProjectMatchCandidate,
+  RelationsFile,
   TaskProjectRow,
 } from './types';
 
@@ -46,6 +54,7 @@ export {
   getUserSpecDir,
   getUserProjectsDir,
   getUserTasksDir,
+  getRelationsFilePath,
   getProjectDir,
   getProjectMetaPath,
   getProjectSpecDir,
@@ -100,12 +109,13 @@ export {
   getProjectById,
   getProjectByPath,
   listAllProjects,
-  upsertRelation,
-  getRelationsForProject,
-  deleteRelation,
+  upsertFingerprint,
+  deleteFingerprintsByProject,
+  listFingerprintsByProject,
+  findProjectsByFingerprint,
+  findProjectsByFingerprintKeyPrefix,
   linkTaskProject,
   unlinkTaskProject,
-  getProjectsForTask,
   getTasksForProject,
   deleteTaskLinks,
   listTaskProjectLinks,
@@ -136,13 +146,45 @@ export {
   updateProjectMeta,
   listProjects,
   findProjectByPath,
+  findProjectsByPathSmart,
   findProjectById,
   findProjectDirName,
   scanForProjects,
   resolveProjectById,
   getAllUniqueRelations,
   parseProjectRow,
+  isPathPrefixOf,
 } from './project';
+
+// 项目关系（relations.json 真源 CRUD）
+export {
+  generateRelationId,
+  normalizePairOrder,
+  readRelationsFile,
+  writeRelationsFile,
+  listRelations,
+  getRelationById as getRelationByIdFromFile,
+  getRelationsByProject,
+  upsertRelation as upsertRelationFile,
+  deleteRelation as deleteRelationFile,
+  deleteRelationsByProject,
+} from './project/relation';
+
+// 项目指纹
+export {
+  FINGERPRINT_WEIGHTS,
+  CONFIDENCE_THRESHOLDS,
+  collectFingerprint,
+  persistFingerprints,
+  listFingerprintsForProject,
+  findCandidatesByFingerprint,
+  findProjectByPathSmart,
+  buildFingerprint,
+  hashFile,
+  listAllProjectFingerprintSummaries,
+  normalizeGitRemote,
+  normalizeLocalPath,
+} from './project/fingerprint';
 
 // Spec
 export {

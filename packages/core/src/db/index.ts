@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import type {
   ProjectRow,
-  ProjectRelationRow,
+  ProjectFingerprintRow,
   TaskProjectRow,
   SearchDocumentMeta,
   SearchDocumentType,
@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS projects (
   local_path TEXT NOT NULL,
   description TEXT,
   git_remote TEXT,
+  git_first_commit TEXT,
+  git_default_branch TEXT,
+  package_names TEXT,
+  monorepo_packages TEXT,
   groups TEXT,
   tags TEXT,
   username TEXT NOT NULL,
@@ -24,13 +28,16 @@ CREATE TABLE IF NOT EXISTS projects (
   updated TEXT
 );
 
-CREATE TABLE IF NOT EXISTS project_relations (
-  project_a TEXT NOT NULL,
-  project_b TEXT NOT NULL,
-  relation_type TEXT NOT NULL,
-  description TEXT,
-  PRIMARY KEY (project_a, project_b)
+CREATE TABLE IF NOT EXISTS project_fingerprints (
+  project_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  weight INTEGER NOT NULL,
+  PRIMARY KEY (project_id, key, value)
 );
+
+CREATE INDEX IF NOT EXISTS idx_fingerprints_project ON project_fingerprints(project_id);
+CREATE INDEX IF NOT EXISTS idx_fingerprints_kv ON project_fingerprints(key, value);
 
 CREATE TABLE IF NOT EXISTS task_projects (
   task_id TEXT NOT NULL,
@@ -119,6 +126,40 @@ function ensureEmbeddingsSchema(db: Database.Database): void {
   }
 }
 
+function ensureProjectsSchema(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info('projects')").all() as { name: string }[];
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has('git_first_commit')) {
+    db.exec('ALTER TABLE projects ADD COLUMN git_first_commit TEXT');
+  }
+  if (!columnNames.has('git_default_branch')) {
+    db.exec('ALTER TABLE projects ADD COLUMN git_default_branch TEXT');
+  }
+  if (!columnNames.has('package_names')) {
+    db.exec('ALTER TABLE projects ADD COLUMN package_names TEXT');
+  }
+  if (!columnNames.has('monorepo_packages')) {
+    db.exec('ALTER TABLE projects ADD COLUMN monorepo_packages TEXT');
+  }
+}
+
+/**
+ * 清理历史遗留的 project_relations 缓存表。
+ * 该表自 v?.? 起被废弃：项目关系完全以 relations.json 为真源，db 中不再缓存。
+ * 旧版本数据库可能仍保留该表与索引，这里做一次性 DROP，无需保留数据（真源在 relations.json）。
+ */
+function dropLegacyProjectRelations(db: Database.Database): void {
+  try {
+    db.exec('DROP INDEX IF EXISTS uq_relations_triple');
+    db.exec('DROP INDEX IF EXISTS idx_relations_a');
+    db.exec('DROP INDEX IF EXISTS idx_relations_b');
+    db.exec('DROP TABLE IF EXISTS project_relations');
+  } catch {
+    // 旧表不存在或不可清理，静默
+  }
+}
+
 function ensureSpecSearchMetaSchema(db: Database.Database): void {
   const columns = db.prepare("PRAGMA table_info('spec_search_meta')").all() as { name: string }[];
   const columnNames = new Set(columns.map((column) => column.name));
@@ -149,6 +190,8 @@ export async function initDb(): Promise<Database.Database> {
   _db.exec(SCHEMA_SQL);
   ensureEmbeddingsSchema(_db);
   ensureSpecSearchMetaSchema(_db);
+  ensureProjectsSchema(_db);
+  dropLegacyProjectRelations(_db);
 
   // FTS5 全文索引
   try {
@@ -196,11 +239,22 @@ export function closeDb(): void {
 export function upsertProject(row: ProjectRow): void {
   const db = getDb();
   db.prepare(
-    `INSERT INTO projects (id, name, local_path, description, git_remote, groups, tags, username, created, updated)
-     VALUES (@id, @name, @local_path, @description, @git_remote, @groups, @tags, @username, @created, @updated)
+    `INSERT INTO projects (
+       id, name, local_path, description, git_remote, git_first_commit, git_default_branch,
+       package_names, monorepo_packages, groups, tags, username, created, updated
+     )
+     VALUES (
+       @id, @name, @local_path, @description, @git_remote, @git_first_commit, @git_default_branch,
+       @package_names, @monorepo_packages, @groups, @tags, @username, @created, @updated
+     )
      ON CONFLICT(id) DO UPDATE SET
        name = @name, local_path = @local_path, description = @description,
-       git_remote = @git_remote, groups = @groups, tags = @tags,
+       git_remote = @git_remote,
+       git_first_commit = @git_first_commit,
+       git_default_branch = @git_default_branch,
+       package_names = @package_names,
+       monorepo_packages = @monorepo_packages,
+       groups = @groups, tags = @tags,
        updated = @updated`,
   ).run(row);
 }
@@ -208,18 +262,23 @@ export function upsertProject(row: ProjectRow): void {
 export function deleteProject(id: string): void {
   const db = getDb();
   db.prepare('DELETE FROM projects WHERE id = ?').run(id);
-  db.prepare('DELETE FROM project_relations WHERE project_a = ? OR project_b = ?').run(id, id);
   db.prepare('DELETE FROM task_projects WHERE project_id = ?').run(id);
+  db.prepare('DELETE FROM project_fingerprints WHERE project_id = ?').run(id);
 }
 
 export function getProjectById(id: string): ProjectRow | undefined {
   return getDb().prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
 }
 
+/**
+ * 按本地路径查找项目。
+ * local_path 列现为 JSON 数组字符串，使用 LIKE 模式包含匹配。
+ */
 export function getProjectByPath(localPath: string): ProjectRow | undefined {
-  return getDb().prepare('SELECT * FROM projects WHERE local_path = ?').get(localPath) as
-    | ProjectRow
-    | undefined;
+  const needle = JSON.stringify(localPath);
+  return getDb()
+    .prepare(`SELECT * FROM projects WHERE local_path LIKE '%' || ? || '%' LIMIT 1`)
+    .get(needle) as ProjectRow | undefined;
 }
 
 export function listAllProjects(username?: string): ProjectRow[] {
@@ -231,30 +290,45 @@ export function listAllProjects(username?: string): ProjectRow[] {
   return getDb().prepare('SELECT * FROM projects ORDER BY name').all() as ProjectRow[];
 }
 
-// ─── 项目关系 CRUD ───
+// ─── 项目关系：已移除 db 缓存 ───
+// relations 完全以 relations.json 为真源，db 不再缓存任何关系数据。
+// 历史遗留表会在 initDb() 中由 dropLegacyProjectRelations() 清理。
 
-export function upsertRelation(row: ProjectRelationRow): void {
+// ─── 项目指纹 CRUD ───
+
+export function upsertFingerprint(row: ProjectFingerprintRow): void {
   getDb()
     .prepare(
-      `INSERT OR REPLACE INTO project_relations (project_a, project_b, relation_type, description)
-       VALUES (@project_a, @project_b, @relation_type, @description)`,
+      `INSERT INTO project_fingerprints (project_id, key, value, weight)
+       VALUES (@project_id, @key, @value, @weight)
+       ON CONFLICT(project_id, key, value) DO UPDATE SET weight = @weight`,
     )
     .run(row);
 }
 
-export function getRelationsForProject(projectId: string): ProjectRelationRow[] {
-  return getDb()
-    .prepare('SELECT * FROM project_relations WHERE project_a = ? OR project_b = ?')
-    .all(projectId, projectId) as ProjectRelationRow[];
+export function deleteFingerprintsByProject(projectId: string): void {
+  getDb().prepare('DELETE FROM project_fingerprints WHERE project_id = ?').run(projectId);
 }
 
-export function deleteRelation(projectA: string, projectB: string): boolean {
-  const result = getDb()
-    .prepare(
-      'DELETE FROM project_relations WHERE (project_a = ? AND project_b = ?) OR (project_a = ? AND project_b = ?)',
-    )
-    .run(projectA, projectB, projectB, projectA);
-  return result.changes > 0;
+export function listFingerprintsByProject(projectId: string): ProjectFingerprintRow[] {
+  return getDb()
+    .prepare('SELECT * FROM project_fingerprints WHERE project_id = ?')
+    .all(projectId) as ProjectFingerprintRow[];
+}
+
+export function findProjectsByFingerprint(key: string, value: string): ProjectFingerprintRow[] {
+  return getDb()
+    .prepare('SELECT * FROM project_fingerprints WHERE key = ? AND value = ?')
+    .all(key, value) as ProjectFingerprintRow[];
+}
+
+export function findProjectsByFingerprintKeyPrefix(
+  key: string,
+  valuePrefix: string,
+): ProjectFingerprintRow[] {
+  return getDb()
+    .prepare(`SELECT * FROM project_fingerprints WHERE key = ? AND value LIKE ? || '%'`)
+    .all(key, valuePrefix) as ProjectFingerprintRow[];
 }
 
 // ─── 任务-项目关联 CRUD ───
@@ -269,13 +343,6 @@ export function unlinkTaskProject(taskId: string, projectId: string): void {
   getDb()
     .prepare('DELETE FROM task_projects WHERE task_id = ? AND project_id = ?')
     .run(taskId, projectId);
-}
-
-export function getProjectsForTask(taskId: string): string[] {
-  const rows = getDb()
-    .prepare('SELECT project_id FROM task_projects WHERE task_id = ?')
-    .all(taskId) as TaskProjectRow[];
-  return rows.map((r) => r.project_id);
 }
 
 export function getTasksForProject(projectId: string): string[] {
