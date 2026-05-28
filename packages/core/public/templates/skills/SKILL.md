@@ -136,6 +136,37 @@ lattice doctor --recheck-scope-paths
 - 只有长期稳定、可复用的信息才应沉淀为 spec
 - 产生新内容后及时 `rag update`，确保搜索可用
 
+## 终端输出读取原则
+
+lattice CLI 的输出往往是判断依据的唯一来源（context / search / spec list / project list / task progress 等）。对这些输出使用 `head` / `tail` / `grep` 等过滤手段时，遵守：
+
+### 什么时候可以过滤
+
+- 已明确知道输出体量很大且关心位置固定（例如只看 `git log -5`、只看构建日志末尾错误摘要）
+- 已知目标关键字，用 `grep -nC 5 <keyword>` 而不是盲 `head/tail`
+- 输出格式稳定且领域已知（如 `lattice project list` 其中一项、`git status --short`）
+
+### 什么时候禁止过滤 / 必须全量
+
+- **第一次跑某条 lattice 命令**、不熟悉输出结构时：先全量看一遍再决定要不要过滤
+- **要从 `lattice search` / `lattice context` 判断“是否有相关 spec / 相似案例”**：需要看到所有后选结果才能给出结论，不能 `head` 截前几条
+- **排查错误、构建 / 测试 / `lattice doctor` 失败**：错误可能出现在输出任意位置，head/tail 极易漏掉根因
+- **判断“有无遗漏”类语义**（残留引用检查、`lattice spec conflicts` 清单是否完整、`lattice project list --orphaned` 是否覆盖全部）：必须全量或先 `wc -l` 探体量
+- **输出可能是 stderr/stdout 交错**：先 `2>&1` 再考虑过滤
+
+### 过滤后必须自检
+
+- 看到结尾被截断（不完整、行末是省略号、关键段落只露半截）→ **重跑去掉过滤或显著加大 N**（如 `head -80` → `head -300` 或直接不过滤）
+- 过滤后看不到预期关键字 / 行数明显少于预期 → **重跑全量再判断**，不要直接下“不存在”结论
+- 同一命令需要看多段（开头摘要 + 末尾错误）→ 用 `2>&1 | tee` 暂存或分两次执行，**禁止只看一段就下结论**
+
+### 推荐替代
+
+- 用 `wc -l` 先看体量再决定要不要过滤
+- 用 `grep -nC 5 <keyword>` 替代 `head/tail` 盲截
+- 用 `awk '/起始模式/,/结束模式/'` 截取语义段落
+- lattice CLI 输出能带 `--json` 就带（例如 `lattice search --json`），结构化之后再按字段抽取比字符串过滤更可靠
+
 ## 渐进式加载
 
 默认只读本文件；遇到具体场景时再继续读取对应子文档：
@@ -145,4 +176,5 @@ lattice doctor --recheck-scope-paths
 - spec 层级、冲突判断、模板和规则沉淀：[spec-workflows.md](spec-workflows.md)
 - 任务创建、开始、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
 - Agent Commands 的用途与使用边界：[agent-commands.md](agent-commands.md)
+- 多命令并行 / 避免原始输出填满主上下文时的 subagent 委派策略：[subagent-delegation.md](subagent-delegation.md)
 - 所有 CLI 配套命令的参数与功能：[command-reference.md](command-reference.md)
