@@ -84,9 +84,7 @@ export function registerTrashCommand(program: Command): void {
 
         if (restored.type === 'project' && restored.restoreHints) {
           const username = await getUsername();
-          const localPaths =
-            (restored.restoreHints.localPaths as string[] | undefined) ??
-            (restored.restoreHints.localPath ? [restored.restoreHints.localPath as string] : []);
+          const localPaths = (restored.restoreHints.localPaths as string[] | undefined) ?? [];
           // 选取仍然存在的路径作为主路径
           let primary: string | null = null;
           for (const p of localPaths) {

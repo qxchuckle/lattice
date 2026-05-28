@@ -87,7 +87,7 @@
 - `--group <group>`：按分组过滤
 - `--tag <tag>`：按标签过滤
 - `--has-git`：只显示含 git remote 的项目
-- `--orphaned`：只显示所有 localPath 都已失效的项目
+- `--orphaned`：只显示所有 localPaths 都已失效的项目
 - `--with-relations`：附带显示项目关系
 - `--json`：以 JSON 输出
 
@@ -368,7 +368,7 @@ Spec 管理。
 检查当前安装和索引状态。
 
 - `--fix`：自动修复安全可修复的问题
-- `--migrate`：迁移旧版项目数据（单字符串 localPath / gitRemote → 数组）
+- `--migrate`：一次性迁移旧版项目数据（单字符串 localPath / gitRemote 升级为 localPaths / gitRemotes 数组，并清理 legacy 字段），同时回填 db 缺失项目
 - `--rebuild-fingerprints`：重新采集所有项目的指纹
 - `--recheck-scope-paths`：重新检查任务 scopePaths 是否已升格为已注册项目
 - `--json`：以 JSON 输出

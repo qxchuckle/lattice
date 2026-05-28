@@ -118,7 +118,7 @@ lattice project relation remove <relation-id>
 迁移旧版数据 / 重建指纹 / 复核任务路径：
 
 ```bash
-lattice doctor --migrate                # 把单字符串 localPath 升级为数组
+lattice doctor --migrate                # 一次性升级旧 localPath/gitRemote 为数组并清理 legacy 字段
 lattice doctor --rebuild-fingerprints   # 重新采集所有项目的指纹
 lattice doctor --recheck-scope-paths    # 重新检查任务 scopePaths 是否升格为已注册项目
 ```

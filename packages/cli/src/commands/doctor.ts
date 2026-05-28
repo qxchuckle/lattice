@@ -225,7 +225,7 @@ export function registerDoctorCommand(program: Command): void {
 
 /**
  * 迁移：以磁盘 projects/<dir>/project.json 为真源，遍历所有目录
- * - 升级 legacy single-string localPath/gitRemote 为数组形式
+ * - 升级 legacy single-string localPath/gitRemote 为数组形式，升级后删除旧字段
  * - 回填 db 缺失的项目记录（孤儿目录也会被登记）
  */
 async function runMigrate(username: string): Promise<{
@@ -249,7 +249,7 @@ async function runMigrate(username: string): Promise<{
       const meta = await readJSON<ProjectMeta>(metaPath);
       if (!meta || !meta.id) continue;
 
-      // legacy 字段兼容：localPath / gitRemote 字符串 → 数组
+      // legacy 字段一次性迁移：localPath / gitRemote 字符串 → 数组，完成后删除旧字段
       const legacy = meta as unknown as { localPath?: string; gitRemote?: string };
       let changed = false;
       if (!Array.isArray(meta.localPaths) || meta.localPaths.length === 0) {
@@ -258,6 +258,15 @@ async function runMigrate(username: string): Promise<{
       }
       if (!meta.gitRemotes && legacy.gitRemote) {
         meta.gitRemotes = [legacy.gitRemote];
+        changed = true;
+      }
+      // 任何场景下发现旧字段存在都要清理（不再兼容）
+      if (legacy.localPath !== undefined) {
+        delete legacy.localPath;
+        changed = true;
+      }
+      if (legacy.gitRemote !== undefined) {
+        delete legacy.gitRemote;
         changed = true;
       }
       if (changed) {
