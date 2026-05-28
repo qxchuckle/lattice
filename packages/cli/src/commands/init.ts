@@ -5,7 +5,7 @@ import ignore from 'ignore';
 import { execSync } from 'node:child_process';
 import { cp, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   getLatticeRoot,
   getConfigDir,
@@ -316,6 +316,15 @@ function renderGitignoreSections(sections: GitignoreSection[]): string {
     .join('\n\n');
 }
 
+interface ExtraRulesInjection {
+  /** 注入目标文件的绝对路径，路径以 detectPath 开头时会按真实根目录重写。 */
+  rulesPath: string;
+  /** 待写入的引导词正文，支持 markdown frontmatter；frontmatter 不会被 BEGIN/END 标记包裹。 */
+  rulesContent: string;
+  /** true=保留原文件内容并在末尾追加 Lattice 块；false=整文件覆盖。默认 false。 */
+  appendRules?: boolean;
+}
+
 interface AIToolConfig {
   id: string;
   name: string;
@@ -327,6 +336,11 @@ interface AIToolConfig {
   commandsRoot?: string;
   appendRules?: boolean;
   defaultChecked?: boolean;
+  /**
+   * 额外的 rules 注入对象。用于支持 rules 系统的客户端（如 Qoder/Cursor）
+   * 在主 rulesPath 之外再注入一份'系统级常驻规则文件'，与渐进式加载的 skill 互补。
+   */
+  extraRules?: ExtraRulesInjection[];
 }
 
 const LATTICE_BEGIN_MARKER = '<!-- LATTICE:BEGIN -->';
@@ -416,6 +430,14 @@ async function detectAndConfigureAITools(): Promise<void> {
       skillPath: join(home, '.claude', 'skills', 'lattice', 'SKILL.md'),
       commandsRoot: join(home, '.claude', 'commands'),
       appendRules: true,
+      // 主注入对象 CLAUDE.md 是 Claude Code 原生的必加载规则入口；
+      // 额外同步写一份 ~/.claude/rules/lattice.mdc，保持与其他支持 rules/ 目录的客户端布局一致。
+      extraRules: [
+        {
+          rulesPath: join(home, '.claude', 'rules', 'lattice.mdc'),
+          rulesContent: renderCursorRules(),
+        },
+      ],
     },
     {
       id: 'windsurf',
@@ -441,6 +463,14 @@ async function detectAndConfigureAITools(): Promise<void> {
       commandsRoot: join(home, '.agents', 'commands'),
       skillPath: join(home, '.agents', 'skills', 'lattice', 'SKILL.md'),
       defaultChecked: true,
+      // Agent 类客户端同样支持 .mdc rules 系统，额外注入常驻规则文件。
+      // 路径以 detectPath 开头，注入时会被 resolveToolPath 重写到每个 matchedRoot（~/.agents 与 ~/.agent）。
+      extraRules: [
+        {
+          rulesPath: join(home, '.agents', 'rules', 'lattice.mdc'),
+          rulesContent: renderCursorRules(),
+        },
+      ],
     },
     {
       id: 'qoder',
@@ -450,6 +480,14 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       commandsRoot: join(home, '.qoder', 'commands'),
       skillPath: join(home, '.qoder', 'skills', 'lattice', 'SKILL.md'),
+      // Qoder 支持 .mdc rules 系统（与 Cursor 同源），额外注入常驻规则文件，
+      // 提升 AI 按 lattice 工作流做事的硬约束（skill 是渐进式加载，rules 是默认常驻）。
+      extraRules: [
+        {
+          rulesPath: join(home, '.qoder', 'rules', 'lattice.mdc'),
+          rulesContent: renderCursorRules(),
+        },
+      ],
     },
     {
       id: 'trae',
@@ -460,25 +498,38 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       commandsRoot: join(home, '.trae', 'commands'),
       skillPath: join(home, '.trae', 'skills', 'lattice', 'SKILL.md'),
+      // Trae 同样支持 .mdc rules 系统，额外注入常驻规则文件。
+      // 路径以 detectPath 开头，注入时会被 resolveToolPath 重写到每个 matchedRoot（~/.trae 与 ~/.trae-cn）。
+      extraRules: [
+        {
+          rulesPath: join(home, '.trae', 'rules', 'lattice.mdc'),
+          rulesContent: renderCursorRules(),
+        },
+      ],
     },
   ];
 
   const detectedToolIds = new Set<string>();
-  const detectedToolRoots = new Map<string, string>();
+  // 收集每个 tool 所有已存在的候选根（first-match 升级为 all-matched），
+  // 避免同一个 tool 同时存在多个别名目录（如 ~/.agents 与 ~/.agent）时仅注入一份。
+  const detectedToolMatchedRoots = new Map<string, string[]>();
   for (const tool of tools) {
-    const candidates = new Set([tool.detectPath, ...(tool.detectPaths ?? [])]);
-    let matchedRoot: string | null = null;
+    const candidates = [tool.detectPath, ...(tool.detectPaths ?? [])];
+    const seen = new Set<string>();
+    const matchedRoots: string[] = [];
     for (const candidate of candidates) {
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
       if (await dirExists(candidate)) {
-        matchedRoot = candidate;
-        break;
+        matchedRoots.push(candidate);
       }
     }
 
-    if (matchedRoot) {
+    if (matchedRoots.length > 0) {
       detectedToolIds.add(tool.id);
-      detectedToolRoots.set(tool.id, matchedRoot);
-      logger.raw(chalk.green(`  ✓ 检测到 ${tool.name}`));
+      detectedToolMatchedRoots.set(tool.id, matchedRoots);
+      const suffix = matchedRoots.length > 1 ? `（${matchedRoots.length} 个候选根）` : '';
+      logger.raw(chalk.green(`  ✓ 检测到 ${tool.name}${suffix}`));
     } else {
       logger.raw(chalk.dim(`  - 未检测到 ${tool.name}（可手动选择注入）`));
     }
@@ -506,39 +557,75 @@ async function detectAndConfigureAITools(): Promise<void> {
       continue;
     }
 
-    const targetRoot = detectedToolRoots.get(tool.id) ?? tool.detectPath;
-    const resolveToolPath = (toolPath: string): string =>
-      toolPath.startsWith(tool.detectPath)
-        ? join(targetRoot, toolPath.slice(tool.detectPath.length))
-        : toolPath;
-    const rulesPath = resolveToolPath(tool.rulesPath);
-    const skillPath = tool.skillPath ? resolveToolPath(tool.skillPath) : undefined;
-    const commandsRoot = tool.commandsRoot ? resolveToolPath(tool.commandsRoot) : undefined;
+    // 未检测到但用户手动勾选时，回退到 detectPath 单个根创建；
+    // 检测到多个候选根时（如 ~/.agents + ~/.agent 均存在）逐个注入。
+    const matchedRoots = detectedToolMatchedRoots.get(tool.id) ?? [tool.detectPath];
 
-    await ensureDir(targetRoot);
+    for (const targetRoot of matchedRoots) {
+      const resolveToolPath = (toolPath: string): string =>
+        toolPath.startsWith(tool.detectPath)
+          ? join(targetRoot, toolPath.slice(tool.detectPath.length))
+          : toolPath;
+      const rulesPath = resolveToolPath(tool.rulesPath);
+      const skillPath = tool.skillPath ? resolveToolPath(tool.skillPath) : undefined;
+      const commandsRoot = tool.commandsRoot ? resolveToolPath(tool.commandsRoot) : undefined;
 
-    await injectLatticeBlock(
-      rulesPath,
-      tool.rulesContent,
-      tool.appendRules ? 'append' : 'overwrite',
-    );
+      // 收集本次注入的所有落盘路径，走完后统一展示给用户
+      const injectedPaths: Array<{ kind: string; path: string }> = [];
 
-    if (skillPath) {
-      const skillRoot = join(skillPath, '..');
-      await rm(skillRoot, { recursive: true, force: true });
-      await cp(getBundledTemplateDir('skills'), skillRoot, { recursive: true });
-    }
+      await ensureDir(targetRoot);
 
-    if (commandsRoot) {
-      const latticeCommandsRoot = join(commandsRoot, 'lattice');
-      await rm(latticeCommandsRoot, { recursive: true, force: true });
-      await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
-    }
+      await injectLatticeBlock(
+        rulesPath,
+        tool.rulesContent,
+        tool.appendRules ? 'append' : 'overwrite',
+      );
+      injectedPaths.push({ kind: 'rules', path: rulesPath });
 
-    if (detectedToolIds.has(tool.id)) {
-      logger.raw(chalk.green(`  ✓ 已注入 ${tool.name}`));
-    } else {
-      logger.raw(chalk.green(`  ✓ 已为 ${tool.name} 创建目录并注入`));
+      if (tool.extraRules && tool.extraRules.length > 0) {
+        for (const extra of tool.extraRules) {
+          const extraPath = resolveToolPath(extra.rulesPath);
+          await ensureDir(dirname(extraPath));
+          await injectLatticeBlock(
+            extraPath,
+            extra.rulesContent,
+            extra.appendRules ? 'append' : 'overwrite',
+          );
+          injectedPaths.push({ kind: 'rules', path: extraPath });
+        }
+      }
+
+      if (skillPath) {
+        const skillRoot = join(skillPath, '..');
+        await rm(skillRoot, { recursive: true, force: true });
+        await cp(getBundledTemplateDir('skills'), skillRoot, { recursive: true });
+        // 将工作节奏硬指令（lattice-rules.md）同步写入 skill 目录，
+        // 源自 platforms/lattice-rules.md 同一份纯正文，供 SKILL.md 引用。
+        await writeText(join(skillRoot, 'lattice-rules.md'), renderClaudeCode());
+        injectedPaths.push({ kind: 'skill', path: `${skillRoot}/` });
+      }
+
+      if (commandsRoot) {
+        const latticeCommandsRoot = join(commandsRoot, 'lattice');
+        await rm(latticeCommandsRoot, { recursive: true, force: true });
+        await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
+        injectedPaths.push({ kind: 'commands', path: `${latticeCommandsRoot}/` });
+      }
+
+      const detected = detectedToolIds.has(tool.id);
+      const suffix = matchedRoots.length > 1 ? `（${targetRoot}）` : '';
+      if (detected) {
+        logger.raw(chalk.green(`  ✓ 已注入 ${tool.name}${suffix}`));
+      } else {
+        logger.raw(chalk.green(`  ✓ 已为 ${tool.name} 创建目录并注入${suffix}`));
+      }
+      // 展示本次注入的具体文件/目录，~ 替换用户家目录以缩短输出
+      const homePrefix = home + '/';
+      const kindWidth = Math.max(...injectedPaths.map((p) => p.kind.length));
+      for (const { kind, path } of injectedPaths) {
+        const shortPath = path.startsWith(homePrefix) ? `~/${path.slice(homePrefix.length)}` : path;
+        logger.raw(chalk.dim(`      ${kind.padEnd(kindWidth)}  ${shortPath}`));
+      }
     }
   }
 }

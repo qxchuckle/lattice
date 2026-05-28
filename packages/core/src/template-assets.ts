@@ -82,11 +82,26 @@ export function getBundledTemplateDir(relativePath: string): string {
   return resolveTemplatePath(relativePath);
 }
 
+// 所有客户端共享同一份引导词正文（# 一级标题、无 frontmatter），
+// 仅 Cursor 系（.mdc 规则文件）需要在最前面拼接 frontmatter 以启用 alwaysApply。
+const LATTICE_RULES_TEMPLATE = 'platforms/lattice-rules.md';
+
+// Cursor .mdc 专用 frontmatter；Qoder / Agent / Trae / Claude 的 rules/ 目录复用同一种 .mdc 格式。
+const CURSOR_RULES_FRONTMATTER = `---
+description: Lattice 跨项目上下文工作流
+globs:
+alwaysApply: true
+trigger: always_on
+---
+
+`;
+
+// 保留 PlatformName 4 个值用作 API 兼容；内部全部指向同一个模板文件。
 const platformTemplatePaths: Record<PlatformName, string> = {
-  cursorRules: 'platforms/cursor-rules.md',
-  claudeCode: 'platforms/claude-code.md',
-  windsurfRules: 'platforms/windsurf-rules.md',
-  kiroSteering: 'platforms/kiro-steering.md',
+  cursorRules: LATTICE_RULES_TEMPLATE,
+  claudeCode: LATTICE_RULES_TEMPLATE,
+  windsurfRules: LATTICE_RULES_TEMPLATE,
+  kiroSteering: LATTICE_RULES_TEMPLATE,
 };
 
 function render(template: string, _data?: TemplateData): string {
@@ -98,7 +113,7 @@ export function renderPlatformTemplate(name: PlatformName, data?: TemplateData):
 }
 
 export function renderCursorRules(data?: TemplateData): string {
-  return renderPlatformTemplate('cursorRules', data);
+  return `${CURSOR_RULES_FRONTMATTER}${renderPlatformTemplate('cursorRules', data)}`;
 }
 
 export function renderClaudeCode(data?: TemplateData): string {

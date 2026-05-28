@@ -15,6 +15,11 @@ description: >-
 
 Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs` 和搜索能力组织长期知识，默认数据根目录是 `~/.lattice/`。
 
+## 工作节奏（必读）
+
+本 skill 配套了一份系统级硬性规则：[lattice-rules.md](lattice-rules.md)。  
+首次加载本 skill 时**必须立即读取**该文件。其中定义的起手契约 / checkpoint 节奏 / 失忆恢复 / 完成闭环是**强制要求**，不是建议。
+
 ## 何时使用
 
 在以下场景主动使用 Lattice：
@@ -169,7 +174,7 @@ lattice CLI 的输出往往是判断依据的唯一来源（context / search / s
 
 ## 渐进式加载
 
-默认只读本文件；遇到具体场景时再继续读取对应子文档：
+默认只读本文件 + [lattice-rules.md](lattice-rules.md)；遇到具体场景时再继续读取对应子文档：
 
 - 项目上下文、任务上下文、相似案例搜索：[project-context.md](project-context.md)
 - 项目查找/识别、多路径绑定、指纹选单、AI 推断项目关系：[project-discovery.md](project-discovery.md)
