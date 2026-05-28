@@ -139,6 +139,7 @@ lattice doctor --recheck-scope-paths
 - spec 优先级始终是 `project > user > global`
 - 遇到同名 spec 覆盖时，要提醒用户覆盖关系
 - 只有长期稳定、可复用的信息才应沉淀为 spec
+- user/global 级 spec 必须包含 `## 适用范围` 声明（project 级不需要）
 - 产生新内容后及时 `rag update`，确保搜索可用
 
 ## 终端输出读取原则

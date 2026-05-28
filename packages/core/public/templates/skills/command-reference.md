@@ -247,6 +247,8 @@ Spec 管理。
 - `--tag <tag>`：按标签过滤
 - `--json`：以 JSON 输出
 
+> **适用范围校验**：命令会自动检测 user/global 级 spec 是否包含 `## 适用范围` 声明，缺失时输出警告。
+
 ### `lattice spec show <file>`
 
 - `<file>`：spec 文件路径

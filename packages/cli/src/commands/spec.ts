@@ -20,6 +20,7 @@ import {
   syncSpecTemplateRegistry,
   listSpecTemplateRegistries,
   removeSpecTemplateRegistry,
+  validateSpecsScope,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 import {
@@ -111,6 +112,23 @@ export function registerSpecCommand(program: Command): void {
             if (tags) logger.raw(`    ${chalk.dim(`标签：${tags}`)}`);
           }
         }
+
+        // 校验 user/global 级 spec 的适用范围声明
+        const scopeWarnings = [];
+        for (const group of allSpecs) {
+          if (group.scope === 'user' || group.scope === 'global') {
+            scopeWarnings.push(
+              ...validateSpecsScope(group.specs, group.scope as 'user' | 'global'),
+            );
+          }
+        }
+        if (scopeWarnings.length > 0) {
+          logger.raw(chalk.yellow(`\n⚠ ${scopeWarnings.length} 个 spec 缺少「适用范围」声明：`));
+          for (const w of scopeWarnings) {
+            logger.raw(chalk.yellow(`  • ${w.message}`));
+          }
+        }
+
         logger.raw('');
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);

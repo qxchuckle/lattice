@@ -199,8 +199,10 @@ export {
   getCascadedSpecs,
   detectSpecConflicts,
   findSpecByName,
+  validateSpecScope,
+  validateSpecsScope,
 } from './spec';
-export type { SpecMatch, FindSpecOptions } from './spec';
+export type { SpecMatch, FindSpecOptions, SpecValidationWarning } from './spec';
 
 // 任务
 export {
