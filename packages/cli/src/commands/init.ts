@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { checkbox, confirm, input } from '@inquirer/prompts';
 import ignore from 'ignore';
 import { execSync } from 'node:child_process';
-import { cp, rm } from 'node:fs/promises';
+import { cp, readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -408,6 +408,54 @@ async function injectLatticeBlock(
   await writeText(filePath, `${trimmed}\n\n${wrappedBlock}\n`);
 }
 
+/**
+ * Codex 特有：将 bundled commands 目录下每个 .md 文件转化为独立 Codex skill。
+ * 映射规则：`task/start.md` → `~/.codex/skills/lattice-task-start/SKILL.md`
+ *
+ * 每个 skill 在文件头部添加 YAML frontmatter（name + description），
+ * 以便 Codex Discovery 机制自动扫描注册。
+ */
+async function deployCommandsAsSkills(
+  commandsDir: string,
+  targetSkillsRoot: string,
+): Promise<string[]> {
+  const deployed: string[] = [];
+
+  async function walkDir(dir: string, prefix: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walkDir(fullPath, prefix ? `${prefix}-${entry.name}` : entry.name);
+      } else if (entry.name.endsWith('.md')) {
+        const baseName = entry.name.replace(/\.md$/, '');
+        const skillName = prefix ? `lattice-${prefix}-${baseName}` : `lattice-${baseName}`;
+        const content = (await readText(fullPath)) ?? '';
+
+        // 从文件内容中提取 description：取第一行 "目标：" 开头的内容
+        const goalMatch = content.match(/^目标[：:](.+)$/m);
+        const description = goalMatch ? goalMatch[1].trim() : `Lattice ${skillName} 命令`;
+
+        const frontmatter = [
+          '---',
+          `name: ${skillName}`,
+          `description: ${description}`,
+          '---',
+          '',
+        ].join('\n');
+
+        const skillDir = join(targetSkillsRoot, skillName);
+        await ensureDir(skillDir);
+        await writeText(join(skillDir, 'SKILL.md'), `${frontmatter}${content}`);
+        deployed.push(skillName);
+      }
+    }
+  }
+
+  await walkDir(commandsDir, '');
+  return deployed;
+}
+
 async function detectAndConfigureAITools(): Promise<void> {
   const home = homedir();
 
@@ -506,6 +554,17 @@ async function detectAndConfigureAITools(): Promise<void> {
           rulesContent: renderCursorRules(),
         },
       ],
+    },
+    {
+      id: 'codex',
+      name: 'Codex',
+      detectPath: join(home, '.codex'),
+      rulesPath: join(home, '.codex', 'AGENTS.md'),
+      rulesContent: renderClaudeCode(),
+      skillPath: join(home, '.codex', 'skills', 'lattice', 'SKILL.md'),
+      // Codex 没有内置 /command 触发机制，commands 将被转化为独立 skills（见下方特殊处理）。
+      // 因此不设置 commandsRoot。
+      appendRules: true,
     },
   ];
 
@@ -610,6 +669,21 @@ async function detectAndConfigureAITools(): Promise<void> {
         await rm(latticeCommandsRoot, { recursive: true, force: true });
         await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
         injectedPaths.push({ kind: 'commands', path: `${latticeCommandsRoot}/` });
+      }
+
+      // Codex 特有：将 commands 目录下每个命令文档转化为独立 Codex skill
+      if (tool.id === 'codex') {
+        const commandsDir = getBundledTemplateDir('commands');
+        const deployedSkills = await deployCommandsAsSkills(
+          commandsDir,
+          join(targetRoot, 'skills'),
+        );
+        for (const skillName of deployedSkills) {
+          injectedPaths.push({
+            kind: 'cmd-skill',
+            path: `${join(targetRoot, 'skills', skillName)}/`,
+          });
+        }
       }
 
       const detected = detectedToolIds.has(tool.id);
