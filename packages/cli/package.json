@@ -16,7 +16,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.0.1",
     "@inquirer/prompts": "^8.4.1",
     "@qcqx/lattice-core": "workspace:*",
     "better-sqlite3": "^11.10.0",
