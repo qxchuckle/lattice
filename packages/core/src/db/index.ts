@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS spec_search_meta (
   updated TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lattice_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_username ON projects(username);
 CREATE INDEX IF NOT EXISTS idx_projects_local_path ON projects(local_path);
 CREATE INDEX IF NOT EXISTS idx_task_projects_task ON task_projects(task_id);
@@ -80,6 +86,19 @@ CREATE INDEX IF NOT EXISTS idx_task_projects_project ON task_projects(project_id
 CREATE INDEX IF NOT EXISTS idx_embeddings_file_path ON embeddings(file_path);
 CREATE INDEX IF NOT EXISTS idx_spec_search_meta_doc_kind ON spec_search_meta(doc_kind);
 `;
+
+/**
+ * FTS 写入时使用的索引版本。
+ * 升版动机：v1 用 unicode61 直接写入 content，对中文几乎不分词；
+ * v2 在写入前对 title/content/tags 追加中文 bigram/trigram，让 unicode61
+ *    也能命中中文 query（query 端已生成同样的 ngram）——但这也让 snippet 输出容易被污染。
+ * v3 拆出独立 `ngram` 列：title/content/tags 列保持原文，ngram 单独存放，
+ *    snippet/highlight 只面向 content 原文，输出不再夹带“状态 态管 管理”类噪声。
+ * 升版后必须 rag rebuild 一次旧库才能用上新 schema，doctor / rag update
+ * 会通过 lattice_meta 检测并提示用户。
+ */
+export const FTS_INDEX_VERSION = 3;
+const FTS_INDEX_VERSION_KEY = 'fts_index_version';
 
 export function getDb(): Database.Database {
   if (!_db) {
@@ -97,9 +116,29 @@ CREATE VIRTUAL TABLE IF NOT EXISTS specs_fts USING fts5(
   source_type,
   username,
   project_id,
+  ngram,
   tokenize='unicode61'
 );
 `;
+
+/**
+ * 检测实际存在的 specs_fts 是否含有 v3 新增的 `ngram` 列，
+ * 若不含（老索引）则 DROP 后重建。FTS5 虚拟表不支持 ALTER ADD COLUMN，
+ * 只能 DROP+CREATE；DROP 后会丢弃原有 FTS 索引数据，
+ * 需要调用方（doctor / rag update）提示用户运行 rag rebuild 重新填充。
+ */
+function ensureSpecsFtsSchema(db: Database.Database): void {
+  try {
+    const cols = db.prepare("PRAGMA table_info('specs_fts')").all() as { name: string }[];
+    if (cols.length === 0) return; // 表尚不存在，后续 FTS_SCHEMA_SQL 会创建
+    const hasNgram = cols.some((c) => c.name === 'ngram');
+    if (!hasNgram) {
+      db.exec('DROP TABLE IF EXISTS specs_fts');
+    }
+  } catch {
+    // FTS 不可用，静默
+  }
+}
 
 function normalizeSearchType(type?: SearchDocumentType): string {
   return type ?? '';
@@ -193,8 +232,22 @@ export async function initDb(): Promise<Database.Database> {
   ensureProjectsSchema(_db);
   dropLegacyProjectRelations(_db);
 
-  // FTS5 全文索引
+  // lattice_meta（在 FTS schema 之前确保存在）
   try {
+    _db.exec(
+      `CREATE TABLE IF NOT EXISTS lattice_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated TEXT
+      );`,
+    );
+  } catch {
+    // ignore
+  }
+
+  // FTS5 全文索引：升级场景下需要先 DROP 老表才能重建出新列
+  try {
+    ensureSpecsFtsSchema(_db);
     _db.exec(FTS_SCHEMA_SQL);
   } catch {
     // FTS5 不可用时静默跳过
@@ -360,7 +413,87 @@ export function listTaskProjectLinks(): TaskProjectRow[] {
   return getDb().prepare('SELECT task_id, project_id FROM task_projects').all() as TaskProjectRow[];
 }
 
+// ─── lattice_meta KV ───
+
+export function getLatticeMeta(key: string): string | null {
+  try {
+    const row = getDb().prepare('SELECT value FROM lattice_meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLatticeMeta(key: string, value: string): void {
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO lattice_meta (key, value, updated)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = datetime('now')`,
+      )
+      .run(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+export function getFtsIndexVersion(): number {
+  const value = getLatticeMeta(FTS_INDEX_VERSION_KEY);
+  if (!value) return 0;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function setFtsIndexVersion(version: number): void {
+  setLatticeMeta(FTS_INDEX_VERSION_KEY, String(version));
+}
+
 // ─── FTS5 全文索引 CRUD ───
+
+/**
+ * 把中文连续片段拆成 bigram + trigram，用空格连接。
+ * 例："前端开发规范" → "前端 端开 开发 发规 规范 前端开 端开发 开发规 发规范"
+ * 这样 unicode61 tokenizer 也能把它们识别为可独立索引的 token，
+ * 配合 query 端的同款 ngram，让中文查询能在 FTS rank 里出现。
+ */
+/**
+ * 仅生成中文 bigram/trigram 拼接串（以空格分隔）。
+ * unicode61 tokenizer 看到的就是带空格的 token 流，与 query 端
+ * buildQueryVariants 产出的同款 ngram 双向对齐。
+ */
+function toChineseNgramString(text: string): string {
+  if (!text) return '';
+  const segments = text.match(/\p{Script=Han}+/gu);
+  if (!segments) return '';
+  const grams: string[] = [];
+  for (const segment of segments) {
+    if (segment.length < 2) continue;
+    const maxGram = Math.min(3, segment.length);
+    for (let size = 2; size <= maxGram; size++) {
+      for (let i = 0; i <= segment.length - size; i++) {
+        grams.push(segment.slice(i, i + size));
+      }
+    }
+  }
+  return grams.join(' ');
+}
+
+/**
+ * 从 title + content + tags 三者合成一份中文 ngram 串，
+ * 供写入 specs_fts.ngram 列专用。不会被 snippet/highlight 读到，
+ * 这样 CLI 输出仍是干净原文。
+ */
+function buildFtsNgramField(title: string, content: string, tags: string): string {
+  const parts = [
+    toChineseNgramString(title),
+    toChineseNgramString(content),
+    toChineseNgramString(tags),
+  ].filter(Boolean);
+  return parts.join(' ');
+}
 
 export function upsertFtsEntry(entry: {
   file_path: string;
@@ -375,9 +508,12 @@ export function upsertFtsEntry(entry: {
   try {
     db.prepare('DELETE FROM specs_fts WHERE file_path = ?').run(entry.file_path);
     db.prepare(
-      `INSERT INTO specs_fts (file_path, title, content, tags, source_type, username, project_id)
-       VALUES (@file_path, @title, @content, @tags, @source_type, @username, @project_id)`,
-    ).run(entry);
+      `INSERT INTO specs_fts (file_path, title, content, tags, source_type, username, project_id, ngram)
+       VALUES (@file_path, @title, @content, @tags, @source_type, @username, @project_id, @ngram)`,
+    ).run({
+      ...entry,
+      ngram: buildFtsNgramField(entry.title, entry.content, entry.tags),
+    });
   } catch {
     // FTS 不可用
   }

@@ -10,6 +10,9 @@ import {
   deleteSearchDocumentsByPrefixes,
   collectAllSearchDocuments,
   isModelLoaded,
+  FTS_INDEX_VERSION,
+  getFtsIndexVersion,
+  setFtsIndexVersion,
 } from '@qcqx/lattice-core';
 import { formatRagTimestamp, logger } from '../utils';
 
@@ -70,6 +73,8 @@ export function registerRagCommand(program: Command): void {
         logger.raw(chalk.blue(`找到 ${allDocs.length} 个搜索文档，正在建立索引...`));
 
         const indexed = await rebuildIndex(allDocs);
+        // 全量重建完成后写入当前 FTS 索引版本，供 doctor / rag update 检测。
+        setFtsIndexVersion(FTS_INDEX_VERSION);
         closeDb();
 
         logger.raw(chalk.green(`✓ 索引重建完成，共 ${indexed} 个文档`));
@@ -87,6 +92,19 @@ export function registerRagCommand(program: Command): void {
       try {
         await getUsername();
         await initDb();
+
+        // 检测 FTS 索引版本是否过期（新升版后必须 rag rebuild 才能拿到新分词）
+        const currentFtsVersion = getFtsIndexVersion();
+        if (currentFtsVersion < FTS_INDEX_VERSION) {
+          logger.raw(
+            chalk.yellow(
+              `⚠ FTS 索引版本过期（当前 v${currentFtsVersion}，需 v${FTS_INDEX_VERSION}）。`,
+            ),
+          );
+          logger.raw(
+            chalk.yellow('  为让中文 FTS 检索生效，请运行 `lattice rag rebuild` 一次全量重建。'),
+          );
+        }
 
         const modelLoaded = isModelLoaded();
         logger.spin(

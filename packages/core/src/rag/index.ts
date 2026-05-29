@@ -310,7 +310,16 @@ export function removeSpecIndex(filePath: string): void {
 export async function semanticSearch(
   query: string,
   limit = 10,
-  opts?: { type?: SearchDocumentType; projectId?: string; usernames?: string[] },
+  opts?: {
+    type?: SearchDocumentType;
+    projectId?: string;
+    usernames?: string[];
+    /**
+     * 丢弃距离 > distanceThreshold 的候选（cosine distance，0=完全相同）。
+     * 未传时不过滤，保持向后兼容。
+     */
+    distanceThreshold?: number;
+  },
 ): Promise<SemanticSearchResult[]> {
   const embedding = await generateEmbedding(query);
   if (!embedding) return [];
@@ -326,6 +335,13 @@ export async function semanticSearch(
     if (!row) continue;
     if (opts?.type && row.source_type !== opts.type) continue;
     if (opts?.usernames?.length && row.username && !opts.usernames.includes(row.username)) continue;
+    if (
+      typeof opts?.distanceThreshold === 'number' &&
+      typeof result.distance === 'number' &&
+      result.distance > opts.distanceThreshold
+    ) {
+      continue;
+    }
 
     const projectIds = decodeProjectIds(row.project_id);
     if (opts?.projectId && !projectIds.includes(opts.projectId)) continue;

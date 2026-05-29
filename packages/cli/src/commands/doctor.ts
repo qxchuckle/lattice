@@ -8,6 +8,8 @@ import {
   listProjects,
   listTasks,
   getRAGStatus,
+  FTS_INDEX_VERSION,
+  getFtsIndexVersion,
   dirExists,
   fileExists,
   getGlobalSpecDir,
@@ -164,6 +166,22 @@ export function registerDoctorCommand(program: Command): void {
                 : ragStatus.totalEmbeddings < ragStatus.indexedDocuments
                   ? '重新运行 lattice rag rebuild 生成缺失向量'
                   : undefined,
+        });
+
+        // 6.1 FTS 索引版本（CJK 检索能力依赖该版本）
+        const ftsVersion = getFtsIndexVersion();
+        const ftsStale = ftsVersion < FTS_INDEX_VERSION;
+        entries.push({
+          item: 'FTS 索引版本',
+          status: ragStatus.indexedDocuments === 0 ? 'stale' : ftsStale ? 'stale' : 'healthy',
+          message:
+            ragStatus.indexedDocuments === 0
+              ? `当前 v${ftsVersion}，期望 v${FTS_INDEX_VERSION}（索引为空）`
+              : ftsStale
+                ? `当前 v${ftsVersion}，期望 v${FTS_INDEX_VERSION}（中文检索失效，需要重建）`
+                : `v${FTS_INDEX_VERSION}`,
+          fix:
+            ftsStale || ragStatus.indexedDocuments === 0 ? '运行 lattice rag rebuild' : undefined,
         });
 
         // 7. --migrate

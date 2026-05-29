@@ -133,6 +133,12 @@ export {
   upsertVecEmbedding,
   searchVec,
   countEmbeddings,
+  // FTS 索引版本与通用 KV
+  FTS_INDEX_VERSION,
+  getFtsIndexVersion,
+  setFtsIndexVersion,
+  getLatticeMeta,
+  setLatticeMeta,
 } from './db';
 
 // 项目
