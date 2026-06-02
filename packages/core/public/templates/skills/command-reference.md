@@ -119,7 +119,11 @@
 ### `lattice project relation list [id]`
 
 - `[id]`：可选，指定项目 ID 只看该项目的关系；不传则列出所有关系
+- `--current-user`：仅显示当前用户定义的关系（不聚合其他用户）
+- `--user <users>`：仅显示指定用户定义的关系，逗号分隔多个用户名
 - `--json`：以 JSON 输出
+
+> **跨用户聚合**：默认聚合所有用户定义的关系（来自其他用户的关系会标注 `[username]`）。`--current-user` 和 `--user` 互斥，不能同时使用。
 
 ### `lattice project relation add <project-a> <project-b>`
 
@@ -144,7 +148,11 @@
 - `--status <status>`：按 `planning` / `in_progress` / `completed` / `archived` 过滤
 - `--project <id>`：按项目 ID 过滤
 - `--current`：自动识别当前目录对应的项目
+- `--all-user`：聚合所有用户的任务（需搭配 `--project` 或 `--current`）
+- `--user <users>`：聚合指定用户的任务，逗号分隔（需搭配 `--project` 或 `--current`）
 - `--json`：以 JSON 输出
+
+> **跨用户聚合**：`--all-user` 和 `--user` 互斥，不能同时使用。来自其他用户的任务会标注 `[username]`。不存在的用户名会报错并列出可用用户。
 
 ### `lattice task create <title>`
 
@@ -251,7 +259,11 @@ Spec 管理。
 
 ### `lattice spec show <file>`
 
-- `<file>`：spec 文件路径
+- `<file>`：spec 文件路径或名称（支持模糊匹配）
+- `--user <username>`：查看指定用户的 spec（而非当前用户）
+- `--detail`：显示完整内容（默认只显示摘要）
+
+> **跨用户查看**：`--user` 允许查看其他用户为同一项目定义的 spec。不存在的用户名会报错并列出可用用户。
 
 ### `lattice spec conflicts`
 

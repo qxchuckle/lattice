@@ -199,6 +199,8 @@ lattice search "<根据当前对话和命令参数总结出的任务标题或主
 ```bash
 lattice task list
 lattice task list --current
+lattice task list --current --all-user
+lattice task list --current --user <users>
 lattice task create "<title>" --current
 lattice task create "<title>" --current --parent <task-id>
 lattice task update <id> --add-project <project-id>

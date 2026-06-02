@@ -19,9 +19,11 @@ export type {
   DoctorEntry,
   SpecConflict,
   ProjectContext,
+  CrossUserProjectData,
   RelatedProjectEntry,
   RelatedProjectRelationEntry,
   SmartContext,
+  CrossUserTaskData,
   SpecTemplateFile,
   SpecTemplate,
   SearchResult,
@@ -109,6 +111,7 @@ export {
   getProjectById,
   getProjectByPath,
   listAllProjects,
+  listProjectRowsById,
   upsertFingerprint,
   deleteFingerprintsByProject,
   listFingerprintsByProject,
@@ -135,6 +138,7 @@ export {
   countEmbeddings,
   // FTS 索引版本与通用 KV
   FTS_INDEX_VERSION,
+  DB_SCHEMA_VERSION,
   getFtsIndexVersion,
   setFtsIndexVersion,
   getLatticeMeta,
@@ -174,7 +178,13 @@ export {
   upsertRelation as upsertRelationFile,
   deleteRelation as deleteRelationFile,
   deleteRelationsByProject,
+  getRelationsByProjectCrossUser,
+  listRelationsCrossUser,
+  type RelationWithSource,
 } from './project/relation';
+
+// 跨用户项目发现
+export { findSameProjectInOtherUsers, listAllUsernames } from './project/cross-user';
 
 // 项目指纹
 export {
@@ -215,6 +225,8 @@ export {
   generateTaskId,
   createTask,
   listTasks,
+  listTasksCrossUser,
+  type TaskMetaWithSource,
   getTaskMeta,
   updateTask,
   archiveTask,
@@ -265,6 +277,7 @@ export {
   getSmartContext,
   formatContextAsMarkdown,
   hybridSearch,
+  type ContextOptions,
 } from './search';
 
 // RAG

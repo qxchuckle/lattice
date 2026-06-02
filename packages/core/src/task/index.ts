@@ -181,6 +181,56 @@ export async function listTasks(
   return tasks;
 }
 
+/** 带来源用户标注的任务 */
+export interface TaskMetaWithSource extends TaskMeta {
+  sourceUser: string;
+}
+
+/**
+ * 跨用户列出某个项目的任务。
+ * 扫描所有用户的任务目录，返回关联该项目的任务并标注来源用户。
+ * @param filter.usernames 仅聚合指定用户（不传则聚合全部用户）
+ */
+export async function listTasksCrossUser(
+  currentUsername: string,
+  projectId: string,
+  filter?: { status?: TaskStatus; usernames?: string[] },
+): Promise<TaskMetaWithSource[]> {
+  const { listAllUsernames } = await import('../project/cross-user');
+
+  const filterUsernames = filter?.usernames;
+  const includeCurrentUser = !filterUsernames || filterUsernames.includes(currentUsername);
+  const results: TaskMetaWithSource[] = [];
+
+  // 当前用户
+  if (includeCurrentUser) {
+    const ownTasks = await listTasks(currentUsername, { status: filter?.status, projectId });
+    results.push(...ownTasks.map((t) => ({ ...t, sourceUser: currentUsername })));
+  }
+
+  // 其他用户
+  const allUsernames = await listAllUsernames();
+  for (const otherUsername of allUsernames) {
+    if (otherUsername === currentUsername) continue;
+    if (filterUsernames && !filterUsernames.includes(otherUsername)) continue;
+    try {
+      const otherTasks = await readAllTaskMeta(otherUsername);
+      const filtered = otherTasks.filter((meta) => {
+        if (!meta.projects?.includes(projectId)) return false;
+        if (filter?.status && meta.status !== filter.status) return false;
+        return true;
+      });
+      results.push(...filtered.map((t) => ({ ...t, sourceUser: otherUsername })));
+    } catch {
+      continue;
+    }
+  }
+
+  // 按创建时间倒序
+  results.sort((a, b) => b.created.localeCompare(a.created));
+  return results;
+}
+
 /** 获取任务元数据 */
 export async function getTaskMeta(username: string, taskId: string): Promise<TaskMeta | null> {
   return readJSON<TaskMeta>(getTaskMetaPath(username, taskId));

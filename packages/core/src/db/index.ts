@@ -1,18 +1,36 @@
 import Database from 'better-sqlite3';
+import { unlinkSync, existsSync } from 'node:fs';
 import type {
   ProjectRow,
+  ProjectMeta,
   ProjectFingerprintRow,
   TaskProjectRow,
   SearchDocumentMeta,
   SearchDocumentType,
 } from '../types';
-import { getDbPath, ensureDir, getCacheDir } from '../paths';
+import {
+  getDbPath,
+  ensureDir,
+  getCacheDir,
+  getUsersDir,
+  getUserProjectsDir,
+  listDir,
+  readJSON,
+} from '../paths';
 
 let _db: Database.Database | null = null;
 
+/**
+ * DB schema 版本号。当 schema 发生不兼容变更（如主键变化）时递增。
+ * v1: projects 表以 id 为单列主键（同一 project ID 仅一行）
+ * v2: projects 表改为 (id, username) 复合主键（同一 project 允许多用户）
+ */
+export const DB_SCHEMA_VERSION = 2;
+const DB_SCHEMA_VERSION_KEY = 'db_schema_version';
+
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   name TEXT NOT NULL,
   local_path TEXT NOT NULL,
   description TEXT,
@@ -25,7 +43,8 @@ CREATE TABLE IF NOT EXISTS projects (
   tags TEXT,
   username TEXT NOT NULL,
   created TEXT NOT NULL,
-  updated TEXT
+  updated TEXT,
+  PRIMARY KEY (id, username)
 );
 
 CREATE TABLE IF NOT EXISTS project_fingerprints (
@@ -220,9 +239,155 @@ function ensureSpecSearchMetaSchema(db: Database.Database): void {
   }
 }
 
+/**
+ * 检测数据库 schema 版本，如果是旧版本则删除数据库文件以触发重建。
+ * 返回 true 表示发生了重建（需要上层重新填充数据）。
+ */
+function checkAndMigrateDbSchema(): boolean {
+  const dbPath = getDbPath();
+  if (!existsSync(dbPath)) return false;
+
+  let tempDb: Database.Database | null = null;
+  try {
+    tempDb = new Database(dbPath, { readonly: true });
+
+    // 检查 lattice_meta 表是否存在
+    const hasMetaTable = tempDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='lattice_meta'")
+      .get() as { name: string } | undefined;
+
+    if (hasMetaTable) {
+      const row = tempDb
+        .prepare(`SELECT value FROM lattice_meta WHERE key = ?`)
+        .get(DB_SCHEMA_VERSION_KEY) as { value: string } | undefined;
+      const currentVersion = row ? Number.parseInt(row.value, 10) : 0;
+      if (currentVersion >= DB_SCHEMA_VERSION) {
+        return false; // 版本已是最新
+      }
+    }
+
+    // 额外检查：projects 表的主键结构（兜底判断）
+    const pkColumns = tempDb.prepare("PRAGMA table_info('projects')").all() as {
+      name: string;
+      pk: number;
+    }[];
+    const pkColNames = pkColumns.filter((c) => c.pk > 0).map((c) => c.name);
+    // 新 schema: pk 列为 [id, username]
+    if (pkColNames.length === 2 && pkColNames.includes('id') && pkColNames.includes('username')) {
+      // 结构正确但版本号未记录，仅需要写入版本号（不重建）
+      tempDb.close();
+      tempDb = null;
+      return false;
+    }
+
+    // 老 schema，需要重建
+    tempDb.close();
+    tempDb = null;
+    unlinkSync(dbPath);
+    // 同时删除 WAL/SHM 文件
+    try {
+      unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    return true;
+  } catch {
+    // 数据库损坏或其他错误，直接删除重建
+    if (tempDb) {
+      try {
+        tempDb.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    return true;
+  }
+}
+
+/**
+ * 从文件系统重建 projects 表缓存。
+ * 扫描 ~/.lattice/users/{user}/projects/{dir}/project.json 并逐条写入 DB。
+ */
+async function rebuildProjectsCache(): Promise<void> {
+  let usernames: string[];
+  try {
+    usernames = await listDir(getUsersDir());
+  } catch {
+    return;
+  }
+
+  for (const username of usernames) {
+    if (username.startsWith('.')) continue;
+    let projectDirs: string[];
+    try {
+      projectDirs = await listDir(getUserProjectsDir(username));
+    } catch {
+      continue;
+    }
+
+    for (const dirName of projectDirs) {
+      if (dirName.startsWith('.')) continue;
+      try {
+        const metaPath = `${getUserProjectsDir(username)}/${dirName}/project.json`;
+        const meta = await readJSON<ProjectMeta>(metaPath);
+        if (!meta || !meta.id) continue;
+        upsertProject({
+          id: meta.id,
+          name: meta.name,
+          local_path: JSON.stringify(meta.localPaths ?? []),
+          description: meta.description ?? null,
+          git_remote:
+            meta.gitRemotes && meta.gitRemotes.length > 0 ? JSON.stringify(meta.gitRemotes) : null,
+          git_first_commit: meta.gitFirstCommit ?? null,
+          git_default_branch: meta.gitDefaultBranch ?? null,
+          package_names:
+            meta.packageNames && meta.packageNames.length > 0
+              ? JSON.stringify(meta.packageNames)
+              : null,
+          monorepo_packages:
+            meta.monorepoPackages && meta.monorepoPackages.length > 0
+              ? JSON.stringify(meta.monorepoPackages)
+              : null,
+          groups: meta.groups ? JSON.stringify(meta.groups) : null,
+          tags: meta.tags ? JSON.stringify(meta.tags) : null,
+          username,
+          created: meta.created,
+          updated: meta.updated ?? null,
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+}
+
 export async function initDb(): Promise<Database.Database> {
   if (_db) return _db;
   await ensureDir(getCacheDir());
+
+  // 检测旧 schema，如需重建则删除旧文件
+  const rebuilt = checkAndMigrateDbSchema();
+
   _db = new Database(getDbPath());
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
@@ -244,6 +409,9 @@ export async function initDb(): Promise<Database.Database> {
   } catch {
     // ignore
   }
+
+  // 写入当前 schema 版本号
+  setLatticeMeta(DB_SCHEMA_VERSION_KEY, String(DB_SCHEMA_VERSION));
 
   // FTS5 全文索引：升级场景下需要先 DROP 老表才能重建出新列
   try {
@@ -277,6 +445,11 @@ export async function initDb(): Promise<Database.Database> {
     // vec0 不可用时跳过
   }
 
+  // 如果发生了 schema 重建，触发项目数据重建
+  if (rebuilt) {
+    await rebuildProjectsCache();
+  }
+
   return _db;
 }
 
@@ -300,7 +473,7 @@ export function upsertProject(row: ProjectRow): void {
        @id, @name, @local_path, @description, @git_remote, @git_first_commit, @git_default_branch,
        @package_names, @monorepo_packages, @groups, @tags, @username, @created, @updated
      )
-     ON CONFLICT(id) DO UPDATE SET
+     ON CONFLICT(id, username) DO UPDATE SET
        name = @name, local_path = @local_path, description = @description,
        git_remote = @git_remote,
        git_first_commit = @git_first_commit,
@@ -312,15 +485,36 @@ export function upsertProject(row: ProjectRow): void {
   ).run(row);
 }
 
-export function deleteProject(id: string): void {
+export function deleteProject(id: string, username?: string): void {
   const db = getDb();
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id);
-  db.prepare('DELETE FROM task_projects WHERE project_id = ?').run(id);
-  db.prepare('DELETE FROM project_fingerprints WHERE project_id = ?').run(id);
+  if (username) {
+    db.prepare('DELETE FROM projects WHERE id = ? AND username = ?').run(id, username);
+  } else {
+    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  }
+  // 仅在删除全部用户记录时清理关联数据（如果指定 username，需要判断是否还有其他用户引用）
+  const remaining = db.prepare('SELECT COUNT(*) as cnt FROM projects WHERE id = ?').get(id) as {
+    cnt: number;
+  };
+  if (remaining.cnt === 0) {
+    db.prepare('DELETE FROM task_projects WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM project_fingerprints WHERE project_id = ?').run(id);
+  }
 }
 
 export function getProjectById(id: string): ProjectRow | undefined {
-  return getDb().prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
+  return getDb().prepare('SELECT * FROM projects WHERE id = ? LIMIT 1').get(id) as
+    | ProjectRow
+    | undefined;
+}
+
+/**
+ * 查询同一 project ID 在所有用户下的记录（跨用户聚合）。
+ */
+export function listProjectRowsById(id: string): ProjectRow[] {
+  return getDb()
+    .prepare('SELECT * FROM projects WHERE id = ? ORDER BY username')
+    .all(id) as ProjectRow[];
 }
 
 /**

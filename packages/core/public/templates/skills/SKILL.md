@@ -86,12 +86,13 @@ lattice unlink --remove-data
 lattice project list [--has-git] [--orphaned] [--with-relations]
 lattice project info <id>
 lattice project where <path>
-lattice project relation list [id]
+lattice project relation list [id] [--current-user] [--user <users>]
 lattice project relation add <a> <b> [--type <type>] [--from-task <taskId>] [--ai-inferred]
 lattice project relation remove <relation-id>
 
 # 任务
 lattice task list
+lattice task list --current [--all-user] [--user <users>]
 lattice task create "<title>" --current
 lattice task update <id> --add-project <project-id>
 lattice task associate <id> --paths <p1> <p2> --note <note>
@@ -107,7 +108,7 @@ lattice task delete <id>
 
 # Spec
 lattice spec list
-lattice spec show <file>
+lattice spec show <file> [--user <username>] [--detail]
 lattice spec conflicts
 lattice spec template list
 lattice spec template apply <name>

@@ -8,6 +8,7 @@ import {
   getSmartContext,
   formatContextAsMarkdown,
   findProjectById,
+  type ContextOptions,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 
@@ -17,15 +18,20 @@ export function registerContextCommand(program: Command): void {
     .description('输出当前项目的聚合上下文')
     .option('--task <id>', '指定任务 ID')
     .option('--project <id>', '指定项目 ID')
+    .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
         await initDb();
 
+        const contextOpts: ContextOptions = {
+          crossUser: !opts.currentUser,
+        };
+
         if (opts.task) {
           // 任务关联上下文
-          const ctx = await getSmartContext(username, opts.task);
+          const ctx = await getSmartContext(username, opts.task, contextOpts);
           closeDb();
 
           if (opts.json) {
@@ -49,6 +55,29 @@ export function registerContextCommand(program: Command): void {
             logger.raw(chalk.blue(`同组项目 Spec（${ctx.relatedSpecs.length}）：`));
             for (const s of ctx.relatedSpecs) {
               logger.raw(`  ${s.frontmatter.title ?? s.fileName}`);
+            }
+            logger.raw('');
+          }
+
+          // 跨用户聚合数据
+          if (ctx.crossUserData && ctx.crossUserData.length > 0) {
+            logger.raw(chalk.magenta.bold(`\n跨用户聚合：`));
+            for (const userData of ctx.crossUserData) {
+              logger.raw(chalk.magenta(`\n  来源用户：${userData.username}`));
+
+              if (userData.directSpecs.length > 0) {
+                logger.raw(chalk.blue(`  项目级 Spec（${userData.directSpecs.length}）：`));
+                for (const s of userData.directSpecs) {
+                  logger.raw(`    ${s.frontmatter.title ?? s.fileName}`);
+                }
+              }
+
+              if (userData.activeTasks.length > 0) {
+                logger.raw(chalk.blue(`  活跃任务（${userData.activeTasks.length}）：`));
+                for (const t of userData.activeTasks) {
+                  logger.raw(`    ${t.title} (${t.status}) — ${t.id}`);
+                }
+              }
             }
             logger.raw('');
           }
@@ -92,7 +121,7 @@ export function registerContextCommand(program: Command): void {
           return;
         }
 
-        const ctx = await getContextForProject(username, projectId);
+        const ctx = await getContextForProject(username, projectId, contextOpts);
         closeDb();
 
         if (opts.json) {

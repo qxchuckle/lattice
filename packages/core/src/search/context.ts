@@ -5,18 +5,90 @@ import type {
   SmartContext,
   RelatedProjectEntry,
   RelatedProjectRelationEntry,
+  CrossUserProjectData,
+  CrossUserTaskData,
 } from '../types';
 import { getProjectSpecs, getUserSpecs, getGlobalSpecs, getCascadedSpecs } from '../spec';
-import { listTasks, getTaskMeta } from '../task';
+import { getTaskMeta } from '../task';
 import { getProjectMeta, listProjects } from '../project';
 import { getRelationsByProject } from '../project/relation';
+import { findSameProjectInOtherUsers } from '../project/cross-user';
 import { getTasksForProject } from '../db';
 
-/** 获取项目的完整上下文（三层 spec 聚合 + 关联信息） */
+export interface ContextOptions {
+  /** 是否启用跨用户聚合（默认 true） */
+  crossUser?: boolean;
+}
+
+/**
+ * 收集某个其他用户对同一项目的上下文数据。
+ */
+async function collectCrossUserProjectData(
+  otherUsername: string,
+  otherProjectId: string,
+): Promise<CrossUserProjectData> {
+  // 项目级 spec
+  const projectSpecs = await getProjectSpecs(otherUsername, otherProjectId);
+
+  // 用户级 spec
+  const userSpecs = await getUserSpecs(otherUsername);
+
+  // 活跃任务
+  let activeTasks: TaskMeta[] = [];
+  try {
+    const taskIds = getTasksForProject(otherProjectId);
+    const allTasks = await Promise.all(taskIds.map((id) => getTaskMeta(otherUsername, id)));
+    activeTasks = allTasks.filter(
+      (t): t is TaskMeta => t !== null && t.status !== 'archived' && t.status !== 'completed',
+    );
+  } catch {
+    // ignore
+  }
+
+  // 关联项目
+  const relatedProjects: RelatedProjectEntry[] = [];
+  try {
+    const relations = await getRelationsByProject(otherUsername, otherProjectId);
+    const relatedMap = new Map<string, RelatedProjectEntry>();
+    for (const r of relations) {
+      const relatedId = r.projectA === otherProjectId ? r.projectB : r.projectA;
+      let entry = relatedMap.get(relatedId);
+      if (!entry) {
+        const meta = await getProjectMeta(otherUsername, relatedId);
+        if (!meta) continue;
+        entry = { id: meta.id, name: meta.name, relations: [] };
+        relatedMap.set(relatedId, entry);
+        relatedProjects.push(entry);
+      }
+      const relEntry: RelatedProjectRelationEntry = {
+        relId: r.id,
+        type: r.type,
+        description: r.description,
+      };
+      entry.relations.push(relEntry);
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    username: otherUsername,
+    projectId: otherProjectId,
+    projectSpecs,
+    userSpecs,
+    activeTasks,
+    relatedProjects,
+  };
+}
+
+/** 获取项目的完整上下文（三层 spec 聚合 + 关联信息 + 跨用户聚合） */
 export async function getContextForProject(
   username: string,
   projectId: string,
+  options?: ContextOptions,
 ): Promise<ProjectContext> {
+  const crossUser = options?.crossUser ?? true;
+
   const [projectSpecs, userSpecs, globalSpecs, cascadedSpecs] = await Promise.all([
     getProjectSpecs(username, projectId),
     getUserSpecs(username),
@@ -87,6 +159,26 @@ export async function getContextForProject(
     }
   }
 
+  // 跨用户聚合
+  let crossUserData: CrossUserProjectData[] | undefined;
+  if (crossUser) {
+    const otherUsers = await findSameProjectInOtherUsers(username, projectId);
+    if (otherUsers.length > 0) {
+      crossUserData = await Promise.all(
+        otherUsers.map((u) => collectCrossUserProjectData(u.username, u.projectId)),
+      );
+      // 过滤掉没有任何有效数据的条目
+      crossUserData = crossUserData.filter(
+        (d) =>
+          d.projectSpecs.length > 0 ||
+          d.userSpecs.length > 0 ||
+          d.activeTasks.length > 0 ||
+          d.relatedProjects.length > 0,
+      );
+      if (crossUserData.length === 0) crossUserData = undefined;
+    }
+  }
+
   return {
     projectSpecs,
     userSpecs,
@@ -94,11 +186,17 @@ export async function getContextForProject(
     cascadedSpecs,
     activeTasks,
     relatedProjects,
+    crossUserData,
   };
 }
 
 /** 获取任务关联的智能上下文 */
-export async function getSmartContext(username: string, taskId: string): Promise<SmartContext> {
+export async function getSmartContext(
+  username: string,
+  taskId: string,
+  options?: ContextOptions,
+): Promise<SmartContext> {
+  const crossUser = options?.crossUser ?? true;
   const task = await getTaskMeta(username, taskId);
   if (!task) throw new Error(`未找到任务：${taskId}`);
 
@@ -139,11 +237,64 @@ export async function getSmartContext(username: string, taskId: string): Promise
     }
   }
 
+  // 跨用户聚合
+  let crossUserData: CrossUserTaskData[] | undefined;
+  if (crossUser && task.projects?.length) {
+    const allOtherUsers: { username: string; projectId: string }[] = [];
+    for (const pid of task.projects) {
+      const others = await findSameProjectInOtherUsers(username, pid);
+      allOtherUsers.push(...others);
+    }
+
+    // 去重
+    const seen = new Set<string>();
+    const uniqueOthers = allOtherUsers.filter((u) => {
+      const key = `${u.username}:${u.projectId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (uniqueOthers.length > 0) {
+      const dataByUser = new Map<string, CrossUserTaskData>();
+
+      for (const other of uniqueOthers) {
+        let entry = dataByUser.get(other.username);
+        if (!entry) {
+          entry = { username: other.username, directSpecs: [], activeTasks: [] };
+          dataByUser.set(other.username, entry);
+        }
+
+        // 项目级 spec
+        const specs = await getProjectSpecs(other.username, other.projectId);
+        entry.directSpecs.push(...specs);
+
+        // 活跃任务
+        try {
+          const taskIds = getTasksForProject(other.projectId);
+          const tasks = await Promise.all(taskIds.map((id) => getTaskMeta(other.username, id)));
+          const active = tasks.filter(
+            (t): t is TaskMeta => t !== null && t.status !== 'archived' && t.status !== 'completed',
+          );
+          entry.activeTasks.push(...active);
+        } catch {
+          // ignore
+        }
+      }
+
+      crossUserData = Array.from(dataByUser.values()).filter(
+        (d) => d.directSpecs.length > 0 || d.activeTasks.length > 0,
+      );
+      if (crossUserData.length === 0) crossUserData = undefined;
+    }
+  }
+
   return {
     task,
     directSpecs,
     relatedSpecs,
     semanticSpecs: [], // P2 阶段通过 RAG 填充
+    crossUserData,
   };
 }
 
@@ -178,6 +329,50 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
       lines.push(`- **${p.name}** — ${relStrs.join(' / ')}`);
     }
     lines.push('');
+  }
+
+  // 跨用户聚合数据
+  if (ctx.crossUserData && ctx.crossUserData.length > 0) {
+    lines.push('## 跨用户聚合\n');
+    for (const userData of ctx.crossUserData) {
+      lines.push(`### 来源用户：${userData.username}\n`);
+
+      if (userData.projectSpecs.length > 0) {
+        lines.push(`#### 项目级 Spec（${userData.projectSpecs.length}）\n`);
+        for (const spec of userData.projectSpecs) {
+          const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
+          lines.push(`##### ${title}\n`);
+          lines.push(spec.content);
+          lines.push('');
+        }
+      }
+
+      if (userData.userSpecs.length > 0) {
+        lines.push(`#### 用户级 Spec（${userData.userSpecs.length}）\n`);
+        for (const spec of userData.userSpecs) {
+          const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
+          lines.push(`- ${title}`);
+        }
+        lines.push('');
+      }
+
+      if (userData.activeTasks.length > 0) {
+        lines.push(`#### 活跃任务（${userData.activeTasks.length}）\n`);
+        for (const task of userData.activeTasks) {
+          lines.push(`- **${task.title}** (${task.status}) — ${task.id}`);
+        }
+        lines.push('');
+      }
+
+      if (userData.relatedProjects.length > 0) {
+        lines.push(`#### 关联项目（${userData.relatedProjects.length}）\n`);
+        for (const p of userData.relatedProjects) {
+          const relStrs = p.relations.map((r) => r.description ?? r.type);
+          lines.push(`- **${p.name}** — ${relStrs.join(' / ')}`);
+        }
+        lines.push('');
+      }
+    }
   }
 
   return lines.join('\n');

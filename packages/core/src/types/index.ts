@@ -177,6 +177,22 @@ export interface RelatedProjectEntry {
   relations: RelatedProjectRelationEntry[];
 }
 
+/** 跨用户聚合的项目数据（每个其他用户一个条目） */
+export interface CrossUserProjectData {
+  /** 数据来源用户名 */
+  username: string;
+  /** 该用户下匹配到的项目 ID */
+  projectId: string;
+  /** 该用户为同一项目编写的项目级 spec */
+  projectSpecs: ParsedSpec[];
+  /** 该用户的用户级 spec */
+  userSpecs: ParsedSpec[];
+  /** 该用户关联到同一项目的活跃任务 */
+  activeTasks: TaskMeta[];
+  /** 该用户为同一项目设定的关联项目 */
+  relatedProjects: RelatedProjectEntry[];
+}
+
 /** 项目上下文（三层 spec 聚合 + 关联信息） */
 export interface ProjectContext {
   projectSpecs: ParsedSpec[];
@@ -185,6 +201,18 @@ export interface ProjectContext {
   cascadedSpecs: ParsedSpec[];
   activeTasks: TaskMeta[];
   relatedProjects: RelatedProjectEntry[];
+  /** 跨用户聚合数据（其他用户为同一项目贡献的信息） */
+  crossUserData?: CrossUserProjectData[];
+}
+
+/** 跨用户聚合的任务上下文数据 */
+export interface CrossUserTaskData {
+  /** 数据来源用户名 */
+  username: string;
+  /** 该用户为同一项目编写的项目级 spec */
+  directSpecs: ParsedSpec[];
+  /** 该用户关联到同一项目的活跃任务 */
+  activeTasks: TaskMeta[];
 }
 
 /** 任务关联的智能上下文 */
@@ -193,6 +221,8 @@ export interface SmartContext {
   directSpecs: ParsedSpec[];
   relatedSpecs: ParsedSpec[];
   semanticSpecs: ParsedSpec[];
+  /** 跨用户聚合数据（其他用户为同一关联项目贡献的信息） */
+  crossUserData?: CrossUserTaskData[];
 }
 
 /** Spec 模板定义 */

@@ -8,6 +8,7 @@ import {
   closeDb,
   createTask,
   listTasks,
+  listTasksCrossUser,
   getTaskMeta,
   updateTask,
   archiveTask,
@@ -27,6 +28,7 @@ import {
   findProjectsByPathSmart,
   normalizeLocalPath,
   resolveProjectById,
+  listAllUsernames,
   CONFIDENCE_THRESHOLDS,
 } from '@qcqx/lattice-core';
 import type {
@@ -35,6 +37,7 @@ import type {
   TaskTreeNode,
   CheckpointType,
   ScopePath,
+  TaskMetaWithSource,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
@@ -82,6 +85,8 @@ export function registerTaskCommand(program: Command): void {
     .option('--status <status>', '按状态过滤（planning / in_progress / completed / archived）')
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目')
+    .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
+    .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
     .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
@@ -98,40 +103,116 @@ export function registerTaskCommand(program: Command): void {
           }
         }
 
-        const tasks = await listTasks(username, {
-          status: opts.status as TaskStatus | undefined,
-          projectId,
-        });
-
-        closeDb();
-
-        if (opts.json) {
-          logger.raw(JSON.stringify(tasks, null, 2));
-          return;
-        }
-
-        if (tasks.length === 0) {
-          logger.raw(chalk.dim('暂无任务。使用 lattice task create 创建任务。'));
-          return;
-        }
-
-        logger.raw(chalk.blue(`共 ${tasks.length} 个任务：\n`));
-
-        const statusIcon: Record<string, string> = {
-          planning: '📋',
-          in_progress: '🔨',
-          completed: '✅',
-          archived: '📦',
-        };
-
-        for (const t of tasks) {
-          const icon = statusIcon[t.status] ?? '•';
-          logger.raw(`  ${icon} ${chalk.bold(t.title)} ${chalk.dim(`[${t.status}]`)}`);
-          logger.raw(`    ${chalk.dim(t.id)}`);
-          if (t.projects?.length) {
-            logger.raw(`    ${chalk.dim(`关联项目：${t.projects.length} 个`)}`);
+        // 解析 --user 选项
+        let filterUsernames: string[] | undefined;
+        if (opts.user) {
+          filterUsernames = (opts.user as string)
+            .split(',')
+            .map((u: string) => u.trim())
+            .filter(Boolean);
+          // 校验用户是否存在
+          const allUsernames = await listAllUsernames();
+          const invalid = filterUsernames.filter((u) => !allUsernames.includes(u));
+          if (invalid.length > 0) {
+            logger.raw(
+              chalk.yellow(
+                `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
+              ),
+            );
+            closeDb();
+            return;
           }
-          logger.raw('');
+        }
+
+        // --all-user 与 --user 互斥
+        if (opts.allUser && filterUsernames) {
+          logger.raw(chalk.yellow('--all-user 与 --user 不能同时使用'));
+          closeDb();
+          return;
+        }
+
+        const crossUserMode = opts.allUser || !!filterUsernames;
+
+        // 跨用户模式需要搭配 --project 或 --current
+        if (crossUserMode && !projectId) {
+          logger.raw(chalk.yellow('--all-user / --user 需搭配 --project 或 --current 使用'));
+          closeDb();
+          return;
+        }
+
+        if (crossUserMode && projectId) {
+          // 跨用户模式
+          const tasks: TaskMetaWithSource[] = await listTasksCrossUser(username, projectId, {
+            status: opts.status as TaskStatus | undefined,
+            usernames: filterUsernames,
+          });
+          closeDb();
+
+          if (opts.json) {
+            logger.raw(JSON.stringify(tasks, null, 2));
+            return;
+          }
+
+          if (tasks.length === 0) {
+            logger.raw(chalk.dim('暂无任务。'));
+            return;
+          }
+
+          logger.raw(chalk.blue(`共 ${tasks.length} 个任务（跨用户）：\n`));
+
+          const statusIcon: Record<string, string> = {
+            planning: '📋',
+            in_progress: '🔨',
+            completed: '✅',
+            archived: '📦',
+          };
+
+          for (const t of tasks) {
+            const icon = statusIcon[t.status] ?? '•';
+            const sourceTag = t.sourceUser !== username ? chalk.magenta(` [${t.sourceUser}]`) : '';
+            logger.raw(
+              `  ${icon} ${chalk.bold(t.title)} ${chalk.dim(`[${t.status}]`)}${sourceTag}`,
+            );
+            logger.raw(`    ${chalk.dim(t.id)}`);
+            logger.raw('');
+          }
+        } else {
+          // 单用户模式（原逻辑）
+          const tasks = await listTasks(username, {
+            status: opts.status as TaskStatus | undefined,
+            projectId,
+          });
+
+          closeDb();
+
+          if (opts.json) {
+            logger.raw(JSON.stringify(tasks, null, 2));
+            return;
+          }
+
+          if (tasks.length === 0) {
+            logger.raw(chalk.dim('暂无任务。使用 lattice task create 创建任务。'));
+            return;
+          }
+
+          logger.raw(chalk.blue(`共 ${tasks.length} 个任务：\n`));
+
+          const statusIcon: Record<string, string> = {
+            planning: '📋',
+            in_progress: '🔨',
+            completed: '✅',
+            archived: '📦',
+          };
+
+          for (const t of tasks) {
+            const icon = statusIcon[t.status] ?? '•';
+            logger.raw(`  ${icon} ${chalk.bold(t.title)} ${chalk.dim(`[${t.status}]`)}`);
+            logger.raw(`    ${chalk.dim(t.id)}`);
+            if (t.projects?.length) {
+              logger.raw(`    ${chalk.dim(`关联项目：${t.projects.length} 个`)}`);
+            }
+            logger.raw('');
+          }
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);

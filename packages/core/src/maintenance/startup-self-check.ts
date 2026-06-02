@@ -50,7 +50,7 @@ export async function runStartupSelfCheck(): Promise<StartupSelfCheckResult> {
 
     for (const project of projects) {
       if (await isOrphanProject(project)) {
-        deleteProject(project.id);
+        deleteProject(project.id, project.username);
         removedProjectIds.add(project.id);
         result.removedProjects++;
       }

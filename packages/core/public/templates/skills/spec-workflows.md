@@ -24,7 +24,10 @@ spec 读取顺序：
 lattice context
 lattice spec list
 lattice spec show <相关文件>
+lattice spec show <相关文件> --user <username> --detail  # 查看其他用户为同一项目定义的 spec
 ```
+
+> `--user` 允许查看其他用户在同一项目中定义的 spec，有助于了解团队不同成员的规范理解。不存在的用户名会报错并列出可用用户。
 
 ## 冲突检测原则
 

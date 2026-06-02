@@ -16,6 +16,9 @@ import {
   closeDb,
   getTasksForProject,
   getRelationsByProject,
+  getRelationsByProjectCrossUser,
+  listRelationsCrossUser,
+  listAllUsernames,
   upsertRelationFile,
   deleteRelationFile,
   listRelations,
@@ -25,7 +28,7 @@ import {
   isPathPrefixOf,
   dirExists,
 } from '@qcqx/lattice-core';
-import type { ProjectRow } from '@qcqx/lattice-core';
+import type { ProjectRow, RelationWithSource } from '@qcqx/lattice-core';
 import { logger, shouldSkipConfirm } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -419,13 +422,43 @@ export function registerProjectCommand(program: Command): void {
   relationCmd
     .command('list [id]')
     .alias('ls')
-    .description('查看项目关系（按项目过滤可选）')
+    .description('查看项目关系（默认聚合所有用户定义的关系）')
+    .option('--current-user', '仅显示当前用户定义的关系')
+    .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
     .option('--json', 'JSON 格式输出')
     .action(async (id: string | undefined, opts) => {
       try {
         const username = await getUsername();
         await initDb();
         const projects = listProjects(username);
+
+        // 解析 --user 选项
+        let filterUsernames: string[] | undefined;
+        if (opts.user) {
+          filterUsernames = (opts.user as string)
+            .split(',')
+            .map((u: string) => u.trim())
+            .filter(Boolean);
+          // 校验用户是否存在
+          const allUsernames = await listAllUsernames();
+          const invalid = filterUsernames.filter((u) => !allUsernames.includes(u));
+          if (invalid.length > 0) {
+            logger.raw(
+              chalk.yellow(
+                `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
+              ),
+            );
+            closeDb();
+            return;
+          }
+        }
+
+        // --current-user 与 --user 互斥
+        if (opts.currentUser && filterUsernames) {
+          logger.raw(chalk.yellow('--current-user 与 --user 不能同时使用'));
+          closeDb();
+          return;
+        }
 
         if (id) {
           const match = resolveProjectById(username, id);
@@ -434,7 +467,13 @@ export function registerProjectCommand(program: Command): void {
             closeDb();
             return;
           }
-          const relations = await getRelationsByProject(username, match.id);
+
+          const relations: RelationWithSource[] = opts.currentUser
+            ? (await getRelationsByProject(username, match.id)).map((r) => ({
+                ...r,
+                sourceUser: username,
+              }))
+            : await getRelationsByProjectCrossUser(username, match.id, filterUsernames);
           closeDb();
 
           if (opts.json) {
@@ -453,8 +492,9 @@ export function registerProjectCommand(program: Command): void {
             const otherId = r.projectA === match.id ? r.projectB : r.projectA;
             const otherProject = projects.find((p) => p.id === otherId);
             const otherName = otherProject?.name ?? otherId;
+            const sourceTag = r.sourceUser !== username ? chalk.magenta(` [${r.sourceUser}]`) : '';
             logger.raw(
-              `  ${chalk.dim(r.id)}  ${chalk.bold(otherName)} ${chalk.dim(`(${otherId})`)}`,
+              `  ${chalk.dim(r.id)}  ${chalk.bold(otherName)} ${chalk.dim(`(${otherId})`)}${sourceTag}`,
             );
             logger.raw(
               `    ${chalk.cyan('类型：')}${r.type}${r.description ? `  ${chalk.dim(r.description)}` : ''}`,
@@ -467,8 +507,10 @@ export function registerProjectCommand(program: Command): void {
           }
           logger.raw('');
         } else {
-          // 列出所有 relations.json 中的关系
-          const relationsAll = await listRelations(username);
+          // 列出所有关系（跨用户聚合）
+          const relationsAll: RelationWithSource[] = opts.currentUser
+            ? (await listRelations(username)).map((r) => ({ ...r, sourceUser: username }))
+            : await listRelationsCrossUser(username, filterUsernames);
           closeDb();
 
           if (opts.json) {
@@ -488,7 +530,10 @@ export function registerProjectCommand(program: Command): void {
           for (const r of relationsAll) {
             const nameA = projects.find((p) => p.id === r.projectA)?.name ?? r.projectA;
             const nameB = projects.find((p) => p.id === r.projectB)?.name ?? r.projectB;
-            logger.raw(`  ${chalk.dim(r.id)}  ${chalk.bold(nameA)} ↔ ${chalk.bold(nameB)}`);
+            const sourceTag = r.sourceUser !== username ? chalk.magenta(` [${r.sourceUser}]`) : '';
+            logger.raw(
+              `  ${chalk.dim(r.id)}  ${chalk.bold(nameA)} ↔ ${chalk.bold(nameB)}${sourceTag}`,
+            );
             logger.raw(
               `    ${chalk.cyan('类型：')}${r.type}${r.description ? `  ${chalk.dim(r.description)}` : ''}`,
             );

@@ -200,7 +200,7 @@ export async function unregisterProject(username: string, id: string): Promise<v
   } catch {
     // relations.json 不存在时忽略
   }
-  dbDeleteProject(id);
+  dbDeleteProject(id, username);
 }
 
 /** 彻底删除项目（跳过垃圾桶） */
@@ -210,7 +210,7 @@ export async function purgeProject(username: string, id: string): Promise<void> 
   } catch {
     // ignore
   }
-  dbDeleteProject(id);
+  dbDeleteProject(id, username);
   const dirName = await findProjectDirName(username, id);
   if (dirName) {
     await removeDir(getProjectDir(username, dirName));

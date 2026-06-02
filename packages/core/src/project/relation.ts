@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { ProjectRelation, RelationsFile } from '../types';
 import { getRelationsFilePath, readJSON, writeJSON } from '../paths';
+import { findSameProjectInOtherUsers, listAllUsernames } from './cross-user';
 
 /** 生成关系 id（rel_ + 8 位 hex） */
 export function generateRelationId(): string {
@@ -119,4 +120,104 @@ export async function deleteRelationsByProject(
   );
   await writeRelationsFile(username, file);
   return before - file.relations.length;
+}
+
+/** 带来源用户标注的关系 */
+export interface RelationWithSource extends ProjectRelation {
+  /** 定义该关系的用户 */
+  sourceUser: string;
+}
+
+/**
+ * 列出涉及某个项目的所有关系，包括其他用户定义的（跨用户聚合）。
+ * 其他用户定义的关系会标注 sourceUser。
+ * @param filterUsernames 仅聚合指定用户（不传则聚合全部用户）
+ */
+export async function getRelationsByProjectCrossUser(
+  username: string,
+  projectId: string,
+  filterUsernames?: string[],
+): Promise<RelationWithSource[]> {
+  // 判断当前用户是否在过滤范围内
+  const includeCurrentUser = !filterUsernames || filterUsernames.includes(username);
+
+  const results: RelationWithSource[] = [];
+
+  // 当前用户的关系
+  if (includeCurrentUser) {
+    const ownRelations = await getRelationsByProject(username, projectId);
+    results.push(...ownRelations.map((r) => ({ ...r, sourceUser: username })));
+  }
+
+  // 其他用户的关系
+  const otherUsers = await findSameProjectInOtherUsers(username, projectId);
+  for (const { username: otherUsername } of otherUsers) {
+    if (filterUsernames && !filterUsernames.includes(otherUsername)) continue;
+    try {
+      const otherFile = await readRelationsFile(otherUsername);
+      const otherRelations = otherFile.relations.filter(
+        (r) => r.projectA === projectId || r.projectB === projectId,
+      );
+      for (const r of otherRelations) {
+        // 去重：如果已存在相同 (a,b,type) 的关系则跳过
+        const isDup = results.some(
+          (existing) =>
+            existing.projectA === r.projectA &&
+            existing.projectB === r.projectB &&
+            existing.type === r.type,
+        );
+        if (!isDup) {
+          results.push({ ...r, sourceUser: otherUsername });
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return results;
+}
+
+/**
+ * 列出所有关系（跨用户聚合版本）。
+ * 聚合所有用户的 relations.json，去重后返回。
+ * @param filterUsernames 仅聚合指定用户（不传则聚合全部用户）
+ */
+export async function listRelationsCrossUser(
+  currentUsername: string,
+  filterUsernames?: string[],
+): Promise<RelationWithSource[]> {
+  const includeCurrentUser = !filterUsernames || filterUsernames.includes(currentUsername);
+  const results: RelationWithSource[] = [];
+
+  // 当前用户
+  if (includeCurrentUser) {
+    const ownFile = await readRelationsFile(currentUsername);
+    results.push(...ownFile.relations.map((r) => ({ ...r, sourceUser: currentUsername })));
+  }
+
+  // 其他用户
+  const allUsernames = await listAllUsernames();
+  for (const otherUsername of allUsernames) {
+    if (otherUsername === currentUsername) continue;
+    if (filterUsernames && !filterUsernames.includes(otherUsername)) continue;
+    try {
+      const otherFile = await readRelationsFile(otherUsername);
+      for (const r of otherFile.relations) {
+        const isDup = results.some(
+          (existing) =>
+            existing.projectA === r.projectA &&
+            existing.projectB === r.projectB &&
+            existing.type === r.type,
+        );
+        if (!isDup) {
+          results.push({ ...r, sourceUser: otherUsername });
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return results;
 }

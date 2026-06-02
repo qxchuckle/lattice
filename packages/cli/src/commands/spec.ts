@@ -21,6 +21,7 @@ import {
   listSpecTemplateRegistries,
   removeSpecTemplateRegistry,
   validateSpecsScope,
+  listAllUsernames,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 import {
@@ -141,15 +142,30 @@ export function registerSpecCommand(program: Command): void {
     .command('show <file>')
     .description('查看 spec 信息（默认只显示元数据和位置）')
     .option('--scope <scope>', '限定层级（project / user / global）')
+    .option('--user <username>', '查看指定用户的 spec（默认当前用户）')
     .option('--detail', '输出文件内容')
     .option('--json', 'JSON 格式输出')
     .action(async (file: string, opts) => {
       try {
-        const username = await getUsername();
+        const currentUsername = await getUsername();
+        const targetUsername = (opts.user as string) ?? currentUsername;
         await initDb();
+
+        // 校验指定用户是否存在
+        if (opts.user) {
+          const allUsernames = await listAllUsernames();
+          if (!allUsernames.includes(targetUsername)) {
+            logger.raw(
+              chalk.yellow(`用户不存在：${targetUsername}。可用用户：${allUsernames.join(', ')}`),
+            );
+            closeDb();
+            return;
+          }
+        }
+
         const projectId = await resolveCurrentProjectId();
 
-        const matches = await findSpecByName(username, projectId, file, {
+        const matches = await findSpecByName(targetUsername, projectId, file, {
           scope: opts.scope,
         });
 
@@ -170,6 +186,7 @@ export function registerSpecCommand(program: Command): void {
             title: m.spec.frontmatter.title ?? m.spec.fileName,
             tags: m.spec.frontmatter.tags ?? [],
             description: m.spec.frontmatter.description ?? null,
+            ...(targetUsername !== currentUsername ? { sourceUser: targetUsername } : {}),
             ...(opts.detail ? { content: m.spec.content } : {}),
           }));
           logger.raw(JSON.stringify(result, null, 2));
@@ -177,10 +194,12 @@ export function registerSpecCommand(program: Command): void {
         }
 
         // 普通输出
+        const userTag =
+          targetUsername !== currentUsername ? chalk.magenta(` [${targetUsername}]`) : '';
         for (const m of matches) {
           const s = m.spec;
           const title = s.frontmatter.title ?? s.fileName;
-          logger.raw(chalk.bold(`\n${title}`));
+          logger.raw(chalk.bold(`\n${title}`) + userTag);
           logger.raw(`  层级：${chalk.cyan(m.scope)}`);
           logger.raw(`  路径：${chalk.dim(s.filePath)}`);
           if (s.frontmatter.tags?.length) {

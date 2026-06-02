@@ -48,6 +48,25 @@ lattice project relation list <id>
 lattice project relation add <project-a> <project-b> --type <type>
 ```
 
+## 跨用户聚合
+
+`lattice context` 默认聚合所有用户为同一项目定义的 spec 和关系。当需要精确控制跨用户范围时：
+
+```bash
+# 关系：默认聚合所有用户，可精确指定
+lattice project relation list <id> --user <users>    # 仅看指定用户的关系
+lattice project relation list <id> --current-user    # 仅看当前用户的关系
+
+# 任务：跨用户聚合需显式开启
+lattice task list --current --all-user               # 聚合所有用户的任务
+lattice task list --current --user <users>           # 仅看指定用户的任务
+
+# Spec：查看其他用户的 spec
+lattice spec show <file> --user <username> --detail
+```
+
+> **注意**：`--user` 中指定不存在的用户名会报错并列出可用用户列表。`--user` 与 `--current-user` / `--all-user` 互斥。
+
 ## 输出要求
 
 - 不要直接转储整份上下文
@@ -64,5 +83,7 @@ lattice status
 lattice search <query> --json
 lattice project list [--with-relations]
 lattice project info <id>
-lattice project relation list [id]
+lattice project relation list [id] [--current-user] [--user <users>]
+lattice task list --current [--all-user] [--user <users>]
+lattice spec show <file> [--user <username>] [--detail]
 ```
