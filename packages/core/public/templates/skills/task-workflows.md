@@ -154,21 +154,50 @@ lattice task progress <task-id> --last 5
 
 ### 任务完成时
 
-归档前，先更新一次该任务的 `prd.md`。
+归档前必须先建立对任务全貌的完整认知，再产出总结。**严格按"先读后写"顺序执行**：
 
-- 查看任务进展记录，确保关键决策和问题已在 PRD 中体现：`lattice task progress <task-id>`
+**第一步：前置信息采集（必须完成才能写总结）**
+
+```bash
+# (a) 读取任务元数据，拿到 PRD 路径
+lattice task info <task-id>
+
+# (b) read_file 读取 prd.md 完整内容，了解当前方案和已有内容
+
+# (c) 读取全部进展记录，了解决策历程和已记录的里程碑
+lattice task progress <task-id>
+
+# (d) 回顾当前对话上下文中产生的决策、方案变更和最终结论
+```
+
+**为什么**：如果没有先读 PRD 原文和 progress 历史就直接写归档总结，极容易遗漏关键决策、重复已有内容、或与实际进展脱节。
+
+**第二步：更新 PRD**
+
+在完成前置信息采集后，再更新该任务的 `prd.md`：
+
+- 查看 progress 中的关键决策和问题是否已在 PRD 中体现
 - 补充最终采用的设计或执行方案
 - 记录关键结果、主要取舍和仍待后续处理的问题
-- 增加“任务完成总结”，明确这次任务实际交付了什么
+- 增加"任务完成总结"，明确这次任务实际交付了什么
 - 如果 `prd.md` 过长，可以把详细复盘内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须作为必要入口
 
-先完成，再归档：
+**第三步：完成并归档**
 
 ```bash
 lattice task complete <task-id>
 lattice task archive <task-id>
 lattice rag update
 ```
+
+**第四步：二次审阅（归档后必做）**
+
+归档完成后，重新审视刚写入的 PRD 总结和 progress 记录，检查是否有遗漏：
+
+- 当前对话中产生的关键决策、方案变更是否全部体现在 PRD 或 checkpoint 中
+- 是否有"做了但忘记写"的改动、取舍或遗留问题
+- 本次任务形成的经验是否已判断要不要沉淀为 spec
+- 如果发现遗漏，立即补充到 PRD 或追加 checkpoint，然后再次 `lattice rag update`
 
 归档后运行 `rag update`，因为 PRD 通常在归档前补充了完成总结，需要重新索引。如果 `rag update` 报错，降级使用 `lattice rag rebuild`。
 
