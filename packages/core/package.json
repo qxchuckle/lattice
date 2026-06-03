@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-core",
-  "version": "0.7.0",
+  "version": "0.10.0",
   "description": "Lattice 共享核心库",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,7 +22,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "tsup"
   },
   "files": [
     "dist"

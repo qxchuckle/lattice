@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-cli",
-  "version": "0.7.0",
+  "version": "0.10.0",
   "description": "Lattice 命令行工具",
   "type": "module",
   "bin": {
@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsup",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "tsup"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",

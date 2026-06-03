@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { resolve as pathResolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { confirm } from '@inquirer/prompts';
 import {
   getUsername,
@@ -17,6 +18,7 @@ import {
   getTaskPrdPath,
   getTaskDir,
   getTaskProgressPath,
+  getTaskDesignPath,
   resolveTaskById,
   getTaskGraphViews,
   getTaskLineage,
@@ -324,6 +326,10 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(`  ID：${meta.id}`);
         logger.raw(`  状态：${meta.status}`);
         logger.raw(`  PRD：${getTaskPrdPath(username, meta.id)}`);
+        const designPath = getTaskDesignPath(username, meta.id);
+        if (existsSync(designPath)) {
+          logger.raw(`  Design：${designPath}`);
+        }
         logger.raw(`  目录：${getTaskDir(username, meta.id)}`);
         if (meta.projects?.length) {
           logger.raw(`  关联项目：${meta.projects.join(', ')}`);

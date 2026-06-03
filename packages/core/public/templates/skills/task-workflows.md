@@ -18,15 +18,31 @@
 ├── task.json       # 任务元数据
 ├── prd.md          # 任务主文档（收敛型内容：目标、约束、方案、索引）
 ├── progress.yaml   # 进展日志（追加型内容：决策、问题、摘要）
+├── design.md       # 方案讨论记录（发散→收敛：候选方案、利弊对比、决策推演）
 └── ...             # 可拆分的子文档
 ```
 
 - `prd.md`：记录收敛型内容——目标、约束、关键设计、最终方案概览、文件索引
 - `progress.yaml`：记录追加型过程信息——决策、问题、方案调整、会话摘要、里程碑
-- 两者职责不重叠：PRD 管"是什么"，progress 管"发生了什么"
+- `design.md`：记录方案讨论过程——候选方案对比、利弊分析、被否决方案及理由、最终结论
+- 三者职责不重叠：PRD 管"最终是什么"，progress 管"发生了什么"，design 管"怎么讨论出来的"
 - **`prd.md` 不得包含 YAML frontmatter 元数据**（如 id、title、status、created_at、projects 等）。这些信息的唯一来源是 `task.json`，在 PRD 中重复会导致数据不一致且增加维护负担
 
 `lattice task create` 和 `lattice task info` 会输出 PRD 的完整路径。你应直接使用该路径读写 PRD 文件。
+
+## 任务阶段与模式
+
+一个任务可以在 design（讨论）和 implementation（实施）模式之间切换：
+
+```
+design（讨论收敛）→ start（开始实施）→ design（中途讨论）→ 继续实施 → archive（收尾）
+```
+
+- **design 模式**：只读代码 + 分析提案，不修改业务代码文件。讨论内容记录到 `design.md`
+- **implementation 模式**：可以修改代码。即 `start` 后的默认状态
+- design 可以多次进出，每次讨论追加到 `design.md`
+- design 也可以是任务的第一个入口（无需先 start），此时会自动创建任务
+- **隐式触发**：即使用户没有显式执行 `/lattice/task/design`，只要当前对话中出现了方案讨论、设计对比、架构决策等内容，AI 也应主动将讨论过程和结论追加到 `design.md`
 
 ## 常见流程
 
@@ -167,7 +183,9 @@ lattice task info <task-id>
 # (c) 读取全部进展记录，了解决策历程和已记录的里程碑
 lattice task progress <task-id>
 
-# (d) 回顾当前对话上下文中产生的决策、方案变更和最终结论
+# (d) read_file 读取 design.md（如存在），了解方案讨论历史
+
+# (e) 回顾当前对话上下文中产生的决策、方案变更和最终结论
 ```
 
 **为什么**：如果没有先读 PRD 原文和 progress 历史就直接写归档总结，极容易遗漏关键决策、重复已有内容、或与实际进展脱节。

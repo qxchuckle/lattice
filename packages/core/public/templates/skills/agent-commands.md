@@ -5,6 +5,8 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 ## 可用命令
 
 - `/lattice/context`
+- `/lattice/task/query`
+- `/lattice/task/design`
 - `/lattice/task/start`
 - `/lattice/task/archive`
 - `/lattice/spec/update/project`
@@ -14,7 +16,9 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 ## 使用原则
 
 - 需要快速拿到项目或任务上下文时，用 `/lattice/context`
-- 需要开始一个任务并同步上下文时，用 `/lattice/task/start`
+- 需要查询项目情况、任务进展、历史完成情况时，用 `/lattice/task/query`
+- 需要讨论方案、分析设计而不动代码时，用 `/lattice/task/design`
+- 需要开始实施一个任务并同步上下文时，用 `/lattice/task/start`
 - 需要结束任务并判断是否沉淀规则时，用 `/lattice/task/archive`
 - 需要把会话经验写成长期规范时，用 `/lattice/spec/update/*`
 

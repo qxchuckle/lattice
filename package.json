@@ -38,6 +38,7 @@
     "dev:core": "pnpm --filter @qcqx/lattice-core run dev",
     "publish:core": "pnpm --filter @qcqx/lattice-core publish --no-git-checks",
     "publish:cli": "pnpm --filter @qcqx/lattice-cli publish --no-git-checks",
+    "release": "node scripts/release.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -25,7 +25,10 @@ lattice task info <task-id>
 # (b) 读取全部进展记录
 lattice task progress <task-id>
 
-# (c) 回顾当前对话上下文
+# (c) 读取 design.md（如存在），了解方案讨论历史和被否决的方案
+# read_file 读取任务目录下的 design.md
+
+# (d) 回顾当前对话上下文
 # 梳理本次会话中产生的决策、方案变更、最终结论
 ```
 

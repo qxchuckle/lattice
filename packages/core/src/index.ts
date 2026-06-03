@@ -64,6 +64,7 @@ export {
   getTaskMetaPath,
   getTaskPrdPath,
   getTaskProgressPath,
+  getTaskDesignPath,
   makeProjectDirName,
   toKebabCase,
   ensureDir,

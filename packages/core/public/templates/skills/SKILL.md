@@ -181,7 +181,7 @@ lattice CLI 的输出往往是判断依据的唯一来源（context / search / s
 - 项目上下文、任务上下文、相似案例搜索：[project-context.md](project-context.md)
 - 项目查找/识别、多路径绑定、指纹选单、AI 推断项目关系：[project-discovery.md](project-discovery.md)
 - spec 层级、冲突判断、模板和规则沉淀：[spec-workflows.md](spec-workflows.md)
-- 任务创建、开始、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
+- 任务创建、开始、方案讨论、查询、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
 - Agent Commands 的用途与使用边界：[agent-commands.md](agent-commands.md)
 - 多命令并行 / 避免原始输出填满主上下文时的 subagent 委派策略：[subagent-delegation.md](subagent-delegation.md)
 - 所有 CLI 配套命令的参数与功能：[command-reference.md](command-reference.md)
