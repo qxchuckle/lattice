@@ -217,4 +217,12 @@ export const logger = {
   },
 };
 
+/**
+ * 输出 JSON 数据。默认压缩输出（单行），指定 pretty 时格式化输出。
+ */
+export function outputJson(data: unknown, pretty?: boolean): void {
+  const str = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+  logger.raw(str);
+}
+
 export default logger;

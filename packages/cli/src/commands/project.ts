@@ -29,7 +29,7 @@ import {
   dirExists,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource } from '@qcqx/lattice-core';
-import { logger, shouldSkipConfirm } from '../utils';
+import { logger, outputJson, shouldSkipConfirm } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -63,6 +63,7 @@ export function registerProjectCommand(program: Command): void {
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -122,7 +123,7 @@ export function registerProjectCommand(program: Command): void {
             monorepoPackages: parseJsonArray(p.monorepo_packages),
             ...(opts.withRelations ? { relations: relationsMap.get(p.id) ?? [] } : {}),
           }));
-          logger.raw(JSON.stringify(result, null, 2));
+          outputJson(result, opts.jsonFormat);
           return;
         }
 
@@ -180,6 +181,7 @@ export function registerProjectCommand(program: Command): void {
     .command('info <id>')
     .description('查看项目详情')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -204,7 +206,7 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          logger.raw(JSON.stringify({ meta, relations, taskIds }, null, 2));
+          outputJson({ meta, relations, taskIds }, opts.jsonFormat);
           return;
         }
 
@@ -335,6 +337,7 @@ export function registerProjectCommand(program: Command): void {
     .command('where <path>')
     .description('查询指定路径属于哪个已注册项目（含父目录前缀匹配与指纹回退）')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (rawPath: string, opts) => {
       try {
         const absPath = normalizeLocalPath(pathResolve(rawPath));
@@ -361,20 +364,17 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          logger.raw(
-            JSON.stringify(
-              {
-                queryPath: absPath,
-                exact: exact ?? null,
-                prefixMatches: prefixMatches.map((m) => ({
-                  id: m.row?.id,
-                  matchedPath: m.matchedPath,
-                })),
-                fingerprintCandidates: smart,
-              },
-              null,
-              2,
-            ),
+          outputJson(
+            {
+              queryPath: absPath,
+              exact: exact ?? null,
+              prefixMatches: prefixMatches.map((m) => ({
+                id: m.row?.id,
+                matchedPath: m.matchedPath,
+              })),
+              fingerprintCandidates: smart,
+            },
+            opts.jsonFormat,
           );
           return;
         }
@@ -426,6 +426,7 @@ export function registerProjectCommand(program: Command): void {
     .option('--current-user', '仅显示当前用户定义的关系')
     .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -477,7 +478,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            logger.raw(JSON.stringify(relations, null, 2));
+            outputJson(relations, opts.jsonFormat);
             return;
           }
           if (relations.length === 0) {
@@ -514,7 +515,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            logger.raw(JSON.stringify(relationsAll, null, 2));
+            outputJson(relationsAll, opts.jsonFormat);
             return;
           }
           if (relationsAll.length === 0) {

@@ -33,7 +33,7 @@ import {
   listDir,
 } from '@qcqx/lattice-core';
 import type { DoctorEntry, ProjectRow, TaskMeta, ScopePath, ProjectMeta } from '@qcqx/lattice-core';
-import { logger } from '../utils';
+import { logger, outputJson } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -58,6 +58,7 @@ export function registerDoctorCommand(program: Command): void {
     .option('--rebuild-fingerprints', '重新采集所有项目的指纹')
     .option('--recheck-scope-paths', '重新检查所有任务的 scopePaths 是否已属于某个已注册项目')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const entries: DoctorEntry[] = [];
@@ -72,7 +73,7 @@ export function registerDoctorCommand(program: Command): void {
         });
 
         if (!initialized) {
-          outputReport(entries, opts.json);
+          outputReport(entries, opts.json, opts.jsonFormat);
           return;
         }
 
@@ -233,7 +234,7 @@ export function registerDoctorCommand(program: Command): void {
         }
 
         closeDb();
-        outputReport(entries, opts.json);
+        outputReport(entries, opts.json, opts.jsonFormat);
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
@@ -366,9 +367,9 @@ async function recheckScopePaths(
   return { totalTasks: total, promoted };
 }
 
-function outputReport(entries: DoctorEntry[], json: boolean): void {
+function outputReport(entries: DoctorEntry[], json: boolean, jsonFormat?: boolean): void {
   if (json) {
-    logger.raw(JSON.stringify(entries, null, 2));
+    outputJson(entries, jsonFormat);
     return;
   }
 

@@ -19,7 +19,7 @@ import {
   findAllUpwards,
   readJSON,
 } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject } from '../utils';
+import { logger, outputJson, resolveCurrentProject } from '../utils';
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -27,6 +27,7 @@ export function registerStatusCommand(program: Command): void {
     .description('显示 Lattice 状态')
     .option('--global', '显示全局状态')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         if (!(await isInitialized())) {
@@ -38,9 +39,9 @@ export function registerStatusCommand(program: Command): void {
         await initDb();
 
         if (opts.global) {
-          await showGlobalStatus(username, opts.json);
+          await showGlobalStatus(username, opts.json, opts.jsonFormat);
         } else {
-          await showProjectStatus(username, opts.json);
+          await showProjectStatus(username, opts.json, opts.jsonFormat);
         }
 
         closeDb();
@@ -51,7 +52,11 @@ export function registerStatusCommand(program: Command): void {
     });
 }
 
-async function showGlobalStatus(username: string, json: boolean): Promise<void> {
+async function showGlobalStatus(
+  username: string,
+  json: boolean,
+  jsonFormat?: boolean,
+): Promise<void> {
   const config = await readResolvedConfig();
   const projects = listProjects(username);
   const tasks = await listTasks(username);
@@ -75,7 +80,7 @@ async function showGlobalStatus(username: string, json: boolean): Promise<void> 
   };
 
   if (json) {
-    logger.raw(JSON.stringify(status, null, 2));
+    outputJson(status, jsonFormat);
     return;
   }
 
@@ -91,7 +96,11 @@ async function showGlobalStatus(username: string, json: boolean): Promise<void> 
   logger.raw('');
 }
 
-async function showProjectStatus(username: string, json: boolean): Promise<void> {
+async function showProjectStatus(
+  username: string,
+  json: boolean,
+  jsonFormat?: boolean,
+): Promise<void> {
   const project = await resolveCurrentProject();
   if (!project) {
     logger.raw(chalk.yellow('当前目录不是 Lattice 项目。使用 --global 查看全局状态。'));
@@ -163,7 +172,7 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
   };
 
   if (json) {
-    logger.raw(JSON.stringify(status, null, 2));
+    outputJson(status, jsonFormat);
     return;
   }
 

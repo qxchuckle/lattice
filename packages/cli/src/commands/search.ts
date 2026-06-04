@@ -9,7 +9,7 @@ import {
   isModelLoaded,
   getRAGStatus,
 } from '@qcqx/lattice-core';
-import { formatRagTimestamp, logger } from '../utils';
+import { formatRagTimestamp, logger, outputJson } from '../utils';
 
 function parseUsersOption(input?: string): string[] {
   return Array.from(
@@ -90,6 +90,7 @@ export function registerSearchCommand(program: Command): void {
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (query: string, opts) => {
       let spinnerActive = false;
       try {
@@ -130,7 +131,7 @@ export function registerSearchCommand(program: Command): void {
         spinnerActive = false;
 
         if (opts.json) {
-          logger.raw(JSON.stringify(results, null, 2));
+          outputJson(results, opts.jsonFormat);
           return;
         }
 

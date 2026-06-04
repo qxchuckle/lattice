@@ -12,7 +12,12 @@ import {
   type ContextOptions,
   type AncestorProjectInfo,
 } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject, resolveCurrentProjectWithAncestors } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveCurrentProject,
+  resolveCurrentProjectWithAncestors,
+} from '../utils';
 
 export function registerContextCommand(program: Command): void {
   program
@@ -22,6 +27,7 @@ export function registerContextCommand(program: Command): void {
     .option('--project <id>', '指定项目 ID')
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -37,7 +43,7 @@ export function registerContextCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            logger.raw(JSON.stringify(ctx, null, 2));
+            outputJson(ctx, opts.jsonFormat);
             return;
           }
 
@@ -159,7 +165,7 @@ export function registerContextCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          logger.raw(JSON.stringify(ctx, null, 2));
+          outputJson(ctx, opts.jsonFormat);
           return;
         }
 

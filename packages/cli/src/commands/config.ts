@@ -17,7 +17,7 @@ import {
   deleteByPath,
   diffConfig,
 } from '@qcqx/lattice-core';
-import { logger } from '../utils';
+import { logger, outputJson } from '../utils';
 
 type ConfigScope = 'global' | 'local';
 
@@ -27,6 +27,7 @@ interface ScopeOptions {
 
 interface ShowOptions extends ScopeOptions {
   json?: boolean;
+  jsonFormat?: boolean;
   diffDefaults?: boolean;
 }
 
@@ -44,42 +45,55 @@ export function registerConfigCommand(program: Command): void {
     .command('show')
     .description('显示完整配置')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .option('--diff-defaults', '仅显示与默认值不同的配置')
     .action(async (...args: unknown[]) => {
       const opts = extractShowOptions(args);
       const command = args.at(-1) instanceof Command ? (args.at(-1) as Command) : undefined;
-      await showConfig(Boolean(opts.json), resolveScope(opts, command), Boolean(opts.diffDefaults));
+      await showConfig(
+        Boolean(opts.json),
+        resolveScope(opts, command),
+        Boolean(opts.diffDefaults),
+        opts.jsonFormat,
+      );
     });
 
   cmd
     .command('get <key>')
     .description('读取单个配置项，使用点路径')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .option('--scope <scope>', '配置范围（global 或 local）')
-    .action(async (key: string, opts: ScopeOptions & { json?: boolean }, command: Command) => {
-      try {
-        await ensureInitialized();
-        const { config } = await loadConfig(resolveScope(opts, command));
-        const value = getByPath(config, key);
+    .action(
+      async (
+        key: string,
+        opts: ScopeOptions & { json?: boolean; jsonFormat?: boolean },
+        command: Command,
+      ) => {
+        try {
+          await ensureInitialized();
+          const { config } = await loadConfig(resolveScope(opts, command));
+          const value = getByPath(config, key);
 
-        if (value === undefined) {
-          logger.raw(chalk.yellow(`未找到配置项：${key}`));
+          if (value === undefined) {
+            logger.raw(chalk.yellow(`未找到配置项：${key}`));
+            process.exitCode = 1;
+            return;
+          }
+
+          if (opts.json || typeof value === 'object') {
+            outputJson(value, opts.jsonFormat);
+            return;
+          }
+
+          logger.raw(String(value));
+        } catch (err) {
+          console.error(chalk.red('错误：'), (err as Error).message);
           process.exitCode = 1;
-          return;
         }
-
-        if (opts.json || typeof value === 'object') {
-          logger.raw(JSON.stringify(value, null, 2));
-          return;
-        }
-
-        logger.raw(String(value));
-      } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
-        process.exitCode = 1;
-      }
-    });
+      },
+    );
 
   cmd
     .command('set <key> <value>')
@@ -209,6 +223,7 @@ async function showConfig(
   asJson: boolean,
   scope: ConfigScope,
   diffDefaults: boolean,
+  jsonFormat?: boolean,
 ): Promise<void> {
   try {
     await ensureInitialized();
@@ -216,7 +231,7 @@ async function showConfig(
     const output = diffDefaults ? diffConfig(config, getDefaultConfig(scope)) : config;
 
     if (asJson) {
-      logger.raw(JSON.stringify(output, null, 2));
+      outputJson(output, jsonFormat);
       return;
     }
 

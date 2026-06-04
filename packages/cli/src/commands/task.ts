@@ -41,7 +41,7 @@ import type {
   ScopePath,
   TaskMetaWithSource,
 } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject, shouldSkipConfirm } from '../utils';
+import { logger, outputJson, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 const CHECKPOINT_TYPES: CheckpointType[] = [
@@ -90,6 +90,7 @@ export function registerTaskCommand(program: Command): void {
     .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
     .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -151,7 +152,7 @@ export function registerTaskCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            logger.raw(JSON.stringify(tasks, null, 2));
+            outputJson(tasks, opts.jsonFormat);
             return;
           }
 
@@ -188,7 +189,7 @@ export function registerTaskCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            logger.raw(JSON.stringify(tasks, null, 2));
+            outputJson(tasks, opts.jsonFormat);
             return;
           }
 
@@ -284,6 +285,7 @@ export function registerTaskCommand(program: Command): void {
     .option('--tree', '显示当前任务所在整棵任务树')
     .option('--descendants', '显示当前任务的后代树')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -305,18 +307,15 @@ export function registerTaskCommand(program: Command): void {
         const views = shouldLoadViews ? await getTaskGraphViews(username, match.id) : null;
 
         if (opts.json) {
-          logger.raw(
-            JSON.stringify(
-              {
-                meta,
-                prd,
-                lineage: views?.lineage ?? null,
-                tree: views?.tree ?? null,
-                descendants: views?.descendants ?? null,
-              },
-              null,
-              2,
-            ),
+          outputJson(
+            {
+              meta,
+              prd,
+              lineage: views?.lineage ?? null,
+              tree: views?.tree ?? null,
+              descendants: views?.descendants ?? null,
+            },
+            opts.jsonFormat,
           );
           return;
         }
@@ -586,6 +585,7 @@ export function registerTaskCommand(program: Command): void {
     .description('查看任务树')
     .option('--descendants', '只显示当前任务为根的后代树')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -605,7 +605,7 @@ export function registerTaskCommand(program: Command): void {
         }
 
         if (opts.json) {
-          logger.raw(JSON.stringify(tree, null, 2));
+          outputJson(tree, opts.jsonFormat);
           return;
         }
 
@@ -623,6 +623,7 @@ export function registerTaskCommand(program: Command): void {
     .command('lineage <id>')
     .description('查看父任务链路')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -639,7 +640,7 @@ export function registerTaskCommand(program: Command): void {
         }
 
         if (opts.json) {
-          logger.raw(JSON.stringify(lineage, null, 2));
+          outputJson(lineage, opts.jsonFormat);
           return;
         }
 
@@ -688,6 +689,7 @@ export function registerTaskCommand(program: Command): void {
     .requiredOption('--title <title>', '检查点标题')
     .option('-m, --message <message>', '检查点内容')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -710,7 +712,7 @@ export function registerTaskCommand(program: Command): void {
         });
 
         if (opts.json) {
-          logger.raw(JSON.stringify(entry, null, 2));
+          outputJson(entry, opts.jsonFormat);
           return;
         }
 
@@ -734,6 +736,7 @@ export function registerTaskCommand(program: Command): void {
     .option('--type <type>', '按类型过滤')
     .option('--id <checkpointId>', '查看指定检查点')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -751,7 +754,7 @@ export function registerTaskCommand(program: Command): void {
             return;
           }
           if (opts.json) {
-            logger.raw(JSON.stringify(entry, null, 2));
+            outputJson(entry, opts.jsonFormat);
             return;
           }
           logger.raw(chalk.bold(`\n[${entry.type}] ${entry.title}`));
@@ -776,7 +779,7 @@ export function registerTaskCommand(program: Command): void {
         });
 
         if (opts.json) {
-          logger.raw(JSON.stringify(entries, null, 2));
+          outputJson(entries, opts.jsonFormat);
           return;
         }
 
@@ -830,6 +833,7 @@ export function registerTaskCommand(program: Command): void {
     .option('--remove-project <id>', '从 projects 中移除指定项目')
     .option('--clear-paths', '清空任务的 scopePaths')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -913,9 +917,7 @@ export function registerTaskCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          logger.raw(
-            JSON.stringify({ task: updated, recognized, unrecognized, scopePaths }, null, 2),
-          );
+          outputJson({ task: updated, recognized, unrecognized, scopePaths }, opts.jsonFormat);
           return;
         }
 

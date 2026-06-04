@@ -134,6 +134,45 @@ lattice search "<当前任务标题或核心关键词>" --type task --json
 
 不要机械地固定只看 1 个任务。参考数量应与任务复杂性匹配。
 
+### 自动关联实际工作项目路径
+
+任务执行过程中，AI 应**主动判断并关联**当前实际围绕哪个项目路径在工作，而不是仅依赖创建时的 `--current` 关联。
+
+**为什么**：`lattice task create --current` 只关联创建任务时所在的项目。但实际工作中，AI 可能在另一个项目目录下操作文件、编辑代码，或在多个项目间切换。如果不主动关联，任务元数据中的 `projects` / `scopePaths` 与实际工作范围会脱节，导致搜索和上下文丢失。
+
+**触发时机**（满足任一即应执行关联）：
+
+1. 任务开始后，当前工作目录对应的项目**不在** `task.json` 的 `projects` 列表中
+2. 对话中 AI 打开、编辑或搜索了某个路径下的文件，且该路径对应的项目尚未关联
+3. 用户明确提到在某个项目/目录下操作
+4. 任务涉及多个项目协作，中途切换到新的项目目录工作
+
+**执行方式**：
+
+```bash
+# 关联当前工作目录对应的项目
+lattice task associate <task-id> --current
+
+# 关联指定路径（AI 判断实际工作目录）
+lattice task associate <task-id> --paths <path>
+
+# 关联已知的项目 ID
+lattice task associate <task-id> --project <project-id>
+```
+
+**行为原则**：
+
+- 这是**静默执行**的辅助动作，不需要每次都向用户确认——除非 AI 对关联判断不确定
+- 如果 `lattice task associate --current` 报告当前路径已在 `projects` 或 `scopePaths` 中，不需要重复执行
+- 关联后无需额外告知用户，除非关联了**意料外**的项目（此时应简短说明）
+- 任务归档时，最终的 `projects` 和 `scopePaths` 应完整反映本次任务实际触及过的所有项目
+
+**典型场景**：
+
+- 用户说"适配 X 能力包到 Y 项目"，创建任务时在 Lattice 仓库目录下（关联了 Lattice），但实际编辑的代码在 `/Users/a1/qcqx/sdk-xxx/` 目录 → 应自动 `task associate --paths /Users/a1/qcqx/sdk-xxx/`
+- 任务涉及修改 A 项目的组件并在 B 项目中消费 → 两个路径都应关联
+- 用户在对话中贴出了 `/some/path/src/xxx.ts` 并要求修改 → 判断该路径属于哪个项目并关联
+
 ### 完善 PRD
 
 开始任务后，应主动完善该任务的 `prd.md`，并运行 `lattice rag update` 确保新任务被索引。

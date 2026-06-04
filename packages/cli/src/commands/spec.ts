@@ -23,7 +23,7 @@ import {
   validateSpecsScope,
   listAllUsernames,
 } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject } from '../utils';
+import { logger, outputJson, resolveCurrentProject } from '../utils';
 import {
   resolveBundledSpecTemplateNames,
   syncBundledSpecTemplatesWithPrompt,
@@ -63,6 +63,7 @@ export function registerSpecCommand(program: Command): void {
     .option('--scope <scope>', '过滤层级（project / user / global）')
     .option('--tag <tag>', '按标签过滤')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -93,7 +94,7 @@ export function registerSpecCommand(program: Command): void {
         }
 
         if (opts.json) {
-          logger.raw(JSON.stringify(allSpecs, null, 2));
+          outputJson(allSpecs, opts.jsonFormat);
           return;
         }
 
@@ -145,6 +146,7 @@ export function registerSpecCommand(program: Command): void {
     .option('--user <username>', '查看指定用户的 spec（默认当前用户）')
     .option('--detail', '输出文件内容')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (file: string, opts) => {
       try {
         const currentUsername = await getUsername();
@@ -189,7 +191,7 @@ export function registerSpecCommand(program: Command): void {
             ...(targetUsername !== currentUsername ? { sourceUser: targetUsername } : {}),
             ...(opts.detail ? { content: m.spec.content } : {}),
           }));
-          logger.raw(JSON.stringify(result, null, 2));
+          outputJson(result, opts.jsonFormat);
           return;
         }
 
@@ -396,6 +398,7 @@ export function registerSpecCommand(program: Command): void {
     .alias('ls')
     .description('列出已注册的模板仓库')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const registries = await getConfiguredTemplateRegistries();
@@ -408,7 +411,7 @@ export function registerSpecCommand(program: Command): void {
         const infos = await listSpecTemplateRegistries(registries);
 
         if (opts.json) {
-          logger.raw(JSON.stringify(infos, null, 2));
+          outputJson(infos, opts.jsonFormat);
           return;
         }
 

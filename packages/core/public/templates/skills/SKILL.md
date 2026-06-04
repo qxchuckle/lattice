@@ -96,6 +96,7 @@ lattice task list
 lattice task list --current [--all-user] [--user <users>]
 lattice task create "<title>" --current
 lattice task update <id> --add-project <project-id>
+lattice task associate <id> --current
 lattice task associate <id> --paths <p1> <p2> --note <note>
 lattice task associate <id> --project <project-id>
 lattice task start <id>

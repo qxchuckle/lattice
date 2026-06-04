@@ -14,7 +14,7 @@ import {
   getFtsIndexVersion,
   setFtsIndexVersion,
 } from '@qcqx/lattice-core';
-import { formatRagTimestamp, logger } from '../utils';
+import { formatRagTimestamp, logger, outputJson } from '../utils';
 
 export function registerRagCommand(program: Command): void {
   const cmd = program.command('rag').description('管理 RAG 索引');
@@ -24,6 +24,7 @@ export function registerRagCommand(program: Command): void {
     .command('status')
     .description('查看索引状态')
     .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         await getUsername();
@@ -33,7 +34,7 @@ export function registerRagCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          logger.raw(JSON.stringify(status, null, 2));
+          outputJson(status, opts.jsonFormat);
           return;
         }
 
