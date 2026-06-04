@@ -4,15 +4,24 @@
 
 ## 层级优先级
 
-spec 读取顺序：
+spec 读取顺序（基本三层）：
 
-1. `~/.lattice/users/<username>/projects/<id>/spec/`
-2. `~/.lattice/users/<username>/spec/`
-3. `~/.lattice/spec/`
+1. `~/.lattice/users/<username>/projects/<id>/spec/`（项目级）
+2. `~/.lattice/users/<username>/spec/`（用户级）
+3. `~/.lattice/spec/`（全局级）
+
+**嵌套项目场景扩展为五层**（当子项目位于父项目目录内时自动生效）：
+
+1. 当前项目 spec（最高优先）
+2. 直接父级项目 spec
+3. 更远祖先项目 spec
+4. 用户级 spec
+5. 全局级 spec（最低优先）
 
 同名文件冲突时：
 
 - 项目级优先
+- 祖先 spec 按距离覆盖（近覆盖远）
 - 用户级覆盖全局级
 - 需要明确告诉用户覆盖关系，而不是静默忽略
 

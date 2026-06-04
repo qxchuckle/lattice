@@ -16,6 +16,10 @@ import {
   findCandidatesByFingerprint,
   findProjectById,
   getProjectMeta,
+  findAllUpwards,
+  readJSON,
+  upsertRelationFile,
+  deleteRelationsByFilter,
   CONFIDENCE_THRESHOLDS,
 } from '@qcqx/lattice-core';
 import type { ProjectMatchCandidate } from '@qcqx/lattice-core';
@@ -193,6 +197,9 @@ export function registerLinkCommand(program: Command): void {
           }
         }
 
+        // 5. 自动检测父级 Lattice 项目并建立 nested-in 关系
+        const parentRelations = await detectAndLinkParentProject(username, id, cwd);
+
         closeDb();
 
         logger.raw(
@@ -208,6 +215,12 @@ export function registerLinkCommand(program: Command): void {
           logger.raw(chalk.green(`\n✓ 已应用 ${appliedTemplatePaths.length} 个模板文件`));
           for (const filePath of appliedTemplatePaths) {
             logger.raw(chalk.dim(`  ${filePath}`));
+          }
+        }
+        if (parentRelations.length > 0) {
+          logger.raw(chalk.cyan(`\n✓ 检测到嵌套项目关系：`));
+          for (const r of parentRelations) {
+            logger.raw(chalk.dim(`  ← ${r.name} (${r.type === 'direct' ? '直接父级' : '祖先'})`));
           }
         }
       } catch (err) {
@@ -291,4 +304,63 @@ async function resolveTemplateNames(input: string): Promise<string[]> {
   }
 
   return [...new Set(validNames)];
+}
+
+interface ParentRelationResult {
+  id: string;
+  name: string;
+  type: 'direct' | 'ancestor';
+}
+
+/**
+ * 自动检测父级 Lattice 项目并建立 nested-in 关系
+ * 类似 npm 向上查找 node_modules 的机制
+ */
+async function detectAndLinkParentProject(
+  username: string,
+  childProjectId: string,
+  childDir: string,
+): Promise<ParentRelationResult[]> {
+  const results: ParentRelationResult[] = [];
+
+  try {
+    // 自愈：先清除该项目旧的 auto nested-in 关系，再根据当前文件系统重新建立
+    await deleteRelationsByFilter(username, {
+      projectId: childProjectId,
+      type: 'nested-in',
+      createdBy: 'auto',
+    });
+
+    // 从当前项目目录向上查找所有祖先 lattice.json
+    const ancestorRoots = await findAllUpwards('lattice.json', childDir);
+
+    for (let i = 0; i < ancestorRoots.length; i++) {
+      const ancestorRoot = ancestorRoots[i];
+      const data = await readJSON<{ id?: string }>(`${ancestorRoot}/lattice.json`);
+      if (!data?.id || data.id === childProjectId) continue;
+
+      // 检查该祖先项目是否已注册在 Lattice 中
+      const parentRow = findProjectById(data.id);
+      if (!parentRow) continue;
+
+      // 建立 nested-in 关系（幂等：已存在则更新）
+      await upsertRelationFile(username, {
+        projectA: childProjectId,
+        projectB: data.id,
+        type: 'nested-in',
+        description: i === 0 ? '直接父级项目' : `第 ${i + 1} 级祖先项目`,
+        createdBy: 'auto',
+      });
+
+      results.push({
+        id: data.id,
+        name: parentRow.name,
+        type: i === 0 ? 'direct' : 'ancestor',
+      });
+    }
+  } catch {
+    // 向上查找失败不影响 link 主流程
+  }
+
+  return results;
 }

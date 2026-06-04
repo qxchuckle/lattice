@@ -122,6 +122,26 @@ export async function deleteRelationsByProject(
   return before - file.relations.length;
 }
 
+/** 按条件删除关系（自愈清理用：例如清除某项目所有 auto 创建的 nested-in 关系） */
+export async function deleteRelationsByFilter(
+  username: string,
+  filter: { projectId: string; type?: string; createdBy?: ProjectRelation['createdBy'] },
+): Promise<number> {
+  const file = await readRelationsFile(username);
+  const before = file.relations.length;
+  file.relations = file.relations.filter((r) => {
+    const matchesProject = r.projectA === filter.projectId || r.projectB === filter.projectId;
+    if (!matchesProject) return true;
+    if (filter.type && r.type !== filter.type) return true;
+    if (filter.createdBy && r.createdBy !== filter.createdBy) return true;
+    return false;
+  });
+  if (file.relations.length !== before) {
+    await writeRelationsFile(username, file);
+  }
+  return before - file.relations.length;
+}
+
 /** 带来源用户标注的关系 */
 export interface RelationWithSource extends ProjectRelation {
   /** 定义该关系的用户 */

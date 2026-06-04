@@ -38,6 +38,7 @@ export type {
   ProjectMatchCandidate,
   RelationsFile,
   TaskProjectRow,
+  AncestorProjectInfo,
 } from './types';
 
 // 路径与文件工具
@@ -78,6 +79,7 @@ export {
   removeDir,
   listDir,
   findUpwards,
+  findAllUpwards,
 } from './paths';
 
 // 配置
@@ -179,6 +181,7 @@ export {
   upsertRelation as upsertRelationFile,
   deleteRelation as deleteRelationFile,
   deleteRelationsByProject,
+  deleteRelationsByFilter,
   getRelationsByProjectCrossUser,
   listRelationsCrossUser,
   type RelationWithSource,
@@ -214,6 +217,7 @@ export {
   getUserSpecs,
   getProjectSpecs,
   getCascadedSpecs,
+  getCascadedSpecsWithAncestors,
   detectSpecConflicts,
   findSpecByName,
   validateSpecScope,

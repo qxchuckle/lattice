@@ -76,3 +76,43 @@ export async function getCascadedSpecs(username: string, projectId: string): Pro
 
   return Array.from(specMap.values());
 }
+
+/**
+ * 含祖先项目的级联聚合：项目 > 祖先（近→远）> 用户 > 全局
+ * ancestorProjectIds 顺序为近→远（直接父级在前），级联时远→近插入确保近覆盖远
+ */
+export async function getCascadedSpecsWithAncestors(
+  username: string,
+  projectId: string,
+  ancestorProjectIds: string[],
+): Promise<{ cascaded: ParsedSpec[]; ancestorSpecs: ParsedSpec[] }> {
+  // 并行加载所有层级
+  const [globalSpecs, userSpecs, projectSpecs, ...ancestorSpecsList] = await Promise.all([
+    getGlobalSpecs(),
+    getUserSpecs(username),
+    getProjectSpecs(username, projectId),
+    ...ancestorProjectIds.map((id) => getProjectSpecs(username, id)),
+  ]);
+
+  const specMap = new Map<string, ParsedSpec>();
+
+  // 全局 spec 先加入（最低优先级）
+  for (const s of globalSpecs) specMap.set(s.relativePath, s);
+  // 用户 spec 覆盖全局
+  for (const s of userSpecs) specMap.set(s.relativePath, s);
+  // 祖先 spec：从远到近加入（远的先，近的覆盖远的）
+  const allAncestorSpecs: ParsedSpec[] = [];
+  for (let i = ancestorSpecsList.length - 1; i >= 0; i--) {
+    for (const s of ancestorSpecsList[i]) {
+      specMap.set(s.relativePath, s);
+      allAncestorSpecs.push(s);
+    }
+  }
+  // 项目 spec 覆盖所有祖先
+  for (const s of projectSpecs) specMap.set(s.relativePath, s);
+
+  return {
+    cascaded: Array.from(specMap.values()),
+    ancestorSpecs: allAncestorSpecs,
+  };
+}

@@ -16,6 +16,8 @@ import {
   getTaskMeta,
   findProjectById,
   dirExists,
+  findAllUpwards,
+  readJSON,
 } from '@qcqx/lattice-core';
 import { logger, resolveCurrentProject } from '../utils';
 
@@ -137,11 +139,27 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
     pathStatus.push({ path: p, exists: await dirExists(p) });
   }
 
+  // 检测嵌套祖先项目
+  const ancestorInfo: { id: string; name: string; root: string }[] = [];
+  try {
+    const ancestorRoots = await findAllUpwards('lattice.json', project.root);
+    for (const aRoot of ancestorRoots) {
+      const data = await readJSON<{ id?: string }>(`${aRoot}/lattice.json`);
+      if (!data?.id || data.id === project.id) continue;
+      const parentRow = findProjectById(data.id);
+      if (!parentRow) continue;
+      ancestorInfo.push({ id: data.id, name: parentRow.name, root: aRoot });
+    }
+  } catch {
+    // 不影响主流程
+  }
+
   const status = {
     meta,
     specs: specs.map((s) => s.fileName),
     activeTasks,
     binding: { current: project.root, pathStatus },
+    ...(ancestorInfo.length > 0 ? { ancestors: ancestorInfo } : {}),
   };
 
   if (json) {
@@ -180,6 +198,22 @@ async function showProjectStatus(username: string, json: boolean): Promise<void>
     for (const t of activeTasks) {
       if (t) logger.raw(`    ${t.title} ${chalk.dim(`[${t.status}]`)}`);
     }
+  }
+
+  // 显示嵌套项目关系
+  if (ancestorInfo.length > 0) {
+    logger.raw(chalk.blue(`\n  嵌套继承（${ancestorInfo.length} 个祖先项目）：`));
+    for (let i = 0; i < ancestorInfo.length; i++) {
+      const label = i === 0 ? '直接父级' : `第 ${i + 1} 级祖先`;
+      logger.raw(`    ← ${ancestorInfo[i].name} ${chalk.dim(`(${label})`)}`);
+    }
+    logger.raw(
+      chalk.dim(
+        '    级联优先级：当前项目 > ' +
+          ancestorInfo.map((a) => a.name).join(' > ') +
+          ' > 用户级 > 全局级',
+      ),
+    );
   }
 
   logger.raw('');

@@ -17,6 +17,7 @@ lattice status
 - 是否存在用户级 / 全局级补充规则
 - 当前项目是否有关联任务
 - 是否存在 spec 冲突或历史上下文
+- 是否处于嵌套项目中（自动从祖先项目继承 spec）
 
 ## 用户提到相似需求时
 
@@ -47,6 +48,17 @@ lattice project relation list <id>
 ```bash
 lattice project relation add <project-a> <project-b> --type <type>
 ```
+
+## 嵌套项目继承
+
+当前项目如果位于另一个已注册 Lattice 项目的子目录中，`lattice context` 会自动继承祖先项目的 spec。
+
+- 继承规则：无需手动配置，`lattice link` 时自动向上检测并创建 `nested-in` 关系
+- 级联优先级：`当前项目 > 直接父级 > 更远祖先 > 用户级 > 全局级`（就近优先覆盖）
+- 只继承 spec，不继承任务
+- `lattice status` 会显示嵌套继承层级信息
+
+典型场景：monorepo 中子包（`packages/foo`）和根目录都注册为 Lattice 项目，子包自动继承根项目的规范。
 
 ## 跨用户聚合
 

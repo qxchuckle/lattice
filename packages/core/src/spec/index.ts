@@ -1,5 +1,11 @@
 export { parseSpec, writeSpec, writeSpecRaw, deleteSpec, specExists } from './io';
-export { getGlobalSpecs, getUserSpecs, getProjectSpecs, getCascadedSpecs } from './cascade';
+export {
+  getGlobalSpecs,
+  getUserSpecs,
+  getProjectSpecs,
+  getCascadedSpecs,
+  getCascadedSpecsWithAncestors,
+} from './cascade';
 export { detectSpecConflicts } from './conflicts';
 export { findSpecByName } from './query';
 export type { SpecMatch, FindSpecOptions } from './query';

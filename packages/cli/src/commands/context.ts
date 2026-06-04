@@ -8,9 +8,11 @@ import {
   getSmartContext,
   formatContextAsMarkdown,
   findProjectById,
+  getProjectMeta,
   type ContextOptions,
+  type AncestorProjectInfo,
 } from '@qcqx/lattice-core';
-import { logger, resolveCurrentProject } from '../utils';
+import { logger, resolveCurrentProject, resolveCurrentProjectWithAncestors } from '../utils';
 
 export function registerContextCommand(program: Command): void {
   program
@@ -87,14 +89,30 @@ export function registerContextCommand(program: Command): void {
 
         // 项目上下文
         let projectId = opts.project as string | undefined;
+        let ancestors: AncestorProjectInfo[] | undefined;
+
         if (!projectId) {
-          const project = await resolveCurrentProject();
-          if (!project) {
+          // 解析当前项目及祖先
+          const resolved = await resolveCurrentProjectWithAncestors();
+          if (!resolved) {
             logger.raw(chalk.yellow('当前目录不是 Lattice 项目。请指定 --project 或 --task'));
             closeDb();
             return;
           }
-          projectId = project.id;
+          projectId = resolved.current.id;
+
+          // 构建祖先信息
+          if (resolved.ancestors.length > 0) {
+            ancestors = [];
+            for (const a of resolved.ancestors) {
+              const meta = await getProjectMeta(username, a.id);
+              ancestors.push({
+                id: a.id,
+                name: meta?.name ?? undefined,
+                root: a.root,
+              });
+            }
+          }
         }
 
         if (!projectId) {
@@ -119,6 +137,12 @@ export function registerContextCommand(program: Command): void {
           );
           process.exitCode = 1;
           return;
+        }
+
+        // 传入祖先信息用于 spec 级联继承
+        if (ancestors && ancestors.length > 0) {
+          contextOpts.ancestorProjectIds = ancestors.map((a) => a.id);
+          contextOpts.ancestors = ancestors;
         }
 
         const ctx = await getContextForProject(username, projectId, contextOpts);

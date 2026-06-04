@@ -7,8 +7,15 @@ import type {
   RelatedProjectRelationEntry,
   CrossUserProjectData,
   CrossUserTaskData,
+  AncestorProjectInfo,
 } from '../types';
-import { getProjectSpecs, getUserSpecs, getGlobalSpecs, getCascadedSpecs } from '../spec';
+import {
+  getProjectSpecs,
+  getUserSpecs,
+  getGlobalSpecs,
+  getCascadedSpecs,
+  getCascadedSpecsWithAncestors,
+} from '../spec';
 import { getTaskMeta } from '../task';
 import { getProjectMeta, listProjects } from '../project';
 import { getRelationsByProject } from '../project/relation';
@@ -18,6 +25,10 @@ import { getTasksForProject } from '../db';
 export interface ContextOptions {
   /** 是否启用跨用户聚合（默认 true） */
   crossUser?: boolean;
+  /** 祖先项目 ID 列表（近→远），用于嵌套项目 spec 继承 */
+  ancestorProjectIds?: string[];
+  /** 祖先项目信息（包含名称和路径，用于输出） */
+  ancestors?: AncestorProjectInfo[];
 }
 
 /**
@@ -81,20 +92,45 @@ async function collectCrossUserProjectData(
   };
 }
 
-/** 获取项目的完整上下文（三层 spec 聚合 + 关联信息 + 跨用户聚合） */
+/** 获取项目的完整上下文（三层 spec 聚合 + 关联信息 + 跨用户聚合 + 祖先继承） */
 export async function getContextForProject(
   username: string,
   projectId: string,
   options?: ContextOptions,
 ): Promise<ProjectContext> {
   const crossUser = options?.crossUser ?? true;
+  const ancestorProjectIds = options?.ancestorProjectIds;
+  const ancestors = options?.ancestors;
 
-  const [projectSpecs, userSpecs, globalSpecs, cascadedSpecs] = await Promise.all([
-    getProjectSpecs(username, projectId),
-    getUserSpecs(username),
-    getGlobalSpecs(),
-    getCascadedSpecs(username, projectId),
-  ]);
+  // 根据是否有祖先项目，选择不同的级联策略
+  let projectSpecs: ParsedSpec[];
+  let userSpecs: ParsedSpec[];
+  let globalSpecs: ParsedSpec[];
+  let cascadedSpecs: ParsedSpec[];
+  let ancestorSpecs: ParsedSpec[] | undefined;
+
+  if (ancestorProjectIds && ancestorProjectIds.length > 0) {
+    // 有祖先项目：使用含祖先的级联聚合
+    const [pSpecs, uSpecs, gSpecs, cascadeResult] = await Promise.all([
+      getProjectSpecs(username, projectId),
+      getUserSpecs(username),
+      getGlobalSpecs(),
+      getCascadedSpecsWithAncestors(username, projectId, ancestorProjectIds),
+    ]);
+    projectSpecs = pSpecs;
+    userSpecs = uSpecs;
+    globalSpecs = gSpecs;
+    cascadedSpecs = cascadeResult.cascaded;
+    ancestorSpecs = cascadeResult.ancestorSpecs;
+  } else {
+    // 无祖先项目：使用原有三层级联
+    [projectSpecs, userSpecs, globalSpecs, cascadedSpecs] = await Promise.all([
+      getProjectSpecs(username, projectId),
+      getUserSpecs(username),
+      getGlobalSpecs(),
+      getCascadedSpecs(username, projectId),
+    ]);
+  }
 
   // 查找关联的活跃任务
   let activeTasks: TaskMeta[] = [];
@@ -187,6 +223,8 @@ export async function getContextForProject(
     activeTasks,
     relatedProjects,
     crossUserData,
+    ancestors,
+    ancestorSpecs: ancestorSpecs && ancestorSpecs.length > 0 ? ancestorSpecs : undefined,
   };
 }
 
@@ -303,6 +341,21 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
   const lines: string[] = [];
 
   lines.push('# 项目上下文\n');
+
+  // 祖先项目继承提示
+  if (ctx.ancestors && ctx.ancestors.length > 0) {
+    lines.push('## 嵌套项目继承\n');
+    lines.push(`本项目检测到 ${ctx.ancestors.length} 个祖先 Lattice 项目，规范已自动级联继承：\n`);
+    for (let i = 0; i < ctx.ancestors.length; i++) {
+      const a = ctx.ancestors[i];
+      const label = i === 0 ? '直接父级' : `第 ${i + 1} 级祖先`;
+      lines.push(`- **${a.name ?? a.id.slice(0, 8)}** (${label}) — ${a.root}`);
+    }
+    lines.push('');
+    lines.push(
+      `级联优先级：当前项目 > ${ctx.ancestors.map((a) => a.name ?? a.id.slice(0, 8)).join(' > ')} > 用户级 > 全局级\n`,
+    );
+  }
 
   if (ctx.cascadedSpecs.length > 0) {
     lines.push('## 规范（Spec）\n');

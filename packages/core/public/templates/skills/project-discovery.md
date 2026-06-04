@@ -6,7 +6,7 @@
 
 - 每个项目有唯一 id（`f92c…` 16 字符）和**多源指纹**（git first commit / git remote / package name / monorepo packages / local path / local path basename / local path prefix）。
 - 一个项目可以同时绑定多个本地路径（worktree、不同机器同步、不同 clone）：`localPaths` 是数组。
-- 项目关系（`forked-from` / `depends-on` / `shares-component` / `related` / 自定义类型）以 `relations.json` 为真源，每条关系有唯一 id `rel_xxxxxxxx`。
+- 项目关系（`forked-from` / `depends-on` / `shares-component` / `nested-in` / `related` / 自定义类型）以 `relations.json` 为真源，每条关系有唯一 id `rel_xxxxxxxx`。
 
 ## 进入未知目录时
 
@@ -36,6 +36,8 @@ lattice link --restore <id>      # 已知目标 id，直接重新绑定（不交
 lattice link --force-new         # 跳过相似检测，强制创建新项目
 lattice link --yes               # 非交互模式：检测到候选时仅打印警告并创建新项目
 ```
+
+> **嵌套项目自动检测**：link 完成后会自动向上查找父级 `lattice.json`，若发现已注册的父项目，自动创建 `nested-in` 关系（`createdBy=auto`）。这使子项目运行 `lattice context` 时自动继承祖先项目的 spec。
 
 判断使用哪个分支：
 - 用户从备份/同步把项目放到新目录 → `--restore`（最快）
@@ -89,6 +91,7 @@ CLI 仅提供"原子能力"，**关系类型与是否成立由 AI 自行判断**
 | 两项目共享 `git_first_commit` 或一个项目的 git remote 是另一个的 fork | `forked-from` |
 | package.json 中 A 直接 `dependencies`/`peerDependencies` 引用 B 的 package | `depends-on` |
 | 在多个项目里看到同一个 monorepo 包名 | `shares-component` |
+| 子项目的目录位于父项目目录之内（目录层级嵌套） | `nested-in`（link 时自动创建） |
 | 仅是同一个组织/团队的相邻仓库，无强证据 | `related`（不要随便升格） |
 | 仅靠 basename 相同（如 `frontend` / `backend`）→ 不要建立关系 | — |
 

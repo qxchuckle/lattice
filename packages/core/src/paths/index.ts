@@ -201,7 +201,7 @@ export async function listDir(dirPath: string): Promise<string[]> {
 }
 
 /**
- * 从当前目录向上查找包含指定文件的目录
+ * 从当前目录向上查找包含指定文件的目录（返回最近的一个）
  */
 export async function findUpwards(fileName: string, startDir: string): Promise<string | null> {
   let current = startDir;
@@ -214,6 +214,27 @@ export async function findUpwards(fileName: string, startDir: string): Promise<s
     if (parent === current) return null;
     current = parent;
   }
+}
+
+/**
+ * 从当前目录向上查找所有包含指定文件的祖先目录（不含起始目录本身）
+ * 返回顺序：从近到远（直接父级在前，最远祖先在后）
+ */
+export async function findAllUpwards(fileName: string, startDir: string): Promise<string[]> {
+  const results: string[] = [];
+  let current = pathJoin(startDir, '..');
+
+  while (true) {
+    if (current === startDir) break;
+    if (await fileExists(pathJoin(current, fileName))) {
+      results.push(current);
+    }
+    const parent = pathJoin(current, '..');
+    if (parent === current) break;
+    current = parent;
+  }
+
+  return results;
 }
 
 export { basename } from 'node:path';

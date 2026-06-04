@@ -35,6 +35,8 @@
 - `--global`：显示全局状态，而不是当前项目状态
 - `--json`：以 JSON 输出
 
+> **嵌套项目信息**：项目模式下会自动检测并显示祖先项目嵌套关系和 spec 级联优先级。
+
 ## `lattice context`
 
 获取项目或任务上下文。
@@ -42,6 +44,8 @@
 - `--task <id>`：按任务 ID 获取上下文
 - `--project <id>`：按项目 ID 获取上下文
 - `--json`：以 JSON 输出
+
+> **嵌套项目继承**：当前项目处于另一个已注册 Lattice 项目的子目录时，会自动继承祖先项目的 spec。级联优先级：`当前项目 > 直接父级 > 更远祖先 > 用户级 > 全局级`。
 
 ## `lattice search <query>`
 
@@ -70,6 +74,8 @@
 - `--restore <id>`：直接重新绑定到已有项目 id（不交互）
 - `--force-new`：强制创建新项目，跳过指纹相似检测
 - `-y, --yes`：检测到候选时仅警告并创建新项目（非交互模式）
+
+> **嵌套项目自动检测**：link 完成后会自动向上查找父级 `lattice.json`，若发现已注册的父项目则自动创建 `nested-in` 关系（`createdBy=auto`）。子项目运行 `lattice context` 时会自动继承祖先项目的 spec。
 
 ## `lattice unlink`
 
@@ -129,7 +135,7 @@
 
 - `<project-a>`：项目 A的 ID
 - `<project-b>`：项目 B 的 ID
-- `--type <type>`：关系类型，默认 `related`（常用：forked-from / depends-on / shares-component / related）
+- `--type <type>`：关系类型，默认 `related`（常用：forked-from / depends-on / shares-component / nested-in / related）
 - `--description <desc>`：关系描述
 - `--from-task <taskId>`：记录关系推断来源任务 ID
 - `--ai-inferred`：标记为 AI 推断的关系（`createdBy=ai-inferred`）

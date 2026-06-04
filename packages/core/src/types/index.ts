@@ -193,6 +193,16 @@ export interface CrossUserProjectData {
   relatedProjects: RelatedProjectEntry[];
 }
 
+/** 祖先项目信息（嵌套项目场景） */
+export interface AncestorProjectInfo {
+  /** 项目 ID */
+  id: string;
+  /** 项目名称 */
+  name?: string;
+  /** 项目本地根目录 */
+  root: string;
+}
+
 /** 项目上下文（三层 spec 聚合 + 关联信息） */
 export interface ProjectContext {
   projectSpecs: ParsedSpec[];
@@ -203,6 +213,10 @@ export interface ProjectContext {
   relatedProjects: RelatedProjectEntry[];
   /** 跨用户聚合数据（其他用户为同一项目贡献的信息） */
   crossUserData?: CrossUserProjectData[];
+  /** 嵌套项目继承：祖先项目列表（近→远） */
+  ancestors?: AncestorProjectInfo[];
+  /** 嵌套项目继承：从祖先项目继承的 spec（已参与级联覆盖） */
+  ancestorSpecs?: ParsedSpec[];
 }
 
 /** 跨用户聚合的任务上下文数据 */
