@@ -16,11 +16,13 @@ import {
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
 } from '../spec';
+import { parseSpec } from '../spec/io';
 import { getTaskMeta } from '../task';
 import { getProjectMeta, listProjects } from '../project';
 import { getRelationsByProject } from '../project/relation';
 import { findSameProjectInOtherUsers } from '../project/cross-user';
 import { getTasksForProject } from '../db';
+import { semanticSearch } from '../rag';
 
 export interface ContextOptions {
   /** 是否启用跨用户聚合（默认 true） */
@@ -327,11 +329,33 @@ export async function getSmartContext(
     }
   }
 
+  // 通过 RAG 语义搜索发现与任务相关的 spec
+  const semanticSpecs: ParsedSpec[] = [];
+  try {
+    const existingPaths = new Set([
+      ...directSpecs.map((s) => s.filePath),
+      ...relatedSpecs.map((s) => s.filePath),
+    ]);
+    const semanticResults = await semanticSearch(task.title, 20, {
+      type: 'spec',
+      distanceThreshold: 1.2,
+    });
+    const dedupedResults = semanticResults.filter((r) => !existingPaths.has(r.filePath));
+    const parsedResults = await Promise.all(
+      dedupedResults.slice(0, 5).map((r) => parseSpec(r.filePath)),
+    );
+    for (const spec of parsedResults) {
+      if (spec) semanticSpecs.push(spec);
+    }
+  } catch {
+    // RAG 不可用时静默回退
+  }
+
   return {
     task,
     directSpecs,
     relatedSpecs,
-    semanticSpecs: [], // P2 阶段通过 RAG 填充
+    semanticSpecs,
     crossUserData,
   };
 }

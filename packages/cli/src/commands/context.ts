@@ -61,6 +61,16 @@ export function registerContextCommand(program: Command): void {
             logger.raw('');
           }
 
+          if (ctx.semanticSpecs.length > 0) {
+            logger.raw(chalk.green(`语义关联 Spec（${ctx.semanticSpecs.length}）：`));
+            for (const s of ctx.semanticSpecs) {
+              const title = s.frontmatter.title ?? s.fileName;
+              logger.raw(`  ${title}`);
+              logger.raw(chalk.dim(`  ${s.content.slice(0, 200)}...`));
+              logger.raw('');
+            }
+          }
+
           // 跨用户聚合数据
           if (ctx.crossUserData && ctx.crossUserData.length > 0) {
             logger.raw(chalk.magenta.bold(`\n跨用户聚合：`));
