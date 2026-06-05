@@ -61,6 +61,36 @@ lattice context --task <task-id>
 
 ## 开始任务后
 
+### 按任务主题选读相关 spec（必做）
+
+任务开始后，**必须**按当前任务主题挑选并精读相关 spec。spec 不只是行为约束，**也是 AI 认识项目的稳定经验**（项目结构、模块职责、领域概念、设计动机、可复用方法论）。
+
+`lattice context --task <task-id>` 会输出"直接关联 Spec"和"语义关联 Spec"两组列表，但**只是标题 + 路径 + 摘要**（摘要常常缺失）。看到标题不等于了解内容，必须按以下规则精读：
+
+**判断哪些 spec 与当前任务相关**：
+
+- 标题 / 路径中的关键字与当前任务标题、PRD 目标、修改范围匹配
+- `lattice context --task <id>` 输出的"语义关联 Spec"列表（基于 RAG 推荐）
+- 项目级中"系统架构 / 模块边界 / 领域概念 / 项目结构 / 方法论 / 关键流程地图"等**认知类**默认应读
+- 项目级中"编码规范 / 提交流程"等**约束类**按本次会修改的代码范围决定是否读
+
+**精读动作**：
+
+- 对判定为"相关"的 spec，必须 read_file 读取正文，不能只看标题或摘要
+- 如果 spec 摘要为"[缺失摘要]"或过于笼统，更必须读正文
+- 读取后，提炼对当前任务的具体影响（哪些规则要遵守、哪些认知要应用）
+
+**读取后的关联**：
+
+- 实施过程中确实参照了某个 spec 来指导实现 → `lattice task ref-spec <task-id> <spec-name>` 关联
+- 也可以在打 checkpoint 时通过 `--refs` 顺手关联
+
+**反模式**：
+
+- ❌ 看到 `lattice context` 输出的 spec 列表后只口头复述标题就开始动手
+- ❌ 把"已运行 lattice context"等同于"已了解 spec 内容"
+- ❌ 只读约束类 spec，跳过项目认知类 spec（觉得"那只是介绍"）
+
 ### 参考近似任务
 
 任务开始后，应主动搜索已完成的近似任务作为参考。搜索方式：
@@ -120,6 +150,29 @@ lattice task progress <task-id>            # 全部
 lattice task progress <task-id> --last 3   # 最近 3 条
 lattice task progress <task-id> --type decision  # 只看决策
 ```
+
+## 实施期多轮对话循环（必做）
+
+任务进行中往往是多轮对话——用户会陆续补充想法、调整需求、修改方案、提新约束。**任何此类输入到来时，必须按 PRD → spec → code → progress 的固定顺序响应，不能跳步直接改代码：**
+
+1. **先回 PRD**：识别本轮输入是否触动"目标 / 范围 / 约束 / 方案 / 取舍 / 文件清单 / 风险"
+   - 是 → 用 `search_replace` 更新该任务 `prd.md` 对应小节，并打 `lattice task checkpoint --type decision` 或 `--type pivot`
+   - 否（仅澄清/补充） → 跳过 PRD 修订
+2. **必要时再选读 spec**：若涉及之前未读过的模块 / 概念 / 规范分层，先 `read_file` 精读相关 spec 正文
+3. **再改代码 / 文件**
+4. **打 checkpoint 收尾**：把这一轮实质进展（milestone / pivot / note 等）记入 progress.yaml
+
+**强制约束：**
+
+- PRD 不能落后于代码。"嘴上答应了、代码改了、PRD 没动" = 跨会话失忆
+- 用户每次推翻 / 调整方案 → 至少打一条 `pivot` 或 `decision` checkpoint
+- 多轮对话中冒出"长期可复用的项目认知 / 行为约束" → 即时考虑沉淀为 spec，不要拖到归档前
+
+**反模式：**
+
+- 用户提了新约束 → 直接改代码不动 PRD
+- 连续 5 轮对话改了 5 处代码全程没 checkpoint
+- 引入新模块时不先读相关 spec
 
 ## 输出要求
 
