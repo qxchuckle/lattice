@@ -1,5 +1,6 @@
 ---
 title: 质量规范
+description: 作用范围：前端代码质量保证；约束：可读性、可测试性、性能基线与无障碍要求；作用：防止质量债积累。
 tags: [frontend, quality]
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: 请求与响应约定
+description: 作用范围：HTTP/RPC 接口设计；约束：请求/响应字段命名、错误结构、分页与版本协商；作用：让每个接口都有可预测的数据形态，便于客户端处理。
 tags: [api, request, response]
 ---
 

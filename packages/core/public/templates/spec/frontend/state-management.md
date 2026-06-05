@@ -1,5 +1,6 @@
 ---
 title: 状态管理规范
+description: 作用范围：前端所有状态（local/global/server）；约束：分类管理、避免冗余派生状态、统一副作用处理；作用：状态可预测可调试。
 tags: [frontend, state]
 ---
 

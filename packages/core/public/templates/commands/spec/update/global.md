@@ -44,7 +44,7 @@ lattice spec template list
 ```bash
 lattice spec list --scope user
 lattice spec list --scope project
-lattice spec show <相关文件>
+lattice spec show <相关文件>       # 支持模糊匹配和 glob，如 "*migration*"、"组件"
 ```
 
 全局规则是默认值，但下层可能已经有更具体的规则。读取内容确认新规则不会与下层产生混淂，如果下层已有更严格的特例，确认全局规则是否作为合理默认值。

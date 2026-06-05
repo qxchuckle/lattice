@@ -360,6 +360,29 @@ export async function getSmartContext(
   };
 }
 
+/** 判断 spec 所属的作用域层级 */
+export function resolveSpecScope(
+  spec: ParsedSpec,
+  ctx: ProjectContext,
+): 'project' | 'ancestor' | 'user' | 'global' {
+  const fp = spec.filePath;
+  if (ctx.projectSpecs.some((s) => s.filePath === fp)) return 'project';
+  if (ctx.ancestorSpecs?.some((s) => s.filePath === fp)) return 'ancestor';
+  if (ctx.userSpecs.some((s) => s.filePath === fp)) return 'user';
+  if (ctx.globalSpecs.some((s) => s.filePath === fp)) return 'global';
+  // fallback：从路径推断
+  if (fp.includes('/projects/')) return 'project';
+  if (fp.includes('/users/')) return 'user';
+  return 'global';
+}
+
+const SCOPE_LABEL: Record<string, string> = {
+  project: '项目级',
+  ancestor: '祖先项目',
+  user: '用户级',
+  global: '全局级',
+};
+
 /** 将上下文格式化为 Markdown 输出 */
 export function formatContextAsMarkdown(ctx: ProjectContext): string {
   const lines: string[] = [];
@@ -385,8 +408,16 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
     lines.push('## 规范（Spec）\n');
     for (const spec of ctx.cascadedSpecs) {
       const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
+      const scope = resolveSpecScope(spec, ctx);
+      const scopeTag = SCOPE_LABEL[scope] ?? scope;
+      const description =
+        typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+          ? spec.frontmatter.description.trim()
+          : '[缺失摘要]';
       lines.push(`### ${title}\n`);
-      lines.push(spec.content);
+      lines.push(`- 作用域：${scopeTag}`);
+      lines.push(`- 路径：${spec.filePath}`);
+      lines.push(`- 摘要：${description}`);
       lines.push('');
     }
   }
@@ -418,10 +449,14 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
         lines.push(`#### 项目级 Spec（${userData.projectSpecs.length}）\n`);
         for (const spec of userData.projectSpecs) {
           const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
-          lines.push(`##### ${title}\n`);
-          lines.push(spec.content);
-          lines.push('');
+          const description =
+            typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+              ? spec.frontmatter.description.trim()
+              : '[缺失摘要]';
+          lines.push(`- **${title}** — ${description}`);
+          lines.push(`  路径：${spec.filePath}`);
         }
+        lines.push('');
       }
 
       if (userData.userSpecs.length > 0) {

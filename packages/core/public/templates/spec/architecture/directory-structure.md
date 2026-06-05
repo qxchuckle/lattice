@@ -1,5 +1,6 @@
 ---
 title: 目录结构
+description: 作用范围：仓库整体目录组织；约束：明确各目录用途、禁止跨层散乱新增；作用：让新成员快速定位代码并避免目录熵增。
 tags: [architecture, structure]
 ---
 

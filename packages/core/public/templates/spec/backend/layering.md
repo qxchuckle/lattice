@@ -1,5 +1,6 @@
 ---
 title: 分层规范
+description: 作用范围：后端服务模块；约束：明确 controller/service/repository 等层次职责与依赖方向；作用：防止层间耦合导致的可测试性与可替换性下降。
 tags: [backend, layering]
 ---
 

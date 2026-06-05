@@ -44,7 +44,7 @@ lattice spec template list
 ```bash
 lattice spec list --scope user
 lattice spec list --scope global
-lattice spec show <相关文件>
+lattice spec show <相关文件>       # 支持模糊匹配和 glob，如 "*migration*"、"组件"
 ```
 
 不仅检查同名文件，更要读取内容判断语义冲突（如：项目级写“用 tabs”但用户级写“用 spaces”）。

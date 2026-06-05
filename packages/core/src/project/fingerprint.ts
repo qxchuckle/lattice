@@ -17,6 +17,7 @@ import {
   getProjectById,
   listAllProjects,
 } from '../db';
+import { nowISO } from '../utils/time';
 
 // ─── 评分权重 ───
 export const FINGERPRINT_WEIGHTS = {
@@ -460,7 +461,7 @@ export function buildFingerprint(
   return {
     projectId,
     entries,
-    collectedAt: new Date().toISOString(),
+    collectedAt: nowISO(),
   };
 }
 

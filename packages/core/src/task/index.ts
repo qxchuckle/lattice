@@ -15,6 +15,7 @@ import {
 } from '../paths';
 import { linkTaskProject, deleteTaskLinks } from '../db';
 import { moveToTrash } from '../trash';
+import { nowISO, todayDateForId } from '../utils/time';
 
 interface TaskGraphSnapshot {
   tasks: TaskMeta[];
@@ -120,7 +121,7 @@ function buildTaskTreeNode(
 
 /** 生成任务 ID：YYYY-MM-DD-<4位随机hex>-<slug> */
 export function generateTaskId(title: string): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayDateForId();
   const rand = randomBytes(2).toString('hex');
   const slug = toKebabCase(title).slice(0, 40);
   return `${date}-${rand}-${slug}`;
@@ -133,7 +134,7 @@ export async function createTask(
   opts?: { projects?: string[]; status?: TaskStatus; parentTaskId?: string },
 ): Promise<TaskMeta> {
   const id = generateTaskId(title);
-  const now = new Date().toISOString();
+  const now = nowISO();
   const parentTaskId = await validateParentTask(username, id, opts?.parentTaskId);
 
   const meta: TaskMeta = {
@@ -256,7 +257,7 @@ export async function updateTask(
     parentTaskId,
     id: existing.id,
     created: existing.created,
-    updated: new Date().toISOString(),
+    updated: nowISO(),
   };
 
   await writeJSON(getTaskMetaPath(username, taskId), updated);

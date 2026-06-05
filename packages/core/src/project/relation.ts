@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { ProjectRelation, RelationsFile } from '../types';
 import { getRelationsFilePath, readJSON, writeJSON } from '../paths';
 import { findSameProjectInOtherUsers, listAllUsernames } from './cross-user';
+import { nowISO } from '../utils/time';
 
 /** 生成关系 id（rel_ + 8 位 hex） */
 export function generateRelationId(): string {
@@ -71,7 +72,7 @@ export async function upsertRelation(
   const existing = file.relations.find(
     (r) => r.projectA === projectA && r.projectB === projectB && r.type === input.type,
   );
-  const now = new Date().toISOString();
+  const now = nowISO();
 
   let saved: ProjectRelation;
   if (existing) {

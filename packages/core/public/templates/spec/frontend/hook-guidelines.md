@@ -1,5 +1,6 @@
 ---
 title: Hook 规范
+description: 作用范围：所有自定义 Hook；约束：单一职责、明确返回值、禁止过深嵌套；作用：保证 Hook 逻辑可复用可测试，避免隐式副作用。
 tags: [frontend, hooks]
 ---
 

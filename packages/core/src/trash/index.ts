@@ -10,6 +10,7 @@ import {
   listDir,
   dirExists,
 } from '../paths';
+import { nowISO, todayDateForId } from '../utils/time';
 
 // ─── 类型 ───
 
@@ -64,7 +65,7 @@ export async function moveToTrash(
   const trashMeta: TrashMeta = {
     ...meta,
     id,
-    trashedAt: new Date().toISOString(),
+    trashedAt: nowISO(),
   };
   await writeJSON(getTrashMetaPath(id), trashMeta);
 
@@ -173,7 +174,7 @@ export async function resolveTrashById(input: string): Promise<TrashMeta | null>
 // ─── 工具 ───
 
 function generateTrashId(): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayDateForId();
   const rand = randomBytes(4).toString('hex');
   return `${date}-${rand}`;
 }

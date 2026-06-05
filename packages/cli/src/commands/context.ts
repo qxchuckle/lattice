@@ -7,10 +7,13 @@ import {
   getContextForProject,
   getSmartContext,
   formatContextAsMarkdown,
+  resolveSpecScope,
   findProjectById,
   getProjectMeta,
   type ContextOptions,
   type AncestorProjectInfo,
+  type ParsedSpec,
+  type ProjectContext,
 } from '@qcqx/lattice-core';
 import {
   logger,
@@ -18,6 +21,33 @@ import {
   resolveCurrentProject,
   resolveCurrentProjectWithAncestors,
 } from '../utils';
+
+/** 剥离 spec 的 content 字段，JSON 输出只保留 frontmatter + 路径信息 + scope */
+function stripSpecContent(
+  spec: ParsedSpec,
+  scope?: string,
+): Omit<ParsedSpec, 'content'> & { scope?: string } {
+  const { content: _, ...rest } = spec;
+  return scope ? { ...rest, scope } : rest;
+}
+
+/** 剥离 spec 数组中的 content，附带 scope */
+function stripSpecs(
+  specs: ParsedSpec[],
+  scope?: string,
+): (Omit<ParsedSpec, 'content'> & { scope?: string })[] {
+  return specs.map((s) => stripSpecContent(s, scope));
+}
+
+/** 剥离 cascadedSpecs 并自动标记 scope */
+function stripCascadedSpecs(
+  ctx: ProjectContext,
+): (Omit<ParsedSpec, 'content'> & { scope: string })[] {
+  return ctx.cascadedSpecs.map((spec) => {
+    const { content: _, ...rest } = spec;
+    return { ...rest, scope: resolveSpecScope(spec, ctx) };
+  });
+}
 
 export function registerContextCommand(program: Command): void {
   program
@@ -43,7 +73,17 @@ export function registerContextCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(ctx, opts.jsonFormat);
+            const jsonCtx = {
+              task: ctx.task,
+              directSpecs: stripSpecs(ctx.directSpecs, 'project'),
+              relatedSpecs: stripSpecs(ctx.relatedSpecs, 'related'),
+              semanticSpecs: stripSpecs(ctx.semanticSpecs, 'semantic'),
+              crossUserData: ctx.crossUserData?.map((d) => ({
+                ...d,
+                directSpecs: stripSpecs(d.directSpecs, 'project'),
+              })),
+            };
+            outputJson(jsonCtx, opts.jsonFormat);
             return;
           }
 
@@ -53,8 +93,13 @@ export function registerContextCommand(program: Command): void {
             logger.raw(chalk.blue(`直接关联 Spec（${ctx.directSpecs.length}）：`));
             for (const s of ctx.directSpecs) {
               const title = s.frontmatter.title ?? s.fileName;
-              logger.raw(`  ${title}`);
-              logger.raw(chalk.dim(`  ${s.content.slice(0, 200)}...`));
+              const description =
+                typeof s.frontmatter.description === 'string' && s.frontmatter.description.trim()
+                  ? s.frontmatter.description.trim()
+                  : chalk.yellow('[缺失摘要]');
+              logger.raw(`  ${chalk.bold(title)}`);
+              logger.raw(chalk.dim(`    路径：${s.filePath}`));
+              logger.raw(`    摘要：${description}`);
               logger.raw('');
             }
           }
@@ -62,7 +107,13 @@ export function registerContextCommand(program: Command): void {
           if (ctx.relatedSpecs.length > 0) {
             logger.raw(chalk.blue(`同组项目 Spec（${ctx.relatedSpecs.length}）：`));
             for (const s of ctx.relatedSpecs) {
-              logger.raw(`  ${s.frontmatter.title ?? s.fileName}`);
+              const title = s.frontmatter.title ?? s.fileName;
+              const description =
+                typeof s.frontmatter.description === 'string' && s.frontmatter.description.trim()
+                  ? s.frontmatter.description.trim()
+                  : chalk.yellow('[缺失摘要]');
+              logger.raw(`  ${chalk.bold(title)} — ${description}`);
+              logger.raw(chalk.dim(`    路径：${s.filePath}`));
             }
             logger.raw('');
           }
@@ -71,10 +122,14 @@ export function registerContextCommand(program: Command): void {
             logger.raw(chalk.green(`语义关联 Spec（${ctx.semanticSpecs.length}）：`));
             for (const s of ctx.semanticSpecs) {
               const title = s.frontmatter.title ?? s.fileName;
-              logger.raw(`  ${title}`);
-              logger.raw(chalk.dim(`  ${s.content.slice(0, 200)}...`));
-              logger.raw('');
+              const description =
+                typeof s.frontmatter.description === 'string' && s.frontmatter.description.trim()
+                  ? s.frontmatter.description.trim()
+                  : chalk.yellow('[缺失摘要]');
+              logger.raw(`  ${chalk.bold(title)} — ${description}`);
+              logger.raw(chalk.dim(`    路径：${s.filePath}`));
             }
+            logger.raw('');
           }
 
           // 跨用户聚合数据
@@ -165,7 +220,24 @@ export function registerContextCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          outputJson(ctx, opts.jsonFormat);
+          const jsonCtx = {
+            projectSpecs: stripSpecs(ctx.projectSpecs, 'project'),
+            userSpecs: stripSpecs(ctx.userSpecs, 'user'),
+            globalSpecs: stripSpecs(ctx.globalSpecs, 'global'),
+            cascadedSpecs: stripCascadedSpecs(ctx),
+            activeTasks: ctx.activeTasks,
+            relatedProjects: ctx.relatedProjects,
+            crossUserData: ctx.crossUserData?.map((d) => ({
+              ...d,
+              projectSpecs: stripSpecs(d.projectSpecs, 'project'),
+              userSpecs: stripSpecs(d.userSpecs, 'user'),
+            })),
+            ancestors: ctx.ancestors,
+            ancestorSpecs: ctx.ancestorSpecs
+              ? stripSpecs(ctx.ancestorSpecs, 'ancestor')
+              : undefined,
+          };
+          outputJson(jsonCtx, opts.jsonFormat);
           return;
         }
 

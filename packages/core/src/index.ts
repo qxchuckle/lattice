@@ -2,6 +2,7 @@
 export type {
   ProjectMeta,
   TaskMeta,
+  ReferencedSpec,
   TaskTreeNode,
   TaskStatus,
   ScopePath,
@@ -213,6 +214,7 @@ export {
   writeSpecRaw,
   deleteSpec,
   specExists,
+  normalizeSpecFrontmatter,
   getGlobalSpecs,
   getUserSpecs,
   getProjectSpecs,
@@ -222,8 +224,25 @@ export {
   findSpecByName,
   validateSpecScope,
   validateSpecsScope,
+  generateSpecId,
+  isValidSpecId,
+  SPEC_ID_PREFIX,
+  SPEC_ID_PATTERN,
+  lintSpecFrontmatter,
+  lintSpecs,
+  DESCRIPTION_MIN_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
+  migrateSpecs,
 } from './spec';
-export type { SpecMatch, FindSpecOptions, SpecValidationWarning } from './spec';
+export type {
+  SpecMatch,
+  FindSpecOptions,
+  SpecValidationWarning,
+  SpecLintIssue,
+  SpecLintReport,
+  MigrateResult,
+  MigrateOptions,
+} from './spec';
 
 // 任务
 export {
@@ -248,6 +267,10 @@ export {
 // 任务检查点
 export { addCheckpoint, listCheckpoints, getCheckpoint, readProgress } from './task/checkpoint';
 export type { AddCheckpointOptions, ListCheckpointsOptions } from './task/checkpoint';
+
+// 任务 spec 引用
+export { addSpecRefs, removeSpecRefs } from './task/refs';
+export type { RefSpecResult } from './task/refs';
 
 // 模板
 export type {
@@ -281,6 +304,7 @@ export {
   getContextForProject,
   getSmartContext,
   formatContextAsMarkdown,
+  resolveSpecScope,
   hybridSearch,
   type ContextOptions,
 } from './search';
@@ -319,3 +343,6 @@ export {
 // 维护
 export { runStartupSelfCheck } from './maintenance/startup-self-check';
 export type { StartupSelfCheckResult } from './maintenance/startup-self-check';
+
+// 工具
+export { nowISO, todayDateForId } from './utils/time';

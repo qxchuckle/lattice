@@ -32,6 +32,9 @@ import {
   resolveProjectById,
   listAllUsernames,
   CONFIDENCE_THRESHOLDS,
+  addSpecRefs,
+  removeSpecRefs,
+  nowISO,
 } from '@qcqx/lattice-core';
 import type {
   TaskMeta,
@@ -688,21 +691,43 @@ export function registerTaskCommand(program: Command): void {
     .requiredOption('--type <type>', `检查点类型（${CHECKPOINT_TYPES.join(' / ')}）`)
     .requiredOption('--title <title>', '检查点标题')
     .option('-m, --message <message>', '检查点内容')
+    .option('--refs <spec-ids>', '同时为任务添加 spec 引用（逗号分隔 spec-id 或 spec 名称）')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
+        await initDb();
         const match = await resolveTaskById(username, id);
         if (!match) {
+          closeDb();
           logger.raw(chalk.yellow(`未找到任务：${id}`));
           return;
         }
 
         if (!CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
+          closeDb();
           logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
           logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
           return;
+        }
+
+        // --refs 快捷方式：同时添加 spec 引用
+        if (opts.refs) {
+          const specInputs = String(opts.refs)
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          if (specInputs.length > 0) {
+            const projectId = await resolveCurrentProjectId();
+            const refResult = await addSpecRefs(username, match.id, specInputs, { projectId });
+            if (refResult.added.length > 0) {
+              logger.raw(chalk.green(`✓ 已添加 ${refResult.added.length} 条 spec 引用`));
+            }
+            if (refResult.errors.length > 0) {
+              for (const e of refResult.errors) logger.raw(chalk.yellow(`  ⚠ ${e}`));
+            }
+          }
         }
 
         const entry = await addCheckpoint(username, match.id, {
@@ -710,6 +735,8 @@ export function registerTaskCommand(program: Command): void {
           title: opts.title,
           message: opts.message || '',
         });
+
+        closeDb();
 
         if (opts.json) {
           outputJson(entry, opts.jsonFormat);
@@ -902,7 +929,7 @@ export function registerTaskCommand(program: Command): void {
                 scopePaths.push({
                   path: norm,
                   note: (opts.note as string | undefined) ?? undefined,
-                  addedAt: new Date().toISOString(),
+                  addedAt: nowISO(),
                 });
               }
               unrecognized.push({ path: norm, note: opts.note as string | undefined });
@@ -940,6 +967,73 @@ export function registerTaskCommand(program: Command): void {
           for (const u of unrecognized) {
             logger.raw(`    ${u.path}${u.note ? chalk.dim(` (${u.note})`) : ''}`);
           }
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── ref-spec / unref-spec ───
+
+  cmd
+    .command('ref-spec <task-id> <spec...>')
+    .description('为任务添加 spec 引用（支持文件名、标题模糊匹配和 glob）')
+    .action(async (taskId: string, specInputs: string[]) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const projectId = await resolveCurrentProjectId();
+        const resolved = await resolveTaskById(username, taskId);
+        if (!resolved) {
+          closeDb();
+          logger.raw(chalk.yellow(`未找到任务：${taskId}`));
+          process.exitCode = 1;
+          return;
+        }
+        const result = await addSpecRefs(username, resolved.id, specInputs, { projectId });
+        closeDb();
+
+        if (result.added.length > 0) {
+          logger.raw(chalk.green(`✓ 已添加 ${result.added.length} 条 spec 引用：`));
+          for (const id of result.added) logger.raw(chalk.dim(`  + ${id}`));
+        }
+        if (result.skipped.length > 0) {
+          logger.raw(chalk.dim(`  跳过已存在：${result.skipped.join(', ')}`));
+        }
+        if (result.errors.length > 0) {
+          for (const e of result.errors) logger.raw(chalk.yellow(`  ⚠ ${e}`));
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  cmd
+    .command('unref-spec <task-id> <spec-id...>')
+    .description('从任务移除 spec 引用（参数为 spec-id）')
+    .action(async (taskId: string, specIds: string[]) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const resolved = await resolveTaskById(username, taskId);
+        if (!resolved) {
+          closeDb();
+          logger.raw(chalk.yellow(`未找到任务：${taskId}`));
+          process.exitCode = 1;
+          return;
+        }
+        const result = await removeSpecRefs(username, resolved.id, specIds);
+        closeDb();
+
+        if (result.removed.length > 0) {
+          logger.raw(chalk.green(`✓ 已移除 ${result.removed.length} 条引用：`));
+          for (const id of result.removed) logger.raw(chalk.dim(`  - ${id}`));
+        }
+        if (result.notFound.length > 0) {
+          logger.raw(chalk.yellow(`  未找到：${result.notFound.join(', ')}`));
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);

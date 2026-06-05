@@ -1,5 +1,6 @@
 ---
 title: 组件规范
+description: 作用范围：所有前端 UI 组件；约束：组件职责单一、Props 精简、解耦状态与视图；作用：提高组件复用率与可测试性。
 tags: [frontend, components]
 ---
 

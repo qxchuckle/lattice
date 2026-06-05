@@ -1,5 +1,6 @@
 ---
 title: 编码规范总览
+description: 作用范围：所有源代码文件；约束：统一代码风格、语法限制与最佳实践；作用：降低协作摩擦，让 code review 聚焦逻辑而非格式。
 tags: [conventions]
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: 类型安全规范
+description: 作用范围：所有 TypeScript 源文件；约束：禁止 any、强制显式返回类型、类型定义统一存放位置；作用：在编译期捕获大部分错误。
 tags: [frontend, types]
 ---
 

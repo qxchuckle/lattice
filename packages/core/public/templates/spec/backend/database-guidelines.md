@@ -1,5 +1,6 @@
 ---
 title: 数据库规范
+description: 作用范围：所有数据库交互代码；约束：统一建表、迁移、索引与查询模式；作用：防止隐式 schema 漂移与性能退化。
 tags: [backend, database]
 ---
 

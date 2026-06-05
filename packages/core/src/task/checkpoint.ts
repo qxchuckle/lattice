@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { stringify, parse } from 'yaml';
 import type { CheckpointEntry, CheckpointType, ProgressFile } from '../types';
 import { getTaskProgressPath, readText, writeText, fileExists } from '../paths';
+import { nowISO } from '../utils/time';
 
 const VALID_TYPES: CheckpointType[] = [
   'decision',
@@ -73,7 +74,7 @@ export async function addCheckpoint(
 
   const entry: CheckpointEntry = {
     id: generateCheckpointId(),
-    time: new Date().toISOString(),
+    time: nowISO(),
     type,
     title: opts.title.trim(),
     message: opts.message.trim(),

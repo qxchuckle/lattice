@@ -47,8 +47,22 @@ export interface TaskMeta {
   /** 任务涉及但不属于已注册项目的额外路径 */
   scopePaths?: ScopePath[];
   parentTaskId?: string;
+  /** 任务引用的 spec 列表（通过 lattice task ref-spec 管理） */
+  referencedSpecs?: ReferencedSpec[];
   created: string;
   updated?: string;
+}
+
+/** 任务引用的 spec 条目 */
+export interface ReferencedSpec {
+  /** Spec 唯一 ID（spec-{8 位 base36}） */
+  id: string;
+  /** 相对路径（从 spec 根目录计算） */
+  relativePath: string;
+  /** 作用域（global / user / project） */
+  scope: 'global' | 'user' | 'project';
+  /** 首次引用时间（ISO 8601） */
+  firstReadAt: string;
 }
 
 /** 任务树节点（运行时计算，不落盘） */
@@ -82,8 +96,18 @@ export interface ProgressFile {
 
 /** Spec frontmatter 字段 */
 export interface SpecFrontmatter {
+  /** Spec 唯一 ID（CLI 自动生成，格式：spec-{8 位 base36}） */
+  id?: string;
+  /** 标题，必填（写入时若缺失 CLI 会用文件名 fallback） */
   title?: string;
+  /**
+   * 摘要（必填），三段式：作用范围 + 约束 + 作用。
+   * 推荐 80~300 中文字符；缺失时 context 输出会显式标 `[缺失摘要]`。
+   */
+  description?: string;
+  /** 可选标签 */
   tags?: string[];
+  /** CLI 自动维护的最后修改时间（ISO 8601） */
   updated?: string;
   [key: string]: unknown;
 }

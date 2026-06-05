@@ -33,6 +33,7 @@ import {
   isPathPrefixOf,
 } from './fingerprint';
 import { deleteRelationsByProject, listRelations as listRelationsFromFile } from './relation';
+import { nowISO } from '../utils/time';
 import type { ProjectRelation } from '../types';
 import { moveToTrash } from '../trash';
 
@@ -121,7 +122,7 @@ export async function registerProject(
 ): Promise<ProjectMeta> {
   const detected = await detectProjectInfo(localPath);
   const fingerprint = await collectFingerprint(localPath);
-  const now = new Date().toISOString();
+  const now = nowISO();
   const dirName = makeProjectDirName(id);
   const existingMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
   const name = opts?.name ?? detected.name ?? existingMeta?.name;
@@ -242,7 +243,7 @@ export async function updateProjectMeta(
     ...updates,
     id: existing.id,
     created: existing.created,
-    updated: new Date().toISOString(),
+    updated: nowISO(),
   };
 
   await writeJSON(metaPath, updated);
@@ -396,7 +397,7 @@ async function scanDir(
             if (!existingPaths.has(norm)) {
               existingPaths.add(norm);
               meta.localPaths = [...existingPaths];
-              meta.updated = new Date().toISOString();
+              meta.updated = nowISO();
               await writeJSON(getProjectMetaPath(username, dirName), meta);
               syncProjectToDb(username, meta);
               pathChanged = true;
