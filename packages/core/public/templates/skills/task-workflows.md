@@ -1,13 +1,8 @@
 # 任务工作流
 
-本文件用于处理任务的创建、开始、进展追踪、完成和归档。
+本文件是 Lattice 中所有 **任务全流程概念**的权威源（任务目录约定、多轮对话循环、checkpoint 类型、归档前置信息采集、输出原则）。其他文档（含 platforms/lattice-rules.md、commands/task/*.md）应通过锚点引用本文件，不再重复定义。
 
-## 目标
-
-- 让当前会话和任务状态保持一致
-- 把任务上下文接入当前工作
-- 在任务执行过程中持续记录关键进展，确保跨会话不丢失上下文
-- 在任务结束时判断是否需要沉淀新的 spec
+spec 相关概念（双重职能 / 选读 / 沉淀判定）见 [spec-workflows.md](spec-workflows.md)。
 
 ## 任务目录与文件约定
 
@@ -15,415 +10,325 @@
 
 ```
 ~/.lattice/users/<username>/tasks/<task-id>/
-├── task.json       # 任务元数据
-├── prd.md          # 任务主文档（收敛型内容：目标、约束、方案、索引）
-├── progress.yaml   # 进展日志（追加型内容：决策、问题、摘要）
-├── design.md       # 方案讨论记录（发散→收敛：候选方案、利弊对比、决策推演）
+├── task.json       # 任务元数据（id、title、status、projects、scopePaths 等的唯一来源）
+├── prd.md          # 任务主入口：收敛型内容（目标、约束、最终方案、文件索引）
+├── progress.yaml   # 进展日志：追加型过程信息（决策、问题、摘要、里程碑）
+├── design.md       # 方案讨论记录（候选方案、利弊对比、被否决方案及理由、最终结论）
 └── ...             # 可拆分的子文档
 ```
 
-- `prd.md`：记录收敛型内容——目标、约束、关键设计、最终方案概览、文件索引
-- `progress.yaml`：记录追加型过程信息——决策、问题、方案调整、会话摘要、里程碑
-- `design.md`：记录方案讨论过程——候选方案对比、利弊分析、被否决方案及理由、最终结论
-- 三者职责不重叠：PRD 管"最终是什么"，progress 管"发生了什么"，design 管"怎么讨论出来的"
-- **`prd.md` 不得包含 YAML frontmatter 元数据**（如 id、title、status、created_at、projects 等）。这些信息的唯一来源是 `task.json`，在 PRD 中重复会导致数据不一致且增加维护负担
+**职责不重叠**：PRD 管"最终是什么"，progress 管"发生了什么"，design 管"怎么讨论出来的"。
 
-`lattice task create` 和 `lattice task info` 会输出 PRD 的完整路径。你应直接使用该路径读写 PRD 文件。
+> ⚠️ `prd.md` **不得包含 YAML frontmatter 元数据**（id / title / status / created_at / projects 等）。这些信息的唯一来源是 `task.json`，PRD 中重复会导致数据不一致。
+
+> `lattice task create` 和 `lattice task info` 会输出 PRD 完整路径，直接使用该路径读写。
 
 ## 任务阶段与模式
-
-一个任务可以在 design（讨论）和 implementation（实施）模式之间切换：
 
 ```
 design（讨论收敛）→ start（开始实施）→ design（中途讨论）→ 继续实施 → archive（收尾）
 ```
 
-- **design 模式**：只读代码 + 分析提案，不修改业务代码文件。讨论内容记录到 `design.md`
-- **implementation 模式**：可以修改代码。即 `start` 后的默认状态
-- design 可以多次进出，每次讨论追加到 `design.md`
-- design 也可以是任务的第一个入口（无需先 start），此时会自动创建任务
-- **隐式触发**：即使用户没有显式执行 `/lattice/task/design`，只要当前对话中出现了方案讨论、设计对比、架构决策等内容，AI 也应主动将讨论过程和结论追加到 `design.md`
+- **design 模式**：只读代码 + 分析提案，不修改业务代码。讨论内容写入 `design.md`。详见 lattice command `task/design.md`
+- **implementation 模式**：可改代码（`start` 后默认状态）
+- **隐式触发 design 记录**：即使未显式 `/lattice/task/design`，只要对话出现方案讨论 / 设计对比 / 架构决策，AI 应主动将讨论追加到 `design.md`（不受"禁止改代码"约束）
 
-## 常见流程
+## 标题归纳与查重
 
-### 需要建立任务链路时
+当命令参数不是任务 ID（描述、关键词、文件引用、需求段）时，**统一遵循**：
 
-如果一个任务明显属于另一个任务的后续步骤，优先在创建时指定父任务，而不是只在 PRD 里靠文字描述关系。
+1. **归纳标题**：结合命令参数和当前对话总结出简洁明确的任务标题
+   - ❌ 不要直接把原始命令参数当标题
+   - ❌ 尤其不要把文件路径、文件引用、长段描述、命令噪音原样塞进标题
+2. **查重相似进行中任务**：
 
-- 创建子任务时使用：
+   ```bash
+   lattice task list --current
+   lattice search "<归纳出的标题>" --project <project-id> --type task --json
+   ```
+
+3. **判断**：若有相似 `in_progress` 任务，**先停下来**把候选列给用户确认；只有无相似任务或用户明确要新建时才创建
+4. **创建（如需要）**：
+
+   ```bash
+   lattice task create "<标题>" --current
+   # 如果是某既有任务的明确后续/拆分，补上父任务关系：
+   lattice task create "<标题>" --current --parent <parent-task-id>
+   ```
+
+## 任务链路（父子任务）
+
+任务明显属于另一个任务的后续步骤时，优先在创建时指定父任务，**不要只在 PRD 文字描述关系**：
 
 ```bash
 lattice task create "<title>" --current --parent <parent-task-id>
+lattice task lineage <task-id>            # 查看链路
+lattice task tree <task-id>               # 整颗树
+lattice task tree <task-id> --descendants # 后代树
+lattice task update <task-id> --parent <parent-task-id>  # 修改归属
+lattice task update <task-id> --clear-parent             # 清空父任务
 ```
 
-- 需要查看当前任务在整条链路中的位置时，使用：
+> 任务仍挂着子任务时，不要直接删除或忽略链路；先迁移、清空或完成子任务再继续。
 
-```bash
-lattice task lineage <task-id>
-lattice task tree <task-id>
-lattice task tree <task-id> --descendants
+## 实施期多轮对话循环（必做）
+
+任务一旦 `lattice task start`，进入"实施期"。任务进行中用户通常会有多轮对话——补充想法、调整需求、修改方案、提新约束。
+
+**任何此类输入到来时必须按以下顺序处理，不能跳步直接改代码**：
+
+```
+用户输入
+  ↓
+是否影响目标 / 范围 / 约束 / 方案 / 取舍 / 文件清单 / 风险？
+  ├─ 是：先 search_replace 改 prd.md + 打 decision/pivot checkpoint
+  └─ 否：跳过 PRD 修订
+  ↓
+涉及之前没读过的模块 / 概念 / 规范分层？
+  ├─ 是：read_file 精读相关 spec 正文（见 spec-workflows.md#按任务主题精读相关-spec-必做）
+  └─ 否：跳过
+  ↓
+实际改代码 / 文件
+  ↓
+打 checkpoint 记录这一轮进展
 ```
 
-- 需要修改任务归属时，使用：
+### 强制规则
 
-```bash
-lattice task update <task-id> --parent <parent-task-id>
-lattice task update <task-id> --clear-parent
-```
+1. **PRD 永不能落后于代码**：用户提的任何"目标 / 边界 / 选型 / 取舍 / 文件清单 / 风险 / 新需求"变化，必须**先**反映到 prd.md，**再**改代码。"嘴上答应了、代码改了、PRD 没动" = 跨会话失忆的最大来源
+2. **新主题先选读 spec**：本轮涉及未读过的模块或规范分层时必须 read_file 精读相关 spec
+3. **代码改完必须打 checkpoint**：连续 5 个小修改也至少要 1 个 milestone/note checkpoint
+4. **用户推翻方案 = 必须 pivot checkpoint**：默默实现新方案 = 丢失决策史
+5. **过程中即沉淀 spec**：多轮对话中冒出"长期可复用的项目认知 / 行为约束"时即时考虑沉淀，不要拖到归档前
 
-- 如果某个任务仍然挂着子任务，不要直接删除或忽略它的链路关系；先迁移、清空或完成这些子任务，再继续后续操作。
+### 反模式
 
-### 已有任务 ID
+- 用户提了新约束 → AI 直接改代码、不更新 PRD → PRD 与代码漂移
+- 连续对话 10 轮、改了 5 处代码 → 全程没 checkpoint → 进展无法跨会话恢复
+- 引入新模块 / 新概念 → 不重新选读相关 spec 就动手 → 违反已有约定
+- 任务中后期才意识到"原来还有 spec 应该读"
 
-运行：
-
-```bash
-lattice task start <task-id>
-lattice context --task <task-id>
-```
-
-### 只有非 ID 参数
-
-先结合命令参数和当前对话，总结出一个简洁、明确的任务标题。
-
-- 不要直接把原始命令参数当作任务标题
-- 尤其不要把文件路径、文件引用、长段描述或命令噪音原样塞进标题
-- 如果命令参数只是线索，可以结合当前会话主题补全为更合适的标题
-
-如果当前目录是已注册项目，运行：
-
-```bash
-lattice task list --current
-lattice search "<总结出的任务标题>" --project <project-id> --type task --json
-```
-
-先判断当前项目中是否已有相似且状态为 `in_progress` 的任务。
-
-- 如果有，先提醒用户是否其实要继续已有任务
-- 只有在没有相似进行中任务，或用户明确要求新建时，才运行：
-
-```bash
-lattice task create "<总结出的任务标题>" --current
-```
-
-拿到任务 ID 后，再运行：
-
-```bash
-lattice task start <task-id>
-lattice context --task <task-id>
-```
-
-### 按任务主题选读相关 spec（必做）
-
-任务开始（或上下文压缩失忆恢复）后，**必须**按当前任务主题挑选并精读相关 spec。spec 不只是行为约束，**也是 AI 认识项目的稳定经验**（项目结构、模块职责、领域概念、设计动机、可复用方法论）。
-
-`lattice context --task <task-id>` 输出的"直接关联 Spec / 语义关联 Spec"只是标题 + 路径 + 摘要（摘要常缺失），看到标题不等于了解内容。
-
-**判断哪些 spec 相关**：
-
-- 标题 / 路径关键字与任务标题 / PRD 目标 / 修改范围匹配
-- "语义关联 Spec"列表（RAG 推荐）
-- **认知类 spec 默认应读**：系统架构 / 模块边界 / 领域概念 / 项目结构 / 方法论 / 关键流程地图
-- **约束类 spec 按修改范围决定**：编码规范、提交流程等
-
-**精读动作**：
-
-- 必须 read_file 读取正文，不能只看标题
-- 摘要为"[缺失摘要]"或过于笼统的，更必须读正文
-
-**读取后衔接**：
-
-- 实施时确实参照了某个 spec → `lattice task ref-spec <task-id> <spec-name>` 关联
-- 实施过程中如果发现某条本应有 spec 的认知/约束实际没有 spec 文件 → 在归档时按沉淀判定（认知类也建议沉淀）补上
-
-**反模式**：
-
-- 仅复述 spec 标题就开始动手
-- 把"已运行 lattice context"等同于"已了解 spec 内容"
-- 只读约束类、跳过认知类（觉得"那只是介绍"）
-
-### 参考近似任务
-
-任务开始后，应主动搜索已完成的近似任务作为参考：
-
-```bash
-lattice search "<当前任务标题或核心关键词>" --type task --json
-```
-
-根据搜索结果和当前任务的复杂性，自行判断需要参考多少个近似任务的 PRD：
-
-- **简单/常规任务**（模式清晰、涉及范围小）：参考 1 个最相关的已完成任务 PRD 即可
-- **中等复杂任务**（涉及多个模块或需要理解上下文模式）：参考 2~3 个相关任务 PRD
-- **高复杂任务**（架构级变更、跨模块协作、首次涉足的领域）：参考 3~5 个相关任务 PRD，必要时还应查看它们的 `design.md` 和 `progress.yaml`
-
-判断依据：
-- 搜索结果中 score 较高且与当前任务领域/模式高度相关的优先参考
-- 如果当前任务是某类模式的重复应用（如"适配 X 能力"），应参考同类已完成任务了解标准做法
-- 如果当前任务涉及此前未触及的架构或概念，应广泛参考多个相关任务建立认知
-
-不要机械地固定只看 1 个任务。参考数量应与任务复杂性匹配。
-
-### 自动关联实际工作项目路径
-
-任务执行过程中，AI 应**主动判断并关联**当前实际围绕哪个项目路径在工作，而不是仅依赖创建时的 `--current` 关联。
-
-**为什么**：`lattice task create --current` 只关联创建任务时所在的项目。但实际工作中，AI 可能在另一个项目目录下操作文件、编辑代码，或在多个项目间切换。如果不主动关联，任务元数据中的 `projects` / `scopePaths` 与实际工作范围会脱节，导致搜索和上下文丢失。
-
-**触发时机**（满足任一即应执行关联）：
-
-1. 任务开始后，当前工作目录对应的项目**不在** `task.json` 的 `projects` 列表中
-2. 对话中 AI 打开、编辑或搜索了某个路径下的文件，且该路径对应的项目尚未关联
-3. 用户明确提到在某个项目/目录下操作
-4. 任务涉及多个项目协作，中途切换到新的项目目录工作
-
-**执行方式**：
-
-```bash
-# 关联当前工作目录对应的项目
-lattice task associate <task-id> --current
-
-# 关联指定路径（AI 判断实际工作目录）
-lattice task associate <task-id> --paths <path>
-
-# 关联已知的项目 ID
-lattice task associate <task-id> --project <project-id>
-```
-
-**行为原则**：
-
-- 这是**静默执行**的辅助动作，不需要每次都向用户确认——除非 AI 对关联判断不确定
-- 如果 `lattice task associate --current` 报告当前路径已在 `projects` 或 `scopePaths` 中，不需要重复执行
-- 关联后无需额外告知用户，除非关联了**意料外**的项目（此时应简短说明）
-- 任务归档时，最终的 `projects` 和 `scopePaths` 应完整反映本次任务实际触及过的所有项目
-
-**典型场景**：
-
-- 用户说"适配 X 能力包到 Y 项目"，创建任务时在 Lattice 仓库目录下（关联了 Lattice），但实际编辑的代码在 `/Users/a1/qcqx/sdk-xxx/` 目录 → 应自动 `task associate --paths /Users/a1/qcqx/sdk-xxx/`
-- 任务涉及修改 A 项目的组件并在 B 项目中消费 → 两个路径都应关联
-- 用户在对话中贴出了 `/some/path/src/xxx.ts` 并要求修改 → 判断该路径属于哪个项目并关联
-
-### 过程中多轮对话工作流（必做循环）
-
-任务并非"启动后就一路埋头实现"。任务进行中用户通常会有多轮对话——补充新想法、调整需求、修改方案、提新约束。**任何这类输入到来时，必须按以下顺序处理，不能跳步直奔代码：**
-
-1. **先回 PRD 而不是先回代码**：识别用户输入是否属于"目标 / 范围 / 约束 / 方案选型 / 取舍 / 边界 / 文件清单 / 风险"层面的变更
-   - 是 → 先用 `search_replace` 更新该任务 `prd.md`（修改目标、范围、问题分析、修改范围、文件索引等对应小节），并通过 `lattice task checkpoint --type decision/pivot` 留痕
-   - 否（仅澄清/补充上下文）→ 直接进入第 3 步
-
-2. **必要时按主题再次选读 spec**：新需求若涉及之前没读过的模块 / 概念 / 规范分层（参见上文"按任务主题选读相关 spec"），先 `read_file` 精读相关 spec 正文，再动代码
-
-3. **再改代码**：基于已经更新过的 PRD 和已读的 spec，进行实际编码 / 编辑 / 重构
-
-4. **最后记 progress**：通过 `lattice task checkpoint` 记录这一轮的实质进展（decision / pivot / milestone / issue / note 任选其一），不要等到任务结束才一次性补
-
-**关键约束：**
-
-- PRD 落后于代码 = 协作失忆。**禁止**"嘴上答应了、代码改了、PRD 没动"——下次会话恢复时该改动会丢失上下文
-- 用户每次推翻 / 调整方案，都至少触发"PRD 修订 + decision/pivot checkpoint"组合；不要默默实现新方案
-- 只读类追问、纯解释类问答、单步小修补可以不改 PRD，但仍可视情况打 note checkpoint
-- 多轮对话中如果新增了"长期可复用的项目认知 / 行为约束"，参见下文"归档前判断"，**不要等到归档**才考虑沉淀，可在过程中即沉淀为 spec
-
-**反模式：**
-
-- 用户提了个新约束 → AI 直接改代码、不更新 PRD → PRD 与代码漂移
-- 用户连续对话 10 轮、改了 5 处代码 → 全程没有任何 checkpoint → 进展无法跨会话恢复
-- 用户引入新模块 / 新概念 → AI 不重新选读相关 spec 就动手 → 违反已有约定
-- 任务中后期才意识到"原来还有 spec 应该读" → 要把这种自检纳入每轮新输入的固定动作
-
-### 完善 PRD
-
-开始任务后，应主动完善该任务的 `prd.md`，并运行 `lattice rag update` 确保新任务被索引。
-
-- 不要停留在默认生成的空白标题
-- PRD 只记录收敛型内容：任务目标、约束、当前方案、关键待办和文件索引
-- `prd.md` 可以只承担任务主入口职责，不必把所有细节都堆在一个文件里
-- 当单个任务过大、`prd.md` 已经过长，或任务天然分成多个步骤时，可以把详细设计、计划、阶段记录、复盘等拆到该任务目录下的其他 Markdown 文件中，再由 `prd.md` 负责摘要、索引和跳转
-- 如果用户后续补充了设计、约束、边界条件、方案取舍或新的阶段结论，要自行判断是否需要同步更新 PRD
-- 如果在任务执行过程中发现实际涉及的项目范围发生变化，也要同步更新任务元数据里的 `projects` 字段
-- 当任务理解发生变化时，优先更新 PRD，再继续后续实现或分析
-
-### 任务进展追踪
-
-任务执行过程中，应主动通过 `lattice task checkpoint` 记录关键进展。这是确保跨会话上下文不丢失的核心机制：
+## checkpoint 类型与触发
 
 ```bash
 lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ```
 
-可用类型：
+| 工作单元类型 | type |
+|---|---|
+| 重要技术决策（方案选型 / 架构调整 / 用户拍板） | `decision` |
+| 方案从 A 切到 B / 推翻原计划 | `pivot` |
+| 阶段性成果交付（一组改动通过验证） | `milestone` |
+| 发现问题 / 踩坑 / 兼容性事故 | `issue` |
+| 调研发现 / 实验数据 / 一次性记录 | `note` |
+| 任务收尾总结 | `summary` |
 
-| type | 含义 | 典型场景 |
-|------|------|----------|
-| `decision` | 设计/技术决策 | 确认方案、选型、取舍 |
-| `issue` | 发现问题/踩坑 | Bug、兼容性问题、性能瓶颈 |
-| `pivot` | 方案调整 | 从 A 方案切换到 B 方案 |
-| `summary` | 会话/阶段摘要 | 会话结束、阶段性总结 |
-| `milestone` | 里程碑达成 | 模块完成、测试通过 |
-| `note` | 一般记录 | 其他值得记住的信息 |
+### 隐式触发时机（满足任一即必须 checkpoint）
 
-**隐式触发时机**（Agent 应主动执行，无需用户显式要求）：
+1. 完成了一个 PRD 子任务 / 一个 P 级阶段
+2. 用户明确拍板了某个决策点
+3. 一次代码改动通过了构建 / 验证
+4. 修改了 3 个以上文件或 100 行以上代码
+5. 准备切换到另一个独立工作单元
+6. 用户在多轮对话中给出了新约束 / 新想法 / 修改原方案
+7. 发现意料外的问题 / Bug / 兼容性坑
+8. 会话即将结束，或用户表示"先到这"
 
-- 用户确认了一个设计决策或技术选型
-- 发现了意料外的问题、Bug 或兼容性坑
-- 方案从 A 调整为 B（pivot）
-- 一个阶段性目标完成（模块实现完毕、测试通过等）
-- 会话即将结束，或用户表示“先到这”“下次继续”
-- 用户反馈了重要约束或修正
+> **不要在每次对话轮都记录**，只在有实质性进展时记录。一次对话有多个值得记录的进展可以分多次调用。
 
-**注意：** 不要在每次对话轮都记录，只在有实质性进展时记录。
-
-查看已记录的进展：
+### 查看进展
 
 ```bash
-lattice task progress <task-id>              # 全部
-lattice task progress <task-id> --last 3     # 最近 3 条
-lattice task progress <task-id> --type decision  # 只看决策
+lattice task progress <task-id>            # 全部
+lattice task progress <task-id> --last 3   # 最近 3 条
+lattice task progress <task-id> --type decision
 ```
 
-新会话 resume 任务时，应读取最近进展快速对齐上下文：
+新会话 resume 任务时应读取最近进展快速对齐：
 
 ```bash
 lattice context --task <task-id>
 lattice task progress <task-id> --last 5
 ```
 
-### 任务完成时
+## 项目关联同步（实施期同步义务）
 
-归档前必须先建立对任务全貌的完整认知，再产出总结。**严格按"先读后写"顺序执行**：
+任务 `start` 后，AI 有义务**实时维护任务元数据中的项目关联**，使 `task.json` 的 `projects` / `scopePaths` 始终反映实际工作范围。
 
-**第一步：前置信息采集（必须完成才能写总结）**
+### 触发时机（与 checkpoint 平行，不依赖 checkpoint 触发）
+
+1. 任务刚 start 后，当前工作目录对应的项目**不在** `projects` 中
+2. 对话中 AI 打开、编辑或搜索了某个路径下的文件，且该路径对应的项目尚未关联
+3. 用户明确提到在某个项目 / 目录下操作
+4. 任务涉及多个项目协作，中途切换到新的项目目录工作
+5. 任务完成前（归档闭环时）复核 `projects` 是否完整覆盖实际触及的所有项目
+
+### 执行方式
 
 ```bash
-# (a) 读取任务元数据，拿到 PRD 路径
+lattice task associate <task-id> --current             # 关联当前目录对应的项目
+lattice task associate <task-id> --paths <path>        # 关联指定路径（智能识别已注册项目）
+lattice task associate <task-id> --project <project-id># 关联已知项目 ID
+```
+
+> 静默执行，不需要用户确认，不需要打 checkpoint。**只有关联了用户可能未预期的项目时才简短说明**。如果当前路径已在 `projects` 或 `scopePaths` 中则跳过。
+
+> **违反信号**：任务归档时 `projects` 中只有创建时的项目，但对话中实际操作了其他项目路径的文件。
+
+## 任务起手动作
+
+获得任务 ID 后立即：
+
+```bash
+lattice task start <task-id>
+lattice context --task <task-id>
+```
+
+然后：
+
+1. **按主题选读相关 spec**（必做）：见 [spec-workflows.md#按任务主题精读相关-spec-必做](spec-workflows.md#按任务主题精读相关-spec-必做)
+2. **参考近似任务**：
+
+   ```bash
+   lattice search "<当前任务标题或核心关键词>" --type task --json
+   ```
+
+   根据复杂性参考不同数量已完成任务的 PRD：
+   - 简单 / 常规：1 个最相关的
+   - 中等复杂：2~3 个
+   - 高复杂（架构级、跨模块、首次涉足）：3~5 个，必要时还看它们的 `design.md` 和 `progress.yaml`
+
+3. **完善 PRD**：不要停留在默认空白标题
+   - 只记录收敛型内容（目标、约束、关键设计、最终方案、文件索引）
+   - 单文件过长可拆到该任务目录下其他 Markdown，但 `prd.md` 必须保留为主入口（摘要、索引、跳转）
+4. **如果有 design.md**：先 read_file 了解之前讨论的方案、约束和结论，避免重复或偏离
+
+## 归档前置信息采集（强制，先读后写）
+
+`/lattice/task/archive` 与 `lattice task complete` 前必须先建立对任务全貌的认知：
+
+```bash
+# (a) 读取任务元数据 + PRD 全文
 lattice task info <task-id>
+# → 拿到 PRD 路径后 read_file 读取 prd.md 完整内容
 
-# (b) read_file 读取 prd.md 完整内容，了解当前方案和已有内容
-
-# (c) 读取全部进展记录，了解决策历程和已记录的里程碑
+# (b) 读取全部进展记录
 lattice task progress <task-id>
 
-# (d) read_file 读取 design.md（如存在），了解方案讨论历史
+# (c) read_file 读取 design.md（如存在）了解方案讨论历史
 
-# (e) 回顾当前对话上下文中产生的决策、方案变更和最终结论
+# (d) 回顾当前对话上下文中的决策、方案变更、最终结论
 ```
 
-**为什么**：如果没有先读 PRD 原文和 progress 历史就直接写归档总结，极容易遗漏关键决策、重复已有内容、或与实际进展脱节。
+> **禁止跳过**：未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策、重复已有内容、与实际进展脱节。
 
-**第二步：更新 PRD**
-
-在完成前置信息采集后，再更新该任务的 `prd.md`：
-
-- 查看 progress 中的关键决策和问题是否已在 PRD 中体现
-- 补充最终采用的设计或执行方案
-- 记录关键结果、主要取舍和仍待后续处理的问题
-- 增加"任务完成总结"，明确这次任务实际交付了什么
-- 如果 `prd.md` 过长，可以把详细复盘内容拆到其他 Markdown 文件中渐进式加载；但 `prd.md` 仍必须作为必要入口
-
-**第三步：完成并归档**
+## 归档闭环
 
 ```bash
+# 1. 前置信息采集（见上）
+# 2. 更新 prd.md：补充最终方案 + "任务完成总结"段落 + 关键结果 / 取舍 / 遗留问题
+# 3. summary checkpoint
+lattice task checkpoint <task-id> --type summary --title "..." -m "..."
+
+# 4. 完成 + 归档
 lattice task complete <task-id>
 lattice task archive <task-id>
+
+# 5. 索引更新
 lattice rag update
+
+# 6. 二次审阅（见下）
+# 7. spec 沉淀判定（见下）
 ```
 
-**第四步：二次审阅（归档后必做）**
+### 归档后二次审阅（强制）
 
-归档完成后，重新审视刚写入的 PRD 总结和 progress 记录，检查是否有遗漏：
+重新审视刚写入的 PRD 总结和 progress 记录，对照 progress 和当前对话检查：
 
-- 当前对话中产生的关键决策、方案变更是否全部体现在 PRD 或 checkpoint 中
-- 是否有"做了但忘记写"的改动、取舍或遗留问题
-- 本次任务形成的经验是否已判断要不要沉淀为 spec（**两类都要判断**：行为约束类 + 项目认知类）
-- 如果发现遗漏，立即补充到 PRD 或追加 checkpoint，然后再次 `lattice rag update`
+- 当前对话中的关键决策、方案变更是否全部体现在 PRD 或 checkpoint 中
+- 是否有"做了但忘记写"的改动、取舍、遗留问题
+- 本次任务形成的经验是否已判断要不要沉淀为 spec
+- 发现遗漏 → 立即补充到 PRD 或追加 checkpoint，然后再次 `lattice rag update`
 
-归档后运行 `rag update`，因为 PRD 通常在归档前补充了完成总结，需要重新索引。如果 `rag update` 报错，降级使用 `lattice rag rebuild`。
+### spec 沉淀判定
 
-如果用户没有提供任务 ID，或提供的内容不是任务 ID，则先运行：
+按 [spec-workflows.md#沉淀判定统一标准](spec-workflows.md#沉淀判定统一标准) 执行：
+
+- **必须沉淀**（用户显式行为指示 / 用户主动给出的项目认知）→ 立即调用 `/lattice/spec/update/*`
+- **建议沉淀**（行为约束类 + 项目认知类，两类都要看）→ 判定核心问题：下次有人 / AI 进入这个项目还需要这条信息吗？
+- 不沉淀的不强行沉淀
+
+## 命令参数为空时的归档推断
+
+如果用户没提供任务 ID 或参数不是 ID：
 
 ```bash
 lattice task list --current
-lattice search "<根据当前对话和命令参数总结出的任务标题或主题>" --project <project-id> --type task --json
+lattice search "<根据当前对话归纳的主题>" --project <project-id> --type task --json
 ```
 
-先在当前项目中找出 `in_progress` 的候选任务，并结合当前对话判断哪个任务最可能是本次会话正在结束的任务。
+### 自动归档（无需确认）
 
-**自动归档（无需确认）**：如果满足以下全部条件，直接归档：
+满足全部条件时直接归档：
 
-1. `in_progress` 任务只有一个，或虽有多个但其中一个与当前对话主题高度匹配
+1. `in_progress` 只有 1 个，**或**多个但其中一个与当前对话主题高度匹配
 2. 当前对话确实围绕该任务做了实质性工作
 3. AI 对匹配结果有足够把握
 
-满足时直接告知用户"确认当前会话对应任务是 XXX，现在进行归档"，然后执行归档流程。
+满足时直接告知"确认当前会话对应任务是 XXX，现在进行归档"再走归档流程。
 
-**需要确认**：有多个候选且无法确定唯一匹配、或对话未围绕明确任务展开时，列出候选任务请用户确认。
+### 需要用户确认
 
-- 如果没有明显候选，不要擅自归档，先把候选任务列给用户确认
-- 如果当前没有匹配的可归档任务，也可以告诉用户：如果需要，可以根据当前对话先新建一个任务，补上必要描述和完成总结后再归档
+- 多个候选无法确定唯一匹配
+- 对话未围绕明确任务展开
+- AI 信心不足
 
-## 归档前判断
+→ 列出候选请用户确认。**没有匹配候选时**告诉用户当前没有合适候选，可以根据对话先新建任务再归档。
 
-在总结中补充：
+## 输出原则：精简但不静默
 
-- 本次任务是否形成了应沉淀的 **行为约束**（架构约定、流程规则、反复适用的开发经验）
-- 本次任务是否形成了应沉淀的 **项目认知**（项目结构 / 模块职责 / 领域概念 / 设计动机 / 可复用方法论 / 关键流程地图）—— 不要因为"它不像规范"就忽略
-- 这些规则或认知更适合项目级、用户级还是全局级
-- 是否需要更新对应 spec
-- 判定核心问题：**下次有人 / AI 进入这个项目，是否还需要这条信息？**
+整体原则：**精简但不静默**。
 
-## 相关命令
+- **精简**：不长篇复述 CLI 输出，不罗列每一步命令，不贴 search 全部 JSON 结果
+- **不静默**：到达关键阶段节点必须立即输出 2~5 行简短说明，不要等所有步骤跑完才统一汇报
+
+### 关键节点（必须输出）
+
+| 节点 | 必说内容 |
+|---|---|
+| 任务创建完成后 | 最终采用的标题（特别是从非 ID 归纳的）+ 新任务 ID + 父任务 ID（如有）+ 关联项目 |
+| 任务启动 / 切换状态后 | 当前状态（`in_progress` / `archived` 等）|
+| 关联项目变化后 | 当前最新的关联项目列表 |
+| 发现相似进行中任务 | **先停下来**把候选列给用户确认，不要直接新建 |
+| 归档完成后 | 归档结果 + 补充进 PRD 的总结要点 |
+
+### 任务进入实施前的最终确认
+
+在所有 CLI 跑完、进入实际实施工作前补一段整体确认：任务 ID + 状态 + 标题 + 关联项目 + 父任务 + 关键上下文 / 约束要点。
+
+### 反例
+
+连续执行 task list / info / search / create / start / associate 等多条命令但全程不输出任何文字解释，让用户只能从终端调用记录推断进度——**违反本规则**。
+
+## 命令速查（属于任务流程的子集）
+
+详细参数见 [command-reference.md](command-reference.md)。
 
 ```bash
-lattice task list
-lattice task list --current
-lattice task list --current --all-user
-lattice task list --current --user <users>
-lattice task create "<title>" --current
-lattice task create "<title>" --current --parent <task-id>
-lattice task update <id> --add-project <project-id>
-lattice task update <id> --parent <task-id>
-lattice task update <id> --clear-parent
-lattice task tree <id>
-lattice task tree <id> --descendants
+lattice task list [--current] [--all-user] [--user <users>]
+lattice task create "<title>" --current [--parent <id>]
+lattice task info <id> [--lineage] [--tree] [--descendants]
+lattice task update <id> [--add-project ...] [--parent ...] [--clear-parent]
+lattice task tree <id> [--descendants]
 lattice task lineage <id>
 lattice task start <id>
 lattice task checkpoint <id> --type <type> --title "..." -m "..."
-lattice task progress <id>
-lattice task progress <id> --last <n>
-lattice task progress <id> --type <type>
+lattice task progress <id> [--last <n>] [--type <type>]
+lattice task associate <id> [--current] [--paths ...] [--project <id>] [--note ...]
 lattice task complete <id>
 lattice task archive <id>
 lattice task reopen <id>
-lattice task delete <id>
+lattice task delete <id> --force
 lattice context --task <id>
 lattice rag update
 ```
-
-## 输出要求
-
-整体原则：**精简但不静默**。"精简"是指不要长篇复述 CLI 输出、不要罗列每一步命令；但在关键阶段必须给出简短说明，不能一路静默地连续跑 CLI。
-
-### 阶段性输出（必须）
-
-执行任务相关命令的过程中，到达以下关键节点时必须立即输出一段简短说明（一般 2~5 行），不要等所有步骤都跑完再统一汇报：
-
-- **任务创建完成后**：说明最终任务标题（特别是从非 ID 参数归纳出来的情况）、新任务 ID、父任务 ID（如有）、创建时关联的项目
-- **任务启动 / 切换状态后**：说明当前状态（`in_progress` / `archived` 等）
-- **关联项目发生变化时**（执行了 `task associate`）：说明当前最新的关联项目列表
-- **发现相似进行中任务时**：先停下来把候选列给用户确认，不要直接新建
-- **归档完成后**：说明归档结果及补充进 PRD 的总结要点
-
-### 整体输出
-
-- 明确任务 ID、当前状态和关联项目
-- 如果任务标题是根据非 ID 参数归纳出来的，明确告诉用户采用了什么标题
-- 提炼任务最关键的约束与背景
-- AI / Agent 调用 `lattice search` 查找候选任务时优先带上 `--json`，再根据结构化字段做判断
-- 如果发现相似进行中任务，先提醒用户确认是否继续已有任务
-- 如果任务执行中更新了关联项目，明确告诉用户 `projects` 字段已同步更新以及当前关联项目列表
-- 开始任务后主动完善并持续维护该任务的 `prd.md`
-- 即使拆分了 PRD，也保持 `prd.md` 作为必要入口
-- 如果用户未提供归档目标，先确认当前会话对应的进行中任务，再执行归档
-- 如果没有匹配的可归档任务，明确告诉用户当前没有候选，并补充可以根据当前对话先新建任务再归档
-- 归档前先更新 `prd.md`，补上任务完成总结
-- 即使归档时 PRD 已拆分，也通过 `prd.md` 回写最终总结和入口索引
-- 结束任务时给出是否需要沉淀 spec 的判断

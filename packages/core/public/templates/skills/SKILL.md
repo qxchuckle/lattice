@@ -18,174 +18,105 @@ Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs
 
 ## 工作节奏（必读）
 
-本 skill 配套了一份系统级硬性规则：[lattice-rules.md](lattice-rules.md)。  
-首次加载本 skill 时**必须立即读取**该文件。其中定义的起手契约 / checkpoint 节奏 / 失忆恢复 / 完成闭环是**强制要求**，不是建议。
+本 skill 配套了一份系统级硬性规则：[lattice-rules.md](lattice-rules.md)。**首次加载本 skill 时立即读取**——其中定义的起手契约 / 实施期循环 / 失忆恢复 / 完成闭环是**强制要求**，不是建议。
 
 ## 何时使用
 
-在以下场景主动使用 Lattice：
+主动使用 Lattice 的场景：
 
 1. 第一次进入一个已注册项目
 2. 用户提到项目规范、历史约定、团队标准、架构规则
-3. 用户问“类似需求之前在哪做过”或“有没有可复用方案”
+3. 用户问"类似需求之前在哪做过"或"有没有可复用方案"
 4. 当前工作涉及多个项目、共享组件或跨仓库任务
 5. 会话中形成了值得长期沉淀的规则、流程或架构决策
 
 ## 默认入口工作流
 
-### 进入项目时
-
-先运行：
+进入项目时：
 
 ```bash
 lattice context
 lattice status
 ```
 
-目标：
+详见 [project-context.md#进入项目时的默认动作](project-context.md#进入项目时的默认动作)。
 
-- 识别项目级、用户级、全局级 spec
-- 确认当前是否存在活跃任务
-- 判断是否已有相关历史上下文可复用
-- 识别嵌套项目继承（若处于父项目子目录中，自动继承祖先 spec）
+需要找相似经验时：`lattice search "<查询词>" --json`，详见 [project-context.md#用户提到相似需求时](project-context.md#用户提到相似需求时)。
 
-### 需要找相似经验时
+## 渐进式加载导航
 
-优先运行：
+默认只读本文件 + [lattice-rules.md](lattice-rules.md)；遇到具体场景再读对应子文档。
 
-```bash
-lattice search "<查询词>" --json
-```
+| 场景 | 文档 |
+|---|---|
+| 进入项目、上下文聚合、相似经验搜索、嵌套继承、跨用户聚合 | [project-context.md](project-context.md) |
+| 项目识别、多路径绑定、指纹选单、AI 推断项目关系、任务关联项目 | [project-discovery.md](project-discovery.md) |
+| spec 双重职能、层级、选读、沉淀判定、写入流程、模板、冲突 | [spec-workflows.md](spec-workflows.md) |
+| 任务全流程：创建、起手、多轮对话循环、checkpoint、归档 | [task-workflows.md](task-workflows.md) |
+| Agent Commands 索引 | [agent-commands.md](agent-commands.md) |
+| 多命令并行 / 大输出场景下的 subagent 委派 | [subagent-delegation.md](subagent-delegation.md) |
+| 所有 CLI 参数与功能详细参考 | [command-reference.md](command-reference.md) |
 
-对 AI / Agent：
+## 索引维护
 
-- 调用 `lattice search` 时优先带上 `--json`，以便拿到结果类型、分数、路径和元数据，支持后续推理与筛选
+> 本节为索引相关操作的**权威源**。其他文档应通过链接 `SKILL.md#索引维护` 引用。
 
-必要时继续补充：
-
-```bash
-lattice task list --current
-lattice context --task <id>
-```
-
-## 配套命令速查
-
-```bash
-# 上下文与搜索
-lattice context
-lattice context --task <id>
-lattice status
-lattice search <query> --json
-lattice search <query> --type checkpoint --json
-lattice search <query> --type relation --json
-
-# 项目
-lattice link
-lattice link --restore <id>
-lattice link --force-new
-lattice unlink
-lattice unlink --remove-data
-lattice project list [--has-git] [--orphaned] [--with-relations]
-lattice project info <id>
-lattice project where <path>
-lattice project relation list [id] [--current-user] [--user <users>]
-lattice project relation add <a> <b> [--type <type>] [--from-task <taskId>] [--ai-inferred]
-lattice project relation remove <relation-id>
-
-# 任务
-lattice task list
-lattice task list --current [--all-user] [--user <users>]
-lattice task create "<title>" --current
-lattice task update <id> --add-project <project-id>
-lattice task associate <id> --current
-lattice task associate <id> --paths <p1> <p2> --note <note>
-lattice task associate <id> --project <project-id>
-lattice task start <id>
-lattice task checkpoint <id> --type <type> --title "..." -m "..."
-lattice task progress <id>
-lattice task progress <id> --last <n>
-lattice task complete <id>
-lattice task archive <id>
-lattice task reopen <id>
-lattice task delete <id>
-
-# Spec
-lattice spec list
-lattice spec show <file> [--user <username>] [--detail]
-lattice spec conflicts
-lattice spec template list
-lattice spec template apply <name>
-
-# 索引维护
-lattice rag status
-lattice rag update
-lattice rag rebuild
-lattice doctor
-lattice doctor --migrate
-lattice doctor --rebuild-fingerprints
-lattice doctor --recheck-scope-paths
-```
-
-## 索引维护原则
-
-以下操作会产生新内容，完成后应运行 `lattice rag update` 确保搜索索引是最新的：
+新建或修改以下内容会产生新的可搜索资源，完成后应运行 `lattice rag update` 确保搜索索引最新：
 
 - 新建或修改 spec 文件
 - 创建任务或更新任务 PRD
-- 任务归档后（因为 PRD 通常在归档前补充了总结）
+- 任务归档后（PRD 通常在归档前补充了完成总结）
 - 新注册或删除项目
 
-如果 `rag update` 报错或搜索结果明显不对，降级使用 `lattice rag rebuild` 全量重建。
-
-## 读取原则
-
-- 先拿上下文，再读规范，再动代码
-- spec 优先级始终是 `project > user > global`
-- 遇到同名 spec 覆盖时，要提醒用户覆盖关系
-- **spec 同时承担两种职能**：(1) 约束 AI 行为的规范；(2) AI 认识项目的稳定经验（项目结构、模块职责、领域概念、设计动机、可复用方法论）。两类内容都值得沉淀
-- 只有长期稳定、可复用的信息才应沉淀为 spec；判定标准是"下次有人 / AI 进入这个项目，是否还需要这条信息"
-- user/global 级 spec 必须包含 `## 适用范围` 声明（project 级不需要）
-- 产生新内容后及时 `rag update`，确保搜索可用
+```bash
+lattice rag update    # 增量更新（首选，只处理变更文档）
+lattice rag rebuild   # 全量重建（rag update 报错或搜索结果明显不对时降级使用）
+lattice rag status    # 查看索引状态
+```
 
 ## 终端输出读取原则
 
-lattice CLI 的输出往往是判断依据的唯一来源（context / search / spec list / project list / task progress 等）。对这些输出使用 `head` / `tail` / `grep` 等过滤手段时，遵守：
+> 本节为终端输出处理的**权威源**。lattice CLI 的输出往往是判断依据的唯一来源（context / search / spec list / project list / task progress 等），对这些输出使用 `head` / `tail` / `grep` 等过滤手段时遵守以下规则。
 
 ### 什么时候可以过滤
 
-- 已明确知道输出体量很大且关心位置固定（例如只看 `git log -5`、只看构建日志末尾错误摘要）
-- 已知目标关键字，用 `grep -nC 5 <keyword>` 而不是盲 `head/tail`
-- 输出格式稳定且领域已知（如 `lattice project list` 其中一项、`git status --short`）
+- 已明确知道输出体量大且关心位置固定（如只看 `git log -5`、只看构建日志末尾错误）
+- 已知目标关键字 → 用 `grep -nC 5 <keyword>` 而非盲 `head/tail`
+- 输出格式稳定且领域已知（如 `git status --short`）
 
 ### 什么时候禁止过滤 / 必须全量
 
-- **第一次跑某条 lattice 命令**、不熟悉输出结构时：先全量看一遍再决定要不要过滤
-- **要从 `lattice search` / `lattice context` 判断“是否有相关 spec / 相似案例”**：需要看到所有后选结果才能给出结论，不能 `head` 截前几条
-- **排查错误、构建 / 测试 / `lattice doctor` 失败**：错误可能出现在输出任意位置，head/tail 极易漏掉根因
-- **判断“有无遗漏”类语义**（残留引用检查、`lattice spec conflicts` 清单是否完整、`lattice project list --orphaned` 是否覆盖全部）：必须全量或先 `wc -l` 探体量
-- **输出可能是 stderr/stdout 交错**：先 `2>&1` 再考虑过滤
+- **第一次跑某条 lattice 命令** / 不熟悉输出结构 → 先全量看一遍再决定是否过滤
+- **从 `lattice search` / `lattice context` 判断"是否有相关 spec / 相似案例"** → 需看到所有候选才能下结论
+- **排查错误、构建 / 测试 / `lattice doctor` 失败** → 错误可能在任意位置，head/tail 极易漏掉根因
+- **判断"有无遗漏"类语义**（残留引用、`spec conflicts` 清单、`project list --orphaned`）→ 必须全量或先 `wc -l` 探体量
+- **输出可能 stderr/stdout 交错** → 先 `2>&1` 再考虑过滤
 
 ### 过滤后必须自检
 
-- 看到结尾被截断（不完整、行末是省略号、关键段落只露半截）→ **重跑去掉过滤或显著加大 N**（如 `head -80` → `head -300` 或直接不过滤）
-- 过滤后看不到预期关键字 / 行数明显少于预期 → **重跑全量再判断**，不要直接下“不存在”结论
-- 同一命令需要看多段（开头摘要 + 末尾错误）→ 用 `2>&1 | tee` 暂存或分两次执行，**禁止只看一段就下结论**
+- 看到结尾被截断 → **重跑去掉过滤或加大 N**（如 `head -80` → `head -300` 或不过滤）
+- 过滤后看不到预期关键字 / 行数明显少 → **重跑全量再判断**，不要直接下"不存在"结论
+- 同一命令需要看多段（开头摘要 + 末尾错误）→ `2>&1 | tee` 暂存或分两次执行
 
 ### 推荐替代
 
-- 用 `wc -l` 先看体量再决定要不要过滤
-- 用 `grep -nC 5 <keyword>` 替代 `head/tail` 盲截
-- 用 `awk '/起始模式/,/结束模式/'` 截取语义段落
-- lattice CLI 输出能带 `--json` 就带（例如 `lattice search --json`），结构化之后再按字段抽取比字符串过滤更可靠
+- `wc -l` 先看体量再决定要不要过滤
+- `grep -nC 5 <keyword>` 替代 `head/tail` 盲截
+- `awk '/起始模式/,/结束模式/'` 截取语义段落
+- 能带 `--json` 就带（`lattice search --json` 等），结构化抽取比字符串过滤可靠
 
-## 渐进式加载
+## --force 跳过二次确认（核心约束）
 
-默认只读本文件 + [lattice-rules.md](lattice-rules.md)；遇到具体场景时再继续读取对应子文档：
+AI / Agent 自主调用以下命令时**必须**带 `-f` / `--force`，否则会阻塞等待用户输入：`lattice init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove`。
 
-- 项目上下文、任务上下文、相似案例搜索：[project-context.md](project-context.md)
-- 项目查找/识别、多路径绑定、指纹选单、AI 推断项目关系：[project-discovery.md](project-discovery.md)
-- spec 层级、冲突判断、模板和规则沉淀：[spec-workflows.md](spec-workflows.md)
-- 任务创建、开始、方案讨论、查询、进展追踪、完成、归档：[task-workflows.md](task-workflows.md)
-- Agent Commands 的用途与使用边界：[agent-commands.md](agent-commands.md)
-- 多命令并行 / 避免原始输出填满主上下文时的 subagent 委派策略：[subagent-delegation.md](subagent-delegation.md)
-- 所有 CLI 配套命令的参数与功能：[command-reference.md](command-reference.md)
+完整列表与用途见 [command-reference.md#通用约定-f---force-跳过二次确认](command-reference.md#通用约定-f---force-跳过二次确认)。
+
+## 读取原则（核心约束）
+
+- 先拿上下文，再读规范，再动代码
+- spec 优先级：`project > user > global`（嵌套场景见 [spec-workflows.md#层级优先级](spec-workflows.md#层级优先级)）
+- 同名 spec 覆盖时必须告知用户覆盖关系
+- spec 同时是行为约束 + 项目认知经验，**两类都值得沉淀**（详见 [spec-workflows.md#spec-的双重职能核心定义](spec-workflows.md#spec-的双重职能核心定义)）
+- 沉淀核心判定：下次有人 / AI 进入这个项目，是否还需要这条信息？
+- user/global 级 spec 必须包含 `## 适用范围`（project 级不需要），详见 [spec-workflows.md#适用范围声明user--global-必须](spec-workflows.md#适用范围声明user--global-必须)
+- 产生新内容后及时 `rag update`（见上文「索引维护」）

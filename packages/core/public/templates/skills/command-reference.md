@@ -1,21 +1,19 @@
 # CLI 命令参数参考
 
-本文件用于快速查阅 Lattice CLI 的主要命令、位置参数和选项参数。
+本文件是 Lattice CLI 主要命令、位置参数和选项参数的字典。流程性概念见 [SKILL.md](SKILL.md) / [task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [project-discovery.md](project-discovery.md)。
 
 ## 通用约定：`-f, --force` 跳过二次确认
 
-以下命令包含交互式二次确认提示，**AI / Agent 调用时必须加 `-f` 或 `--force`**，否则命令会阻塞等待用户输入：
+以下命令包含交互式二次确认，**AI / Agent 调用时必须加 `-f` / `--force`**，否则会阻塞等待用户输入：
 
 | 命令 | 确认内容 |
-|------|----------|
+|---|---|
 | `lattice init` | 是否下载 embedding 模型 |
 | `lattice unlink` | 确认取消项目注册 |
 | `lattice project remove <id>` | 确认删除项目数据 |
 | `lattice project relation remove <a> <b>` | 确认删除项目关系 |
 | `lattice task delete <id>` | 确认彻底删除任务 |
 | `lattice user remove <name>` | 确认删除用户 |
-
-> **规则**：当 AI 自主执行上述命令时，始终带 `-f` 以避免交互阻塞。
 
 ## `lattice init`
 

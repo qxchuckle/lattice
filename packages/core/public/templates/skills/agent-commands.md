@@ -1,35 +1,29 @@
 # Agent Commands
 
-Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 agent 入口，不等同于 CLI 子命令本身。
+Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 agent 入口，**不等同于 CLI 子命令本身**。
 
-## 可用命令
+## 命令清单与用途
 
-- `/lattice/context`
-- `/lattice/task/query`
-- `/lattice/task/design`
-- `/lattice/task/start`
-- `/lattice/task/archive`
-- `/lattice/spec/update/project`
-- `/lattice/spec/update/user`
-- `/lattice/spec/update/global`
+| 命令 | 何时使用 | 详细说明所在文件（位于 lattice commands 目录） |
+|---|---|---|
+| `/lattice/context` | 快速拿到项目或任务上下文 | `context.md` |
+| `/lattice/task/query` | 查询项目情况 / 任务进展 / 历史完成情况（**只读**） | `task/query.md` |
+| `/lattice/task/design` | 讨论方案 / 分析设计而不动代码 | `task/design.md` |
+| `/lattice/task/start` | 开始实施任务并同步上下文 | `task/start.md` |
+| `/lattice/task/checkpoint` | 记录任务关键进展 | `task/checkpoint.md` |
+| `/lattice/task/archive` | 结束任务并判断是否沉淀规则 | `task/archive.md` |
+| `/lattice/spec/update/project` | 沉淀当前项目特有规则 / 认知 | `spec/update/project.md` |
+| `/lattice/spec/update/user` | 沉淀跨项目可复用、属于当前用户的规则 / 认知 | `spec/update/user.md` |
+| `/lattice/spec/update/global` | 沉淀多用户多项目共享的默认规则 | `spec/update/global.md` |
 
-## 使用原则
+> **说明**：commands 文件部署在客户端 `commands/lattice/` 目录下，与本 skill 不在同一相对路径。AI 接收 `/lattice/...` 命令时，agent 客户端会自动加载对应 commands 文件，本表只用于查找文件名。
 
-- 需要快速拿到项目或任务上下文时，用 `/lattice/context`
-- 需要查询项目情况、任务进展、历史完成情况时，用 `/lattice/task/query`
-- 需要讨论方案、分析设计而不动代码时，用 `/lattice/task/design`
-- 需要开始实施一个任务并同步上下文时，用 `/lattice/task/start`
-- 需要结束任务并判断是否沉淀规则时，用 `/lattice/task/archive`
-- 需要把会话经验写成长期规范时，用 `/lattice/spec/update/*`
+## 层级判断（spec/update/*）
 
-## 层级判断
-
-- 当前项目特有规则：`/lattice/spec/update/project`
-- 当前用户或团队跨项目可复用规则：`/lattice/spec/update/user`
-- 多用户、多项目共享的默认规则：`/lattice/spec/update/global`
+层级判定标准统一见 [spec-workflows.md → 选择写入层级](spec-workflows.md#选择写入层级)。
 
 ## 与 CLI 的关系
 
-- Agent Commands 负责组织 workflow
-- CLI 负责真正执行读写、搜索、列举和状态更新
-- 输出时要总结关键结论，不要机械回显命令结果
+- **Agent Commands 负责组织 workflow**（按动词组织：进入上下文 / 查询 / 讨论 / 开始 / 归档 / 沉淀）
+- **CLI 负责真正执行**（读写、搜索、列举、状态更新）
+- 输出时总结关键结论，不机械回显命令结果
