@@ -18,7 +18,7 @@ Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs
 
 ## 工作节奏
 
-本 skill 配套了四份核心文档（见下方「必读」表格），其中定义的起手契约 / 实施期循环 / 沉淀行为 / 归档闭环是**强制要求**，不是建议。
+本 skill 配套四份核心文档（见下方「必读」），其中定义的起手契约 / 实施期循环 / 沉淀行为 / 归档闭环是**强制要求**，不是建议。
 
 ## 何时使用
 
@@ -29,19 +29,6 @@ Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs
 3. 用户问"类似需求之前在哪做过"或"有没有可复用方案"
 4. 当前工作涉及多个项目、共享组件或跨仓库任务
 5. 会话中形成了值得长期沉淀的规则、流程或架构决策
-
-## 默认入口工作流
-
-进入项目时：
-
-```bash
-lattice context
-lattice status
-```
-
-详见 [project-context.md#进入项目时的默认动作](project-context.md#进入项目时的默认动作)。
-
-需要找相似经验时：`lattice search "<查询词>" --json`，详见 [project-context.md#用户提到相似需求时](project-context.md#用户提到相似需求时)。
 
 ## 文档加载策略
 
@@ -67,12 +54,7 @@ lattice status
 
 > 本节为索引相关操作的**权威源**。其他文档应通过链接 `SKILL.md#索引维护` 引用。
 
-新建或修改以下内容会产生新的可搜索资源，完成后应运行 `lattice rag update` 确保搜索索引最新：
-
-- 新建或修改 spec 文件
-- 创建任务或更新任务 PRD
-- 任务归档后（PRD 通常在归档前补充了完成总结）
-- 新注册或删除项目
+新建或修改 spec / 任务 PRD / 项目注册后，运行 `lattice rag update` 让搜索索引最新：
 
 ```bash
 lattice rag update    # 增量更新（首选，只处理变更文档）
@@ -82,32 +64,32 @@ lattice rag status    # 查看索引状态
 
 ## 终端输出读取原则
 
-> 本节为终端输出处理的**权威源**。lattice CLI 的输出往往是判断依据的唯一来源（context / search / spec list / project list / task progress 等），对这些输出使用 `head` / `tail` / `grep` 等过滤手段时遵守以下规则。
+> 本节为终端输出处理的**权威源**。lattice CLI 输出（context / search / spec list / project list / task progress 等）往往是判断依据的唯一来源，对其使用 `head` / `tail` / `grep` 等过滤手段时遵守以下规则。
 
-### 什么时候可以过滤
+### 何时可以过滤
 
-- 已明确知道输出体量大且关心位置固定（如只看 `git log -5`、只看构建日志末尾错误）
-- 已知目标关键字 → 用 `grep -nC 5 <keyword>` 而非盲 `head/tail`
+- 已知输出体量大且关心位置固定（如 `git log -5`、构建日志末尾错误）
+- 已知目标关键字 → `grep -nC 5 <keyword>` 而非盲 `head/tail`
 - 输出格式稳定且领域已知（如 `git status --short`）
 
-### 什么时候禁止过滤 / 必须全量
+### 何时禁止过滤 / 必须全量
 
-- **第一次跑某条 lattice 命令** / 不熟悉输出结构 → 先全量看一遍再决定是否过滤
+- **第一次跑某条 lattice 命令** / 不熟悉输出结构 → 先全量看再决定
 - **从 `lattice search` / `lattice context` 判断"是否有相关 spec / 相似案例"** → 需看到所有候选才能下结论
-- **排查错误、构建 / 测试 / `lattice doctor` 失败** → 错误可能在任意位置，head/tail 极易漏掉根因
-- **判断"有无遗漏"类语义**（残留引用、`spec conflicts` 清单、`project list --orphaned`）→ 必须全量或先 `wc -l` 探体量
+- **排查错误、构建 / 测试 / `lattice doctor` 失败** → 错误可能在任意位置
+- **判断"有无遗漏"类语义**（残留引用、`spec conflicts`、`project list --orphaned`）→ 必须全量或先 `wc -l` 探体量
 - **输出可能 stderr/stdout 交错** → 先 `2>&1` 再考虑过滤
 
 ### 过滤后必须自检
 
-- 看到结尾被截断 → **重跑去掉过滤或加大 N**（如 `head -80` → `head -300` 或不过滤）
+- 看到结尾被截断 → **重跑去掉过滤或加大 N**
 - 过滤后看不到预期关键字 / 行数明显少 → **重跑全量再判断**，不要直接下"不存在"结论
-- 同一命令需要看多段（开头摘要 + 末尾错误）→ `2>&1 | tee` 暂存或分两次执行
+- 同一命令需要看多段 → `2>&1 | tee` 暂存或分两次执行
 
 ### 推荐替代
 
 - `wc -l` 先看体量再决定要不要过滤
-- `grep -nC 5 <keyword>` 替代 `head/tail` 盲截
+- `grep -nC 5 <keyword>` 替代盲截
 - `awk '/起始模式/,/结束模式/'` 截取语义段落
 - 能带 `--json` 就带（`lattice search --json` 等），结构化抽取比字符串过滤可靠
 
@@ -115,14 +97,4 @@ lattice rag status    # 查看索引状态
 
 AI / Agent 自主调用以下命令时**必须**带 `-f` / `--force`，否则会阻塞等待用户输入：`lattice init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove`。
 
-完整列表与用途见 [command-reference.md#通用约定-f---force-跳过二次确认](command-reference.md#通用约定-f---force-跳过二次确认)。
-
-## 读取原则（核心约束）
-
-- 先拿上下文，再读规范，再动代码
-- spec 优先级：`project > user > global`（详见 [spec-workflows.md#层级](spec-workflows.md#层级)）
-- 同名 spec 覆盖时必须告知用户覆盖关系
-- spec 记录一切对理解项目、完成任务有益、可复用参考的内容（行为约束 / 项目认知 / 流程范式 / 经验细节 / 试错积累），详见 [spec-workflows.md#spec-是什么](spec-workflows.md#spec-是什么)
-- 沉淀核心判定：下次有人 / AI 进入这个项目，是否还需要这条信息？
-- user/global 级 spec 必须包含 `## 适用范围`（project 级不需要）
-- 产生新内容后及时 `rag update`（见上文「索引维护」）
+完整列表见 [command-reference.md#通用约定-f---force-跳过二次确认](command-reference.md#通用约定-f---force-跳过二次确认)。
