@@ -7,6 +7,7 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 | 命令 | 何时使用 | 详细说明所在文件（位于 lattice commands 目录） |
 |---|---|---|
 | `/lattice/context` | 快速拿到项目或任务上下文 | `context.md` |
+| `/lattice/keep` | 保持 Lattice 工作流的轻量提示器，可在单窗口连续对话时频繁使用；快速核对任务身份 / 工作流约束 / spec 清单 / PRD 范围 / 漂移；默认一行简报；参数可附加用户后续请求 | `keep.md` |
 | `/lattice/task/query` | 查询项目情况 / 任务进展 / 历史完成情况（**只读**） | `task/query.md` |
 | `/lattice/task/design` | 讨论方案 / 分析设计而不动代码 | `task/design.md` |
 | `/lattice/task/start` | 开始实施任务并同步上下文 | `task/start.md` |
