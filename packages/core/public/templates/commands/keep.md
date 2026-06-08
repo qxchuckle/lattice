@@ -11,17 +11,20 @@
 
 ## 自检清单（按顺序，失败按括号补救）
 
+> **前置**：必读 lattice skill 的 `SKILL.md`（导航 + 起手契约）。下列各步发现认知缺失时，按 `SKILL.md` 渐进式加载导航**只读对应子文档**，不要全量加载。
+
 1. **任务身份**：活跃任务 ID + 标题是否在当前上下文中明确可述？
-   - 否 → `lattice task list --current --status in_progress`；多条无法判断 → 列候选请用户确认，不硬猜
+   - 否 → `lattice task list --current --status in_progress`；多条无法判断 → 列候选请用户确认，不硬猜；如任务创建 / 进展 / 归档流程也模糊 → 读 `task-workflows.md`
 2. **工作流约束**：lattice-rules.md 实施期循环（PRD → spec → code → progress）/ checkpoint 时机 / spec 更新规则是否在当前上下文中明确可述？
-   - 否 → Skill 重载 `lattice`
+   - 否 → 读 `SKILL.md` + `lattice-rules.md`；实施期循环 / checkpoint 时机 模糊 → 加读 `task-workflows.md`；spec 更新规则模糊 → 加读 `spec-workflows.md`
 3. **Spec 清单**：当前项目可用 spec 列表（项目级 / 用户级 / 全局级各有哪些主题）是否在当前上下文中明确可列？
-   - 否 → `lattice context` 重新拉取上下文与 spec 列表（仅清单层，不展开精读）
+   - 否 → `lattice context` 重新拉取上下文与 spec 列表（仅清单层，不展开精读）；如对 spec 层级 / 冲突 / 模板机制也模糊 → 加读 `spec-workflows.md`
 4. **PRD 范围**：当前请求落在活跃任务 PRD 目标 / 范围 / 约束内？
    - 否 → 提示用户走 `/lattice/task/start` 新建任务，不默默扩范围
 5. **漂移盘点**：上次 checkpoint 后有未记录改动？对话已确定的目标 / 范围 / 约束 / 方案变更已同步 PRD？
    - 未记录改动 → `lattice task checkpoint` 立即补打
    - PRD 漂移 → `search_replace` 同步 PRD + 补 `decision` / `pivot` checkpoint
+   - checkpoint 类型 / 触发条件不确定 → 读 `task-workflows.md`
 
 > 本命令仅校验 spec **清单**是否记得；spec **内容**认知丢失到无法判断行为合规性，属严重漂移，走升级路径。
 

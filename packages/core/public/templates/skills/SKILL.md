@@ -16,9 +16,9 @@ description: >-
 
 Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs` 和搜索能力组织长期知识，默认数据根目录是 `~/.lattice/`。
 
-## 工作节奏（必读）
+## 工作节奏
 
-本 skill 配套了一份系统级硬性规则：[lattice-rules.md](lattice-rules.md)。**首次加载本 skill 时立即读取**——其中定义的起手契约 / 实施期循环 / 失忆恢复 / 完成闭环是**强制要求**，不是建议。
+本 skill 配套了四份核心文档（见下方「必读」表格），其中定义的起手契约 / 实施期循环 / 沉淀行为 / 归档闭环是**强制要求**，不是建议。
 
 ## 何时使用
 
@@ -43,16 +43,22 @@ lattice status
 
 需要找相似经验时：`lattice search "<查询词>" --json`，详见 [project-context.md#用户提到相似需求时](project-context.md#用户提到相似需求时)。
 
-## 渐进式加载导航
+## 文档加载策略
 
-默认只读本文件 + [lattice-rules.md](lattice-rules.md)；遇到具体场景再读对应子文档。
+### 必读（首次加载本 skill 时立即读取）
+
+| 文档 | 内容 |
+|---|---|
+| [lattice-rules.md](lattice-rules.md) | 系统级硬性规则：起手契约 / 实施期循环 / 失忆恢复 / 完成闭环 |
+| [project-context.md](project-context.md) | 进入项目默认动作、相似需求搜索、嵌套项目继承 |
+| [spec-workflows.md](spec-workflows.md) | spec 定义、读写流程、沉淀判定、主动沉淀行为 |
+| [task-workflows.md](task-workflows.md) | 任务全流程：创建、起手、多轮对话循环、checkpoint、归档 |
+
+### 按需加载（遇到具体场景时读）
 
 | 场景 | 文档 |
 |---|---|
-| 进入项目、上下文聚合、相似经验搜索、嵌套继承、跨用户聚合 | [project-context.md](project-context.md) |
-| 项目识别、多路径绑定、指纹选单、AI 推断项目关系、任务关联项目 | [project-discovery.md](project-discovery.md) |
-| spec 双重职能、层级、选读、沉淀判定、写入流程、模板、冲突 | [spec-workflows.md](spec-workflows.md) |
-| 任务全流程：创建、起手、多轮对话循环、checkpoint、归档 | [task-workflows.md](task-workflows.md) |
+| 项目识别、多路径绑定、指纹选单、AI 推断项目关系 | [project-discovery.md](project-discovery.md) |
 | Agent Commands 索引 | [agent-commands.md](agent-commands.md) |
 | 多命令并行 / 大输出场景下的 subagent 委派 | [subagent-delegation.md](subagent-delegation.md) |
 | 所有 CLI 参数与功能详细参考 | [command-reference.md](command-reference.md) |
@@ -114,9 +120,9 @@ AI / Agent 自主调用以下命令时**必须**带 `-f` / `--force`，否则会
 ## 读取原则（核心约束）
 
 - 先拿上下文，再读规范，再动代码
-- spec 优先级：`project > user > global`（嵌套场景见 [spec-workflows.md#层级优先级](spec-workflows.md#层级优先级)）
+- spec 优先级：`project > user > global`（详见 [spec-workflows.md#层级](spec-workflows.md#层级)）
 - 同名 spec 覆盖时必须告知用户覆盖关系
-- spec 同时是行为约束 + 项目认知经验，**两类都值得沉淀**（详见 [spec-workflows.md#spec-的双重职能核心定义](spec-workflows.md#spec-的双重职能核心定义)）
+- spec 记录一切对理解项目、完成任务有益、可复用参考的内容（行为约束 / 项目认知 / 流程范式 / 经验细节 / 试错积累），详见 [spec-workflows.md#spec-是什么](spec-workflows.md#spec-是什么)
 - 沉淀核心判定：下次有人 / AI 进入这个项目，是否还需要这条信息？
-- user/global 级 spec 必须包含 `## 适用范围`（project 级不需要），详见 [spec-workflows.md#适用范围声明user--global-必须](spec-workflows.md#适用范围声明user--global-必须)
+- user/global 级 spec 必须包含 `## 适用范围`（project 级不需要）
 - 产生新内容后及时 `rag update`（见上文「索引维护」）

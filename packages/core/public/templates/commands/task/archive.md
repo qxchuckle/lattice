@@ -16,6 +16,7 @@
 完整归档闭环详见 skill `task-workflows.md` 的「归档闭环」：
 
 1. **前置信息采集（必须先读后写）**：见 skill `task-workflows.md` 的「归档前置信息采集（强制，先读后写）」。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
+   - 含代码变更审查：如项目使用 git，通过 diff 审查本次任务修改的代码，必要时阅读完整源文件，以确保归档信息完整覆盖所有实际变更（详见 skill `task-workflows.md` 的「归档时审查代码变更」）
 2. **更新 PRD**：补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落；确保 progress 中的关键决策已在 PRD 中体现
    - 任务有父 / 子任务时先用 `lattice task lineage` / `lattice task tree --descendants` 检查链路是否仍合理
 3. **summary checkpoint** + **complete** + **archive** + **`lattice rag update`**
