@@ -9,13 +9,15 @@ spec 相关概念见 [spec-workflows.md](spec-workflows.md)。
 ```
 ~/.lattice/users/<username>/tasks/<task-id>/
 ├── task.json       # 元数据（id/title/status/projects/scopePaths 唯一来源）
-├── prd.md          # 收敛型内容（目标、约束、最终方案、文件索引）
+├── prd.md          # 当前最佳认知快照（目标、约束、当前方案、文件索引），边做边修订
 ├── progress.yaml   # 追加型过程（决策、问题、里程碑）
 ├── design.md       # 方案讨论（候选、利弊、被否决方案及理由、结论）
 └── ...             # 可拆分子文档
 ```
 
-**职责不重叠**：PRD 管"最终是什么"，progress 管"发生了什么"，design 管"怎么讨论出来的"。
+**职责不重叠**：PRD 管"现在认为应该是什么"（活体快照，每轮对齐），progress 管"发生了什么"（追加日志），design 管"怎么讨论出来的"（讨论档案）。
+
+> ⚠️ **PRD 不是终态文档，是活体快照**：不要等归档才补全。"等收敛了再写"是 AI 最常见的拖延借口——PRD 应当随每轮对话**先于代码**修订，详见下方「实施期多轮对话循环」与「PRD 同步硬触发清单」。
 
 > ⚠️ `prd.md` **不得包含 YAML frontmatter**（id/title/status/created_at/projects 等只在 task.json）。`lattice task create` / `task info` 输出 PRD 完整路径，直接用。
 
@@ -69,26 +71,65 @@ lattice task update <task-id> --clear-parent             # 清空父
 ```
 用户输入
   ↓
-是否影响目标 / 范围 / 约束 / 方案 / 取舍 / 文件清单 / 风险？
-  └─ 是：先 search_replace 改 prd.md + 打 decision/pivot checkpoint
+PRD 同步硬触发清单（见下表）命中任意一项？
+  └─ 是：read_file prd.md → search_replace 改 prd.md → 打 decision/pivot checkpoint
   ↓
 涉及之前没读过的模块 / 概念 / 规范分层？
   └─ 是：read_file 精读相关 spec（见 spec-workflows.md）
   ↓
-实际改代码
+实际改代码（search_replace / create_file）
   ↓
-打 checkpoint 记录这一轮进展
+打 checkpoint：先按"打点前 PRD 自检"自查 → 再写入 progress.yaml
 ```
+
+### PRD 同步硬触发清单（命中即先改 PRD）
+
+不要再判断"是否影响目标 / 范围"那种软语义——**以下任意一条命中即必须先 `read_file prd.md` 再 `search_replace prd.md`**，不允许跳过直接改代码：
+
+| # | 触发条件 | 必须落到 PRD 的位置 |
+|---|----------|---------------------|
+| T1 | 用户提出新需求 / 修改需求 / 推翻方案 | 目标 / 关键约束 / 修改文件索引 |
+| T2 | 决定采用 / 否决一个技术方案（库选型、数据结构、API 形态等） | 当前方案 / 设计要点 |
+| T3 | 新增 / 移除一个修改文件（代码或文档均算） | 修改文件索引 |
+| T4 | 单轮内将要 search_replace 或 create_file 的业务文件 ≥ 3 个 | 修改文件索引 + 该批改动的目标说明 |
+| T5 | 发现意料外的兼容性 / 边界 / 数据迁移问题 | 关键约束 / 风险 |
+| T6 | 引入新的依赖 / 模块边界 / 跨包调用 | 当前方案 / 修改文件索引 |
+| T7 | 阶段性完成一组改动并准备打 milestone checkpoint | 实施分阶段 / 完成判定 勾选项 |
+
+> 命中后**先 read_file prd.md** 看现状，再 search_replace 修订对应位置。**严禁"先改代码再批量补 PRD"**——这是 PRD 失同步最常见路径。
+
+### 动作锚点（强制行为契约）
+
+把"PRD 永不落后"具体化为可机械执行的动作前后规则：
+
+- **写代码前**：单轮要改 ≥ 3 个业务文件 → 必须先 `read_file prd.md` 校对"修改文件索引"
+- **打 checkpoint 前**：必须先按"打点前 PRD 自检"自查（见下方 [checkpoint 类型与触发](#checkpoint-类型与触发)）
+- **lattice task complete 前**：必须先 read_file prd.md 全文 + 进展回放（见 [归档前置信息采集](#归档前置信息采集强制先读后写)）
+- **用户推翻方案后第一动作**：先 search_replace prd.md 改"当前方案"段，再打 pivot checkpoint，**禁止**"先改代码再补 PRD"
 
 ### 强制规则
 
-1. **PRD 永不落后于代码**：目标 / 边界 / 选型 / 取舍 / 文件清单 / 风险任何变化必须**先**改 PRD 再改代码——"嘴上答应了、代码改了、PRD 没动" = 跨会话失忆最大来源
-2. **新主题先选读 spec**：本轮涉及未读过的模块 / 规范分层时必须 read_file 精读
-3. **代码改完必须打 checkpoint**：连续 5 个小修改至少 1 个 milestone/note
-4. **用户推翻方案 = 必须 pivot checkpoint**：默默实现新方案 = 丢失决策史
-5. **过程中即沉淀 spec**：多轮对话中冒出长期可复用的项目认知 / 行为约束 / 流程范式 / 经验细节时，**立即询问用户是否沉淀**，不要拖到归档前
+1. **PRD 是活体快照，不是终态文档**：每轮对话都可能修订；命中硬触发清单立即更新；"等收敛了再统一写" = 失同步根源
+2. **PRD 永不落后于代码**：硬触发清单任一命中必须**先**改 PRD 再改代码
+3. **新主题先选读 spec**：本轮涉及未读过的模块 / 规范分层时必须 read_file 精读
+4. **代码改完必须打 checkpoint**：连续 5 个小修改至少 1 个 milestone/note；打点前先做 PRD 自检
+5. **用户推翻方案 = 必须 pivot checkpoint**：默默实现新方案 = 丢失决策史
+6. **过程中即沉淀 spec**：多轮对话中冒出长期可复用的项目认知 / 行为约束 / 流程范式 / 经验细节时，**立即询问用户是否沉淀**，不要拖到归档前
 
 ## checkpoint 类型与触发
+
+### 打点前 PRD 自检（强制前置步骤）
+
+执行 `lattice task checkpoint` **之前必须先过以下自检**——任何一条命中而 PRD 未同步，**先 search_replace prd.md 再打点**：
+
+- [ ] 本轮是否触发了 [PRD 同步硬触发清单](#prd-同步硬触发清单命中即先改-prd) 中任一项（T1~T7）？
+- [ ] 本轮改动的文件是否全部出现在 PRD 的"修改文件索引"中？
+- [ ] 本轮的方案 / 决策 / 否决理由是否已写入 PRD 对应段落？
+- [ ] 本轮发现的新约束 / 边界 / 风险是否已写入 PRD"关键约束"或"风险"段？
+
+> checkpoint 是**追加型过程日志**，不能替代 PRD 的"当前最佳认知"。把决策只写进 checkpoint 而不回流 PRD = 跨会话失忆。纠结"写 PRD 还是写 checkpoint" → **两个都写**：PRD 改对应段落，checkpoint 记录改动事件。
+
+### 命令格式
 
 ```bash
 lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
@@ -154,7 +195,7 @@ lattice context --task <task-id>
 
 1. **按主题选读相关 spec**（必做）：见 [spec-workflows.md#读-spec](spec-workflows.md#读-spec)
 2. **参考近似任务**：`lattice search "<标题或核心关键词>" --type task --json`，按复杂度参考 1~5 个已完成任务的 PRD（高复杂度可同时看 design.md / progress.yaml）
-3. **完善 PRD**：不停留在默认空白；只记录收敛型内容（目标、约束、关键设计、最终方案、文件索引）；过长可拆但 `prd.md` 必须保留主入口
+3. **完善 PRD**：不停留在默认空白；只记录"当前最佳认知"内容（目标、关键约束、当前方案、修改文件索引、风险）；过长可拆但 `prd.md` 必须保留主入口；后续每轮按 PRD 同步硬触发清单持续修订
 4. **如有 design.md**：先 read_file 了解之前讨论的方案、约束、结论
 
 ## 归档前置信息采集（强制，先读后写）

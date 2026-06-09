@@ -28,18 +28,39 @@ lattice context --task <task-id>
 
 1. **按主题精读相关 spec**（必做）：见 skill `spec-workflows.md` 的「按任务主题精读相关 spec」
 2. **参考近似任务**（按复杂性 1~5 个 PRD）
-3. **完善 PRD**：不要停留在默认空白标题；只记录收敛型内容；如有 design.md 先读
-4. **同步项目关联**：见 skill `task-workflows.md` 的「项目关联同步（实施期同步义务）」
+3. **完善 PRD**：不要停留在默认空白标题；只记录当前最佳认知内容（目标 / 关键约束 / 当前方案 / 修改文件索引 / 风险）；如有 design.md 先读
+4. **输出 PRD 当前规模摘要**：写完 PRD 后用 1~3 行告知用户本轮 PRD 覆盖了哪几个关键段落（目标 / 修改文件数 / 实施阶段数），让 PRD 状态在会话中可见
+5. **同步项目关联**：见 skill `task-workflows.md` 的「项目关联同步（实施期同步义务）」
 
 ## 实施期循环（任务进行中每轮必做）
 
-详见 skill `task-workflows.md` 的「实施期多轮对话循环」：
+**每一轮用户输入到来后按以下步骤执行，不能跳步**（详见 skill `task-workflows.md` 的「实施期多轮对话循环」）：
 
-```
-用户输入 → PRD（如需）→ spec（如需）→ code → checkpoint
-```
+### 步骤 1：PRD 同步硬触发检查（命中即先改 PRD）
 
-强制规则：PRD 永不能落后于代码 / 新主题先选读 spec / 代码改完必须打 checkpoint / 用户推翻方案必须 pivot。
+本轮是否命中 skill `task-workflows.md` 「PRD 同步硬触发清单」中的 T1~T7 任一项？
+
+- **是** → 必须先 `read_file prd.md` → `search_replace prd.md` 修订对应段落 → 打 decision/pivot checkpoint → 才进入下一步
+- **否** → 跳过，进入步骤 2
+
+### 步骤 2：spec 选读
+
+本轮涉及之前没读过的模块 / 概念 / 规范分层？是→ read_file 精读相关 spec。
+
+### 步骤 3：写代码
+
+动作锚点：本轮要 search_replace 或 create_file 的业务文件 ≥ 3 个 → 必须先 `read_file prd.md` 校对"修改文件索引"。
+
+### 步骤 4：打 checkpoint
+
+必须先按 skill `task-workflows.md` 「打点前 PRD 自检」过一遍，命中任一项未同步项 → 先 search_replace prd.md 再打点。
+
+### 强制项
+
+- PRD 永不能落后于代码（同步硬触发任一项命中 → 先改 PRD）
+- 新主题先选读 spec
+- 代码改完必须打 checkpoint，打点前必过 PRD 自检
+- 用户推翻方案 → 第一动作是改 PRD「当前方案」段 + 打 pivot checkpoint，**不是**先改代码
 
 ## 进展追踪
 
