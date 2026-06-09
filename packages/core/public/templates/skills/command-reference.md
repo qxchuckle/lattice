@@ -1,6 +1,16 @@
 # CLI 命令参数参考
 
-本文件是 Lattice CLI 主要命令、位置参数和选项参数的字典。流程性概念见 [SKILL.md](SKILL.md) / [task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [project-discovery.md](project-discovery.md)。
+> **本文权威范围**：Lattice CLI 主要命令、位置参数、选项参数的字典（`init` / `status` / `context` / `search` / `link` / `unlink` / `project` / `task` / `spec` / `scan` / `sync` / `user` / `config` / `doctor` / `rag`）+ 需要 `-f / --force` 跳过二次确认的命令清单。
+>
+> **使用方式**：本文是 *查阅式* 参考，仅在你已经从流程文档选定要调的命令、但需要查询它的参数拼写 / 默认值 / 互斥选项时才读。**不要把本文作为从 0 起步的学习入口**。
+>
+> **什么时候不该读本文**：
+> - 不知道该调哪个命令 → 读流程文档（[task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [project-context.md](project-context.md) / [project-discovery.md](project-discovery.md)）
+> - 想了解什么时候该打 checkpoint → [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)
+> - 想了解什么时候该动 spec → [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)
+> - 想了解项目身份识别 / 多路径绑定 / 项目关系 → [project-discovery.md](project-discovery.md)
+>
+> 本文不复述强制规则（以 lattice-rules.md 为准）与输出原则（以 SKILL.md 为准）。
 
 ## 通用约定：`-f, --force` 跳过二次确认
 
@@ -131,6 +141,8 @@
 
 ### `lattice project relation add <project-a> <project-b>`
 
+> 语义与触发条件：见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)。AI 推断的关系必须带 `--ai-inferred` + `--from-task`。
+
 - `<project-a>`：项目 A的 ID
 - `<project-b>`：项目 B 的 ID
 - `--type <type>`：关系类型，默认 `related`（常用：forked-from / depends-on / shares-component / nested-in / related）
@@ -221,6 +233,8 @@
 
 ### `lattice task checkpoint <id>`
 
+> 语义与触发条件：见 [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)。
+
 - `<id>`：任务 ID，支持前缀匹配
 - `--type <type>`：检查点类型，必填。可选值：`decision` / `issue` / `pivot` / `summary` / `milestone` / `note`
 - `--title <title>`：检查点标题，必填
@@ -236,6 +250,8 @@
 - `--json`：以 JSON 输出
 
 ### `lattice task associate <id>`
+
+> 语义与触发条件：见 [project-discovery.md#任务的项目集合与路径集合](project-discovery.md#任务的项目集合与路径集合) 与 [task-workflows.md#项目关联同步](task-workflows.md#项目关联同步)。
 
 为任务关联项目或路径（路径智能识别：high 置信度则进 projects，否则进 scopePaths）。
 
@@ -254,6 +270,8 @@
 Spec 管理。
 
 ### `lattice spec list`
+
+> 语义与触发条件：见 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)。
 
 - `--scope <scope>`：限制层级为 `project` / `user` / `global`
 - `--tag <tag>`：按标签过滤

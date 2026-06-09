@@ -1,6 +1,11 @@
 # /lattice/context
 
 > **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+>
+> **[依赖 skill 子文档]**（本命令期间会 read 的 skill 子文档）：
+> - `project-context.md`：进入项目默认动作 / 嵌套项目继承 / 跨用户聚合 / 输出要求
+> - `spec-workflows.md`：按任务主题精读相关 spec
+> - `project-discovery.md`（按需）：当前目录未注册时如何走 `lattice link`
 
 **目标**：快速获取当前项目或当前任务的高信号上下文，作为后续实现和分析的起点。
 

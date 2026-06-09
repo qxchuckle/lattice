@@ -1,6 +1,12 @@
 # /lattice/task/query
 
 > **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+>
+> **[依赖 skill 子文档]**（本命令期间会按需 read 的 skill 子文档）：
+> - `project-context.md`：项目 / 任务上下文查询
+> - `task-workflows.md`：任务状态 / 进展 / checkpoint 查询语义
+> - `command-reference.md`：CLI 参数字典
+> - `subagent-delegation.md`（可选）：多词多类型并行调研场景下委派给 subagent
 
 **目标**：纯信息查询模式 —— 回答用户关于项目、任务、进展的提问，**不修改任何文件、不创建任务**。
 

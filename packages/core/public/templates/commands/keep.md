@@ -3,6 +3,12 @@
 > 保持 Lattice 工作流的轻量提示器。可在连续对话中频繁使用。
 >
 > 默认不跑多条 CLI、不写文件、不输出长表格。仅在自检发现真实漂移时按需补救。
+>
+> **[依赖 skill 子文档]**（本命令期间按需 read，不要全量加载）：
+> - `SKILL.md`：导航 + 起手契约（默认必读）
+> - `lattice-rules.md`：实施期循环 / checkpoint 时机 / spec 更新硬规则
+> - `task-workflows.md`：任务身份不明 / 实施期循环模糊 / checkpoint 触发条件不明
+> - `spec-workflows.md`：spec 清单不记得 / spec 层级与冲突不明
 
 ## 用法
 
@@ -24,7 +30,7 @@
 5. **漂移盘点**：上次 checkpoint 后有未记录改动？对话已确定的目标 / 范围 / 约束 / 方案变更已同步 PRD？
    - 未记录改动 → `lattice task checkpoint` 立即补打
    - PRD 漂移 → `search_replace` 同步 PRD + 补 `decision` / `pivot` checkpoint
-   - checkpoint 类型 / 触发条件不确定 → 读 `task-workflows.md`
+   - checkpoint 类型 / 触发条件不确定 → 读 `task-workflows.md` 「checkpoint 类型与触发条件」
 
 > 本命令仅校验 spec **清单**是否记得；spec **内容**认知丢失到无法判断行为合规性，属严重漂移，走升级路径。
 
