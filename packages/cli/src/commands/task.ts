@@ -47,13 +47,23 @@ import type {
 import { logger, outputJson, resolveCurrentProject, shouldSkipConfirm } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
+// 检查点类型按信息源三分（详见 core/types CheckpointType 注释）
+// A 区 用户输入 / B 区 AI 自我 / C 区 进程事件
 const CHECKPOINT_TYPES: CheckpointType[] = [
-  'decision',
-  'issue',
-  'pivot',
-  'summary',
-  'milestone',
+  // A 区 · 用户输入
+  'context',
+  'correction',
+  'constraint',
+  // B 区 · AI 自我
+  'assumption',
+  'followup',
   'note',
+  // C 区 · 进程事件
+  'decision',
+  'pivot',
+  'milestone',
+  'issue',
+  'summary',
 ];
 
 async function resolveCurrentProjectId(): Promise<string | null> {
@@ -816,12 +826,20 @@ export function registerTaskCommand(program: Command): void {
         }
 
         const typeIcon: Record<string, string> = {
-          decision: '🎯',
-          issue: '⚠️',
-          pivot: '🔄',
-          summary: '📝',
-          milestone: '🏁',
+          // A 区 · 用户输入
+          context: '📥',
+          correction: '🔧',
+          constraint: '🚧',
+          // B 区 · AI 自我
+          assumption: '💭',
+          followup: '⏭️',
           note: '📌',
+          // C 区 · 进程事件
+          decision: '🎯',
+          pivot: '🔄',
+          milestone: '🏁',
+          issue: '⚠️',
+          summary: '📝',
         };
 
         logger.raw(chalk.blue(`\n任务「${match.title}」的进展记录（共 ${entries.length} 条）：\n`));

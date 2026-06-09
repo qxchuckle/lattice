@@ -77,8 +77,40 @@ export interface TaskTreeNode {
   nextTasks: TaskTreeNode[];
 }
 
-/** 检查点类型 */
-export type CheckpointType = 'decision' | 'issue' | 'pivot' | 'summary' | 'milestone' | 'note';
+/**
+ * 检查点类型（11 类，按信息来源分三组）
+ *
+ * 用户输入类（3）——用户在对话中主动提供的信息
+ * - context：背景·需求·场景·业务领域信息
+ * - correction：对已做之事的纠正（3段：做错了什么 / 为什么错 / 正确做法）
+ * - constraint：边界·约束·禁区
+ *
+ * AI 判断类（3）——AI 自身产生的推断与记录
+ * - assumption：用户未明说时 AI 做出的关键推断
+ * - followup：识别出但主动延后的事项
+ * - note：从代码·环境·工具调用获得的客观事实（亦作颗粒度兜底）
+ *
+ * 进程事件类（5）——任务推进中发生的客观事件
+ * - decision：中性拍板某选项
+ * - pivot：原方向被推翻
+ * - milestone：阶段性成果通过验证
+ * - issue：已发生的问题·踩坑
+ * - summary：任务收尾总结
+ *
+ * 设计原则：多类型是互补记录信息，不是重复记录。单条输入常需多类型并发打点。
+ */
+export type CheckpointType =
+  | 'context'
+  | 'correction'
+  | 'constraint'
+  | 'assumption'
+  | 'followup'
+  | 'note'
+  | 'decision'
+  | 'pivot'
+  | 'milestone'
+  | 'issue'
+  | 'summary';
 
 /** 检查点条目，存储在 progress.yaml */
 export interface CheckpointEntry {

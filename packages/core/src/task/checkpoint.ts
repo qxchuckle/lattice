@@ -4,13 +4,30 @@ import type { CheckpointEntry, CheckpointType, ProgressFile } from '../types';
 import { getTaskProgressPath, readText, writeText, fileExists } from '../paths';
 import { nowISO } from '../utils/time';
 
-const VALID_TYPES: CheckpointType[] = [
+/**
+ * 检查点有效类型表（按信息源三分）
+ * 详细说明见 packages/core/src/types/index.ts 的 CheckpointType 注释。
+ */
+
+/** 用户输入类：用户在对话中主动提供的信息 */
+const USER_INPUT_TYPES: CheckpointType[] = ['context', 'correction', 'constraint'];
+
+/** AI 判断类：AI 自身产生的推断与记录 */
+const AI_SELF_TYPES: CheckpointType[] = ['assumption', 'followup', 'note'];
+
+/** 进程事件类：任务推进中发生的客观事件 */
+const PROCESS_EVENT_TYPES: CheckpointType[] = [
   'decision',
-  'issue',
   'pivot',
-  'summary',
   'milestone',
-  'note',
+  'issue',
+  'summary',
+];
+
+const VALID_TYPES: CheckpointType[] = [
+  ...USER_INPUT_TYPES,
+  ...AI_SELF_TYPES,
+  ...PROCESS_EVENT_TYPES,
 ];
 
 /** 生成检查点 ID：cp_<8位随机hex> */
