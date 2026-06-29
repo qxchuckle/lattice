@@ -97,7 +97,10 @@ export function registerTaskCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('列出任务')
-    .option('--status <status>', '按状态过滤（planning / in_progress / completed / archived）')
+    .option(
+      '--status <status>',
+      '按状态过滤（planning / in_progress / completed / archived / all）',
+    )
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目')
     .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
@@ -108,6 +111,10 @@ export function registerTaskCommand(program: Command): void {
       try {
         const username = await getUsername();
         await initDb();
+
+        // --status all 视为不过滤
+        const statusFilter =
+          opts.status && opts.status !== 'all' ? (opts.status as TaskStatus) : undefined;
 
         let projectId = opts.project as string | undefined;
         if (opts.current) {
@@ -159,7 +166,7 @@ export function registerTaskCommand(program: Command): void {
         if (crossUserMode && projectId) {
           // 跨用户模式
           const tasks: TaskMetaWithSource[] = await listTasksCrossUser(username, projectId, {
-            status: opts.status as TaskStatus | undefined,
+            status: statusFilter,
             usernames: filterUsernames,
           });
           closeDb();
@@ -195,7 +202,7 @@ export function registerTaskCommand(program: Command): void {
         } else {
           // 单用户模式（原逻辑）
           const tasks = await listTasks(username, {
-            status: opts.status as TaskStatus | undefined,
+            status: statusFilter,
             projectId,
           });
 

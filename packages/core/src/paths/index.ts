@@ -147,6 +147,16 @@ export async function dirExists(dirPath: string): Promise<boolean> {
   }
 }
 
+/** 获取文件 mtime（毫秒时间戳），失败返回 null */
+export async function getFileMtime(filePath: string): Promise<number | null> {
+  try {
+    const s = await stat(filePath);
+    return s.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 export async function readJSON<T>(filePath: string): Promise<T | null> {
   try {
     const content = await readFile(filePath, 'utf-8');

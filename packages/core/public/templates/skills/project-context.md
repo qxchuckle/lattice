@@ -58,7 +58,7 @@ lattice context --task <id>
 
 ## 项目关系
 
-> 何时读：工作涉及多个项目 / 共享组件 / 跨仓库依赖时 → 下一步：发现未记录的依赖 / 协作 → 跳到 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断) 看如何主动补充关系。
+> 何时读：工作涉及多个项目 / 共享组件 / 跨仓库依赖时，或 `lattice context` 输出“关联项目”段为空但有多个已注册项目时 → 下一步：发现未记录的依赖 / 协作 → 跳到 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断) 记录关系。
 
 工作涉及多个项目、共享组件或跨仓库依赖时：
 
@@ -67,7 +67,20 @@ lattice project list --with-relations
 lattice project relation list <id>
 ```
 
-如果发现项目间存在未记录的依赖或协作关系，主动建议添加（详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）。
+发现项目间存在未记录的依赖或协作关系时，**必须记录**，不要仅“建议添加”：
+
+```bash
+lattice project relation add <a> <b> --type <type> \
+  --description "证据描述" --ai-inferred --from-task <task-id>
+```
+
+典型触发场景：
+
+- 任务关联了多个项目（`task.json` 的 `projects` 有多个）
+- 在 PRD / 指纹里看到跨项目证据（共享 git first commit、package.json 依赖、monorepo 包名）
+- `lattice context` 输出“关联项目”段为空但本地有多个已注册项目
+
+关系类型判定指引详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)。
 
 ## 跨用户聚合
 

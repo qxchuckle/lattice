@@ -99,8 +99,9 @@ AI 判断类、进程事件类不直接触发 spec 沉淀，但 `issue` + 解决
 2. **查已有 spec**：`lattice spec show <相关文件>`，优先补充而非重复创建
 3. **冲突检测**：读取同层级及上下层级已有 spec，判断语义矛盾，发现冲突告知用户
 4. **写入**：一个文件聚焦一个主题；写具体可执行的内容；包含完整操作步骤和经验细节；user / global 带 `## 适用范围`
-5. **二次审阅**：对照 PRD + progress + 对话检查有无遗漏
-6. **索引更新**：`lattice rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）
+5. **元数据刷新**：直接编辑 spec 正文后，运行 `lattice spec migrate` 刷新 frontmatter（自动补 `id`、刷新 `updated`）；仅改 frontmatter 字段时用 `lattice spec set <file> --title/--description/--add-tag`
+6. **二次审阅**：对照 PRD + progress + 对话检查有无遗漏
+7. **索引更新**：`lattice rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）
 
 ## 模板命令
 

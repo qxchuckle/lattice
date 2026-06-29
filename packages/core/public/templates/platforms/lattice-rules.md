@@ -12,7 +12,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 2. 按当前主题精读相关 spec（`lattice context` 输出只是标题列表，看到标题不等于了解内容；→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
 3. 有活跃任务 → `lattice task info <id>` + `lattice task progress <id>` + read_file design.md（如存在；→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 用户提到"规范/之前/类似/历史/跨项目" → 先 `lattice search <query> --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)）
-5. 需求横跨多仓库 → `lattice project list --with-relations`（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
+5. 需求横跨多仓库 → `lattice project list --with-relations` 查看现有关系；发现未记录的依赖 / 协作关系 → 用 `lattice project relation add --ai-inferred --from-task <task-id>` 记录（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
 
 ## 二、Design 模式约束
 
@@ -37,7 +37,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 **强制规则**：
 
-1. PRD 硬触发清单命中 → 先改 PRD 再改代码（→ [task-workflows.md#prd-同步硬触发清单t1t7](task-workflows.md#prd-同步硬触发清单t1t7)）
+1. PRD 硬触发清单命中 → 先改 PRD 再改代码（→ [task-workflows.md#prd-同步硬触发清单t1t8](task-workflows.md#prd-同步硬触发清单t1t8)）
 2. 写代码前 / 打 checkpoint 前 / complete 前 / 用户推翻方案后，各有必做动作（→ [task-workflows.md#写代码前的动作锚点](task-workflows.md#写代码前的动作锚点) / [task-workflows.md#打-checkpoint-前的-prd-自检](task-workflows.md#打-checkpoint-前的-prd-自检)）
 3. 新主题先精读相关 spec（→ [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件)）
 4. 代码改完必须打 checkpoint（→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）
@@ -61,7 +61,11 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 ## 四、项目关联同步
 
-任务 start 后，实时维护 `task.json` 的 `projects` / `scopePaths`（→ [task-workflows.md#项目关联同步](task-workflows.md#项目关联同步)）。
+任务 start 后，实时维护 `task.json` 的 `projects` / `scopePaths` / spec 引用（→ [task-workflows.md#项目关联同步](task-workflows.md#项目关联同步)）。
+
+**task.json 的结构化字段是机器可读元数据的唯一来源，PRD 中的自然语言描述不能替代 CLI 记录。** 在 PRD 中写入了项目路径 / 包名 / spec 引用时，必须同时用 `lattice task associate` / `lattice task ref-spec` 记录到 task.json（命中 PRD 同步硬触发 T8；→ [task-workflows.md#prd-同步硬触发清单t1t8](task-workflows.md#prd-同步硬触发清单t1t8)）。
+
+同时维护项目间关系（`relations.json`）：任务涉及多个已注册项目时，检查 `lattice project list --with-relations` 中是否已有对应关系记录；发现未记录的 fork / 依赖 / 共享组件等关系 → 用 `lattice project relation add --ai-inferred --from-task <task-id>` 记录（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）。
 
 ## 五、上下文压缩失忆恢复
 
@@ -89,7 +93,8 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 3. summary checkpoint（→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）
 4. `lattice rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）
 5. spec 沉淀判定（→ [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
-6. 二次审阅（→ [task-workflows.md#归档后的二次审阅与-spec-沉淀判定](task-workflows.md#归档后的二次审阅与-spec-沉淀判定)）
+6. 项目关系审查：任务中是否发现了未记录的项目间关系 → 补充 `lattice project relation add`（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
+7. 二次审阅（→ [task-workflows.md#归档后的二次审阅与-spec-沉淀判定](task-workflows.md#归档后的二次审阅与-spec-沉淀判定)）
 
 ## 七、Spec 优先级与冲突
 
@@ -110,6 +115,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 - 打 checkpoint 前不做 PRD 自检
 - design 模式下改业务代码
 - 忽视上下文压缩信号
+- 编辑 spec 正文后不刷新 frontmatter（应运行 `lattice spec migrate`，→ [spec-workflows.md#写入流程](spec-workflows.md#写入流程)）
 
 **[归档]**
 

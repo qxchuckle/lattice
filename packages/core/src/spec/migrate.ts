@@ -3,7 +3,7 @@ import { writeSpec, normalizeSpecFrontmatter } from './io';
 import { isValidSpecId } from './id';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from './cascade';
 import { getUsername } from '../config';
-import { getProjectSpecDir, getUserSpecDir, getGlobalSpecDir } from '../paths';
+import { getProjectSpecDir, getUserSpecDir, getGlobalSpecDir, getFileMtime } from '../paths';
 
 export interface MigrateResult {
   /** 成功 backfill 的 spec */
@@ -28,7 +28,7 @@ export interface MigrateOptions {
 /**
  * 批量迁移历史 spec：
  * - 自动补 id（如缺失或非法格式）
- * - 自动补 updated（取当前日期）
+ * - 自动刷新 updated（如缺失或文件 mtime 晚于 updated，说明被外部编辑过）
  * - 自动补 title（从首 H1 或文件名 fallback）
  * - **不自动补 description**（仅报告缺失，引导用户手动补）
  */
@@ -68,8 +68,20 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
       const needsDescription =
         !fm.description || (typeof fm.description === 'string' && fm.description.trim() === '');
 
-      if (!needsId && !needsTitle) {
-        // id 和 title 都有，不需要迁移（description 只报告）
+      // 检测 updated 是否过期：缺失，或文件 mtime 晚于 updated（说明被外部编辑过）
+      let needsUpdated = false;
+      if (!fm.updated || typeof fm.updated !== 'string') {
+        needsUpdated = true;
+      } else {
+        const updatedMs = Date.parse(fm.updated);
+        const mtimeMs = await getFileMtime(spec.filePath);
+        if (!isNaN(updatedMs) && mtimeMs !== null && mtimeMs > updatedMs + 1000) {
+          needsUpdated = true;
+        }
+      }
+
+      if (!needsId && !needsTitle && !needsUpdated) {
+        // id / title / updated 都正常，不需要迁移（description 只报告）
         if (needsDescription) {
           result.needsDescription.push(spec.filePath);
         }
@@ -79,6 +91,7 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
 
       // 需要迁移
       if (needsId) addedFields.push('id');
+      if (needsUpdated) addedFields.push('updated');
       if (needsTitle) {
         // 从正文首个 H1 取 title fallback
         const h1Match = spec.content.match(/^#\s+(.+)$/m);

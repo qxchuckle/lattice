@@ -44,7 +44,7 @@ lattice context --task <task-id>
 
 ### 步骤 1：PRD 同步硬触发检查（命中即先改 PRD）
 
-本轮是否命中 skill `task-workflows.md` 「PRD 同步硬触发清单（T1~T7）」中的 T1~T7 任一项？
+本轮是否命中 skill `task-workflows.md` 「PRD 同步硬触发清单（T1~T8）」中的 T1~T8 任一项？
 
 - **是** → 必须先 `read_file prd.md` → `search_replace prd.md` 修订对应段落 → 打 decision/pivot checkpoint → 才进入下一步
 - **否** → 跳过，进入步骤 2

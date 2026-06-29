@@ -80,7 +80,7 @@ lattice context --task <task-id>
 ```
 用户输入
   ↓
-步骤 1：PRD 同步硬触发清单（T1~T7）命中任意一项？
+步骤 1：PRD 同步硬触发清单（T1~T8）命中任意一项？
   └─ 是：read_file prd.md → search_replace prd.md → 打 decision/pivot checkpoint → 才进入下一步
   ↓
 步骤 2：spec 选读触发条件命中？
@@ -91,7 +91,7 @@ lattice context --task <task-id>
 步骤 4：打 checkpoint（打点前必过 PRD 自检）
 ```
 
-### PRD 同步硬触发清单（T1~T7）
+### PRD 同步硬触发清单（T1~T8）
 
 > 步骤 1 判断本轮是否命中。命中即先 `read_file prd.md` → `search_replace prd.md` 修订对应段落 → 打 decision / pivot checkpoint → 才进入下一步。
 
@@ -104,6 +104,7 @@ lattice context --task <task-id>
 | T5 | 发现意料外的兼容性 / 边界 / 迁移问题 |
 | T6 | 引入新依赖 / 模块边界 / 跨包调用 |
 | T7 | 准备打 milestone checkpoint |
+| T8 | 在 PRD 中写入了项目路径 / 包名 / spec 引用，但 task.json 的 projects / scopePaths / spec 引用未同步 |
 
 ### spec 选读触发条件
 
@@ -132,7 +133,7 @@ lattice context --task <task-id>
 
 - 本轮改动的文件是否已在 PRD 文件索引中
 - 本轮决策是否已写入 PRD「当前方案」段
-- 是否命中硬触发清单（T1~T7）但 PRD 未同步
+- 是否命中硬触发清单（T1~T8）但 PRD 未同步
 
 命中即先改 PRD 再打点。checkpoint 是追加型过程日志，不能替代 PRD；决策必须同时写入 PRD 和 checkpoint。
 
@@ -214,7 +215,47 @@ lattice task associate <task-id> --paths <path>
 lattice task associate <task-id> --project <project-id>
 ```
 
-静默执行，只有关联了用户可能未预期的项目时才输出说明。
+发现任务涉及新路径 / 新项目时当轮执行，不延后。只有关联了用户可能未预期的项目时才输出说明。
+
+### spec 引用同步
+
+实施时参照了某 spec → 用 `lattice task ref-spec` 记录到 task.json：
+
+```bash
+lattice task ref-spec <task-id> <spec-name>     # 支持文件名 / 标题模糊匹配
+lattice task unref-spec <task-id> <spec-id>      # 移除引用
+```
+
+### 元数据与 PRD 一致性
+
+**task.json 的 `projects` / `scopePaths` / spec 引用是机器可读的结构化元数据，PRD 中的自然语言描述不能替代 CLI 记录。** 当在 PRD 中写入了以下信息时，必须同时用 CLI 记录到 task.json：
+
+| PRD 中写入的内容 | 必须执行的 CLI 命令 |
+|---|---|
+| 工作目录 / 文件路径 | `lattice task associate <task-id> --paths <path>` |
+| 关联的项目名称 / ID | `lattice task associate <task-id> --project <project-id>` |
+| 参照的 spec 名称 | `lattice task ref-spec <task-id> <spec-name>` |
+
+### 项目间关系记录
+
+任务涉及多个已注册项目时，检查项目间是否已有关系记录，无则推断并添加：
+
+```bash
+lattice project relation list <project-id>   # 查看当前项目已有关系
+lattice project relation add <a> <b> --type <type> \
+  --description "证据描述" --ai-inferred --from-task <task-id>
+```
+
+常见判定证据（详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）：
+
+| 现象 | 关系类型 |
+|------|----------|
+| 两项目共享 git first commit / fork | `forked-from` |
+| package.json 中 A 直接 dependencies 引用 B | `depends-on` |
+| 多项目共用同一 monorepo 包 | `shares-component` |
+| 同组织相邻仓库，无强证据 | `related` |
+
+发现关系后当轮记录，不延后到归档。
 
 ## 任务归档前置信息采集
 
@@ -259,6 +300,7 @@ lattice task archive <task-id>
 - 关键决策是否全部体现在 PRD 或 checkpoint
 - 是否有遗漏改动
 - 经验是否已判断要不要沉淀为 spec（见 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
+- 任务中是否发现了未记录的项目间关系 → 补充 `lattice project relation add`（详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
 
 发现遗漏立即补充 + `lattice rag update`。
 

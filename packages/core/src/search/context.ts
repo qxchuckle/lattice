@@ -437,6 +437,11 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
       lines.push(`- **${p.name}** — ${relStrs.join(' / ')}`);
     }
     lines.push('');
+  } else {
+    lines.push('## 关联项目\n');
+    lines.push(
+      '暂无记录。如涉及多项目协作，可运行 `lattice project relation add` 记录项目间关系。\n',
+    );
   }
 
   // 跨用户聚合数据
