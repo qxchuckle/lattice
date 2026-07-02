@@ -6,6 +6,8 @@ import {
   FolderOutlined,
   FileTextOutlined,
   AimOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
@@ -164,8 +166,6 @@ export function TreeBrowserSidebar() {
   const { tree, loading } = useTreeData();
   const [activeTab, setActiveTab] = useState<'search' | 'filter'>('search');
 
-  if (collapsed) return null;
-
   const handleToggle = (key: string) => {
     sidebarStore.expandedKeys[key] = !expandedKeys[key];
   };
@@ -193,242 +193,283 @@ export function TreeBrowserSidebar() {
   });
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        bottom: 12,
-        width: 260,
-        zIndex: 20,
-        background: 'var(--bg-secondary)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid var(--border)',
-        borderRadius: 12,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-      }}
-      className='sidebar-transition'>
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-        <div style={tabStyle(activeTab === 'search')} onClick={() => setActiveTab('search')}>
-          搜索
-        </div>
-        <div style={tabStyle(activeTab === 'filter')} onClick={() => setActiveTab('filter')}>
-          筛选
-        </div>
-      </div>
-
-      {activeTab === 'search' && (
-        <>
-          <div style={{ padding: 8 }}>
-            <Input.Search
-              id='sidebar-search-input'
-              size='small'
-              placeholder='搜索 spec/项目/任务...'
-              defaultValue=''
-              onChange={(e) => {
-                sidebarStore.searchKeyword = e.target.value;
-              }}
-              allowClear
-            />
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          bottom: 12,
+          width: 260,
+          zIndex: 20,
+          background: 'var(--bg-secondary)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        }}
+        className={`sidebar-transition${collapsed ? ' sidebar-transition--hidden' : ''}`}>
+        <Button
+          size='small'
+          type='text'
+          icon={<MenuFoldOutlined />}
+          onClick={() => {
+            sidebarStore.collapsed = true;
+          }}
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            zIndex: 30,
+            borderRadius: '50%',
+          }}
+        />
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+          <div style={tabStyle(activeTab === 'search')} onClick={() => setActiveTab('search')}>
+            搜索
           </div>
-          <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 8px' }}>
-            {loading && <Skeleton active paragraph={{ rows: 6 }} />}
-            {!loading && isSearching && searchResult.isLoading && <Skeleton active />}
-            {!loading && isSearching && searchItems.length === 0 && !searchResult.isLoading && (
-              <Empty description='无搜索结果' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            )}
-            {!loading && !isSearching && filteredTree.length === 0 && (
-              <Empty description='暂无数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            )}
-            {!loading && isSearching && searchItems.length > 0 && (
+          <div style={tabStyle(activeTab === 'filter')} onClick={() => setActiveTab('filter')}>
+            筛选
+          </div>
+        </div>
+
+        {activeTab === 'search' && (
+          <>
+            <div style={{ padding: 8 }}>
+              <Input.Search
+                id='sidebar-search-input'
+                size='small'
+                placeholder='搜索 spec/项目/任务...'
+                defaultValue=''
+                onChange={(e) => {
+                  sidebarStore.searchKeyword = e.target.value;
+                }}
+                allowClear
+              />
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 8px' }}>
+              {loading && <Skeleton active paragraph={{ rows: 6 }} />}
+              {!loading && isSearching && searchResult.isLoading && <Skeleton active />}
+              {!loading && isSearching && searchItems.length === 0 && !searchResult.isLoading && (
+                <Empty description='无搜索结果' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+              {!loading && !isSearching && filteredTree.length === 0 && (
+                <Empty description='暂无数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+              {!loading && isSearching && searchItems.length > 0 && (
+                <>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)',
+                      marginBottom: 4,
+                    }}>
+                    搜索结果 ({searchItems.length})
+                  </div>
+                  {searchItems.map((node) => (
+                    <TreeItem
+                      key={node.key}
+                      node={node}
+                      depth={0}
+                      expandedKeys={{}}
+                      onToggle={() => {}}
+                      onNavigate={handleNavigate}
+                    />
+                  ))}
+                  {filteredTree.length > 0 && (
+                    <>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: 'var(--text-secondary)',
+                          margin: '8px 0 4px',
+                        }}>
+                        浏览器匹配
+                      </div>
+                      {filteredTree.map((node) => (
+                        <TreeItem
+                          key={node.key}
+                          node={node}
+                          depth={0}
+                          expandedKeys={Object.fromEntries(
+                            Object.keys(expandedKeys).map((k) => [k, true]),
+                          )}
+                          onToggle={handleToggle}
+                          onNavigate={handleNavigate}
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+              {!loading &&
+                !isSearching &&
+                filteredTree.map((node) => (
+                  <TreeItem
+                    key={node.key}
+                    node={node}
+                    depth={0}
+                    expandedKeys={expandedKeys as Record<string, boolean>}
+                    onToggle={handleToggle}
+                    onNavigate={handleNavigate}
+                  />
+                ))}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'filter' && (
+          <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: 4,
+              }}>
+              节点类型
+            </div>
+            <Checkbox
+              checked={allNodesChecked}
+              indeterminate={
+                !allNodesChecked && nodeLegendItems.some((item) => visibleTypes[item.key])
+              }
+              onChange={(e) =>
+                nodeLegendItems.forEach((item) => {
+                  canvasStore.visibleTypes[item.key] = e.target.checked;
+                })
+              }
+              style={{ fontSize: 11, marginBottom: 2 }}>
+              全选
+            </Checkbox>
+            {nodeLegendItems.map((item) => (
+              <Checkbox
+                key={item.key}
+                checked={!!visibleTypes[item.key]}
+                onChange={(e) => {
+                  canvasStore.visibleTypes[item.key] = e.target.checked;
+                }}
+                style={{ fontSize: 11, marginLeft: 8 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 8,
+                    height: 8,
+                    borderRadius: 2,
+                    background: item.color,
+                    marginRight: 4,
+                    verticalAlign: 'middle',
+                  }}
+                />
+                {item.label}
+              </Checkbox>
+            ))}
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                margin: '10px 0 4px',
+              }}>
+              边类型
+            </div>
+            <Checkbox
+              checked={allEdgesChecked}
+              indeterminate={
+                !allEdgesChecked && edgeLegendItems.some((item) => visibleEdgeTypes[item.key])
+              }
+              onChange={(e) =>
+                edgeLegendItems.forEach((item) => {
+                  canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+                })
+              }
+              style={{ fontSize: 11, marginBottom: 2 }}>
+              全选
+            </Checkbox>
+            {edgeLegendItems.map((item) => (
+              <Checkbox
+                key={item.key}
+                checked={!!visibleEdgeTypes[item.key]}
+                onChange={(e) => {
+                  canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+                }}
+                style={{ fontSize: 11, marginLeft: 8 }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 8,
+                    height: 3,
+                    borderRadius: 1,
+                    background: item.color,
+                    marginRight: 4,
+                    verticalAlign: 'middle',
+                  }}
+                />
+                <span>{item.label}</span>
+                <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
+                  {item.desc}
+                </span>
+              </Checkbox>
+            ))}
+            {selectedNodeId && (
               <>
                 <div
                   style={{
                     fontSize: 11,
                     fontWeight: 600,
                     color: 'var(--text-secondary)',
-                    marginBottom: 4,
+                    margin: '10px 0 4px',
                   }}>
-                  搜索结果 ({searchItems.length})
+                  聚焦深度
                 </div>
-                {searchItems.map((node) => (
-                  <TreeItem
-                    key={node.key}
-                    node={node}
-                    depth={0}
-                    expandedKeys={{}}
-                    onToggle={() => {}}
-                    onNavigate={handleNavigate}
-                  />
-                ))}
-                {filteredTree.length > 0 && (
-                  <>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: 'var(--text-secondary)',
-                        margin: '8px 0 4px',
-                      }}>
-                      浏览器匹配
-                    </div>
-                    {filteredTree.map((node) => (
-                      <TreeItem
-                        key={node.key}
-                        node={node}
-                        depth={0}
-                        expandedKeys={Object.fromEntries(
-                          Object.keys(expandedKeys).map((k) => [k, true]),
-                        )}
-                        onToggle={handleToggle}
-                        onNavigate={handleNavigate}
-                      />
-                    ))}
-                  </>
-                )}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {focusDepthOptions.map((opt) => (
+                    <Button
+                      key={opt.value}
+                      size='small'
+                      type={focusDepth === opt.value ? 'primary' : 'text'}
+                      onClick={() => {
+                        canvasStore.focusDepth = opt.value;
+                      }}
+                      style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
               </>
             )}
-            {!loading &&
-              !isSearching &&
-              filteredTree.map((node) => (
-                <TreeItem
-                  key={node.key}
-                  node={node}
-                  depth={0}
-                  expandedKeys={expandedKeys as Record<string, boolean>}
-                  onToggle={handleToggle}
-                  onNavigate={handleNavigate}
-                />
-              ))}
           </div>
-        </>
-      )}
-
-      {activeTab === 'filter' && (
-        <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              marginBottom: 4,
-            }}>
-            节点类型
-          </div>
-          <Checkbox
-            checked={allNodesChecked}
-            indeterminate={
-              !allNodesChecked && nodeLegendItems.some((item) => visibleTypes[item.key])
-            }
-            onChange={(e) =>
-              nodeLegendItems.forEach((item) => {
-                canvasStore.visibleTypes[item.key] = e.target.checked;
-              })
-            }
-            style={{ fontSize: 11, marginBottom: 2 }}>
-            全选
-          </Checkbox>
-          {nodeLegendItems.map((item) => (
-            <Checkbox
-              key={item.key}
-              checked={!!visibleTypes[item.key]}
-              onChange={(e) => {
-                canvasStore.visibleTypes[item.key] = e.target.checked;
-              }}
-              style={{ fontSize: 11, marginLeft: 8 }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: 8,
-                  borderRadius: 2,
-                  background: item.color,
-                  marginRight: 4,
-                  verticalAlign: 'middle',
-                }}
-              />
-              {item.label}
-            </Checkbox>
-          ))}
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              margin: '10px 0 4px',
-            }}>
-            边类型
-          </div>
-          <Checkbox
-            checked={allEdgesChecked}
-            indeterminate={
-              !allEdgesChecked && edgeLegendItems.some((item) => visibleEdgeTypes[item.key])
-            }
-            onChange={(e) =>
-              edgeLegendItems.forEach((item) => {
-                canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-              })
-            }
-            style={{ fontSize: 11, marginBottom: 2 }}>
-            全选
-          </Checkbox>
-          {edgeLegendItems.map((item) => (
-            <Checkbox
-              key={item.key}
-              checked={!!visibleEdgeTypes[item.key]}
-              onChange={(e) => {
-                canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-              }}
-              style={{ fontSize: 11, marginLeft: 8 }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: 3,
-                  borderRadius: 1,
-                  background: item.color,
-                  marginRight: 4,
-                  verticalAlign: 'middle',
-                }}
-              />
-              <span>{item.label}</span>
-              <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
-                {item.desc}
-              </span>
-            </Checkbox>
-          ))}
-          {selectedNodeId && (
-            <>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
-                  margin: '10px 0 4px',
-                }}>
-                聚焦深度
-              </div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {focusDepthOptions.map((opt) => (
-                  <Button
-                    key={opt.value}
-                    size='small'
-                    type={focusDepth === opt.value ? 'primary' : 'text'}
-                    onClick={() => {
-                      canvasStore.focusDepth = opt.value;
-                    }}
-                    style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
-                    {opt.label}
-                  </Button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          zIndex: 20,
+          width: 32,
+          height: 48,
+          background: 'var(--bg-secondary)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+        }}
+        className={`sidebar-collapsed-btn${collapsed ? '' : ' sidebar-collapsed-btn--hidden'}`}
+        onClick={() => {
+          sidebarStore.collapsed = false;
+        }}>
+        <MenuUnfoldOutlined style={{ fontSize: 14 }} />
+      </div>
+    </>
   );
 }

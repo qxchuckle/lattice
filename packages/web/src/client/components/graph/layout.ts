@@ -1,6 +1,29 @@
 import type cytoscape from 'cytoscape';
-import type { LayoutMode } from '../../store';
+import { canvasStore, type LayoutMode } from '../../store';
 import { runRadialLayout } from './radial-layout';
+import { runSequentialLayout } from './sequential-layout';
+import { resolveOverlapsContinuous } from './overlap-resolution';
+
+// ── 确定性渲染：seeded LCG PRNG 临时替换 Math.random ──
+
+const LAYOUT_SEED = 42;
+
+/**
+ * fCoSE 源码直接调用 Math.random()（spectral 采样 + 初始向量），
+ * 不支持 Cytoscape 的 seed 参数。用 seeded LCG 临时替换使其确定性。
+ * 返回恢复函数，需在 layoutstop 后调用。
+ */
+function seedMathRandom(seed: number): () => void {
+  const original = Math.random;
+  let state = seed >>> 0;
+  Math.random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  return () => {
+    Math.random = original;
+  };
+}
 
 /** 布局配置：支持力导向 / 顺序 / 径向三种布局 */
 export function buildLayoutConfig(
@@ -61,18 +84,86 @@ export function buildLayoutConfig(
 
 /**
  * 运行布局的统一入口。
- * - 径向模式：自定义径向物理模拟（仿 GitNexus circles 视图）
- * - 力导向 / 顺序：Cytoscape 内置布局
+ * - 径向模式：自定义确定性排布（radial-layout.ts，同步）
+ * - 顺序模式：自定义按类型分层（sequential-layout.ts，同步）
+ * - 力导向：fCoSE → layoutstop → resolveOverlaps 防重叠 → fit
+ *
+ * 防御措施：
+ * 1. 运行前清理无效边（端点节点不存在），避免内置布局排序崩溃
+ * 2. sequential 失败时回退到 force
+ *
+ * onComplete 在布局（含防重叠后处理）全部完成后回调。
  */
 export function runLayout(
   cy: cytoscape.Core,
   nodeCount: number,
   layoutMode: LayoutMode = 'force',
+  onComplete?: () => void,
 ): void {
+  // 清理无效边（端点节点不存在），所有模式通用
+  const invalidEdges = cy.edges().filter((e) => e.source().length === 0 || e.target().length === 0);
+  if (invalidEdges.length > 0) {
+    invalidEdges.remove();
+  }
+
+  // 径向：preset 动画 → layoutstop → 持续防重叠 → fit
   if (layoutMode === 'radial') {
-    runRadialLayout(cy, nodeCount);
-  } else {
-    cy.layout(buildLayoutConfig(nodeCount, layoutMode)).run();
+    runRadialLayout(cy, nodeCount, () => {
+      canvasStore.layoutRunning = true;
+      resolveOverlapsContinuous(cy, {
+        maxDuration: 3000,
+        onDone: () => {
+          canvasStore.layoutRunning = false;
+          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+          onComplete?.();
+        },
+      });
+    });
+    return;
+  }
+
+  // 顺序：preset 动画 → layoutstop → 持续防重叠 → fit
+  if (layoutMode === 'sequential') {
+    try {
+      runSequentialLayout(cy, nodeCount, () => {
+        canvasStore.layoutRunning = true;
+        resolveOverlapsContinuous(cy, {
+          maxDuration: 3000,
+          onDone: () => {
+            canvasStore.layoutRunning = false;
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+            onComplete?.();
+          },
+        });
+      });
+      return;
+    } catch (e) {
+      console.warn('Sequential layout failed, falling back to force:', e);
+    }
+  }
+
+  // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit
+  const restoreRandom = seedMathRandom(LAYOUT_SEED);
+  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force'));
+
+  layout.one('layoutstop', () => {
+    restoreRandom();
+    canvasStore.layoutRunning = true;
+    resolveOverlapsContinuous(cy, {
+      maxDuration: 3000,
+      onDone: () => {
+        canvasStore.layoutRunning = false;
+        cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+        onComplete?.();
+      },
+    });
+  });
+
+  try {
+    layout.run();
+  } catch {
+    restoreRandom();
+    onComplete?.();
   }
 }
 

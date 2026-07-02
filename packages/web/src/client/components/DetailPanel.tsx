@@ -24,7 +24,6 @@ import {
   CopyOutlined,
   AimOutlined,
   FileTextOutlined,
-  FolderOutlined,
   MenuFoldOutlined,
 } from '@ant-design/icons';
 import type { ReferencedSpec, ScopePath } from '@qcqx/lattice-core';
@@ -54,6 +53,7 @@ import type {
 } from '@qcqx/lattice-core';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
+import './DetailPanel.less';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeHighlight from 'rehype-highlight';
@@ -98,29 +98,9 @@ function ScrollSpyBar({
 
   return (
     <div
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 5,
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border)',
-        padding: '4px 12px',
-        fontSize: 11,
-        fontWeight: 600,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        transition: 'background 0.2s',
-      }}
-      onClick={() => active.el?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg-tertiary)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'var(--bg-secondary)';
-      }}>
-      <span style={{ color: 'var(--brand-color)', fontSize: 10 }}>●</span>
+      className='scroll-spy-bar'
+      onClick={() => active.el?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+      <span className='scroll-spy-bar__dot'>●</span>
       {active.label}
     </div>
   );
@@ -188,36 +168,11 @@ function FilePathBar({
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 8px',
-        background: 'var(--bg-tertiary)',
-        borderRadius: 4,
-        fontSize: 11,
-        marginBottom: 8,
-      }}>
-      <span
-        className='mono'
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          color: 'var(--text-secondary)',
-        }}
-        title={finalPath}>
+    <div className='file-path-bar'>
+      <span className='mono file-path-bar__text' title={finalPath}>
         {finalPath}
       </span>
-      <Button
-        size='small'
-        type='text'
-        icon={<CopyOutlined />}
-        onClick={handleCopy}
-        style={{ fontSize: 11 }}
-      />
+      <Button size='small' type='text' icon={<CopyOutlined />} onClick={handleCopy} />
       <Dropdown.Button
         size='small'
         type='text'
@@ -226,8 +181,7 @@ function FilePathBar({
         menu={{
           items: editorMenuItems,
           onClick: ({ key }) => handleOpen(key as EditorApp),
-        }}
-        style={{ fontSize: 11 }}>
+        }}>
         <FolderOpenOutlined />
       </Dropdown.Button>
     </div>
@@ -303,49 +257,40 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
     docTabs.push({ key: 'prd', label: 'PRD', content: null, loading: true });
 
   return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
+    <div className='detail-component'>
       {/* 固定头部 */}
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{task.title}</h3>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+      <h3 className='detail-component__title'>{task.title}</h3>
+      <div className='detail-component__tags'>
         <Tag color={statusColor}>{task.status}</Tag>
       </div>
       <FilePathBar pathType='task-dir' entityId={task.id} />
       {/* 祖先路径 */}
       {lineage.length > 1 && (
-        <div
-          style={{
-            fontSize: 12,
-            marginBottom: 8,
-            color: 'var(--text-secondary)',
-            lineHeight: 1.8,
-          }}>
-          <span style={{ fontWeight: 500 }}>祖先路径: </span>
+        <div className='detail-ancestor'>
+          <span className='detail-ancestor__label'>祖先路径: </span>
           {lineage.slice(0, -1).map((ancestor: TaskMeta, i: number) => (
             <span key={ancestor.id}>
               <span
-                style={{ cursor: 'pointer', color: 'var(--brand-color)' }}
+                className='detail-ancestor__link'
                 onClick={() => navigate(getViewPath('task', ancestor.id))}>
                 {truncate(ancestor.title, 20)}
               </span>
-              {i < lineage.length - 2 && <span style={{ margin: '0 4px' }}>›</span>}
+              {i < lineage.length - 2 && <span className='detail-ancestor__sep'>›</span>}
             </span>
           ))}
         </div>
       )}
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        <div className='mono' style={{ fontSize: 11 }}>
-          ID: {task.id}
-        </div>
+      <div className='detail-component__meta'>
+        <div className='mono detail-component__meta-id'>ID: {task.id}</div>
         <div>创建: {formatDate(task.created)}</div>
         {task.updated && <div>更新: {formatRelative(task.updated)}</div>}
       </div>
 
       {/* 导航目录 */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+      <div className='detail-component__nav'>
         {task.projects && task.projects.length > 0 && (
           <a
-            style={{ fontSize: 11, cursor: 'pointer', color: 'var(--brand-color)' }}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.projects?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -354,7 +299,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         )}
         {task.referencedSpecs && task.referencedSpecs.length > 0 && (
           <a
-            style={{ fontSize: 11, cursor: 'pointer', color: 'var(--brand-color)' }}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.specs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -363,7 +308,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         )}
         {task.scopePaths && task.scopePaths.length > 0 && (
           <a
-            style={{ fontSize: 11, cursor: 'pointer', color: 'var(--brand-color)' }}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.scopePaths?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -372,7 +317,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         )}
         {docTabs.length > 0 && (
           <a
-            style={{ fontSize: 11, cursor: 'pointer', color: 'var(--brand-color)' }}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.docs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -381,7 +326,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         )}
         {progress && progress.length > 0 && (
           <a
-            style={{ fontSize: 11, cursor: 'pointer', color: 'var(--brand-color)' }}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.checkpoints?.scrollIntoView({
                 behavior: 'smooth',
@@ -394,7 +339,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
       </div>
 
       {/* 可滚动内容区：所有内容平铺，导航目录点击跳转 */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={scrollRef} className='detail-component__scroll'>
         <ScrollSpyBar
           scrollRef={scrollRef}
           sections={useScrollSections(scrollRef, sectionRefs, {
@@ -411,7 +356,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               sectionRefs.current.projects = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>关联项目</div>
+            <div className='detail-component__section-title'>关联项目</div>
             <List
               size='small'
               dataSource={task.projects}
@@ -419,35 +364,15 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                 const project = projectsQuery.data?.find((p) => p.id === pid);
                 return (
                   <List.Item
-                    style={{
-                      padding: '4px 0',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      borderRadius: 4,
-                    }}
-                    onClick={() => navigate(getViewPath('project', pid))}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'var(--bg-tertiary)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}>
+                    className='detail-list-item'
+                    onClick={() => navigate(getViewPath('project', pid))}>
                     <div>
-                      <div style={{ fontWeight: 500 }}>{project?.name || pid.slice(0, 12)}</div>
-                      <div
-                        className='mono'
-                        style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                        {pid}
+                      <div className='detail-list-item__name'>
+                        {project?.name || pid.slice(0, 12)}
                       </div>
+                      <div className='mono detail-list-item__id'>{pid}</div>
                       {project?.description && (
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--text-secondary)',
-                            marginTop: 2,
-                          }}>
-                          {project.description}
-                        </div>
+                        <div className='detail-list-item__desc'>{project.description}</div>
                       )}
                     </div>
                   </List.Item>
@@ -463,35 +388,20 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               sectionRefs.current.specs = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>引用 Spec</div>
+            <div className='detail-component__section-title'>引用 Spec</div>
             <List
               size='small'
               dataSource={task.referencedSpecs}
               renderItem={(ref: ReferencedSpec) => (
                 <List.Item
-                  style={{
-                    padding: '4px 0',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    borderRadius: 4,
-                  }}
-                  onClick={() => navigate(getViewPath('spec', ref.id))}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-tertiary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  className='detail-list-item'
+                  onClick={() => navigate(getViewPath('spec', ref.id))}>
+                  <div className='detail-list-item__row'>
                     <Tag color={getEntityColor('spec')} style={{ fontSize: 10, margin: 0 }}>
                       spec
                     </Tag>
-                    <span className='mono' style={{ fontSize: 11 }}>
-                      {ref.id}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      {ref.scope}
-                    </span>
+                    <span className='mono detail-list-item__id-mono'>{ref.id}</span>
+                    <span className='detail-list-item__scope'>{ref.scope}</span>
                   </div>
                 </List.Item>
               )}
@@ -505,28 +415,19 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               sectionRefs.current.scopePaths = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>范围路径</div>
+            <div className='detail-component__section-title'>范围路径</div>
             <List
               size='small'
               dataSource={task.scopePaths}
               renderItem={(sp: ScopePath) => (
-                <List.Item style={{ padding: '4px 0', fontSize: 12 }}>
+                <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
                   <div style={{ width: '100%' }}>
-                    <div
-                      style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                      <span
-                        className='mono'
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--text-secondary)',
-                          wordBreak: 'break-all',
-                          lineHeight: 1.4,
-                        }}
-                        title={sp.path}>
+                    <div className='scope-path__path-row'>
+                      <span className='mono scope-path__path' title={sp.path}>
                         {sp.path}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <div className='scope-path__actions'>
                       <Dropdown.Button
                         size='small'
                         type='text'
@@ -541,8 +442,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                             const adapter = getAdapter();
                             await adapter.openPath(sp.path, key as EditorApp);
                           },
-                        }}
-                        style={{ fontSize: 11 }}>
+                        }}>
                         <FolderOpenOutlined />
                       </Dropdown.Button>
                       {sp.projectId && (
@@ -568,20 +468,14 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               sectionRefs.current.docs = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>文档预览</div>
+            <div className='detail-component__section-title'>文档预览</div>
             <Tabs
               size='small'
               items={docTabs.map((tab) => ({
                 key: tab.key,
                 label: tab.label,
                 children: (
-                  <div
-                    className='markdown-body'
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      paddingBottom: 12,
-                    }}>
+                  <div className='markdown-body detail-markdown'>
                     {tab.loading ? (
                       <Skeleton active paragraph={{ rows: 4 }} />
                     ) : tab.content ? (
@@ -606,26 +500,21 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               sectionRefs.current.checkpoints = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Checkpoint 时间线</div>
+            <div className='detail-component__section-title' style={{ marginBottom: 8 }}>
+              Checkpoint 时间线
+            </div>
             <Timeline
               items={progress.map((cp: CheckpointEntry) => ({
                 color: getCheckpointTimelineColor(cp.type),
                 children: (
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{cp.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                    <div className='checkpoint-item__title'>{cp.title}</div>
+                    <div className='checkpoint-item__meta'>
                       <Tag style={{ fontSize: 10, margin: 0 }}>{cp.type}</Tag>{' '}
                       {formatRelative(cp.time)}
                     </div>
                     {cp.message && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--text-secondary)',
-                          marginTop: 2,
-                        }}>
-                        {truncate(cp.message, 200)}
-                      </div>
+                      <div className='checkpoint-item__message'>{truncate(cp.message, 200)}</div>
                     )}
                   </div>
                 ),
@@ -677,28 +566,20 @@ function ProjectDetail({
     return <Empty description='项目不存在' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
 
-  const navLinkStyle: React.CSSProperties = {
-    fontSize: 11,
-    cursor: 'pointer',
-    color: 'var(--brand-color)',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{project.name}</h3>
+    <div className='detail-component'>
+      <h3 className='detail-component__title'>{project.name}</h3>
 
       {project.description && (
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
+        <p className='detail-component__meta' style={{ marginBottom: 8 }}>
           {project.description}
         </p>
       )}
 
       <ProjectPathBar projectId={project.id} />
 
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        <div className='mono' style={{ fontSize: 11 }}>
-          ID: {project.id}
-        </div>
+      <div className='detail-component__meta'>
+        <div className='mono detail-component__meta-id'>ID: {project.id}</div>
         <div>创建: {formatDate(project.created)}</div>
         {project.groups && project.groups.length > 0 && (
           <div>分组: {project.groups.join(', ')}</div>
@@ -707,10 +588,10 @@ function ProjectDetail({
       </div>
 
       {/* 导航目录 */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+      <div className='detail-component__nav'>
         {gitStatus && (
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.git?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -719,7 +600,7 @@ function ProjectDetail({
         )}
         {tasks && tasks.length > 0 && (
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.tasks?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -728,7 +609,7 @@ function ProjectDetail({
         )}
         {relations && relations.length > 0 && (
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.relations?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -737,7 +618,7 @@ function ProjectDetail({
         )}
         {specs && specs.length > 0 && (
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.specs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -747,7 +628,7 @@ function ProjectDetail({
       </div>
 
       {/* 可滚动内容区 */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={scrollRef} className='detail-component__scroll'>
         <ScrollSpyBar
           scrollRef={scrollRef}
           sections={useScrollSections(scrollRef, sectionRefs, {
@@ -764,12 +645,12 @@ function ProjectDetail({
               sectionRefs.current.git = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
+            <div className='detail-component__section-title'>
               <BranchesOutlined /> Git 状态
             </div>
-            <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className='git-status'>
               <div>
-                <span style={{ color: 'var(--text-secondary)' }}>分支: </span>
+                <span className='git-status__label'>分支: </span>
                 <span className='mono'>{gitStatus.branch || '-'}</span>
                 {gitStatus.dirty ? (
                   <Tag color='orange' style={{ marginLeft: 8, fontSize: 10 }}>
@@ -783,7 +664,7 @@ function ProjectDetail({
               </div>
               {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
                 <div>
-                  <span style={{ color: 'var(--text-secondary)' }}>远程: </span>
+                  <span className='git-status__label'>远程: </span>
                   {gitStatus.ahead > 0 && (
                     <Tag color='green' style={{ fontSize: 10 }}>
                       ↑{gitStatus.ahead}
@@ -799,8 +680,8 @@ function ProjectDetail({
               {gitStatus.lastCommitMessage && (
                 <Tooltip
                   title={gitStatus.lastCommitTime ? formatDate(gitStatus.lastCommitTime) : ''}>
-                  <div style={{ wordBreak: 'break-word' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>最近: </span>
+                  <div className='git-status__commit'>
+                    <span className='git-status__label'>最近: </span>
                     {gitStatus.lastCommitMessage}
                   </div>
                 </Tooltip>
@@ -816,23 +697,15 @@ function ProjectDetail({
               sectionRefs.current.tasks = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
-              关联任务 ({tasks.length})
-            </div>
+            <div className='detail-component__section-title'>关联任务 ({tasks.length})</div>
             <List
               size='small'
               dataSource={tasks}
               renderItem={(t: TaskMeta) => (
                 <List.Item
-                  style={{ padding: '4px 0', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
-                  onClick={() => navigate(getViewPath('task', t.id))}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-tertiary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  className='detail-list-item'
+                  onClick={() => navigate(getViewPath('task', t.id))}>
+                  <div className='detail-list-item__row'>
                     <Tag color={getTaskStatusColor(t.status)} style={{ fontSize: 10, margin: 0 }}>
                       {t.status}
                     </Tag>
@@ -851,9 +724,7 @@ function ProjectDetail({
               sectionRefs.current.relations = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
-              项目关系 ({relations.length})
-            </div>
+            <div className='detail-component__section-title'>项目关系 ({relations.length})</div>
             <List
               size='small'
               dataSource={relations}
@@ -861,15 +732,9 @@ function ProjectDetail({
                 const otherId = r.projectA === project.id ? r.projectB : r.projectA;
                 return (
                   <List.Item
-                    style={{ padding: '4px 0', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
-                    onClick={() => navigate(getViewPath('project', otherId))}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'var(--bg-tertiary)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    className='detail-list-item'
+                    onClick={() => navigate(getViewPath('project', otherId))}>
+                    <div className='detail-list-item__row'>
                       <Tag color={getEntityColor('project')} style={{ fontSize: 10, margin: 0 }}>
                         {r.type}
                       </Tag>
@@ -889,30 +754,20 @@ function ProjectDetail({
               sectionRefs.current.specs = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>
-              Spec ({specs.length})
-            </div>
+            <div className='detail-component__section-title'>Spec ({specs.length})</div>
             <List
               size='small'
               dataSource={specs}
               renderItem={(s: ParsedSpec) => (
                 <List.Item
-                  style={{ padding: '4px 0', fontSize: 12, cursor: 'pointer', borderRadius: 4 }}
-                  onClick={() => navigate(getViewPath('spec', s.frontmatter.id || s.fileName))}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-tertiary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}>
+                  className='detail-list-item'
+                  onClick={() => navigate(getViewPath('spec', s.frontmatter.id || s.fileName))}>
                   <div>
                     <span>{truncate(s.frontmatter.title || s.fileName, 30)}</span>
                     {s.frontmatter.tags && s.frontmatter.tags.length > 0 && (
-                      <div style={{ marginTop: 2 }}>
+                      <div className='spec-tags'>
                         {s.frontmatter.tags.slice(0, 3).map((tag: string) => (
-                          <Tag key={tag} style={{ fontSize: 10, margin: '0 4px 0 0' }}>
-                            {tag}
-                          </Tag>
+                          <Tag key={tag}>{tag}</Tag>
                         ))}
                       </div>
                     )}
@@ -939,23 +794,15 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
   const taskId = (data.taskId as string) || '';
   const message = (data.message as string) || '';
   const time = (data.time as string) || '';
-  const navLinkStyle: React.CSSProperties = {
-    fontSize: 11,
-    cursor: 'pointer',
-    color: 'var(--brand-color)',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{title}</h3>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+    <div className='detail-component'>
+      <h3 className='detail-component__title'>{title}</h3>
+      <div className='detail-component__tags'>
         <Tag color={getCheckpointTypeColor(type)}>{type}</Tag>
       </div>
       {taskId && <FilePathBar pathType='progress' entityId={taskId} />}
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        <div className='mono' style={{ fontSize: 11 }}>
-          ID: {checkpointId}
-        </div>
+      <div className='detail-component__meta'>
+        <div className='mono detail-component__meta-id'>ID: {checkpointId}</div>
         {time && (
           <div>
             时间: {formatDate(time)} ({formatRelative(time)})
@@ -965,8 +812,7 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
           <div>
             所属任务:{' '}
             <span
-              className='mono'
-              style={{ cursor: 'pointer', color: 'var(--brand-color)' }}
+              className='mono detail-ancestor__link'
               onClick={() => navigate(getViewPath('task', taskId))}>
               {taskId}
             </span>
@@ -975,9 +821,9 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
       </div>
       {/* 导航目录 */}
       {message && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+        <div className='detail-component__nav'>
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -985,7 +831,7 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
           </a>
         </div>
       )}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={scrollRef} className='detail-component__scroll'>
         <ScrollSpyBar
           scrollRef={scrollRef}
           sections={useScrollSections(scrollRef, sectionRefs, { content: '详情内容' })}
@@ -996,9 +842,7 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div
-              className='markdown-body'
-              style={{ fontSize: 12, lineHeight: 1.6, paddingBottom: 12 }}>
+            <div className='markdown-body detail-markdown'>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw, rehypeHighlight]}>
@@ -1033,31 +877,23 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
   ];
   const spec = allSpecs.find((s) => s.fileName === specId || s.frontmatter.id === specId);
   const finalFilePath = filePath || spec?.filePath || null;
-  const navLinkStyle: React.CSSProperties = {
-    fontSize: 11,
-    cursor: 'pointer',
-    color: 'var(--brand-color)',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{title}</h3>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+    <div className='detail-component'>
+      <h3 className='detail-component__title'>{title}</h3>
+      <div className='detail-component__tags'>
         <Tag color={scope === 'project' ? 'blue' : scope === 'user' ? 'green' : 'default'}>
           {scope}
         </Tag>
       </div>
       {finalFilePath && <FilePathBar path={finalFilePath} />}
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        <div className='mono' style={{ fontSize: 11 }}>
-          文件: {specId}
-        </div>
+      <div className='detail-component__meta'>
+        <div className='mono detail-component__meta-id'>文件: {specId}</div>
       </div>
       {/* 导航目录 */}
       {spec?.content && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+        <div className='detail-component__nav'>
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -1065,7 +901,7 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
           </a>
         </div>
       )}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={scrollRef} className='detail-component__scroll'>
         <ScrollSpyBar
           scrollRef={scrollRef}
           sections={useScrollSections(scrollRef, sectionRefs, { content: 'Spec 内容' })}
@@ -1076,9 +912,7 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div
-              className='markdown-body'
-              style={{ fontSize: 12, lineHeight: 1.6, paddingBottom: 12 }}>
+            <div className='markdown-body detail-markdown'>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw, rehypeHighlight]}>
@@ -1130,18 +964,8 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '4px 8px',
-          background: 'var(--bg-tertiary)',
-          borderRadius: 4,
-          fontSize: 11,
-          marginBottom: 8,
-        }}>
-        <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{paths.length} 个本地路径</span>
+      <div className='project-path-bar'>
+        <span className='project-path-bar__text'>{paths.length} 个本地路径</span>
         <Dropdown.Button
           size='small'
           type='text'
@@ -1156,8 +980,7 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
               setSelectedApp(key as EditorApp);
               setModalOpen(true);
             },
-          }}
-          style={{ fontSize: 11 }}>
+          }}>
           <FolderOpenOutlined /> 打开
         </Dropdown.Button>
       </div>
@@ -1174,18 +997,8 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
             handleOpen(path, selectedApp);
           }}>
           {paths.map((p) => (
-            <Radio
-              key={p}
-              value={p}
-              style={{
-                display: 'block',
-                marginBottom: 8,
-                wordBreak: 'break-all',
-                fontSize: 12,
-              }}>
-              <span className='mono' style={{ fontSize: 11 }}>
-                {p}
-              </span>
+            <Radio key={p} value={p} className='path-radio'>
+              <span className='mono'>{p}</span>
             </Radio>
           ))}
         </Radio.Group>
@@ -1198,17 +1011,9 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
 
 function DetailHeader({ entityId }: { entityId?: string | null }) {
   return (
-    <div
-      style={{
-        padding: '8px 12px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexShrink: 0,
-      }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>详情</span>
-      <div style={{ display: 'flex', gap: 4 }}>
+    <div className='detail-header'>
+      <span className='detail-header__title'>详情</span>
+      <div className='detail-header__actions'>
         {entityId && (
           <Tooltip title='在图中定位'>
             <Button
@@ -1258,29 +1063,23 @@ function DocumentDetail({ data }: { data: Record<string, unknown> }) {
   });
   const content = contentQuery.data;
   const isError = content != null && typeof content !== 'string';
-  const navLinkStyle: React.CSSProperties = {
-    fontSize: 11,
-    cursor: 'pointer',
-    color: 'var(--brand-color)',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
+    <div className='detail-component'>
+      <h3 className='detail-component__title'>
         <FileTextOutlined style={{ marginRight: 6 }} />
         {label}
       </h3>
       <FilePathBar pathType={docType} entityId={taskId} />
-      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>
-        <div className='mono' style={{ fontSize: 11 }}>
+      <div className='detail-component__meta'>
+        <div className='mono detail-component__meta-id'>
           类型: {docType} | 任务: {taskId}
         </div>
       </div>
       {/* 导航目录 */}
       {!contentQuery.isLoading && !isError && content && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+        <div className='detail-component__nav'>
           <a
-            style={navLinkStyle}
+            className='nav-link'
             onClick={() =>
               sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }>
@@ -1288,7 +1087,7 @@ function DocumentDetail({ data }: { data: Record<string, unknown> }) {
           </a>
         </div>
       )}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <div ref={scrollRef} className='detail-component__scroll'>
         <ScrollSpyBar
           scrollRef={scrollRef}
           sections={useScrollSections(scrollRef, sectionRefs, { content: '文档内容' })}
@@ -1303,9 +1102,7 @@ function DocumentDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div
-              className='markdown-body'
-              style={{ fontSize: 12, lineHeight: 1.6, paddingBottom: 12 }}>
+            <div className='markdown-body detail-markdown'>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw, rehypeHighlight]}>
@@ -1334,9 +1131,9 @@ export function DetailPanel() {
   // checkpoint 直接从节点 data 渲染
   if (entityType === 'checkpoint' && entityData) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className='detail-panel-root'>
         <DetailHeader entityId={entityId} />
-        <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: '12px 16px' }}>
+        <div className='detail-panel-content'>
           <CheckpointDetail data={entityData as Record<string, unknown>} />
         </div>
       </div>
@@ -1346,9 +1143,9 @@ export function DetailPanel() {
   // spec 直接从节点 data 渲染
   if (entityType === 'spec' && entityData) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className='detail-panel-root'>
         <DetailHeader entityId={entityId} />
-        <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: '12px 16px' }}>
+        <div className='detail-panel-content'>
           <SpecDetail data={entityData as Record<string, unknown>} />
         </div>
       </div>
@@ -1358,9 +1155,9 @@ export function DetailPanel() {
   // document 直接从节点 data 渲染
   if (entityType === 'document' && entityData) {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className='detail-panel-root'>
         <DetailHeader entityId={entityId} />
-        <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: '12px 16px' }}>
+        <div className='detail-panel-content'>
           <DocumentDetail data={entityData as Record<string, unknown>} />
         </div>
       </div>
@@ -1369,14 +1166,7 @@ export function DetailPanel() {
 
   if (!entityId || !entityType) {
     return (
-      <div
-        style={{
-          padding: 24,
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
+      <div className='detail-empty'>
         <Empty description='选择一个节点查看详情' image={Empty.PRESENTED_IMAGE_SIMPLE} />
       </div>
     );
@@ -1384,7 +1174,7 @@ export function DetailPanel() {
 
   if (detailQuery.isLoading) {
     return (
-      <div style={{ padding: 16 }}>
+      <div className='detail-loading'>
         <Skeleton active paragraph={{ rows: 6 }} />
       </div>
     );
@@ -1392,13 +1182,9 @@ export function DetailPanel() {
 
   if (detailQuery.error || !detailQuery.data) {
     return (
-      <div style={{ padding: 16 }}>
+      <div className='detail-error'>
         <Empty description='加载失败' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        <Button
-          size='small'
-          icon={<ReloadOutlined />}
-          onClick={() => detailQuery.refetch()}
-          style={{ marginTop: 8 }}>
+        <Button size='small' icon={<ReloadOutlined />} onClick={() => detailQuery.refetch()}>
           重试
         </Button>
       </div>
@@ -1408,11 +1194,11 @@ export function DetailPanel() {
   const data = detailQuery.data;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className='detail-panel-root'>
       <DetailHeader entityId={entityId} />
 
       {/* 内容 */}
-      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: '12px 16px' }}>
+      <div className='detail-panel-content'>
         {data.type === 'task' && data.task && (
           <TaskDetail task={data.task} progress={data.progress} />
         )}

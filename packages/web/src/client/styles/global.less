@@ -140,11 +140,33 @@ body {
 
 // ── 布局过渡 ──
 .sidebar-transition {
-  transition: width var(--transition-normal);
+  transition:
+    opacity var(--transition-normal),
+    transform var(--transition-normal);
+
+  &--hidden {
+    opacity: 0;
+    transform: translateX(-20px);
+    pointer-events: none;
+  }
+}
+
+.sidebar-collapsed-btn {
+  transition:
+    opacity var(--transition-normal),
+    transform var(--transition-normal);
+
+  &--hidden {
+    opacity: 0;
+    transform: translateX(-20px);
+    pointer-events: none;
+  }
 }
 
 .detail-transition {
-  transition: width var(--transition-normal);
+  transition:
+    opacity var(--transition-normal),
+    transform var(--transition-normal);
 }
 
 // ── 视角切换淡入淡出 ──
@@ -219,5 +241,17 @@ body {
     padding-left: 12px;
     margin: 4px 0;
     color: var(--text-secondary);
+  }
+}
+
+// ── Segmented 选中项增强 ──
+.ant-segmented .ant-segmented-item-selected {
+  background: var(--brand-color) !important;
+  color: #fff !important;
+  font-weight: 600;
+
+  .anticon,
+  span {
+    color: #fff !important;
   }
 }

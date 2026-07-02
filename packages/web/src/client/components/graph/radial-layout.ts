@@ -2,7 +2,7 @@ import type cytoscape from 'cytoscape';
 
 // ── 类型分环 ──
 
-const TYPE_RING: Record<string, number> = {
+export const TYPE_RING: Record<string, number> = {
   project: 0,
   spec: 1,
   task: 2,
@@ -30,7 +30,7 @@ const LINE_HEIGHT = FONT_SIZE * 1.3;
 const MAX_TEXT_WIDTH = 180;
 
 /** 从 label 文本估算节点宽高——比 boundingBox() 更可靠 */
-function estimateNodeSize(label: string): { w: number; h: number } {
+export function estimateNodeSize(label: string): { w: number; h: number } {
   let textWidth = 0;
   for (const char of label) {
     if (/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(char)) {
@@ -105,7 +105,11 @@ function placeNodesOnRing(
  * 2. 逐个类型排布：从左上角开始，按估算宽度逐个放置
  * 3. 一圈放不下自动加子环（外环半径更大，能放更多节点）
  */
-export function runRadialLayout(cy: cytoscape.Core, _nodeCount: number): void {
+export function runRadialLayout(
+  cy: cytoscape.Core,
+  _nodeCount: number,
+  onReady?: () => void,
+): void {
   const cyNodes = cy.nodes();
   if (cyNodes.length === 0) return;
 
@@ -158,13 +162,19 @@ export function runRadialLayout(cy: cytoscape.Core, _nodeCount: number): void {
     currentRadius = lastR + maxHeight + INTER_TYPE_GAP;
   }
 
-  // 3. 应用到 Cytoscape
-  cy.layout({
+  // 3. 应用到 Cytoscape（保留动画，onReady 在 layoutstop 后回调）
+  const layout = cy.layout({
     name: 'preset',
     animate: 'end',
     animationDuration: 500,
     fit: true,
     padding: 60,
     positions: (node: cytoscape.NodeSingular) => positions[node.id()] || { x: 0, y: 0 },
-  } as unknown as cytoscape.LayoutOptions).run();
+  } as unknown as cytoscape.LayoutOptions);
+
+  if (onReady) {
+    layout.one('layoutstop', onReady);
+  }
+
+  layout.run();
 }

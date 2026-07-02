@@ -8,6 +8,7 @@ import { CytoscapeGraph } from './components/CytoscapeGraph';
 import { DetailPanel } from './components/DetailPanel';
 import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
 import { FloatingStatusBar } from './components/FloatingStatusBar';
+import './components/DetailPanel.less';
 
 // ── 路由同步 ──
 function RouteSync() {
@@ -68,10 +69,9 @@ function MainContent() {
 // ── 主布局 ──
 export default function App() {
   const { open: detailOpen, collapsed: detailCollapsed } = useSnapshot(detailStore);
-  const detailVisible = detailOpen && !detailCollapsed;
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div className='app-root'>
       <Routes>
         <Route path='/' element={<MainContent />} />
         <Route path='/task' element={<MainContent />} />
@@ -88,70 +88,27 @@ export default function App() {
       <TreeBrowserSidebar />
       <FloatingStatusBar />
 
-      {detailVisible && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            right: 12,
-            transform: 'translateY(-50%)',
-            width: 420,
-            maxHeight: 'calc(100vh - 100px)',
-            zIndex: 20,
-            background: 'var(--bg-secondary)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid var(--border)',
-            borderRadius: 16,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-          className='detail-transition'>
+      {detailOpen && (
+        <>
           <div
-            style={{ position: 'absolute', top: 8, right: 8, zIndex: 30, display: 'flex', gap: 4 }}>
-            <Button
-              size='small'
-              type='text'
-              icon={<MenuFoldOutlined />}
-              onClick={toggleDetailCollapse}
-              style={{ borderRadius: '50%' }}
-            />
-            <Button
-              size='small'
-              type='text'
-              icon={<CloseOutlined />}
-              onClick={closeDetail}
-              style={{ borderRadius: '50%' }}
-            />
+            className={`detail-panel detail-transition${detailCollapsed ? ' detail-panel--hidden' : ''}`}>
+            <div className='detail-panel__actions'>
+              <Button
+                size='small'
+                type='text'
+                icon={<MenuFoldOutlined />}
+                onClick={toggleDetailCollapse}
+              />
+              <Button size='small' type='text' icon={<CloseOutlined />} onClick={closeDetail} />
+            </div>
+            <DetailPanel />
           </div>
-          <DetailPanel />
-        </div>
-      )}
-
-      {detailOpen && detailCollapsed && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            right: 12,
-            transform: 'translateY(-50%)',
-            zIndex: 20,
-            width: 32,
-            height: 48,
-            background: 'var(--bg-secondary)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-          }}
-          onClick={toggleDetailCollapse}>
-          <MenuUnfoldOutlined style={{ fontSize: 14 }} />
-        </div>
+          <div
+            className={`detail-panel-collapsed${detailCollapsed ? '' : ' detail-panel-collapsed--hidden'}`}
+            onClick={toggleDetailCollapse}>
+            <MenuUnfoldOutlined style={{ fontSize: 14 }} />
+          </div>
+        </>
       )}
     </div>
   );

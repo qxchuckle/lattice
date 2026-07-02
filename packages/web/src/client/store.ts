@@ -1,3 +1,4 @@
+import type cytoscape from 'cytoscape';
 import { proxy } from 'valtio';
 
 // ── 画布状态 ──
@@ -42,6 +43,9 @@ export const canvasStore = proxy({
   /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
   layoutRunning: false,
 });
+
+/** Cytoscape 实例引用（非响应式，由 CytoscapeGraph 赋值，供 FloatingStatusBar 等跨组件访问） */
+export const cyRef: { current: cytoscape.Core | null } = { current: null };
 
 // ── 侧栏状态 ──
 

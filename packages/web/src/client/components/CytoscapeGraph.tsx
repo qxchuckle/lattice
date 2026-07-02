@@ -5,6 +5,7 @@ import fcose from 'cytoscape-fcose';
 import { useSnapshot } from 'valtio';
 import {
   canvasStore,
+  cyRef,
   selectNode,
   closeDetail,
   getViewPath,
@@ -12,7 +13,6 @@ import {
   type ViewMode,
 } from '../store';
 import { useGlobalGraph } from '../hooks';
-import { CanvasToolbar } from './graph/CanvasToolbar';
 import { buildStylesheet } from './graph/stylesheet';
 import { runLayout, applyFocus, clearFocus, findNodeById } from './graph/layout';
 import { toElements } from './graph/elements';
@@ -23,7 +23,6 @@ export function CytoscapeGraph() {
   const { mode } = useSnapshot(themeStore);
   const isDark = mode === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
   const lastElementCountRef = useRef<number>(0);
   const navigate = useNavigate();
   const {
@@ -120,7 +119,10 @@ export function CytoscapeGraph() {
     cy.elements().remove();
     cy.add(elements);
     cy.nodes().ungrabify();
-    runLayout(cy, elements.length, layoutMode);
+    canvasStore.layoutRunning = true;
+    runLayout(cy, elements.length, layoutMode, () => {
+      canvasStore.layoutRunning = false;
+    });
 
     if (anchorId) {
       const node = findNodeById(cy, anchorId);
@@ -140,7 +142,10 @@ export function CytoscapeGraph() {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || cy.elements().length === 0) return;
-    runLayout(cy, cy.elements().length, layoutMode);
+    canvasStore.layoutRunning = true;
+    runLayout(cy, cy.elements().length, layoutMode, () => {
+      canvasStore.layoutRunning = false;
+    });
   }, [layoutMode]);
 
   // 锚点变化：仅聚焦
@@ -192,7 +197,10 @@ export function CytoscapeGraph() {
       cy.elements().remove();
       cy.add(elements);
       cy.nodes().ungrabify();
-      runLayout(cy, elements.length, layoutMode);
+      canvasStore.layoutRunning = true;
+      runLayout(cy, elements.length, layoutMode, () => {
+        canvasStore.layoutRunning = false;
+      });
       if (anchorId) {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {
@@ -263,7 +271,6 @@ export function CytoscapeGraph() {
         ref={containerRef}
         style={{ width: '100%', height: '100%', background: isDark ? '#1D1D26' : '#F5F5F5' }}
       />
-      <CanvasToolbar isDark={isDark} cyRef={cyRef} layoutMode={layoutMode} />
     </div>
   );
 }
