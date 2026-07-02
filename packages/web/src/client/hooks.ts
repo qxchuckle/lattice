@@ -337,8 +337,8 @@ export function useProjectGraph(projectId: string | null) {
     queryFn: () => adapter.getTasks(),
   });
   const allSpecsQuery = useQuery({
-    queryKey: queryKeys.specs('project'),
-    queryFn: () => adapter.getSpecs('project'),
+    queryKey: queryKeys.specs(),
+    queryFn: () => adapter.getSpecs(),
   });
   const allProjectsQuery = useQuery({
     queryKey: queryKeys.projects,
@@ -412,8 +412,12 @@ export function useProjectGraph(projectId: string | null) {
     });
 
     // 项目的 Spec
+    const specIdToNodeId = new Map<string, string>();
     (specsQuery.data || []).forEach((s: ParsedSpec) => {
       const specNodeId = `spec-${project.id}-${s.fileName}`;
+      const specId = s.frontmatter.id || s.fileName;
+      specIdToNodeId.set(specId, specNodeId);
+      specIdToNodeId.set(s.fileName, specNodeId);
       addNode({
         id: specNodeId,
         type: 'specNode',
@@ -423,6 +427,7 @@ export function useProjectGraph(projectId: string | null) {
           specId: s.fileName,
           title: s.frontmatter.title || s.fileName,
           scope: 'project',
+          filePath: s.filePath,
         },
       });
       edges.push({
@@ -435,6 +440,38 @@ export function useProjectGraph(projectId: string | null) {
         data: { label: 'spec' },
       });
     });
+
+    // 补充：任务引用的用户级/全局级 spec 也加入图
+    const referencedSpecIds = new Set<string>();
+    (tasksQuery.data || []).forEach((t: TaskMeta) => {
+      (t.referencedSpecs || []).forEach((ref: ReferencedSpec) => {
+        referencedSpecIds.add(ref.id);
+      });
+    });
+    const allSpecsResult = allSpecsQuery.data;
+    if (allSpecsResult) {
+      const addExternalSpec = (s: ParsedSpec, scopeLevel: string) => {
+        const specId = s.frontmatter.id || s.fileName;
+        if (!referencedSpecIds.has(specId) || specIdToNodeId.has(specId)) return;
+        const specNodeId = `spec-${scopeLevel}-${specId}`;
+        specIdToNodeId.set(specId, specNodeId);
+        specIdToNodeId.set(s.fileName, specNodeId);
+        addNode({
+          id: specNodeId,
+          type: 'specNode',
+          position: { x: 0, y: 0 },
+          data: {
+            entityType: 'spec',
+            specId,
+            title: s.frontmatter.title || s.fileName,
+            scope: scopeLevel,
+            filePath: s.filePath,
+          },
+        });
+      };
+      (allSpecsResult.user || []).forEach((s) => addExternalSpec(s, 'user'));
+      (allSpecsResult.global || []).forEach((s) => addExternalSpec(s, 'global'));
+    }
 
     // 项目的任务
     (tasksQuery.data || []).forEach((t: TaskMeta) => {
@@ -453,6 +490,33 @@ export function useProjectGraph(projectId: string | null) {
         style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
         data: { label: 'task' },
       });
+      // Task → Spec 引用边
+      (t.referencedSpecs || []).forEach((ref: ReferencedSpec) => {
+        const specNodeId = specIdToNodeId.get(ref.id);
+        if (specNodeId) {
+          edges.push({
+            id: `edge-spec-${t.id}-${ref.id}`,
+            source: t.id,
+            target: specNodeId,
+            type: 'smoothstep',
+            label: 'ref-spec',
+            style: { stroke: '#13C2C2', opacity: 0.4 } as CSSProperties,
+            data: { label: 'ref-spec' },
+          });
+        }
+      });
+      // Parent → Child task 边
+      if (t.parentTaskId) {
+        edges.push({
+          id: `edge-parent-${t.parentTaskId}-${t.id}`,
+          source: t.parentTaskId,
+          target: t.id,
+          type: 'smoothstep',
+          label: 'parent',
+          style: { stroke: 'var(--brand-color)', opacity: 0.4 } as CSSProperties,
+          data: { label: 'parent' },
+        });
+      }
     });
 
     // 关系项目 + 递归一层
@@ -492,9 +556,10 @@ export function useProjectGraph(projectId: string | null) {
             position: { x: 0, y: 0 },
             data: {
               entityType: 'spec',
-              specId: s.fileName,
+              specId: s.frontmatter.id || s.fileName,
               title: s.frontmatter.title || s.fileName,
               scope: 'project',
+              filePath: s.filePath,
             },
           });
           edges.push({
@@ -554,6 +619,10 @@ export function useSpecGraph(_specId: string | null) {
     queryKey: queryKeys.projects,
     queryFn: () => adapter.getProjects(),
   });
+  const tasksQuery = useQuery({
+    queryKey: queryKeys.tasks(),
+    queryFn: () => adapter.getTasks(),
+  });
 
   const nodes: LatticeNode[] = [];
   const edges: LatticeEdge[] = [];
@@ -588,9 +657,14 @@ export function useSpecGraph(_specId: string | null) {
       ...(specsQuery.data.project || []).map((s: ParsedSpec) => ({ ...s, scope: 'project' })),
     ];
 
+    // 构建 specId → nodeId 映射
+    const specIdToNodeId = new Map<string, string>();
+
     allSpecs.forEach((s) => {
       const id = s.frontmatter.id || s.fileName;
       const specNodeId = `spec-${id}`;
+      specIdToNodeId.set(id, specNodeId);
+      specIdToNodeId.set(s.fileName, specNodeId);
       addNode({
         id: specNodeId,
         type: 'specNode',
@@ -622,13 +696,39 @@ export function useSpecGraph(_specId: string | null) {
         }
       }
     });
+
+    // 任务节点 + Task → Spec 引用边（只添加引用了图中 spec 的任务）
+    (tasksQuery.data || []).forEach((t: TaskMeta) => {
+      const hasSpecRef = (t.referencedSpecs || []).some((ref) => specIdToNodeId.has(ref.id));
+      if (!hasSpecRef) return;
+      addNode({
+        id: t.id,
+        type: 'taskNode',
+        position: { x: 0, y: 0 },
+        data: { entityType: 'task', taskId: t.id, title: t.title, status: t.status },
+      });
+      (t.referencedSpecs || []).forEach((ref: ReferencedSpec) => {
+        const specNodeId = specIdToNodeId.get(ref.id);
+        if (specNodeId) {
+          edges.push({
+            id: `edge-spec-${t.id}-${ref.id}`,
+            source: t.id,
+            target: specNodeId,
+            type: 'smoothstep',
+            label: 'ref-spec',
+            style: { stroke: '#13C2C2', opacity: 0.4 } as CSSProperties,
+            data: { label: 'ref-spec' },
+          });
+        }
+      });
+    });
   }
 
   const layoutedNodes = nodes.length > 0 ? layoutGraph(nodes, edges, 'TB') : nodes;
   return {
     nodes: layoutedNodes,
     edges,
-    isLoading: specsQuery.isLoading || projectsQuery.isLoading,
+    isLoading: specsQuery.isLoading || projectsQuery.isLoading || tasksQuery.isLoading,
   };
 }
 

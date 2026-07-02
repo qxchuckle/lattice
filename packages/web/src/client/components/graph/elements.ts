@@ -37,7 +37,15 @@ export function getNodeLabel(data: Record<string, unknown>): string {
         return 'Node';
     }
   })();
-  return `${typeTag}  ${title}`;
+  const scopeSuffix = (() => {
+    if (type !== 'spec') return '';
+    const scope = data.scope as string;
+    if (scope === 'global') return ' [全局]';
+    if (scope === 'user') return ' [用户]';
+    if (scope === 'project') return ' [项目]';
+    return '';
+  })();
+  return `${typeTag}  ${title}${scopeSuffix}`;
 }
 
 /** 转换为 Cytoscape 元素，按可见类型过滤 */

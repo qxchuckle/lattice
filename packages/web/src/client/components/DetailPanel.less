@@ -45,6 +45,36 @@
       border-radius: 50%;
     }
   }
+
+  &__resize-handle {
+    position: absolute;
+    left: -4px;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 31;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::after {
+      content: '';
+      width: 3px;
+      height: 40px;
+      background: var(--border);
+      border-radius: 2px;
+      transition:
+        background 0.2s,
+        height 0.2s;
+    }
+
+    &:hover::after,
+    &:active::after {
+      background: var(--brand-color);
+      height: 60px;
+    }
+  }
 }
 
 .detail-panel-collapsed {
@@ -234,6 +264,19 @@
     font-size: 12px;
     font-weight: 500;
     margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 14px;
+      background: var(--brand-color);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
   }
 }
 
@@ -251,6 +294,102 @@
   font-size: 12px;
   line-height: 1.6;
   padding-bottom: 12px;
+}
+
+// ── Markdown TOC（悬浮目录）──
+
+.markdown-toc-container {
+  position: relative;
+}
+
+.markdown-toc-float {
+  position: sticky;
+  bottom: 8px;
+  left: 8px;
+  z-index: 10;
+  width: fit-content;
+  margin-left: 4px;
+
+  &__btn {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    opacity: 0.65;
+    transition: opacity 0.2s;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    &--active {
+      opacity: 1;
+    }
+  }
+
+  &__panel {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    padding: 8px 10px;
+    font-size: 11px;
+    width: 260px;
+    max-width: calc(100vw - 80px);
+    max-height: 320px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__item {
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color 0.15s;
+    line-height: 1.6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--brand-color);
+    }
+
+    &--level-1 {
+      font-weight: 500;
+      padding-left: 0;
+    }
+    &--level-2 {
+      padding-left: 12px;
+    }
+    &--level-3 {
+      padding-left: 24px;
+    }
+    &--level-4 {
+      padding-left: 36px;
+    }
+  }
 }
 
 // ── 空状态 / 加载 / 错误 ──

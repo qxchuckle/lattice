@@ -1,9 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { Button } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useLocation, Routes, Route } from 'react-router';
-import { canvasStore, detailStore, closeDetail, toggleDetailCollapse } from './store';
+import {
+  canvasStore,
+  detailStore,
+  closeDetail,
+  toggleDetailCollapse,
+  setDetailWidth,
+} from './store';
 import { CytoscapeGraph } from './components/CytoscapeGraph';
 import { DetailPanel } from './components/DetailPanel';
 import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
@@ -68,7 +74,34 @@ function MainContent() {
 
 // ── 主布局 ──
 export default function App() {
-  const { open: detailOpen, collapsed: detailCollapsed } = useSnapshot(detailStore);
+  const {
+    open: detailOpen,
+    collapsed: detailCollapsed,
+    width: detailWidth,
+  } = useSnapshot(detailStore);
+
+  // 拖拽 resize handle：鼠标按下后面板左边缘 → 水平拖拽调整宽度
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = detailStore.width;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      // 面板在右侧，拖拽向左 → delta 正 → 宽度增加
+      setDetailWidth(startWidth + (startX - ev.clientX));
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
 
   return (
     <div className='app-root'>
@@ -91,7 +124,9 @@ export default function App() {
       {detailOpen && (
         <>
           <div
-            className={`detail-panel detail-transition${detailCollapsed ? ' detail-panel--hidden' : ''}`}>
+            className={`detail-panel detail-transition${detailCollapsed ? ' detail-panel--hidden' : ''}`}
+            style={{ width: detailWidth }}>
+            <div className='detail-panel__resize-handle' onMouseDown={handleResizeStart} />
             <div className='detail-panel__actions'>
               <Button
                 size='small'

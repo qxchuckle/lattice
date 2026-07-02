@@ -14,6 +14,7 @@ import {
   listRelations,
   getRelationsByProject,
   getProjectSpecs,
+  getAllProjectSpecs,
   getUserSpecs,
   getGlobalSpecs,
   hybridSearch,
@@ -158,7 +159,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // 默认返回全部
     const projectSpecs = req.query.projectId
       ? await getProjectSpecs(username, req.query.projectId)
-      : [];
+      : await getAllProjectSpecs(username);
     return {
       global: await getGlobalSpecs(),
       user: await getUserSpecs(username),
@@ -239,7 +240,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     try {
       if (type === 'prd') {
         const content = await getTaskPrd(username, id);
-        if (content) return content;
+        // content !== null 区分"文件不存在"（null）与"文件存在但为空"（""）
+        if (content !== null) return { content };
         return { error: 'not_found', message: 'PRD 文件不存在或为空' };
       }
       let filePath: string | null = null;
@@ -254,7 +256,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           return { error: 'bad_request', message: `未知内容类型: ${type}` };
       }
       if (filePath) {
-        return await readText(filePath);
+        const content = await readText(filePath);
+        if (content !== null) return { content };
+        return { error: 'not_found', message: '文件不存在' };
       }
       return { error: 'not_found', message: '文件不存在' };
     } catch {

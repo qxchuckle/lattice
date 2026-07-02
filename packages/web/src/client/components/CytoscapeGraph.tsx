@@ -219,11 +219,18 @@ export function CytoscapeGraph() {
     };
   }, [visibleTypes, visibleEdgeTypes]);
 
-  // 聚焦深度变化时重新 applyFocus
+  // 聚焦深度变化时重新 applyFocus；selectedNodeId 清空时清除聚焦样式
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy || !selectedNodeId) return;
-    if (skipAnchorRef.current) return;
+    if (!cy) return;
+    if (!selectedNodeId) {
+      clearFocus(cy);
+      return;
+    }
+    if (skipAnchorRef.current) {
+      skipAnchorRef.current = false;
+      return;
+    }
     applyFocus(cy, selectedNodeId, focusDepth);
   }, [focusDepth, selectedNodeId]);
 

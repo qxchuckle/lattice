@@ -58,6 +58,8 @@ export const sidebarStore = proxy({
   collapsed: false,
   /** 树形展开状态：key = nodeKey, value = true/false */
   expandedKeys: {} as Record<string, boolean>,
+  /** 侧栏宽度（px），持久化到 localStorage */
+  width: parseInt(localStorage.getItem('lattice-sidebar-width') || '260', 10),
 });
 
 // ── 详情面板状态 ──
@@ -67,6 +69,8 @@ export const detailStore = proxy({
   open: false,
   /** 详情面板是否临时收起（不丢失数据，点击展开恢复） */
   collapsed: false,
+  /** 面板宽度（px），持久化到 localStorage */
+  width: parseInt(localStorage.getItem('lattice-detail-width') || '420', 10),
   /** 当前查看的实体 ID */
   entityId: null as string | null,
   /** 当前查看的实体类型 */
@@ -158,10 +162,24 @@ export function toggleDetailCollapse(): void {
   detailStore.collapsed = !detailStore.collapsed;
 }
 
+/** 设置详情面板宽度（含 clamping + 持久化） */
+export function setDetailWidth(width: number): void {
+  const clamped = Math.max(320, Math.min(800, Math.round(width)));
+  detailStore.width = clamped;
+  localStorage.setItem('lattice-detail-width', String(clamped));
+}
+
 /** 设置锚点并切换到对应视角 */
 export function setAnchor(id: string, mode: ViewMode): void {
   canvasStore.anchorId = id;
   canvasStore.viewMode = mode;
+}
+
+/** 设置侧栏宽度（含 clamping + 持久化） */
+export function setSidebarWidth(width: number): void {
+  const clamped = Math.max(200, Math.min(480, Math.round(width)));
+  sidebarStore.width = clamped;
+  localStorage.setItem('lattice-sidebar-width', String(clamped));
 }
 
 /** 切换节点展开状态 */

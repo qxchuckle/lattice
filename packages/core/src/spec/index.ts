@@ -10,6 +10,7 @@ export {
   getGlobalSpecs,
   getUserSpecs,
   getProjectSpecs,
+  getAllProjectSpecs,
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
 } from './cascade';

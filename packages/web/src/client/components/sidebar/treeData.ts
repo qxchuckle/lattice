@@ -29,11 +29,12 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
     const globalSpecs = allSpecs?.global || [];
     const userSpecs = allSpecs?.user || [];
     const projectSpecs = allSpecs?.project || [];
+    const totalSpecCount = globalSpecs.length + userSpecs.length + projectSpecs.length;
 
     if (globalSpecs.length > 0) {
       specChildren.push({
         key: 'spec-global',
-        title: `全局 (${globalSpecs.length})`,
+        title: `全局级 (${globalSpecs.length})`,
         type: 'spec-scope',
         children: globalSpecs.map((s: ParsedSpec) => ({
           key: `spec-g-${s.frontmatter.id || s.fileName}`,
@@ -41,7 +42,7 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
           type: 'spec-item' as const,
           entityId: s.frontmatter.id || s.fileName,
           viewMode: 'spec' as ViewMode,
-          meta: { scope: 'global' },
+          meta: { scope: '全局级' },
         })),
       });
     }
@@ -56,7 +57,7 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
           type: 'spec-item' as const,
           entityId: s.frontmatter.id || s.fileName,
           viewMode: 'spec' as ViewMode,
-          meta: { scope: 'user' },
+          meta: { scope: '用户级' },
         })),
       });
     }
@@ -92,7 +93,7 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
             type: 'spec-item' as const,
             entityId: specId,
             viewMode: 'spec' as ViewMode,
-            meta: { scope: 'project' },
+            meta: { scope: '项目级' },
             children: taskChildren.length > 0 ? taskChildren : undefined,
           };
         }),
@@ -133,7 +134,7 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
             type: 'spec-item' as const,
             entityId: s.frontmatter.id || s.fileName,
             viewMode: 'spec' as ViewMode,
-            meta: { scope: 'project' },
+            meta: { scope: '项目级' },
           })),
         });
       }
@@ -150,8 +151,78 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
 
     // ── 任务树 ──
     const rootTasks = (tasks as TaskMeta[]).filter((t) => !t.parentTaskId);
+    // 构建 spec 查找表（用于解析任务引用的 spec）
+    const allSpecList = [...globalSpecs, ...userSpecs, ...projectSpecs];
+    const specMap = new Map<string, ParsedSpec>();
+    allSpecList.forEach((s: ParsedSpec) => {
+      const sid = s.frontmatter.id || s.fileName;
+      if (sid) specMap.set(sid, s);
+    });
     const taskChildren: TreeNode[] = rootTasks.map((t: TaskMeta) => {
+      const children: TreeNode[] = [];
+
+      // 关联项目
+      const taskProjects = (t.projects || [])
+        .map((pid: string) => (projects as ProjectMeta[]).find((p) => p.id === pid))
+        .filter((p): p is ProjectMeta => !!p);
+      if (taskProjects.length > 0) {
+        children.push({
+          key: `task-projects-${t.id}`,
+          title: `关联项目 (${taskProjects.length})`,
+          type: 'spec-scope',
+          children: taskProjects.map((p) => ({
+            key: `task-proj-${t.id}-${p.id}`,
+            title: p.name,
+            type: 'project-item' as const,
+            entityId: p.id,
+            viewMode: 'project' as ViewMode,
+            meta: { desc: p.description },
+          })),
+        });
+      }
+
+      // 引用 Spec
+      const taskSpecItems = (t.referencedSpecs || []).flatMap((ref) => {
+        const spec = specMap.get(ref.id);
+        if (!spec) return [];
+        const scopeLabel =
+          ref.scope === 'global' ? '全局级' : ref.scope === 'user' ? '用户级' : '项目级';
+        return [{ ref, spec, scopeLabel }];
+      });
+      if (taskSpecItems.length > 0) {
+        children.push({
+          key: `task-specs-${t.id}`,
+          title: `引用 Spec (${taskSpecItems.length})`,
+          type: 'spec-scope',
+          children: taskSpecItems.map(({ ref, spec, scopeLabel }) => ({
+            key: `task-spec-${t.id}-${ref.id}`,
+            title: spec.frontmatter.title || spec.fileName,
+            type: 'spec-item' as const,
+            entityId: ref.id,
+            viewMode: 'spec' as ViewMode,
+            meta: { scope: scopeLabel },
+          })),
+        });
+      }
+
+      // 子任务
       const subTasks = (tasks as TaskMeta[]).filter((st) => st.parentTaskId === t.id);
+      if (subTasks.length > 0) {
+        children.push({
+          key: `task-subtasks-${t.id}`,
+          title: `子任务 (${subTasks.length})`,
+          type: 'spec-scope',
+          children: subTasks.map((st: TaskMeta) => ({
+            key: `task-${t.id}-${st.id}`,
+            title: truncate(st.title, 30),
+            type: 'task-item' as const,
+            entityId: st.id,
+            viewMode: 'task' as ViewMode,
+            meta: { status: st.status },
+          })),
+        });
+      }
+
       return {
         key: `task-${t.id}`,
         title: truncate(t.title, 30),
@@ -159,22 +230,17 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
         entityId: t.id,
         viewMode: 'task' as ViewMode,
         meta: { status: t.status },
-        children:
-          subTasks.length > 0
-            ? subTasks.map((st: TaskMeta) => ({
-                key: `task-${t.id}-${st.id}`,
-                title: truncate(st.title, 30),
-                type: 'task-item' as const,
-                entityId: st.id,
-                viewMode: 'task' as ViewMode,
-                meta: { status: st.status },
-              }))
-            : undefined,
+        children: children.length > 0 ? children : undefined,
       };
     });
 
     return [
-      { key: 'root-spec', title: 'Spec', type: 'spec-root', children: specChildren },
+      {
+        key: 'root-spec',
+        title: `Spec (${totalSpecCount})`,
+        type: 'spec-root',
+        children: specChildren,
+      },
       {
         key: 'root-project',
         title: `项目 (${projects.length})`,

@@ -43,6 +43,21 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
       style: { 'border-color': '#13C2C2' } as unknown as cytoscape.Css.Node,
     },
     {
+      selector: 'node[entityType = "spec"][scope = "global"]',
+      style: {
+        'border-color': '#FA8C16',
+        'border-style': 'dashed',
+      } as unknown as cytoscape.Css.Node,
+    },
+    {
+      selector: 'node[entityType = "spec"][scope = "user"]',
+      style: { 'border-color': '#13C2C2' } as unknown as cytoscape.Css.Node,
+    },
+    {
+      selector: 'node[entityType = "spec"][scope = "project"]',
+      style: { 'border-color': '#1677FF' } as unknown as cytoscape.Css.Node,
+    },
+    {
       selector: 'node[entityType = "checkpoint"]',
       style: { 'border-color': 'data(color)', 'font-size': '9px' } as unknown as cytoscape.Css.Node,
     },

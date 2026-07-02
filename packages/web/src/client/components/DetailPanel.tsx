@@ -25,9 +25,20 @@ import {
   AimOutlined,
   FileTextOutlined,
   MenuFoldOutlined,
+  MenuOutlined,
 } from '@ant-design/icons';
 import type { ReferencedSpec, ScopePath } from '@qcqx/lattice-core';
-import { useState, useRef as useReactRef, useEffect, useCallback } from 'react';
+import {
+  useState,
+  useRef as useReactRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  isValidElement,
+  createElement,
+  type ReactNode,
+  type ReactElement,
+} from 'react';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
 import { detailStore, closeDetail, getViewPath, locateNode, toggleDetailCollapse } from '../store';
@@ -57,6 +68,125 @@ import './DetailPanel.less';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeHighlight from 'rehype-highlight';
+
+// ── Markdown 目录（TOC）组件 ──
+
+function slugifyToc(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^\w\u4e00-\u9fff]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'heading'
+  );
+}
+
+function stripMarkdownSyntax(text: string): string {
+  return text
+    .replace(/`{1,3}([^`]+)`{1,3}/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+}
+
+function extractTocHeadings(markdown: string): { level: number; text: string; id: string }[] {
+  const headings: { level: number; text: string; id: string }[] = [];
+  const usedIds = new Map<string, number>();
+  for (const line of markdown.split('\n')) {
+    const match = line.match(/^(#{1,6})\s+(.+)/);
+    if (!match) continue;
+    const level = match[1].length;
+    const text = stripMarkdownSyntax(match[2].trim());
+    let id = slugifyToc(text);
+    const count = usedIds.get(id) || 0;
+    if (count > 0) id = `${id}-${count + 1}`;
+    usedIds.set(id, count + 1);
+    headings.push({ level, text, id });
+  }
+  return headings;
+}
+
+function getTextFromNode(node: ReactNode): string {
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(getTextFromNode).join('');
+  if (isValidElement(node))
+    return getTextFromNode((node.props as { children?: ReactNode }).children);
+  return '';
+}
+
+const tocHeadingComponents: Record<
+  string,
+  (props: { children?: ReactNode; [k: string]: unknown }) => ReactElement
+> = {};
+for (let level = 1; level <= 6; level++) {
+  const tag = `h${level}`;
+  tocHeadingComponents[tag] = ({ children, ...props }) => {
+    const id = slugifyToc(getTextFromNode(children));
+    return createElement(tag, { ...props, id, 'data-toc-id': id }, children);
+  };
+}
+
+function MarkdownWithToc({ content }: { content: string }) {
+  const containerRef = useReactRef<HTMLDivElement>(null);
+  const headings = useMemo(() => extractTocHeadings(content), [content]);
+  const [tocOpen, setTocOpen] = useState(false);
+
+  const scrollToHeading = (id: string) => {
+    const el = containerRef.current?.querySelector(`[data-toc-id="${id}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTocOpen(false);
+  };
+
+  return (
+    <div className='markdown-toc-container' ref={containerRef}>
+      <div className='markdown-body detail-markdown'>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw, rehypeHighlight]}
+          components={tocHeadingComponents}>
+          {content}
+        </ReactMarkdown>
+      </div>
+      {headings.length >= 2 && (
+        <div className='markdown-toc-float'>
+          {tocOpen && (
+            <div className='markdown-toc-float__panel'>
+              <div className='markdown-toc-float__header'>
+                <span>目录</span>
+                <Tag color='blue' style={{ fontSize: 10, margin: 0 }}>
+                  {headings.length}
+                </Tag>
+              </div>
+              <div className='markdown-toc-float__list'>
+                {headings.map((h, i) => (
+                  <a
+                    key={i}
+                    className={`markdown-toc-float__item markdown-toc-float__item--level-${Math.min(h.level, 4)}`}
+                    title={h.text}
+                    onClick={() => scrollToHeading(h.id)}>
+                    {h.text}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          <Button
+            type='primary'
+            shape='circle'
+            size='small'
+            icon={<MenuOutlined />}
+            className={`markdown-toc-float__btn${tocOpen ? ' markdown-toc-float__btn--active' : ''}`}
+            onClick={() => setTocOpen(!tocOpen)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── ScrollSpyBar：滚动时固定在顶部显示当前 section，点击回到 section 开头 ──
 
@@ -233,28 +363,32 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   const lineage = (lineageQuery.data as TaskMeta[] | null) || [];
 
   // 构建文档 tab 列表
-  // 注意：API 在文件不存在时返回 { error: 'not_found' } 对象而非字符串，需过滤
+  // 服务端成功返回 { content: string }，文件不存在返回 { error: 'not_found' }
+  // adapter 已将成功映射为 string、失败映射为 null
   const isStringContent = (d: unknown): d is string => typeof d === 'string';
   const docTabs: { key: string; label: string; content: string | null; loading: boolean }[] = [];
-  if (isStringContent(prdQuery.data))
-    docTabs.push({ key: 'prd', label: 'PRD', content: prdQuery.data, loading: prdQuery.isLoading });
-  if (isStringContent(designQuery.data))
+  // loading 中也显示 tab（展示骨架），内容就绪后切换为 markdown 预览
+  if (prdQuery.isLoading || isStringContent(prdQuery.data))
+    docTabs.push({
+      key: 'prd',
+      label: 'PRD',
+      content: isStringContent(prdQuery.data) ? prdQuery.data : null,
+      loading: prdQuery.isLoading,
+    });
+  if (designQuery.isLoading || isStringContent(designQuery.data))
     docTabs.push({
       key: 'design',
       label: '设计文档',
-      content: designQuery.data,
+      content: isStringContent(designQuery.data) ? designQuery.data : null,
       loading: designQuery.isLoading,
     });
-  if (isStringContent(progressContentQuery.data))
+  if (progressContentQuery.isLoading || isStringContent(progressContentQuery.data))
     docTabs.push({
       key: 'progress',
       label: '进度文件',
-      content: progressContentQuery.data,
+      content: isStringContent(progressContentQuery.data) ? progressContentQuery.data : null,
       loading: progressContentQuery.isLoading,
     });
-  // loading 中也显示 tab（展示骨架）
-  if (prdQuery.isLoading && docTabs.length === 0)
-    docTabs.push({ key: 'prd', label: 'PRD', content: null, loading: true });
 
   return (
     <div className='detail-component'>
@@ -475,19 +609,17 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                 key: tab.key,
                 label: tab.label,
                 children: (
-                  <div className='markdown-body detail-markdown'>
+                  <>
                     {tab.loading ? (
-                      <Skeleton active paragraph={{ rows: 4 }} />
+                      <div className='markdown-body detail-markdown'>
+                        <Skeleton active paragraph={{ rows: 4 }} />
+                      </div>
                     ) : tab.content ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                        {tab.content}
-                      </ReactMarkdown>
+                      <MarkdownWithToc content={tab.content} />
                     ) : (
                       <Empty description='文件为空' image={Empty.PRESENTED_IMAGE_SIMPLE} />
                     )}
-                  </div>
+                  </>
                 ),
               }))}
             />
@@ -842,13 +974,7 @@ function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div className='markdown-body detail-markdown'>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                {message}
-              </ReactMarkdown>
-            </div>
+            <MarkdownWithToc content={message} />
           </div>
         )}
       </div>
@@ -865,6 +991,8 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
   const title = (data.title as string) || '未知';
   const specId = (data.specId as string) || '';
   const scope = (data.scope as string) || 'project';
+  const scopeLabel = scope === 'global' ? '全局级' : scope === 'user' ? '用户级' : '项目级';
+  const scopeColor = scope === 'global' ? 'orange' : scope === 'user' ? 'cyan' : 'blue';
   const filePath = (data.filePath as string) || null;
   const specsQuery = useQuery({
     queryKey: queryKeys.specs(),
@@ -881,9 +1009,7 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
     <div className='detail-component'>
       <h3 className='detail-component__title'>{title}</h3>
       <div className='detail-component__tags'>
-        <Tag color={scope === 'project' ? 'blue' : scope === 'user' ? 'green' : 'default'}>
-          {scope}
-        </Tag>
+        <Tag color={scopeColor}>{scopeLabel}</Tag>
       </div>
       {finalFilePath && <FilePathBar path={finalFilePath} />}
       <div className='detail-component__meta'>
@@ -912,13 +1038,7 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div className='markdown-body detail-markdown'>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                {spec.content}
-              </ReactMarkdown>
-            </div>
+            <MarkdownWithToc content={spec.content} />
           </div>
         )}
       </div>
@@ -1102,13 +1222,7 @@ function DocumentDetail({ data }: { data: Record<string, unknown> }) {
               sectionRefs.current.content = el;
             }}>
             <Divider style={{ margin: '8px 0' }} />
-            <div className='markdown-body detail-markdown'>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                {content}
-              </ReactMarkdown>
-            </div>
+            <MarkdownWithToc content={content} />
           </div>
         )}
         {!contentQuery.isLoading && !isError && !content && (

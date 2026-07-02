@@ -163,6 +163,52 @@ body {
   }
 }
 
+// ── 侧栏 resize handle（与详情面板风格一致） ──
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    content: '';
+    width: 3px;
+    height: 40px;
+    background: var(--border);
+    border-radius: 2px;
+    transition:
+      background 0.2s,
+      height 0.2s;
+  }
+
+  &:hover::after,
+  &:active::after {
+    background: var(--brand-color);
+    height: 60px;
+  }
+}
+
+// ── 树形浏览器行 hover ──
+.tree-item {
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--bg-tertiary);
+  }
+}
+
+.tree-item--sticky {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+
 .detail-transition {
   transition:
     opacity var(--transition-normal),

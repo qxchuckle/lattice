@@ -101,10 +101,12 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // ── 文件内容 ──
-  getContent(type: string, id: string): Promise<string> {
-    return fetchJson<string>(
+  async getContent(type: string, id: string): Promise<string | null> {
+    const res = await fetchJson<{ content?: string; error?: string }>(
       `${API_BASE}/content/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
     );
+    // 服务端成功时返回 { content: string }，失败时返回 { error: string, message: string }
+    return res.content ?? null;
   }
 
   // ── 统计 ──

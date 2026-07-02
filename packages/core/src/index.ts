@@ -221,6 +221,7 @@ export {
   getGlobalSpecs,
   getUserSpecs,
   getProjectSpecs,
+  getAllProjectSpecs,
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
   detectSpecConflicts,

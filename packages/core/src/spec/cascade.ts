@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import type { ParsedSpec } from '../types';
 import { getGlobalSpecDir, getUserSpecDir, getProjectSpecDir, listDir } from '../paths';
 import { parseSpec } from './io';
-import { findProjectDirName } from '../project';
+import { findProjectDirName, listProjects } from '../project';
 
 async function listMarkdownFiles(dir: string): Promise<string[]> {
   const entries = await listDir(dir);
@@ -52,6 +52,17 @@ export async function getProjectSpecs(username: string, projectId: string): Prom
   const dirName = await findProjectDirName(username, projectId);
   if (!dirName) return [];
   return listSpecsInDir(getProjectSpecDir(username, dirName));
+}
+
+/** 获取所有已注册项目的 spec（聚合） */
+export async function getAllProjectSpecs(username: string): Promise<ParsedSpec[]> {
+  const projects = listProjects(username);
+  const results: ParsedSpec[] = [];
+  for (const p of projects) {
+    const specs = await getProjectSpecs(username, p.id);
+    results.push(...specs);
+  }
+  return results;
 }
 
 /**

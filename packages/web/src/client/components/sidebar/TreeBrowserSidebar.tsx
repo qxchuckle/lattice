@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Input, Button, Skeleton, Empty, Tag, Checkbox } from 'antd';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Input, Button, Skeleton, Empty, Tag, Checkbox, Tooltip } from 'antd';
 import {
   RightOutlined,
   DownOutlined,
@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
-import { canvasStore, sidebarStore, getViewPath } from '../../store';
+import { canvasStore, sidebarStore, getViewPath, setSidebarWidth } from '../../store';
 import { useSearch } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
@@ -23,6 +23,41 @@ import {
   edgeLegendItems,
   focusDepthOptions,
 } from './treeUtils';
+
+/** 可截断标题：溢出时悬浮显示完整标题（右侧、延迟触发） */
+function TruncatableTitle({ title }: { title: string }) {
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleMouseEnter = () => {
+    const el = spanRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    timerRef.current = setTimeout(() => setOpen(true), 200);
+  };
+  const handleMouseLeave = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setOpen(false);
+  };
+
+  return (
+    <Tooltip title={title} placement='right' open={open}>
+      <span
+        ref={spanRef}
+        style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}>
+        {title}
+      </span>
+    </Tooltip>
+  );
+}
 
 /** 树节点图标 */
 function getNodeIcon(node: TreeNode): React.ReactNode {
@@ -65,10 +100,21 @@ function TreeItem({
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = expandedKeys[node.key];
   const isLeaf =
-    node.type === 'task-item' ||
-    node.type === 'spec-item' ||
+    (node.type === 'task-item' && !hasChildren) ||
+    (node.type === 'spec-item' && !hasChildren) ||
     (node.type === 'project-item' && !hasChildren);
   const isSearchResult = node.type === 'search-result';
+
+  // 容器节点 sticky 置顶：展开的祖先节点滚动时固定在顶部
+  const isStickyHeader =
+    !isLeaf &&
+    depth < 4 &&
+    (node.type === 'spec-root' ||
+      node.type === 'project-root' ||
+      node.type === 'task-root' ||
+      node.type === 'spec-scope' ||
+      (node.type === 'project-item' && hasChildren) ||
+      (node.type === 'task-item' && hasChildren));
 
   const colorMap: Record<string, string> = {
     task: getEntityColor('task'),
@@ -81,6 +127,7 @@ function TreeItem({
   return (
     <>
       <div
+        className={`tree-item${isStickyHeader ? ' tree-item--sticky' : ''}`}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -91,52 +138,97 @@ function TreeItem({
           marginLeft: depth * 14,
           fontSize: 12,
           whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
+          ...(isStickyHeader
+            ? {
+                position: 'sticky' as const,
+                top: depth * 25,
+                zIndex: 20 - depth,
+              }
+            : {}),
         }}
         onClick={() => {
-          if (hasChildren && !isLeaf) {
-            onToggle(node.key);
-          } else if (node.entityId && node.viewMode) {
+          if (node.entityId && node.viewMode) {
             onNavigate(node);
+          } else if (hasChildren && !isLeaf) {
+            onToggle(node.key);
           }
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--bg-tertiary)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
         }}>
         {hasChildren && !isLeaf ? (
-          isExpanded ? (
-            <DownOutlined style={{ fontSize: 8, flexShrink: 0 }} />
-          ) : (
-            <RightOutlined style={{ fontSize: 8, flexShrink: 0 }} />
-          )
+          <span
+            style={{
+              flexShrink: 0,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 20,
+              height: 20,
+              borderRadius: 4,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--bg-tertiary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle(node.key);
+            }}>
+            {isExpanded ? (
+              <DownOutlined style={{ fontSize: 11 }} />
+            ) : (
+              <RightOutlined style={{ fontSize: 11 }} />
+            )}
+          </span>
         ) : (
-          <span style={{ width: 8, flexShrink: 0 }} />
+          <span style={{ width: 16, flexShrink: 0 }} />
         )}
         {getNodeIcon(node)}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-          {truncate(node.title, 32)}
-        </span>
+        <TruncatableTitle title={truncate(node.title, 32)} />
         {node.meta?.status && node.type === 'task-item' && (
           <Tag
             color={getEntityColor('task')}
-            style={{ fontSize: 9, margin: 0, lineHeight: '14px', padding: '0 3px', flexShrink: 0 }}>
+            style={{
+              fontSize: 9,
+              margin: 0,
+              lineHeight: '14px',
+              padding: '0 3px',
+              flexShrink: 0,
+            }}>
             {node.meta.status}
           </Tag>
         )}
         {isSearchResult && node.meta?.desc && (
           <Tag
             color={colorMap[node.meta.desc] || undefined}
-            style={{ fontSize: 9, margin: 0, lineHeight: '14px', padding: '0 3px', flexShrink: 0 }}>
+            style={{
+              fontSize: 9,
+              margin: 0,
+              lineHeight: '14px',
+              padding: '0 3px',
+              flexShrink: 0,
+            }}>
             {node.meta.desc}
           </Tag>
         )}
         {node.meta?.scope && node.type === 'spec-item' && (
           <Tag
-            style={{ fontSize: 9, margin: 0, lineHeight: '14px', padding: '0 3px', flexShrink: 0 }}>
+            color={
+              node.meta.scope === '全局级'
+                ? 'orange'
+                : node.meta.scope === '用户级'
+                  ? 'cyan'
+                  : 'blue'
+            }
+            style={{
+              fontSize: 9,
+              margin: 0,
+              lineHeight: '14px',
+              padding: '0 3px',
+              flexShrink: 0,
+            }}>
             {node.meta.scope}
           </Tag>
         )}
@@ -160,18 +252,23 @@ function TreeItem({
 /** 树形浏览器侧栏：顶部 Tab 切换搜索/筛选 */
 export function TreeBrowserSidebar() {
   const navigate = useNavigate();
-  const { collapsed, searchKeyword, expandedKeys } = useSnapshot(sidebarStore);
+  const { collapsed, searchKeyword, width } = useSnapshot(sidebarStore);
   const { visibleTypes, visibleEdgeTypes, focusDepth, selectedNodeId } = useSnapshot(canvasStore);
   const searchResult = useSearch();
   const { tree, loading } = useTreeData();
   const [activeTab, setActiveTab] = useState<'search' | 'filter'>('search');
+  // 用本地 useState 管理 expandedKeys，确保展开/折叠立即触发重渲染
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
 
-  const handleToggle = (key: string) => {
-    sidebarStore.expandedKeys[key] = !expandedKeys[key];
-  };
-  const handleNavigate = (node: TreeNode) => {
-    if (node.entityId && node.viewMode) navigate(getViewPath(node.viewMode, node.entityId));
-  };
+  const handleToggle = useCallback((key: string) => {
+    setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+  const handleNavigate = useCallback(
+    (node: TreeNode) => {
+      if (node.entityId && node.viewMode) navigate(getViewPath(node.viewMode, node.entityId));
+    },
+    [navigate],
+  );
 
   const isSearching = searchKeyword.length > 0;
   const searchItems = isSearching && searchResult.data ? flattenSearch(searchResult.data) : [];
@@ -179,6 +276,29 @@ export function TreeBrowserSidebar() {
 
   const allNodesChecked = nodeLegendItems.every((item) => visibleTypes[item.key]);
   const allEdgesChecked = edgeLegendItems.every((item) => visibleEdgeTypes[item.key]);
+
+  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = sidebarStore.width;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      // 侧栏在左侧，右边缘向右拖 → delta 正 → 宽度增加
+      setSidebarWidth(startWidth + (ev.clientX - startX));
+    };
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1,
@@ -200,7 +320,7 @@ export function TreeBrowserSidebar() {
           top: 12,
           left: 12,
           bottom: 12,
-          width: 260,
+          width: width,
           zIndex: 20,
           background: 'var(--bg-secondary)',
           backdropFilter: 'blur(12px)',
@@ -212,6 +332,8 @@ export function TreeBrowserSidebar() {
           boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
         }}
         className={`sidebar-transition${collapsed ? ' sidebar-transition--hidden' : ''}`}>
+        {/* 右侧 resize handle */}
+        <div className='sidebar-resize-handle' onMouseDown={handleSidebarResizeStart} />
         <Button
           size='small'
           type='text'
@@ -314,7 +436,7 @@ export function TreeBrowserSidebar() {
                     key={node.key}
                     node={node}
                     depth={0}
-                    expandedKeys={expandedKeys as Record<string, boolean>}
+                    expandedKeys={expandedKeys}
                     onToggle={handleToggle}
                     onNavigate={handleNavigate}
                   />

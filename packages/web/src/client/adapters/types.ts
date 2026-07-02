@@ -40,8 +40,8 @@ export interface LatticeDataAdapter {
   // 打开文件/目录
   openPath(path: string, app: EditorApp): Promise<boolean>;
 
-  // 文件内容读取
-  getContent(type: string, id: string): Promise<string>;
+  // 文件内容读取（成功返回 string，文件不存在返回 null）
+  getContent(type: string, id: string): Promise<string | null>;
 
   // 统计
   getStats(): Promise<DashboardStats>;
