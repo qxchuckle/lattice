@@ -39,6 +39,8 @@ export const canvasStore = proxy({
   } as Record<string, boolean>,
   /** 聚焦深度（选中节点后高亮的跳数，0 = 全部，默认 1 跳） */
   focusDepth: 1 as number,
+  /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
+  layoutRunning: false,
 });
 
 // ── 侧栏状态 ──

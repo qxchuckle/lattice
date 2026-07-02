@@ -12,7 +12,7 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
       style: {
         'shape': 'round-rectangle',
         'background-color': bg,
-        'background-opacity': 0.95,
+        'background-opacity': 0.6,
         'border-width': 2,
         'border-color': ec,
         'border-opacity': 0.8,

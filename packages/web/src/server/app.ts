@@ -6,11 +6,15 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { registerRoutes } from './routes';
+import { initDb } from '@qcqx/lattice-core';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 /** 创建 Fastify 实例并注册所有插件和路由 */
 export async function createServer() {
+  // 初始化数据库（必须在路由注册前完成）
+  await initDb();
+
   const app = Fastify({
     logger: { level: 'warn' },
   }).withTypeProvider<TypeBoxTypeProvider>();

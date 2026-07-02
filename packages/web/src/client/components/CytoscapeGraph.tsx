@@ -14,7 +14,7 @@ import {
 import { useGlobalGraph } from '../hooks';
 import { CanvasToolbar } from './graph/CanvasToolbar';
 import { buildStylesheet } from './graph/stylesheet';
-import { buildLayoutConfig, applyFocus, clearFocus, findNodeById } from './graph/layout';
+import { runLayout, applyFocus, clearFocus, findNodeById } from './graph/layout';
 import { toElements } from './graph/elements';
 
 cytoscape.use(fcose);
@@ -120,7 +120,7 @@ export function CytoscapeGraph() {
     cy.elements().remove();
     cy.add(elements);
     cy.nodes().ungrabify();
-    cy.layout(buildLayoutConfig(elements.length, layoutMode)).run();
+    runLayout(cy, elements.length, layoutMode);
 
     if (anchorId) {
       const node = findNodeById(cy, anchorId);
@@ -140,7 +140,7 @@ export function CytoscapeGraph() {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || cy.elements().length === 0) return;
-    cy.layout(buildLayoutConfig(cy.elements().length, layoutMode)).run();
+    runLayout(cy, cy.elements().length, layoutMode);
   }, [layoutMode]);
 
   // 锚点变化：仅聚焦
@@ -192,7 +192,7 @@ export function CytoscapeGraph() {
       cy.elements().remove();
       cy.add(elements);
       cy.nodes().ungrabify();
-      cy.layout(buildLayoutConfig(elements.length, layoutMode)).run();
+      runLayout(cy, elements.length, layoutMode);
       if (anchorId) {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {
@@ -263,7 +263,7 @@ export function CytoscapeGraph() {
         ref={containerRef}
         style={{ width: '100%', height: '100%', background: isDark ? '#1D1D26' : '#F5F5F5' }}
       />
-      <CanvasToolbar isDark={isDark} cyRef={cyRef} />
+      <CanvasToolbar isDark={isDark} cyRef={cyRef} layoutMode={layoutMode} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type cytoscape from 'cytoscape';
 import type { LayoutMode } from '../../store';
+import { runRadialLayout } from './radial-layout';
 
 /** 布局配置：支持力导向 / 顺序 / 径向三种布局 */
 export function buildLayoutConfig(
@@ -54,6 +55,25 @@ export function buildLayoutConfig(
     nodeSeparation: 120,
     packingQuality: 'default',
   } as unknown as cytoscape.LayoutOptions;
+}
+
+// ── 径向布局在 radial-layout.ts 中实现（仿 GitNexus circles 视图）──
+
+/**
+ * 运行布局的统一入口。
+ * - 径向模式：自定义径向物理模拟（仿 GitNexus circles 视图）
+ * - 力导向 / 顺序：Cytoscape 内置布局
+ */
+export function runLayout(
+  cy: cytoscape.Core,
+  nodeCount: number,
+  layoutMode: LayoutMode = 'force',
+): void {
+  if (layoutMode === 'radial') {
+    runRadialLayout(cy, nodeCount);
+  } else {
+    cy.layout(buildLayoutConfig(nodeCount, layoutMode)).run();
+  }
 }
 
 /** Focus+Context：高亮选中节点的 N 跳邻域，其余变灰 */
