@@ -19,6 +19,7 @@ import { registerSyncCommand } from './commands/sync';
 import { registerUserCommand } from './commands/user';
 import { registerRagCommand } from './commands/rag';
 import { registerTrashCommand } from './commands/trash';
+import { registerWebCommand } from './commands/web';
 
 const program = new Command();
 const invokedAs = process.argv[1] ? basename(process.argv[1]) : 'lattice';
@@ -45,6 +46,7 @@ registerSyncCommand(program);
 registerUserCommand(program);
 registerRagCommand(program);
 registerTrashCommand(program);
+registerWebCommand(program);
 
 // 确保所有可执行命令都接受 --force 选项，避免 AI 调用时因 unknown option 报错
 function ensureForceOption(cmd: Command): void {

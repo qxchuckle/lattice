@@ -29,6 +29,7 @@
     "undici": "^6.24.1"
   },
   "devDependencies": {
+    "@qcqx/lattice-web": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3"
   },

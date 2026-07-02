@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { basename as pathBasename, resolve as pathResolve } from 'node:path';
-import machineIdPkg from 'node-machine-id';
+import { machineIdSync } from 'node-machine-id';
 import type { ProjectMeta, ProjectRow } from '../types';
 import {
   getProjectDir,
@@ -40,7 +40,6 @@ import { moveToTrash } from '../trash';
 // ─── ID 生成 ───
 
 const PROJECT_ID_PATTERN = /^[0-9a-f]{16}$/;
-const { machineIdSync } = machineIdPkg;
 
 function hashSegment(input: string, length: number): string {
   return createHash('sha256').update(input).digest('hex').slice(0, length);

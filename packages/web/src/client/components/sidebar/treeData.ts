@@ -1,0 +1,194 @@
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getAdapter } from '../../adapters';
+import { queryKeys, truncate } from '../../lib';
+import type { ViewMode } from '../../store';
+import type { TreeNode } from './treeUtils';
+import type { TaskMeta, ProjectMeta, ParsedSpec } from '@qcqx/lattice-core';
+
+/** 构建树形数据：Spec / 项目 / 任务 三级树 */
+export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
+  const adapter = getAdapter();
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: () => adapter.getProjects(),
+  });
+  const tasksQuery = useQuery({ queryKey: queryKeys.tasks(), queryFn: () => adapter.getTasks() });
+  const specsQuery = useQuery({ queryKey: queryKeys.specs(), queryFn: () => adapter.getSpecs() });
+
+  const loading = projectsQuery.isLoading || tasksQuery.isLoading || specsQuery.isLoading;
+
+  const tree = useMemo<TreeNode[]>(() => {
+    if (loading) return [];
+    const projects = projectsQuery.data || [];
+    const tasks = tasksQuery.data || [];
+    const allSpecs = specsQuery.data;
+
+    // ── Spec 树 ──
+    const specChildren: TreeNode[] = [];
+    const globalSpecs = allSpecs?.global || [];
+    const userSpecs = allSpecs?.user || [];
+    const projectSpecs = allSpecs?.project || [];
+
+    if (globalSpecs.length > 0) {
+      specChildren.push({
+        key: 'spec-global',
+        title: `全局 (${globalSpecs.length})`,
+        type: 'spec-scope',
+        children: globalSpecs.map((s: ParsedSpec) => ({
+          key: `spec-g-${s.frontmatter.id || s.fileName}`,
+          title: s.frontmatter.title || s.fileName,
+          type: 'spec-item' as const,
+          entityId: s.frontmatter.id || s.fileName,
+          viewMode: 'spec' as ViewMode,
+          meta: { scope: 'global' },
+        })),
+      });
+    }
+    if (userSpecs.length > 0) {
+      specChildren.push({
+        key: 'spec-user',
+        title: `用户级 (${userSpecs.length})`,
+        type: 'spec-scope',
+        children: userSpecs.map((s: ParsedSpec) => ({
+          key: `spec-u-${s.frontmatter.id || s.fileName}`,
+          title: s.frontmatter.title || s.fileName,
+          type: 'spec-item' as const,
+          entityId: s.frontmatter.id || s.fileName,
+          viewMode: 'spec' as ViewMode,
+          meta: { scope: 'user' },
+        })),
+      });
+    }
+    const projectSpecMap = new Map<string, ParsedSpec[]>();
+    projectSpecs.forEach((s: ParsedSpec) => {
+      const match = s.filePath.match(/\/projects\/([^/]+)\//);
+      const pid = match ? match[1] : 'other';
+      if (!projectSpecMap.has(pid)) projectSpecMap.set(pid, []);
+      projectSpecMap.get(pid)!.push(s);
+    });
+    projectSpecMap.forEach((specs, pid) => {
+      const project = projects.find((p) => p.id === pid);
+      specChildren.push({
+        key: `spec-p-${pid}`,
+        title: `${project?.name || truncate(pid, 16)} (${specs.length})`,
+        type: 'spec-scope',
+        children: specs.map((s: ParsedSpec) => {
+          const specId = s.frontmatter.id || s.fileName;
+          const refTasks = tasks.filter((t: TaskMeta) =>
+            (t.referencedSpecs || []).some((r: { id: string }) => r.id === specId),
+          );
+          const taskChildren = refTasks.map((t: TaskMeta) => ({
+            key: `spec-task-${specId}-${t.id}`,
+            title: truncate(t.title, 30),
+            type: 'task-item' as const,
+            entityId: t.id,
+            viewMode: 'task' as ViewMode,
+            meta: { status: t.status },
+          }));
+          return {
+            key: `spec-pi-${pid}-${specId}`,
+            title: s.frontmatter.title || s.fileName,
+            type: 'spec-item' as const,
+            entityId: specId,
+            viewMode: 'spec' as ViewMode,
+            meta: { scope: 'project' },
+            children: taskChildren.length > 0 ? taskChildren : undefined,
+          };
+        }),
+      });
+    });
+
+    // ── 项目树 ──
+    const projectChildren: TreeNode[] = (projects as ProjectMeta[]).map((p) => {
+      const projectTasks = (tasks as TaskMeta[]).filter((t) => (t.projects || []).includes(p.id));
+      const projectSpecItems = projectSpecs.filter((s: ParsedSpec) => {
+        const match = s.filePath.match(/\/projects\/([^/]+)\//);
+        return match && match[1] === p.id;
+      });
+      const children: TreeNode[] = [];
+      if (projectTasks.length > 0) {
+        children.push({
+          key: `proj-tasks-${p.id}`,
+          title: `任务 (${projectTasks.length})`,
+          type: 'spec-scope',
+          children: projectTasks.map((t: TaskMeta) => ({
+            key: `proj-task-${p.id}-${t.id}`,
+            title: truncate(t.title, 30),
+            type: 'task-item' as const,
+            entityId: t.id,
+            viewMode: 'task' as ViewMode,
+            meta: { status: t.status },
+          })),
+        });
+      }
+      if (projectSpecItems.length > 0) {
+        children.push({
+          key: `proj-specs-${p.id}`,
+          title: `Spec (${projectSpecItems.length})`,
+          type: 'spec-scope',
+          children: projectSpecItems.map((s: ParsedSpec) => ({
+            key: `proj-spec-${p.id}-${s.frontmatter.id || s.fileName}`,
+            title: s.frontmatter.title || s.fileName,
+            type: 'spec-item' as const,
+            entityId: s.frontmatter.id || s.fileName,
+            viewMode: 'spec' as ViewMode,
+            meta: { scope: 'project' },
+          })),
+        });
+      }
+      return {
+        key: `proj-${p.id}`,
+        title: p.name,
+        type: 'project-item' as const,
+        entityId: p.id,
+        viewMode: 'project' as ViewMode,
+        meta: { desc: p.description },
+        children: children.length > 0 ? children : undefined,
+      };
+    });
+
+    // ── 任务树 ──
+    const rootTasks = (tasks as TaskMeta[]).filter((t) => !t.parentTaskId);
+    const taskChildren: TreeNode[] = rootTasks.map((t: TaskMeta) => {
+      const subTasks = (tasks as TaskMeta[]).filter((st) => st.parentTaskId === t.id);
+      return {
+        key: `task-${t.id}`,
+        title: truncate(t.title, 30),
+        type: 'task-item' as const,
+        entityId: t.id,
+        viewMode: 'task' as ViewMode,
+        meta: { status: t.status },
+        children:
+          subTasks.length > 0
+            ? subTasks.map((st: TaskMeta) => ({
+                key: `task-${t.id}-${st.id}`,
+                title: truncate(st.title, 30),
+                type: 'task-item' as const,
+                entityId: st.id,
+                viewMode: 'task' as ViewMode,
+                meta: { status: st.status },
+              }))
+            : undefined,
+      };
+    });
+
+    return [
+      { key: 'root-spec', title: 'Spec', type: 'spec-root', children: specChildren },
+      {
+        key: 'root-project',
+        title: `项目 (${projects.length})`,
+        type: 'project-root',
+        children: projectChildren,
+      },
+      {
+        key: 'root-task',
+        title: `任务 (${tasks.length})`,
+        type: 'task-root',
+        children: taskChildren,
+      },
+    ];
+  }, [loading, projectsQuery.data, tasksQuery.data, specsQuery.data]);
+
+  return { tree, loading };
+}

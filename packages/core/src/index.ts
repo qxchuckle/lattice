@@ -170,6 +170,9 @@ export {
   isPathPrefixOf,
 } from './project';
 
+// 项目 git 状态
+export { getProjectGitStatus, type GitStatus } from './project/git-status';
+
 // 项目关系（relations.json 真源 CRUD）
 export {
   generateRelationId,

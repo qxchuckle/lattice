@@ -16,4 +16,5 @@ export default defineConfig({
     ].join('\n'),
   },
   publicDir: 'public',
+  external: ['@qcqx/lattice-web', '@qcqx/lattice-core'],
 });
