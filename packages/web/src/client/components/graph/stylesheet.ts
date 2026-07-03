@@ -122,5 +122,23 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
         'target-arrow-color': '#1677FF',
       } as unknown as cytoscape.Css.Edge,
     },
+    {
+      selector: 'edge.hovered',
+      style: {
+        'opacity': 0.7,
+        'width': 2,
+        'line-color': '#52C41A',
+        'target-arrow-color': '#52C41A',
+      } as unknown as cytoscape.Css.Edge,
+    },
+    {
+      selector: 'edge.highlighted.hovered',
+      style: {
+        'opacity': 0.7,
+        'width': 2,
+        'line-color': '#1677FF',
+        'target-arrow-color': '#1677FF',
+      } as unknown as cytoscape.Css.Edge,
+    },
   ];
 }

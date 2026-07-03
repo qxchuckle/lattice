@@ -45,6 +45,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   const skipAnchorRef = useRef(false);
   const visibleTypesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hoveredElesRef = useRef<cytoscape.Collection | null>(null);
+  const hoveredEdgesRef = useRef<cytoscape.EdgeCollection | null>(null);
 
   // 初始化（仅一次）
   useEffect(() => {
@@ -62,6 +64,15 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
 
     cy.on('tap', 'node', (evt) => {
       const node = evt.target;
+      // 清理 hover 状态：移除旧 hovered 边的 class + 恢复旧 dimmed 元素
+      if (hoveredEdgesRef.current) {
+        hoveredEdgesRef.current.removeClass('hovered');
+      }
+      if (hoveredElesRef.current) {
+        hoveredElesRef.current.addClass('dimmed');
+      }
+      hoveredElesRef.current = null;
+      hoveredEdgesRef.current = null;
       const data = node.data() as Record<string, unknown>;
       const entityType = data.entityType as string;
       const nodeId = node.id();
@@ -83,9 +94,49 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       }
     });
 
+    cy.on('mouseover', 'node', (evt) => {
+      const node = evt.target as cytoscape.NodeSingular;
+      // 恢复上次被移除 dimmed 的元素
+      if (hoveredElesRef.current) {
+        hoveredElesRef.current.addClass('dimmed');
+      }
+      // 移除上次被加 hovered 的边
+      if (hoveredEdgesRef.current) {
+        hoveredEdgesRef.current.removeClass('hovered');
+      }
+      // 找出当前邻域中 dimmed 的元素，移除 dimmed 恢复可见性
+      const neighborhood = node.closedNeighborhood();
+      const dimmedInNeighborhood = neighborhood.filter((el) => el.hasClass('dimmed'));
+      dimmedInNeighborhood.removeClass('dimmed');
+      hoveredElesRef.current = dimmedInNeighborhood;
+      // 给邻域中的边加 hovered（绿色连线）
+      const edges = neighborhood.edges();
+      edges.addClass('hovered');
+      hoveredEdgesRef.current = edges as cytoscape.EdgeCollection;
+    });
+
+    cy.on('mouseout', 'node', () => {
+      if (hoveredElesRef.current) {
+        hoveredElesRef.current.addClass('dimmed');
+        hoveredElesRef.current = null;
+      }
+      if (hoveredEdgesRef.current) {
+        hoveredEdgesRef.current.removeClass('hovered');
+        hoveredEdgesRef.current = null;
+      }
+    });
+
     cy.on('tap', (evt) => {
       if (evt.target === cy) {
         clearFocus(cy);
+        if (hoveredEdgesRef.current) {
+          hoveredEdgesRef.current.removeClass('hovered');
+        }
+        if (hoveredElesRef.current) {
+          hoveredElesRef.current.addClass('dimmed');
+        }
+        hoveredElesRef.current = null;
+        hoveredEdgesRef.current = null;
         closeDetail();
         navigate('/');
       }
