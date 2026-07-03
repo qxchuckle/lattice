@@ -143,6 +143,10 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     });
 
     cyRef.current = cy;
+    // HMR 后组件重新挂载：重置模块级 focus 状态（旧 lastNeighborhood 引用已销毁的元素）
+    // 并重置 canvasReady 显示 loading 遮罩，直到首次布局完成
+    clearFocus(cy);
+    canvasStore.canvasReady = false;
     return () => {
       cy.destroy();
       cyRef.current = null;
@@ -209,6 +213,9 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
               skipAnchorRef.current = true;
               applyFocus(cy, node.id(), canvasStore.focusDepth, true);
             }
+          } else if (selectedNodeId) {
+            // 无 anchorId 但有 selectedNodeId（HMR 后全局 store 保留选中状态）
+            applyFocus(cy, selectedNodeId, canvasStore.focusDepth, true);
           }
         },
         true,
@@ -325,6 +332,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
+    if (isFirstRenderRef.current) return;
     if (!selectedNodeId) {
       clearFocus(cy);
       return;
