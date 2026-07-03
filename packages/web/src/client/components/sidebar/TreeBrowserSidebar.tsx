@@ -30,7 +30,6 @@ const ENTITY_COLOR_MAP: Record<string, string> = {
   task: getEntityColor('task'),
   project: getEntityColor('project'),
   spec: getEntityColor('spec'),
-  checkpoint: getEntityColor('checkpoint'),
   relation: getEntityColor('project'),
 };
 
@@ -91,7 +90,7 @@ function getNodeIcon(node: TreeNode): React.ReactNode {
     case 'spec-root':
       return <FileTextOutlined style={{ fontSize: 12, color: '#13C2C2' }} />;
     case 'project-root':
-      return <FolderOutlined style={{ fontSize: 12, color: '#722ED1' }} />;
+      return <FolderOutlined style={{ fontSize: 12, color: '#FA8C16' }} />;
     case 'task-root':
       return <AimOutlined style={{ fontSize: 12, color: '#1677FF' }} />;
     case 'spec-scope':
@@ -99,7 +98,7 @@ function getNodeIcon(node: TreeNode): React.ReactNode {
     case 'spec-item':
       return <FileTextOutlined style={{ fontSize: 11, color: '#13C2C2' }} />;
     case 'project-item':
-      return <FolderOutlined style={{ fontSize: 11, color: '#722ED1' }} />;
+      return <FolderOutlined style={{ fontSize: 11, color: '#FA8C16' }} />;
     case 'task-item':
       return <AimOutlined style={{ fontSize: 11, color: getEntityColor('task') }} />;
     case 'search-result':

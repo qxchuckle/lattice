@@ -3,7 +3,7 @@ import { proxy } from 'valtio';
 
 // ── 画布状态 ──
 
-export type ViewMode = 'global' | 'task' | 'project' | 'spec' | 'checkpoint';
+export type ViewMode = 'global' | 'task' | 'project' | 'spec';
 
 export type LayoutMode = 'force' | 'sequential' | 'radial';
 
@@ -25,7 +25,6 @@ export const canvasStore = proxy({
     task: true,
     project: true,
     spec: true,
-    checkpoint: true,
   } as Record<string, boolean>,
   /** 画布可见边类型（边过滤） */
   visibleEdgeTypes: {
@@ -39,7 +38,6 @@ export const canvasStore = proxy({
     nested_in: true,
     related: true,
     belongs_to: true,
-    checkpoint: true,
     overrides: true,
     scope: true,
     semantic: true,
@@ -57,7 +55,7 @@ export const cyRef: { current: cytoscape.Core | null } = { current: null };
 
 // ── 侧栏状态 ──
 
-export type FilterType = 'all' | 'task' | 'project' | 'spec' | 'checkpoint';
+export type FilterType = 'all' | 'task' | 'project' | 'spec';
 
 export const sidebarStore = proxy({
   /** 搜索关键词 */
@@ -82,8 +80,8 @@ export const detailStore = proxy({
   /** 当前查看的实体 ID */
   entityId: null as string | null,
   /** 当前查看的实体类型 */
-  entityType: null as 'task' | 'project' | 'spec' | 'checkpoint' | 'document' | null,
-  /** 节点 data（checkpoint/spec 直接从此渲染，不走 API） */
+  entityType: null as 'task' | 'project' | 'spec' | null,
+  /** 节点 data（spec 直接从此渲染，不走 API） */
   entityData: null as Record<string, unknown> | null,
 });
 
@@ -118,8 +116,6 @@ export function getViewPath(mode: ViewMode, anchorId?: string | null): string {
       return anchorId ? `/project/${anchorId}` : '/project';
     case 'spec':
       return anchorId ? `/spec/${anchorId}` : '/spec';
-    case 'checkpoint':
-      return anchorId ? `/checkpoint/${anchorId}` : '/checkpoint';
   }
 }
 
@@ -140,7 +136,7 @@ export function setViewMode(mode: ViewMode): void {
 /** 选中节点并打开详情面板 */
 export function selectNode(
   nodeId: string,
-  entityType: 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
+  entityType: 'task' | 'project' | 'spec',
   data?: Record<string, unknown>,
 ): void {
   canvasStore.selectedNodeId = nodeId;
@@ -213,10 +209,6 @@ export function getBreadcrumb(): string[] {
       break;
     case 'spec':
       crumbs.push('全局', 'Spec');
-      if (anchorId) crumbs.push(anchorId.slice(0, 12));
-      break;
-    case 'checkpoint':
-      crumbs.push('全局', 'Checkpoint');
       if (anchorId) crumbs.push(anchorId.slice(0, 12));
       break;
   }

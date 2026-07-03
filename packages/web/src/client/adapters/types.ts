@@ -31,9 +31,6 @@ export interface LatticeDataAdapter {
   // 关系
   getRelations(): Promise<ProjectRelation[]>;
 
-  // Checkpoint
-  getActiveCheckpoints(): Promise<ActiveCheckpointResult[]>;
-
   // 任务语义上下文
   getTaskContext(id: string): Promise<TaskContextResult>;
 
@@ -80,11 +77,6 @@ export interface DashboardStats {
   taskCount: number;
   activeTaskCount: number;
   relationCount: number;
-}
-
-export interface ActiveCheckpointResult {
-  taskId: string;
-  checkpoints: CheckpointEntry[];
 }
 
 export interface TaskContextResult {

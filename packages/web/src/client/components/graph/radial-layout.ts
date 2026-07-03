@@ -6,8 +6,6 @@ export const TYPE_RING: Record<string, number> = {
   project: 0,
   spec: 1,
   task: 2,
-  checkpoint: 3,
-  document: 3,
 };
 
 // ── 布局参数 ──
@@ -101,7 +99,7 @@ function placeNodesOnRing(
 /**
  * 径向布局：确定性排布，从 label 文本估算尺寸。
  *
- * 1. 按类型分组（project 中心 → spec → task → checkpoint/document）
+ * 1. 按类型分组（project 中心 → spec → task）
  * 2. 逐个类型排布：从左上角开始，按估算宽度逐个放置
  * 3. 一圈放不下自动加子环（外环半径更大，能放更多节点）
  */

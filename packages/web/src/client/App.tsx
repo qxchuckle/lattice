@@ -24,7 +24,6 @@ function RouteSync() {
     const taskMatch = path.match(/^\/task\/(.+)$/);
     const projectMatch = path.match(/^\/project\/(.+)$/);
     const specMatch = path.match(/^\/spec\/(.+)$/);
-    const cpMatch = path.match(/^\/checkpoint\/(.+)$/);
     if (path === '/') {
       canvasStore.viewMode = 'global';
       canvasStore.anchorId = null;
@@ -45,12 +44,6 @@ function RouteSync() {
       canvasStore.anchorId = decodeURIComponent(specMatch[1]);
     } else if (path === '/spec') {
       canvasStore.viewMode = 'spec';
-      canvasStore.anchorId = null;
-    } else if (cpMatch) {
-      canvasStore.viewMode = 'checkpoint';
-      canvasStore.anchorId = decodeURIComponent(cpMatch[1]);
-    } else if (path === '/checkpoint') {
-      canvasStore.viewMode = 'checkpoint';
       canvasStore.anchorId = null;
     }
   }, [location.pathname]);
@@ -136,8 +129,6 @@ export default function App() {
         <Route path='/project/:projectId' element={<MainContent />} />
         <Route path='/spec' element={<MainContent />} />
         <Route path='/spec/:specId' element={<MainContent />} />
-        <Route path='/checkpoint' element={<MainContent />} />
-        <Route path='/checkpoint/:taskId' element={<MainContent />} />
         <Route path='*' element={<MainContent />} />
       </Routes>
 

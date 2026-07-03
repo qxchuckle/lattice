@@ -1,26 +1,41 @@
 import type cytoscape from 'cytoscape';
-import { getEntityColor, getTaskStatusColor, getCheckpointTypeColor } from '../../lib';
+import { getEntityColor, getTaskStatusColor } from '../../lib';
 import type { LatticeNode, LatticeEdge } from '../../types/graph';
 
-/** 节点标签：带类型 tag */
+/** 任务状态中文标签 */
+const TASK_STATUS_LABEL: Record<string, string> = {
+  in_progress: '进行中',
+  completed: '已完成',
+  archived: '已归档',
+  planning: '规划中',
+};
+
+/** spec scope 中文标签 */
+const SPEC_SCOPE_LABEL: Record<string, string> = {
+  global: '全局',
+  user: '用户级',
+  project: '项目级',
+};
+
+/** 节点标签：单行多标签（[类型][状态] 标题） */
 export function getNodeLabel(data: Record<string, unknown>): string {
   const type = data.entityType as string;
+
+  // 类型标签
   const typeTag = (() => {
     switch (type) {
       case 'task':
-        return 'Task';
+        return '[Task]';
       case 'project':
-        return 'Project';
+        return '[Project]';
       case 'spec':
-        return 'Spec';
-      case 'checkpoint':
-        return 'CP';
-      case 'document':
-        return 'Doc';
+        return '[Spec]';
       default:
-        return '';
+        return '[Node]';
     }
   })();
+
+  // 标题
   const title = (() => {
     switch (type) {
       case 'task':
@@ -29,23 +44,31 @@ export function getNodeLabel(data: Record<string, unknown>): string {
         return (data.name as string) || (data.projectId as string) || 'Project';
       case 'spec':
         return (data.title as string) || (data.specId as string) || 'Spec';
-      case 'checkpoint':
-        return (data.title as string) || (data.checkpointId as string) || 'CP';
-      case 'document':
-        return (data.title as string) || (data.docType as string) || 'Doc';
       default:
         return 'Node';
     }
   })();
-  const scopeSuffix = (() => {
-    if (type !== 'spec') return '';
-    const scope = data.scope as string;
-    if (scope === 'global') return ' [全局]';
-    if (scope === 'user') return ' [用户]';
-    if (scope === 'project') return ' [项目]';
-    return '';
+
+  // 属性标签（状态/类型/scope/docType），不同种类用不同符号样式
+  const attrTag = (() => {
+    switch (type) {
+      case 'task': {
+        const status = (data.status as string) || 'planning';
+        return `[${TASK_STATUS_LABEL[status] ?? status}]`;
+      }
+      case 'spec': {
+        const scope = (data.scope as string) || '';
+        const label = SPEC_SCOPE_LABEL[scope] ?? scope;
+        return label ? `[${label}]` : '';
+      }
+      case 'project':
+        return data.hasGit ? '[git]' : '';
+      default:
+        return '';
+    }
   })();
-  return `${typeTag}  ${title}${scopeSuffix}`;
+
+  return attrTag ? `${typeTag}${attrTag}\n${title}` : `${typeTag}\n${title}`;
 }
 
 /** 转换为 Cytoscape 元素，按可见类型过滤 */
@@ -72,8 +95,6 @@ export function toElements(
     let color = '#8C8C8C';
     if (entityType === 'task') {
       color = getTaskStatusColor((data.status as string) || 'planning');
-    } else if (entityType === 'checkpoint') {
-      color = getCheckpointTypeColor((data.checkpointType as string) || 'note');
     } else {
       color = getEntityColor(entityType);
     }

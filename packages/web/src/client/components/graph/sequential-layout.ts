@@ -14,7 +14,7 @@ const ROW_GAP = 80; // 同层换行时的 y 间距
  * 顺序布局：按类型分层 + 水平排列。
  *
  * 复用径向布局的 TYPE_RING 和 estimateNodeSize：
- * - 每个 entityType 占一个水平条带：project → spec → task → checkpoint/document
+ * - 每个 entityType 占一个水平条带：project → spec → task
  * - 同层节点从左到右排列，整体居中
  * - 同层节点过多时自动换行（类似径向布局一圈放不下加子环）
  * - 最终用 Cytoscape preset 布局应用坐标
@@ -39,7 +39,7 @@ export function runSequentialLayout(
     nodesByLayer.get(layer)!.push({ id: node.id(), label });
   });
 
-  // 2. 逐层排布（从上到下：project → spec → task → checkpoint）
+  // 2. 逐层排布（从上到下：project → spec → task）
   const sortedLayers = [...nodesByLayer.keys()].sort((a, b) => a - b);
   let currentY = 0;
 

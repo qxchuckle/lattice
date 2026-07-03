@@ -32,9 +32,8 @@ export const tokens = {
   // 实体配色
   entity: {
     task: '#1677FF',
-    project: '#722ED1',
+    project: '#FA8C16',
     spec: '#13C2C2',
-    checkpoint: '#8C8C8C',
   },
 
   // 任务状态色
@@ -43,21 +42,6 @@ export const tokens = {
     completed: '#52C41A',
     archived: '#8C8C8C',
     planning: '#FA8C16',
-  },
-
-  // checkpoint 类型色
-  checkpointType: {
-    decision: '#FAAD14',
-    issue: '#F5222D',
-    pivot: '#722ED1',
-    milestone: '#52C41A',
-    note: '#8C8C8C',
-    context: '#1677FF',
-    correction: '#F5222D',
-    constraint: '#FA541C',
-    assumption: '#FAAD14',
-    followup: '#13C2C2',
-    summary: '#722ED1',
   },
 
   // 关系连线样式

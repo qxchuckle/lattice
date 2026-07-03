@@ -27,7 +27,6 @@ export function extractSearchResultInfo(item: SearchResult): { id: string; mode:
     task: 'task',
     project: 'project',
     spec: 'spec',
-    checkpoint: 'checkpoint',
     relation: 'global',
   };
   const mode = typeMap[item.type] || 'global';
@@ -83,9 +82,8 @@ export function flattenSearch(data: SearchResult[]): TreeNode[] {
 /** 筛选面板常量 */
 export const nodeLegendItems = [
   { key: 'task', label: 'Task', color: '#1677FF' },
-  { key: 'project', label: 'Project', color: '#722ED1' },
+  { key: 'project', label: 'Project', color: '#FA8C16' },
   { key: 'spec', label: 'Spec', color: '#13C2C2' },
-  { key: 'checkpoint', label: 'CP', color: '#FAAD14' },
 ];
 
 export const edgeLegendItems = [
@@ -104,7 +102,6 @@ export const edgeLegendItems = [
   { key: 'nested_in', label: 'nested-in', desc: 'Project → Project', color: '#722ED1' },
   { key: 'related', label: 'related', desc: 'Project → Project', color: '#8C8C8C' },
   { key: 'belongs_to', label: 'belongs-to', desc: 'Task → Project', color: '#52C41A' },
-  { key: 'checkpoint', label: 'checkpoint', desc: 'Task → CP', color: '#FAAD14' },
   { key: 'overrides', label: 'overrides', desc: 'Spec → Spec (layering)', color: '#FA8C16' },
   { key: 'scope', label: 'scope', desc: 'Project → Task (scopePath)', color: '#FA8C16' },
   { key: 'semantic', label: 'semantic', desc: 'Task → Spec (RAG)', color: '#EB2F96' },

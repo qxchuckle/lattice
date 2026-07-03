@@ -76,18 +76,9 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       const data = node.data() as Record<string, unknown>;
       const entityType = data.entityType as string;
       const nodeId = node.id();
-      selectNode(
-        nodeId,
-        entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-        data,
-      );
+      selectNode(nodeId, entityType as 'task' | 'project' | 'spec', data);
       applyFocus(cy, nodeId, canvasStore.focusDepth);
-      if (
-        entityType === 'task' ||
-        entityType === 'project' ||
-        entityType === 'spec' ||
-        entityType === 'checkpoint'
-      ) {
+      if (entityType === 'task' || entityType === 'project' || entityType === 'spec') {
         const urlId = nodeId.startsWith('spec-') ? nodeId.slice(5) : nodeId;
         skipAnchorRef.current = true;
         navigate(getViewPath(entityType as ViewMode, urlId));
@@ -204,11 +195,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
             const node = findNodeById(cy, anchorId);
             if (node.length > 0) {
               const data = node.data() as Record<string, unknown>;
-              selectNode(
-                anchorId,
-                data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-                data,
-              );
+              selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
               // 标记跳过 selectedNodeId useEffect 的重复 applyFocus
               skipAnchorRef.current = true;
               applyFocus(cy, node.id(), canvasStore.focusDepth, true);
@@ -234,11 +221,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {
           const data = node.data() as Record<string, unknown>;
-          selectNode(
-            anchorId,
-            data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-            data,
-          );
+          selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
           applyFocus(cy, anchorId, canvasStore.focusDepth);
         }
       }
@@ -270,15 +253,11 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     const node = findNodeById(cy, anchorId);
     if (node.length > 0) {
       const data = node.data() as Record<string, unknown>;
-      selectNode(
-        node.id(),
-        data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-        data,
-      );
+      selectNode(node.id(), data.entityType as 'task' | 'project' | 'spec', data);
       applyFocus(cy, node.id(), canvasStore.focusDepth);
     } else {
       const entityType = canvasStore.viewMode === 'global' ? 'task' : canvasStore.viewMode;
-      selectNode(anchorId, entityType as 'task' | 'project' | 'spec' | 'checkpoint');
+      selectNode(anchorId, entityType as 'task' | 'project' | 'spec');
     }
     // selectNode 是同步的，但 React useEffect 批量执行，
     // selectedNodeId 变化触发的 useEffect 会在本 effect 之后执行，此时 skipAnchorRef 仍为 true
@@ -314,11 +293,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {
           const data = node.data() as Record<string, unknown>;
-          selectNode(
-            anchorId,
-            data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-            data,
-          );
+          selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
           applyFocus(cy, node.id(), canvasStore.focusDepth);
         }
       }
@@ -372,11 +347,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     const node = findNodeById(cy, locateNodeId);
     if (node.length > 0) {
       const data = node.data() as Record<string, unknown>;
-      selectNode(
-        locateNodeId,
-        data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-        data,
-      );
+      selectNode(locateNodeId, data.entityType as 'task' | 'project' | 'spec', data);
       // force=true 强制执行视口动画，即使用户已选中该节点
       // 不设置 skipAnchorRef：若 selectedNodeId 变化，selectedNodeId useEffect 中的
       // applyFocus(force=false) 会因同一节点自然跳过；若 selectedNodeId 不变，useEffect 不触发

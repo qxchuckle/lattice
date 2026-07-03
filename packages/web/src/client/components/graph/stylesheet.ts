@@ -12,7 +12,7 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
       style: {
         'shape': 'round-rectangle',
         'background-color': bg,
-        'background-opacity': 0.6,
+        'background-opacity': 0.2,
         'border-width': 2,
         'border-color': ec,
         'border-opacity': 0.8,
@@ -32,40 +32,47 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
     },
     {
       selector: 'node[entityType = "task"]',
-      style: { 'border-color': 'data(color)', 'border-width': 2 } as unknown as cytoscape.Css.Node,
+      style: {
+        'border-color': '#1677FF',
+        'border-width': 2,
+        'background-color': '#1677FF',
+      } as unknown as cytoscape.Css.Node,
     },
     {
       selector: 'node[entityType = "project"]',
-      style: { 'border-color': '#722ED1', 'border-width': 2 } as unknown as cytoscape.Css.Node,
+      style: {
+        'border-color': '#FA8C16',
+        'border-width': 2,
+        'background-color': '#FA8C16',
+      } as unknown as cytoscape.Css.Node,
     },
     {
       selector: 'node[entityType = "spec"]',
-      style: { 'border-color': '#13C2C2' } as unknown as cytoscape.Css.Node,
+      style: {
+        'border-color': '#13C2C2',
+        'background-color': '#13C2C2',
+      } as unknown as cytoscape.Css.Node,
     },
     {
       selector: 'node[entityType = "spec"][scope = "global"]',
       style: {
-        'border-color': '#FA8C16',
+        'border-color': '#13C2C2',
         'border-style': 'dashed',
+        'background-color': '#13C2C2',
       } as unknown as cytoscape.Css.Node,
     },
     {
       selector: 'node[entityType = "spec"][scope = "user"]',
-      style: { 'border-color': '#13C2C2' } as unknown as cytoscape.Css.Node,
+      style: {
+        'border-color': '#13C2C2',
+        'background-color': '#13C2C2',
+      } as unknown as cytoscape.Css.Node,
     },
     {
       selector: 'node[entityType = "spec"][scope = "project"]',
-      style: { 'border-color': '#1677FF' } as unknown as cytoscape.Css.Node,
-    },
-    {
-      selector: 'node[entityType = "checkpoint"]',
-      style: { 'border-color': 'data(color)', 'font-size': '9px' } as unknown as cytoscape.Css.Node,
-    },
-    {
-      selector: 'node[entityType = "document"]',
       style: {
-        'border-color': '#FA8C16',
-        'border-style': 'dashed',
+        'border-color': '#13C2C2',
+        'background-color': '#13C2C2',
       } as unknown as cytoscape.Css.Node,
     },
     { selector: '.dimmed', style: { 'opacity': 0.1 } as unknown as cytoscape.Css.Node },

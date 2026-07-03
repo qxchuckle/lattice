@@ -23,7 +23,6 @@ import {
   BranchesOutlined,
   CopyOutlined,
   AimOutlined,
-  FileTextOutlined,
   MenuFoldOutlined,
   MenuOutlined,
 } from '@ant-design/icons';
@@ -50,7 +49,6 @@ import {
   formatRelative,
   getTaskStatusColor,
   getEntityColor,
-  getCheckpointTypeColor,
   truncate,
   queryKeys,
 } from '../lib';
@@ -925,74 +923,6 @@ function ProjectDetail({
   );
 }
 
-// ── Checkpoint 详情（直接从节点 data 渲染，不走 API）──
-
-function CheckpointDetail({ data }: { data: Record<string, unknown> }) {
-  const navigate = useNavigate();
-  const sectionRefs = useReactRef<Record<string, HTMLDivElement | null>>({});
-  const scrollRef = useReactRef<HTMLDivElement>(null);
-  const title = (data.title as string) || '未知';
-  const type = (data.checkpointType as string) || 'note';
-  const checkpointId = (data.checkpointId as string) || '';
-  const taskId = (data.taskId as string) || '';
-  const message = (data.message as string) || '';
-  const time = (data.time as string) || '';
-  return (
-    <div className='detail-component'>
-      <h3 className='detail-component__title'>{title}</h3>
-      <div className='detail-component__tags'>
-        <Tag color={getCheckpointTypeColor(type)}>{type}</Tag>
-      </div>
-      {taskId && <FilePathBar pathType='progress' entityId={taskId} />}
-      <div className='detail-component__meta'>
-        <div className='mono detail-component__meta-id'>ID: {checkpointId}</div>
-        {time && (
-          <div>
-            时间: {formatDate(time)} ({formatRelative(time)})
-          </div>
-        )}
-        {taskId && (
-          <div>
-            所属任务:{' '}
-            <span
-              className='mono detail-ancestor__link'
-              onClick={() => navigate(getViewPath('task', taskId))}>
-              {taskId}
-            </span>
-          </div>
-        )}
-      </div>
-      {/* 导航目录 */}
-      {message && (
-        <div className='detail-component__nav'>
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            详情内容
-          </a>
-        </div>
-      )}
-      <div ref={scrollRef} className='detail-component__scroll'>
-        <ScrollSpyBar
-          scrollRef={scrollRef}
-          sections={useScrollSections(scrollRef, sectionRefs, { content: '详情内容' })}
-        />
-        {message && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.content = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <MarkdownWithToc content={message} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Spec 详情（直接从节点 data 渲染，不走 API）──
 
 function SpecDetail({ data }: { data: Record<string, unknown> }) {
@@ -1171,79 +1101,6 @@ function DetailHeader({ entityId }: { entityId?: string | null }) {
   );
 }
 
-// ── 文档详情（PRD/设计文档等，直接从节点 data 渲染 + API 获取内容）──
-
-const docLabels: Record<string, string> = {
-  prd: 'PRD 文档',
-  design: '设计文档',
-  progress: '进度文件',
-};
-
-function DocumentDetail({ data }: { data: Record<string, unknown> }) {
-  const adapter = getAdapter();
-  const sectionRefs = useReactRef<Record<string, HTMLDivElement | null>>({});
-  const scrollRef = useReactRef<HTMLDivElement>(null);
-  const title = (data.title as string) || '文档';
-  const docType = (data.docType as string) || 'prd';
-  const taskId = (data.taskId as string) || '';
-  const label = docLabels[docType] || title;
-  const contentQuery = useQuery({
-    queryKey: ['content', docType, taskId],
-    queryFn: () => adapter.getContent(docType, taskId),
-    enabled: !!taskId,
-  });
-  const content = contentQuery.data;
-  const isError = content != null && typeof content !== 'string';
-  return (
-    <div className='detail-component'>
-      <h3 className='detail-component__title'>
-        <FileTextOutlined style={{ marginRight: 6 }} />
-        {label}
-      </h3>
-      <FilePathBar pathType={docType} entityId={taskId} />
-      <div className='detail-component__meta'>
-        <div className='mono detail-component__meta-id'>
-          类型: {docType} | 任务: {taskId}
-        </div>
-      </div>
-      {/* 导航目录 */}
-      {!contentQuery.isLoading && !isError && content && (
-        <div className='detail-component__nav'>
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            文档内容
-          </a>
-        </div>
-      )}
-      <div ref={scrollRef} className='detail-component__scroll'>
-        <ScrollSpyBar
-          scrollRef={scrollRef}
-          sections={useScrollSections(scrollRef, sectionRefs, { content: '文档内容' })}
-        />
-        {contentQuery.isLoading && <Skeleton active paragraph={{ rows: 6 }} />}
-        {!contentQuery.isLoading && isError && (
-          <Empty description='文件不存在' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )}
-        {!contentQuery.isLoading && !isError && content && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.content = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <MarkdownWithToc content={content} />
-          </div>
-        )}
-        {!contentQuery.isLoading && !isError && !content && (
-          <Empty description='文件为空' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── 详情面板主组件 ──
 
 export const DetailPanel = memo(function DetailPanel() {
@@ -1253,18 +1110,6 @@ export const DetailPanel = memo(function DetailPanel() {
   const isApiType = entityType === 'task' || entityType === 'project';
   const detailQuery = useEntityDetail(isApiType ? entityId : null, isApiType ? entityType : null);
 
-  // checkpoint 直接从节点 data 渲染
-  if (entityType === 'checkpoint' && entityData) {
-    return (
-      <div className='detail-panel-root'>
-        <DetailHeader entityId={entityId} />
-        <div className='detail-panel-content'>
-          <CheckpointDetail data={entityData as Record<string, unknown>} />
-        </div>
-      </div>
-    );
-  }
-
   // spec 直接从节点 data 渲染
   if (entityType === 'spec' && entityData) {
     return (
@@ -1272,18 +1117,6 @@ export const DetailPanel = memo(function DetailPanel() {
         <DetailHeader entityId={entityId} />
         <div className='detail-panel-content'>
           <SpecDetail data={entityData as Record<string, unknown>} />
-        </div>
-      </div>
-    );
-  }
-
-  // document 直接从节点 data 渲染
-  if (entityType === 'document' && entityData) {
-    return (
-      <div className='detail-panel-root'>
-        <DetailHeader entityId={entityId} />
-        <div className='detail-panel-content'>
-          <DocumentDetail data={entityData as Record<string, unknown>} />
         </div>
       </div>
     );

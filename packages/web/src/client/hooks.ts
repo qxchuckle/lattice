@@ -17,7 +17,6 @@ import type {
   ProjectRelation,
   TaskMeta,
   ParsedSpec,
-  CheckpointEntry,
   ReferencedSpec,
 } from '@qcqx/lattice-core';
 
@@ -41,11 +40,6 @@ export function useGlobalGraph() {
     queryKey: queryKeys.specs(),
     queryFn: () => adapter.getSpecs(),
   });
-  const checkpointsQuery = useQuery({
-    queryKey: queryKeys.activeCheckpoints,
-    queryFn: () => adapter.getActiveCheckpoints(),
-  });
-
   const { nodes, edges } = useMemo(() => {
     const nodes: LatticeNode[] = [];
     const edges: LatticeEdge[] = [];
@@ -211,46 +205,8 @@ export function useGlobalGraph() {
       });
     });
 
-    // Checkpoint 节点（仅 in_progress 任务的最新 checkpoint）
-    (checkpointsQuery.data || []).forEach(
-      ({ taskId, checkpoints }: { taskId: string; checkpoints: CheckpointEntry[] }) => {
-        if (checkpoints.length === 0) return;
-        const latest = checkpoints[checkpoints.length - 1];
-        const cpNodeId = `cp-${latest.id}`;
-        nodes.push({
-          id: cpNodeId,
-          type: 'checkpointNode',
-          position: { x: 0, y: 0 },
-          data: {
-            entityType: 'checkpoint',
-            checkpointId: latest.id,
-            title: latest.title,
-            checkpointType: latest.type,
-            message: latest.message,
-            time: latest.time,
-            taskId,
-          },
-        });
-        edges.push({
-          id: `edge-checkpoint-${taskId}-${latest.id}`,
-          source: taskId,
-          target: cpNodeId,
-          type: 'smoothstep',
-          label: 'checkpoint',
-          style: { stroke: '#FAAD14', opacity: 0.3 } as CSSProperties,
-          data: { label: 'checkpoint' },
-        });
-      },
-    );
-
     return { nodes, edges };
-  }, [
-    projectsQuery.data,
-    tasksQuery.data,
-    relationsQuery.data,
-    specsQuery.data,
-    checkpointsQuery.data,
-  ]);
+  }, [projectsQuery.data, tasksQuery.data, relationsQuery.data, specsQuery.data]);
 
   return {
     nodes,
@@ -259,8 +215,7 @@ export function useGlobalGraph() {
       projectsQuery.isLoading ||
       tasksQuery.isLoading ||
       relationsQuery.isLoading ||
-      specsQuery.isLoading ||
-      checkpointsQuery.isLoading,
+      specsQuery.isLoading,
   };
 }
 
@@ -271,11 +226,6 @@ export function useTaskGraph(taskId: string | null) {
   const taskQuery = useQuery({
     queryKey: queryKeys.task(taskId || ''),
     queryFn: () => adapter.getTask(taskId!),
-    enabled: !!taskId,
-  });
-  const progressQuery = useQuery({
-    queryKey: queryKeys.taskProgress(taskId || ''),
-    queryFn: () => adapter.getTaskProgress(taskId!),
     enabled: !!taskId,
   });
   const specsQuery = useQuery({
@@ -391,34 +341,6 @@ export function useTaskGraph(taskId: string | null) {
       });
     }
 
-    // Checkpoint 时间线（线性串联）
-    (progressQuery.data || []).forEach((cp: CheckpointEntry, i: number) => {
-      nodes.push({
-        id: cp.id,
-        type: 'checkpointNode',
-        position: { x: 0, y: 0 },
-        data: {
-          entityType: 'checkpoint',
-          checkpointId: cp.id,
-          title: cp.title,
-          checkpointType: cp.type,
-          message: cp.message,
-          time: cp.time,
-          taskId: task.id,
-        },
-      });
-      const source = i === 0 ? task.id : progressQuery.data![i - 1].id;
-      edges.push({
-        id: `edge-${source}-${cp.id}`,
-        source,
-        target: cp.id,
-        type: 'smoothstep',
-        label: 'checkpoint',
-        style: { stroke: 'var(--text-secondary)', opacity: 0.5 } as CSSProperties,
-        data: { label: 'checkpoint' },
-      });
-    });
-
     // 任务引用的 Spec 节点 + Task → Spec 边
     if (specsQuery.data) {
       const allSpecs: (ParsedSpec & { scope: string })[] = [
@@ -526,7 +448,6 @@ export function useTaskGraph(taskId: string | null) {
     edges,
     isLoading:
       taskQuery.isLoading ||
-      progressQuery.isLoading ||
       specsQuery.isLoading ||
       allTasksQuery.isLoading ||
       contextQuery.isLoading,
@@ -1193,58 +1114,6 @@ export function useSpecGraph(_specId: string | null) {
   };
 }
 
-// ── Checkpoint 视角：以任务为锚点展开 checkpoint 时间线 ──
-
-export function useCheckpointGraph(taskId: string | null) {
-  const adapter = getAdapter();
-  const progressQuery = useQuery({
-    queryKey: queryKeys.taskProgress(taskId || ''),
-    queryFn: () => adapter.getTaskProgress(taskId!),
-    enabled: !!taskId,
-  });
-
-  const nodes: LatticeNode[] = [];
-  const edges: LatticeEdge[] = [];
-
-  if (progressQuery.data && taskId) {
-    nodes.push({
-      id: taskId,
-      type: 'taskNode',
-      position: { x: 0, y: 0 },
-      data: { entityType: 'task', taskId, title: '任务', status: 'in_progress' },
-    });
-
-    progressQuery.data.forEach((cp: CheckpointEntry, i: number) => {
-      nodes.push({
-        id: cp.id,
-        type: 'checkpointNode',
-        position: { x: 0, y: 0 },
-        data: {
-          entityType: 'checkpoint',
-          checkpointId: cp.id,
-          title: cp.title,
-          checkpointType: cp.type,
-          message: cp.message,
-          time: cp.time,
-          taskId,
-        },
-      });
-      // 线性串联：task → cp1 → cp2 → ... → cpN
-      const source = i === 0 ? taskId : progressQuery.data[i - 1].id;
-      edges.push({
-        id: `${source}-${cp.id}`,
-        source,
-        target: cp.id,
-        type: 'smoothstep',
-        data: { label: 'checkpoint' },
-      });
-    });
-  }
-
-  const layoutedNodes = nodes.length > 0 ? layoutGraph(nodes, edges, 'TB') : nodes;
-  return { nodes: layoutedNodes, edges, isLoading: progressQuery.isLoading };
-}
-
 // ── 实体详情 ──
 
 export function useEntityDetail(entityId: string | null, entityType: string | null) {
@@ -1307,9 +1176,9 @@ export function useKeyboard() {
         const input = document.querySelector<HTMLInputElement>('#sidebar-search-input');
         input?.focus();
       }
-      // 数字键 1-5 → 切换视角
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[1-5]$/.test(e.key)) {
-        const modes: ViewMode[] = ['global', 'task', 'project', 'spec', 'checkpoint'];
+      // 数字键 1-4 → 切换视角
+      if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[1-4]$/.test(e.key)) {
+        const modes: ViewMode[] = ['global', 'task', 'project', 'spec'];
         const idx = parseInt(e.key, 10) - 1;
         if (idx < modes.length) {
           canvasStore.viewMode = modes[idx];

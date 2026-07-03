@@ -18,10 +18,6 @@ export function getTaskStatusColor(status: string): string {
   return (tokens.taskStatus as Record<string, string>)[status] || '#8C8C8C';
 }
 
-export function getCheckpointTypeColor(type: string): string {
-  return (tokens.checkpointType as Record<string, string>)[type] || '#8C8C8C';
-}
-
 export function getRelationStyle(type: string): { stroke: string; strokeDasharray?: string } {
   const r = (tokens.relationType as Record<string, { color: string; style: string }>)[type];
   if (!r) return { stroke: '#8C8C8C' };
@@ -108,7 +104,6 @@ export const queryKeys = {
   taskContext: (id: string) => ['tasks', id, 'context'] as const,
   taskTree: (id: string) => ['tasks', id, 'tree'] as const,
   relations: ['relations'] as const,
-  activeCheckpoints: ['checkpoints', 'active'] as const,
   specs: (scope?: string) => ['specs', scope] as const,
   search: (query: string) => ['search', query] as const,
   stats: ['stats'] as const,
