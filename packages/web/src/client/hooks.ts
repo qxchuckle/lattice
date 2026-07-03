@@ -1198,15 +1198,22 @@ export function useKeyboard() {
   }, []);
 }
 
-// ── 搜索 hook（带防抖）──
+// ── 搜索 hook（带防抖 + 筛选）──
 
 export function useSearch() {
-  const { searchKeyword } = useSnapshot(sidebarStore);
+  const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
   const debouncedKeyword = useDeferredValue(searchKeyword);
   const adapter = getAdapter();
+  const hasStatusOrScopeFilter =
+    searchFilters.taskStatus.length > 0 || searchFilters.specScope.length > 0;
+  const searchType = searchFilters.type === 'all' ? undefined : searchFilters.type;
   return useQuery({
-    queryKey: queryKeys.search(debouncedKeyword),
-    queryFn: () => adapter.search(debouncedKeyword, { limit: 20 }),
+    queryKey: queryKeys.search(debouncedKeyword, searchFilters.type),
+    queryFn: () =>
+      adapter.search(debouncedKeyword, {
+        type: searchType,
+        limit: hasStatusOrScopeFilter ? 50 : 20,
+      }),
     enabled: debouncedKeyword.length > 0,
     staleTime: 30_000,
   });

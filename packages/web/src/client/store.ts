@@ -57,6 +57,16 @@ export const cyRef: { current: cytoscape.Core | null } = { current: null };
 
 export type FilterType = 'all' | 'task' | 'project' | 'spec';
 
+/** 搜索面板筛选状态 */
+export interface SearchFilters {
+  /** 类型筛选：all = 不限 */
+  type: FilterType;
+  /** 任务状态筛选：空数组 = 全部 */
+  taskStatus: readonly string[];
+  /** Spec 范围筛选：空数组 = 全部（值: global / user / project） */
+  specScope: readonly string[];
+}
+
 export const sidebarStore = proxy({
   /** 搜索关键词 */
   searchKeyword: '',
@@ -66,6 +76,12 @@ export const sidebarStore = proxy({
   expandedKeys: {} as Record<string, boolean>,
   /** 侧栏宽度（px），持久化到 localStorage */
   width: parseInt(localStorage.getItem('lattice-sidebar-width') || '260', 10),
+  /** 搜索面板筛选状态（会话级，不持久化） */
+  searchFilters: {
+    type: 'all' as FilterType,
+    taskStatus: [] as string[],
+    specScope: [] as string[],
+  } satisfies SearchFilters,
 });
 
 // ── 详情面板状态 ──

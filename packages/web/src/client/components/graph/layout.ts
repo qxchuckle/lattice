@@ -25,14 +25,17 @@ function seedMathRandom(seed: number): () => void {
   };
 }
 
-/** 布局配置：支持力导向 / 顺序 / 径向三种布局 */
+/** 布局配置：支持力导向 / 顺序 / 径向三种布局
+ *  preserveViewport=true 时 fit 设为 false，阻止 Cytoscape 内置布局自动 fit 视口 */
 export function buildLayoutConfig(
   nodeCount: number,
   layoutMode: LayoutMode = 'force',
   skipAnimation = false,
+  preserveViewport = false,
 ): cytoscape.LayoutOptions {
   const animate = skipAnimation ? false : 'end';
   const animationDuration = skipAnimation ? 0 : 500;
+  const fit = !preserveViewport;
   if (layoutMode === 'sequential') {
     return {
       name: 'breadthfirst',
@@ -43,7 +46,7 @@ export function buildLayoutConfig(
       spacingFactor: Math.max(0.8, Math.min(1.5, 200 / nodeCount)),
       circle: false,
       maximalAdjustments: true,
-      fit: true,
+      fit,
     } as unknown as cytoscape.LayoutOptions;
   }
   if (layoutMode === 'radial') {
@@ -55,7 +58,7 @@ export function buildLayoutConfig(
       concentric: (ele: cytoscape.SingularElementReturnValue) => ele.degree(),
       levelWidth: () => 2,
       minNodeSpacing: Math.max(60, Math.min(120, 6000 / nodeCount)),
-      fit: true,
+      fit,
     } as unknown as cytoscape.LayoutOptions;
   }
   // 默认：fCoSE 力导向布局
@@ -75,7 +78,7 @@ export function buildLayoutConfig(
     tile: false,
     tilingPaddingVertical: 80,
     tilingPaddingHorizontal: 80,
-    fit: true,
+    fit,
     padding: 60,
     randomize: true,
     nodeSeparation: 120,
@@ -103,6 +106,7 @@ export function runLayout(
   layoutMode: LayoutMode = 'force',
   onComplete?: () => void,
   skipAnimation = false,
+  preserveViewport = false,
 ): void {
   // 清理无效边（端点节点不存在），所有模式通用
   const invalidEdges = cy.edges().filter((e) => e.source().length === 0 || e.target().length === 0);
@@ -111,9 +115,11 @@ export function runLayout(
   }
 
   // 首次加载跳过入场动画和 fit 动画，直接到位
+  // preserveViewport=true 时保留用户当前 zoom/pan，不自动 fit（首次加载 skipAnimation 优先级更高，始终 fit）
+  const shouldFit = !preserveViewport;
   const fitDuration = skipAnimation ? 0 : 300;
 
-  // 径向：preset 动画 → layoutstop → 持续防重叠 → fit
+  // 径向：preset 动画 → layoutstop → 持续防重叠 → fit（可选）
   if (layoutMode === 'radial') {
     runRadialLayout(cy, nodeCount, () => {
       canvasStore.layoutRunning = true;
@@ -121,10 +127,12 @@ export function runLayout(
         maxDuration: skipAnimation ? 0 : 3000,
         onDone: () => {
           canvasStore.layoutRunning = false;
-          if (skipAnimation) {
-            cy.fit(cy.elements(), 60);
-          } else {
-            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+          if (shouldFit) {
+            if (skipAnimation) {
+              cy.fit(cy.elements(), 60);
+            } else {
+              cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+            }
           }
           onComplete?.();
         },
@@ -133,7 +141,7 @@ export function runLayout(
     return;
   }
 
-  // 顺序：preset 动画 → layoutstop → 持续防重叠 → fit
+  // 顺序：preset 动画 → layoutstop → 持续防重叠 → fit（可选）
   if (layoutMode === 'sequential') {
     try {
       runSequentialLayout(cy, nodeCount, () => {
@@ -142,10 +150,12 @@ export function runLayout(
           maxDuration: skipAnimation ? 0 : 3000,
           onDone: () => {
             canvasStore.layoutRunning = false;
-            if (skipAnimation) {
-              cy.fit(cy.elements(), 60);
-            } else {
-              cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+            if (shouldFit) {
+              if (skipAnimation) {
+                cy.fit(cy.elements(), 60);
+              } else {
+                cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+              }
             }
             onComplete?.();
           },
@@ -157,9 +167,9 @@ export function runLayout(
     }
   }
 
-  // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit
+  // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit（可选）
   const restoreRandom = seedMathRandom(LAYOUT_SEED);
-  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force', skipAnimation));
+  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force', skipAnimation, preserveViewport));
 
   layout.one('layoutstop', () => {
     restoreRandom();
@@ -168,10 +178,12 @@ export function runLayout(
       maxDuration: skipAnimation ? 0 : 3000,
       onDone: () => {
         canvasStore.layoutRunning = false;
-        if (skipAnimation) {
-          cy.fit(cy.elements(), 60);
-        } else {
-          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+        if (shouldFit) {
+          if (skipAnimation) {
+            cy.fit(cy.elements(), 60);
+          } else {
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+          }
         }
         onComplete?.();
       },

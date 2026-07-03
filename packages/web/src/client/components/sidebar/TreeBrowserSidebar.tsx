@@ -17,11 +17,17 @@ import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
 import {
   type TreeNode,
-  filterTree,
+  type CanvasPreset,
+  filterTreeByKeywordAndFilters,
   flattenSearch,
   nodeLegendItems,
   edgeLegendItems,
+  edgeGroups,
+  canvasPresets,
   focusDepthOptions,
+  searchTypeOptions,
+  taskStatusOptions,
+  specScopeOptions,
 } from './treeUtils';
 
 // ── 模块级常量 ──
@@ -270,15 +276,107 @@ function TreeItemBase({
 // useSnapshot 触发的重渲染不受 memo 影响（直接调 hook，不经过 props）。
 const MemoizedTreeItem = memo(TreeItemBase);
 
+// ── 搜索筛选器 bar ──
+
+const SearchFilterBar = memo(function SearchFilterBar() {
+  const { searchFilters } = useSnapshot(sidebarStore);
+
+  const toggleTaskStatus = (value: string) => {
+    const current = sidebarStore.searchFilters.taskStatus;
+    sidebarStore.searchFilters.taskStatus = current.includes(value)
+      ? current.filter((s) => s !== value)
+      : [...current, value];
+  };
+
+  const toggleSpecScope = (value: string) => {
+    const current = sidebarStore.searchFilters.specScope;
+    sidebarStore.searchFilters.specScope = current.includes(value)
+      ? current.filter((s) => s !== value)
+      : [...current, value];
+  };
+
+  const chipStyle = (active: boolean): React.CSSProperties => ({
+    padding: '2px 8px',
+    fontSize: 10,
+    cursor: 'pointer',
+    borderRadius: 10,
+    border: `1px solid ${active ? 'var(--brand-color)' : 'var(--border)'}`,
+    background: active ? 'var(--brand-color)' : 'transparent',
+    color: active ? '#fff' : 'var(--text-secondary)',
+    transition: 'all 0.15s',
+    userSelect: 'none',
+  });
+
+  return (
+    <div style={{ padding: '0 8px 6px' }}>
+      {/* 类型 segmented */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 4 }}>
+        {searchTypeOptions.map((opt) => {
+          const active = searchFilters.type === opt.value;
+          return (
+            <div
+              key={opt.value}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                padding: '3px 0',
+                fontSize: 10,
+                fontWeight: active ? 600 : 400,
+                cursor: 'pointer',
+                borderRadius: 4,
+                background: active ? 'var(--brand-color)' : 'var(--bg-tertiary)',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                transition: 'all 0.15s',
+              }}
+              onClick={() => {
+                sidebarStore.searchFilters.type = opt.value;
+                if (opt.value !== 'task') sidebarStore.searchFilters.taskStatus = [];
+                if (opt.value !== 'spec') sidebarStore.searchFilters.specScope = [];
+              }}>
+              {opt.label}
+            </div>
+          );
+        })}
+      </div>
+      {/* 任务状态 chips */}
+      {searchFilters.type === 'task' && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {taskStatusOptions.map((opt) => (
+            <div
+              key={opt.value}
+              style={chipStyle(searchFilters.taskStatus.includes(opt.value))}
+              onClick={() => toggleTaskStatus(opt.value)}>
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Spec 范围 chips */}
+      {searchFilters.type === 'spec' && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {specScopeOptions.map((opt) => (
+            <div
+              key={opt.value}
+              style={chipStyle(searchFilters.specScope.includes(opt.value))}
+              onClick={() => toggleSpecScope(opt.value)}>
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ── 搜索 Tab：仅订阅 sidebarStore，不订阅 canvasStore ──
 
 const SearchTreeTab = memo(function SearchTreeTab() {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  const { searchKeyword } = useSnapshot(sidebarStore);
+  const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
   const searchResult = useSearch();
-  const { tree, loading } = useTreeData();
+  const { tree, loading, tasks } = useTreeData();
 
   const handleNavigate = useCallback((node: TreeNode) => {
     if (node.entityId && node.viewMode)
@@ -286,13 +384,23 @@ const SearchTreeTab = memo(function SearchTreeTab() {
   }, []);
 
   const isSearching = searchKeyword.length > 0;
+  const hasFilters =
+    searchFilters.type !== 'all' ||
+    searchFilters.taskStatus.length > 0 ||
+    searchFilters.specScope.length > 0;
   const searchItems = useMemo(
-    () => (isSearching && searchResult.data ? flattenSearch(searchResult.data) : []),
-    [isSearching, searchResult.data],
+    () =>
+      isSearching && searchResult.data
+        ? flattenSearch(searchResult.data, searchFilters, tasks)
+        : [],
+    [isSearching, searchResult.data, searchFilters, tasks],
   );
   const filteredTree = useMemo(
-    () => (isSearching ? filterTree(tree, searchKeyword) : tree),
-    [isSearching, tree, searchKeyword],
+    () =>
+      isSearching || hasFilters
+        ? filterTreeByKeywordAndFilters(tree, searchKeyword, searchFilters)
+        : tree,
+    [isSearching, hasFilters, tree, searchKeyword, searchFilters],
   );
 
   return (
@@ -309,13 +417,17 @@ const SearchTreeTab = memo(function SearchTreeTab() {
           allowClear
         />
       </div>
+      <SearchFilterBar />
       <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 8px' }}>
         {loading && <Skeleton active paragraph={{ rows: 6 }} />}
         {!loading && isSearching && searchResult.isLoading && <Skeleton active />}
         {!loading && isSearching && searchItems.length === 0 && !searchResult.isLoading && (
           <Empty description='无搜索结果' image={Empty.PRESENTED_IMAGE_SIMPLE} />
         )}
-        {!loading && !isSearching && filteredTree.length === 0 && (
+        {!loading && !isSearching && hasFilters && filteredTree.length === 0 && (
+          <Empty description='无匹配数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+        {!loading && !isSearching && !hasFilters && filteredTree.length === 0 && (
           <Empty description='暂无数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
         )}
         {!loading && isSearching && searchItems.length > 0 && (
@@ -370,60 +482,162 @@ const SearchTreeTab = memo(function SearchTreeTab() {
 
 const FilterTreeTab = memo(function FilterTreeTab() {
   const { visibleTypes, visibleEdgeTypes, focusDepth, selectedNodeId } = useSnapshot(canvasStore);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['spec', 'project']));
 
-  const allNodesChecked = useMemo(
-    () => nodeLegendItems.every((item) => visibleTypes[item.key]),
-    [visibleTypes],
-  );
-  const allEdgesChecked = useMemo(
-    () => edgeLegendItems.every((item) => visibleEdgeTypes[item.key]),
-    [visibleEdgeTypes],
-  );
+  const activePreset = useMemo(() => {
+    for (const preset of canvasPresets) {
+      const nodesMatch = nodeLegendItems.every(
+        (item) => !!visibleTypes[item.key] === preset.nodes[item.key],
+      );
+      const edgesMatch = edgeLegendItems.every(
+        (item) => !!visibleEdgeTypes[item.key] === preset.edges[item.key],
+      );
+      if (nodesMatch && edgesMatch) return preset.label;
+    }
+    return null;
+  }, [visibleTypes, visibleEdgeTypes]);
+
+  const applyPreset = (preset: CanvasPreset) => {
+    nodeLegendItems.forEach((item) => {
+      canvasStore.visibleTypes[item.key] = preset.nodes[item.key] ?? false;
+    });
+    edgeLegendItems.forEach((item) => {
+      canvasStore.visibleEdgeTypes[item.key] = preset.edges[item.key] ?? false;
+    });
+  };
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
+      {/* 节点类型 - 横向 */}
       <div
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          marginBottom: 4,
-        }}>
+        style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
         节点类型
       </div>
-      <Checkbox
-        checked={allNodesChecked}
-        indeterminate={!allNodesChecked && nodeLegendItems.some((item) => visibleTypes[item.key])}
-        onChange={(e) =>
-          nodeLegendItems.forEach((item) => {
-            canvasStore.visibleTypes[item.key] = e.target.checked;
-          })
-        }
-        style={{ fontSize: 11, marginBottom: 2 }}>
-        全选
-      </Checkbox>
-      {nodeLegendItems.map((item) => (
-        <Checkbox
-          key={item.key}
-          checked={!!visibleTypes[item.key]}
-          onChange={(e) => {
-            canvasStore.visibleTypes[item.key] = e.target.checked;
-          }}
-          style={{ fontSize: 11, marginLeft: 8 }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 8,
-              height: 8,
-              borderRadius: 2,
-              background: item.color,
-              marginRight: 4,
-              verticalAlign: 'middle',
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        {nodeLegendItems.map((item) => (
+          <Checkbox
+            key={item.key}
+            checked={!!visibleTypes[item.key]}
+            onChange={(e) => {
+              canvasStore.visibleTypes[item.key] = e.target.checked;
             }}
-          />
-          {item.label}
-        </Checkbox>
-      ))}
+            style={{ fontSize: 11 }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: item.color,
+                marginRight: 4,
+                verticalAlign: 'middle',
+              }}
+            />
+            {item.label}
+          </Checkbox>
+        ))}
+      </div>
+
+      {/* 快捷预设 */}
+      <div
+        style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+        快捷预设
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+        {canvasPresets.map((preset) => (
+          <Button
+            key={preset.label}
+            size='small'
+            type={activePreset === preset.label ? 'primary' : 'text'}
+            onClick={() => applyPreset(preset)}
+            style={{ fontSize: 10, padding: '0 8px', height: 22, flex: 1 }}>
+            {preset.label}
+          </Button>
+        ))}
+      </div>
+
+      {/* 边类型 - 分组 */}
+      <div
+        style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+        边类型
+      </div>
+      {edgeGroups.map((group) => {
+        const collapsed = collapsedGroups.has(group.key);
+        const checkedCount = group.items.filter((i) => visibleEdgeTypes[i.key]).length;
+        const allGroupChecked = checkedCount === group.items.length;
+        const someGroupChecked = checkedCount > 0 && !allGroupChecked;
+
+        return (
+          <div key={group.key} style={{ marginBottom: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 10,
+                  width: 16,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                onClick={() => {
+                  const next = new Set(collapsedGroups);
+                  if (collapsed) next.delete(group.key);
+                  else next.add(group.key);
+                  setCollapsedGroups(next);
+                }}>
+                {collapsed ? '▸' : '▾'}
+              </span>
+              <Checkbox
+                checked={allGroupChecked}
+                indeterminate={someGroupChecked}
+                onChange={(e) => {
+                  group.items.forEach((item) => {
+                    canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+                  });
+                }}
+                style={{ fontSize: 11, flex: 1 }}>
+                {group.label} ({checkedCount}/{group.items.length})
+              </Checkbox>
+            </div>
+            {!collapsed && (
+              <div style={{ marginLeft: 20 }}>
+                {group.items.map((item) => (
+                  <Checkbox
+                    key={item.key}
+                    checked={!!visibleEdgeTypes[item.key]}
+                    onChange={(e) => {
+                      canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+                    }}
+                    style={{
+                      fontSize: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      margin: '1px 0',
+                    }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        width: 8,
+                        height: 3,
+                        borderRadius: 1,
+                        background: item.color,
+                        marginRight: 4,
+                        verticalAlign: 'middle',
+                      }}
+                    />
+                    <span>{item.label}</span>
+                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
+                      {item.desc}
+                    </span>
+                  </Checkbox>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* 聚焦深度 - 始终显示 */}
       <div
         style={{
           fontSize: 11,
@@ -431,73 +645,22 @@ const FilterTreeTab = memo(function FilterTreeTab() {
           color: 'var(--text-secondary)',
           margin: '10px 0 4px',
         }}>
-        边类型
+        聚焦深度{selectedNodeId ? '' : '（未选中节点）'}
       </div>
-      <Checkbox
-        checked={allEdgesChecked}
-        indeterminate={
-          !allEdgesChecked && edgeLegendItems.some((item) => visibleEdgeTypes[item.key])
-        }
-        onChange={(e) =>
-          edgeLegendItems.forEach((item) => {
-            canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-          })
-        }
-        style={{ fontSize: 11, marginBottom: 2 }}>
-        全选
-      </Checkbox>
-      {edgeLegendItems.map((item) => (
-        <Checkbox
-          key={item.key}
-          checked={!!visibleEdgeTypes[item.key]}
-          onChange={(e) => {
-            canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-          }}
-          style={{ fontSize: 11, marginLeft: 8 }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 8,
-              height: 3,
-              borderRadius: 1,
-              background: item.color,
-              marginRight: 4,
-              verticalAlign: 'middle',
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {focusDepthOptions.map((opt) => (
+          <Button
+            key={opt.value}
+            size='small'
+            type={focusDepth === opt.value ? 'primary' : 'text'}
+            onClick={() => {
+              canvasStore.focusDepth = opt.value;
             }}
-          />
-          <span>{item.label}</span>
-          <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
-            {item.desc}
-          </span>
-        </Checkbox>
-      ))}
-      {selectedNodeId && (
-        <>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              margin: '10px 0 4px',
-            }}>
-            聚焦深度
-          </div>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {focusDepthOptions.map((opt) => (
-              <Button
-                key={opt.value}
-                size='small'
-                type={focusDepth === opt.value ? 'primary' : 'text'}
-                onClick={() => {
-                  canvasStore.focusDepth = opt.value;
-                }}
-                style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
-                {opt.label}
-              </Button>
-            ))}
-          </div>
-        </>
-      )}
+            style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
+            {opt.label}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 });

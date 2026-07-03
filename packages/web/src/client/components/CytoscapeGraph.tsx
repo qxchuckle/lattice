@@ -213,9 +213,16 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       cy.add(elements);
       cy.nodes().ungrabify();
       canvasStore.layoutRunning = true;
-      runLayout(cy, elements.length, layoutMode, () => {
-        canvasStore.layoutRunning = false;
-      });
+      runLayout(
+        cy,
+        elements.length,
+        layoutMode,
+        () => {
+          canvasStore.layoutRunning = false;
+        },
+        false,
+        true,
+      );
 
       if (anchorId) {
         const node = findNodeById(cy, anchorId);
@@ -234,9 +241,16 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     const cy = cyRef.current;
     if (!cy || cy.elements().length === 0) return;
     canvasStore.layoutRunning = true;
-    runLayout(cy, cy.elements().length, layoutMode, () => {
-      canvasStore.layoutRunning = false;
-    });
+    runLayout(
+      cy,
+      cy.elements().length,
+      layoutMode,
+      () => {
+        canvasStore.layoutRunning = false;
+      },
+      false,
+      true,
+    );
   }, [layoutMode]);
 
   // 锚点变化：仅聚焦
@@ -286,9 +300,16 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       cy.add(elements);
       cy.nodes().ungrabify();
       canvasStore.layoutRunning = true;
-      runLayout(cy, elements.length, layoutMode, () => {
-        canvasStore.layoutRunning = false;
-      });
+      runLayout(
+        cy,
+        elements.length,
+        layoutMode,
+        () => {
+          canvasStore.layoutRunning = false;
+        },
+        false,
+        true,
+      );
       if (anchorId) {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {

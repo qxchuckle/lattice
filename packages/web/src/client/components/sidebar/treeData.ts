@@ -7,7 +7,7 @@ import type { TreeNode } from './treeUtils';
 import type { TaskMeta, ProjectMeta, ParsedSpec } from '@qcqx/lattice-core';
 
 /** 构建树形数据：Spec / 项目 / 任务 三级树 */
-export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
+export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: TaskMeta[] } {
   const adapter = getAdapter();
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects,
@@ -256,5 +256,5 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean } {
     ];
   }, [loading, projectsQuery.data, tasksQuery.data, specsQuery.data]);
 
-  return { tree, loading };
+  return { tree, loading, tasks: (tasksQuery.data as TaskMeta[] | undefined) ?? [] };
 }
