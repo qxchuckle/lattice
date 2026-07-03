@@ -198,12 +198,14 @@ export function applyFocus(
   nodeId: string,
   depth: number = 0,
   skipAnimation = false,
+  force = false,
 ): void {
   const node = cy.getElementById(nodeId);
   if (node.length === 0) return;
 
   // 同一节点重复聚焦：完全跳过，避免重复动画导致闪动
-  if (nodeId === lastFocusedNodeId && lastNeighborhood) {
+  // force=true 时豁免（用于详情面板「在图中定位」主动触发场景）
+  if (!force && nodeId === lastFocusedNodeId && lastNeighborhood) {
     return;
   }
 

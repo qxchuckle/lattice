@@ -369,7 +369,10 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
         data,
       );
-      applyFocus(cy, node.id(), canvasStore.focusDepth);
+      // force=true 强制执行视口动画，即使用户已选中该节点
+      // 不设置 skipAnchorRef：若 selectedNodeId 变化，selectedNodeId useEffect 中的
+      // applyFocus(force=false) 会因同一节点自然跳过；若 selectedNodeId 不变，useEffect 不触发
+      applyFocus(cy, node.id(), canvasStore.focusDepth, false, true);
     }
     canvasStore.locateNodeId = null;
   }, [locateNodeId]);
