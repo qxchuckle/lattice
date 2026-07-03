@@ -6,6 +6,8 @@ import type {
   SearchOpts,
   EditorApp,
   DashboardStats,
+  ActiveCheckpointResult,
+  TaskContextResult,
 } from './types';
 import type {
   ProjectMeta,
@@ -72,6 +74,16 @@ export class HttpAdapter implements LatticeDataAdapter {
   // ── 关系 ──
   getRelations(): Promise<ProjectRelation[]> {
     return fetchJson<ProjectRelation[]>(`${API_BASE}/relations`);
+  }
+
+  // ── Checkpoint ──
+  getActiveCheckpoints(): Promise<ActiveCheckpointResult[]> {
+    return fetchJson<ActiveCheckpointResult[]>(`${API_BASE}/checkpoints/active`);
+  }
+
+  // ── 任务语义上下文 ──
+  getTaskContext(id: string): Promise<TaskContextResult> {
+    return fetchJson<TaskContextResult>(`${API_BASE}/tasks/${encodeURIComponent(id)}/context`);
   }
 
   // ── Spec ──

@@ -1,4 +1,4 @@
-import type { ViewMode } from '../store';
+import type { ViewMode } from '../../store';
 import type { SearchResult } from '@qcqx/lattice-core';
 
 /** 树节点类型 */
@@ -92,11 +92,22 @@ export const edgeLegendItems = [
   { key: 'task', label: 'task', desc: 'Project → Task', color: '#8C8C8C' },
   { key: 'parent', label: 'parent', desc: 'Task → Task', color: '#1677FF' },
   { key: 'spec', label: 'spec', desc: 'Project → Spec', color: '#13C2C2' },
-  { key: 'ref-spec', label: 'ref-spec', desc: 'Task → Spec', color: '#13C2C2' },
+  { key: 'ref_spec', label: 'ref-spec', desc: 'Task → Spec', color: '#13C2C2' },
   { key: 'depends_on', label: 'depends-on', desc: 'Project → Project', color: '#FA541C' },
   { key: 'forked_from', label: 'forked-from', desc: 'Project → Project', color: '#722ED1' },
-  { key: 'belongs-to', label: 'belongs-to', desc: 'Task → Project', color: '#52C41A' },
+  {
+    key: 'shares_component',
+    label: 'shares-component',
+    desc: 'Project → Project',
+    color: '#13C2C2',
+  },
+  { key: 'nested_in', label: 'nested-in', desc: 'Project → Project', color: '#722ED1' },
+  { key: 'related', label: 'related', desc: 'Project → Project', color: '#8C8C8C' },
+  { key: 'belongs_to', label: 'belongs-to', desc: 'Task → Project', color: '#52C41A' },
   { key: 'checkpoint', label: 'checkpoint', desc: 'Task → CP', color: '#FAAD14' },
+  { key: 'overrides', label: 'overrides', desc: 'Spec → Spec (layering)', color: '#FA8C16' },
+  { key: 'scope', label: 'scope', desc: 'Project → Task (scopePath)', color: '#FA8C16' },
+  { key: 'semantic', label: 'semantic', desc: 'Task → Spec (RAG)', color: '#EB2F96' },
 ];
 
 export const focusDepthOptions = [

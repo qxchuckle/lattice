@@ -34,6 +34,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  memo,
   isValidElement,
   createElement,
   type ReactNode,
@@ -130,7 +131,7 @@ for (let level = 1; level <= 6; level++) {
   };
 }
 
-function MarkdownWithToc({ content }: { content: string }) {
+const MarkdownWithToc = memo(function MarkdownWithToc({ content }: { content: string }) {
   const containerRef = useReactRef<HTMLDivElement>(null);
   const headings = useMemo(() => extractTocHeadings(content), [content]);
   const [tocOpen, setTocOpen] = useState(false);
@@ -186,7 +187,7 @@ function MarkdownWithToc({ content }: { content: string }) {
       )}
     </div>
   );
-}
+});
 
 // ── ScrollSpyBar：滚动时固定在顶部显示当前 section，点击回到 section 开头 ──
 
@@ -366,29 +367,39 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   // 服务端成功返回 { content: string }，文件不存在返回 { error: 'not_found' }
   // adapter 已将成功映射为 string、失败映射为 null
   const isStringContent = (d: unknown): d is string => typeof d === 'string';
-  const docTabs: { key: string; label: string; content: string | null; loading: boolean }[] = [];
-  // loading 中也显示 tab（展示骨架），内容就绪后切换为 markdown 预览
-  if (prdQuery.isLoading || isStringContent(prdQuery.data))
-    docTabs.push({
-      key: 'prd',
-      label: 'PRD',
-      content: isStringContent(prdQuery.data) ? prdQuery.data : null,
-      loading: prdQuery.isLoading,
-    });
-  if (designQuery.isLoading || isStringContent(designQuery.data))
-    docTabs.push({
-      key: 'design',
-      label: '设计文档',
-      content: isStringContent(designQuery.data) ? designQuery.data : null,
-      loading: designQuery.isLoading,
-    });
-  if (progressContentQuery.isLoading || isStringContent(progressContentQuery.data))
-    docTabs.push({
-      key: 'progress',
-      label: '进度文件',
-      content: isStringContent(progressContentQuery.data) ? progressContentQuery.data : null,
-      loading: progressContentQuery.isLoading,
-    });
+  const docTabs = useMemo(() => {
+    const tabs: { key: string; label: string; content: string | null; loading: boolean }[] = [];
+    // loading 中也显示 tab（展示骨架），内容就绪后切换为 markdown 预览
+    if (prdQuery.isLoading || isStringContent(prdQuery.data))
+      tabs.push({
+        key: 'prd',
+        label: 'PRD',
+        content: isStringContent(prdQuery.data) ? prdQuery.data : null,
+        loading: prdQuery.isLoading,
+      });
+    if (designQuery.isLoading || isStringContent(designQuery.data))
+      tabs.push({
+        key: 'design',
+        label: '设计文档',
+        content: isStringContent(designQuery.data) ? designQuery.data : null,
+        loading: designQuery.isLoading,
+      });
+    if (progressContentQuery.isLoading || isStringContent(progressContentQuery.data))
+      tabs.push({
+        key: 'progress',
+        label: '进度文件',
+        content: isStringContent(progressContentQuery.data) ? progressContentQuery.data : null,
+        loading: progressContentQuery.isLoading,
+      });
+    return tabs;
+  }, [
+    prdQuery.isLoading,
+    prdQuery.data,
+    designQuery.isLoading,
+    designQuery.data,
+    progressContentQuery.isLoading,
+    progressContentQuery.data,
+  ]);
 
   return (
     <div className='detail-component'>
@@ -1235,7 +1246,7 @@ function DocumentDetail({ data }: { data: Record<string, unknown> }) {
 
 // ── 详情面板主组件 ──
 
-export function DetailPanel() {
+export const DetailPanel = memo(function DetailPanel() {
   const { entityId, entityType, entityData } = useSnapshot(detailStore);
 
   // task/project 才走 API
@@ -1328,4 +1339,4 @@ export function DetailPanel() {
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, memo } from 'react';
 import { Button } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
@@ -57,37 +57,30 @@ function RouteSync() {
   return null;
 }
 
-// ── 画布 ──
-function CanvasArea() {
-  return <CytoscapeGraph />;
-}
-
 // ── 主内容区 ──
-function MainContent() {
+const MainContent = memo(function MainContent() {
   return (
     <>
       <RouteSync />
-      <CanvasArea />
+      <CytoscapeGraph />
     </>
   );
-}
+});
 
-// ── 主布局 ──
-export default function App() {
+// ── 详情面板容器：独立订阅 detailStore，避免 App 跟随重渲染 ──
+const DetailPanelContainer = memo(function DetailPanelContainer() {
   const {
     open: detailOpen,
     collapsed: detailCollapsed,
     width: detailWidth,
   } = useSnapshot(detailStore);
 
-  // 拖拽 resize handle：鼠标按下后面板左边缘 → 水平拖拽调整宽度
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = detailStore.width;
 
     const onMouseMove = (ev: MouseEvent) => {
-      // 面板在右侧，拖拽向左 → delta 正 → 宽度增加
       setDetailWidth(startWidth + (startX - ev.clientX));
     };
     const onMouseUp = () => {
@@ -103,6 +96,36 @@ export default function App() {
     document.body.style.userSelect = 'none';
   }, []);
 
+  if (!detailOpen) return null;
+
+  return (
+    <>
+      <div
+        className={`detail-panel detail-transition${detailCollapsed ? ' detail-panel--hidden' : ''}`}
+        style={{ width: detailWidth }}>
+        <div className='detail-panel__resize-handle' onMouseDown={handleResizeStart} />
+        <div className='detail-panel__actions'>
+          <Button
+            size='small'
+            type='text'
+            icon={<MenuFoldOutlined />}
+            onClick={toggleDetailCollapse}
+          />
+          <Button size='small' type='text' icon={<CloseOutlined />} onClick={closeDetail} />
+        </div>
+        <DetailPanel />
+      </div>
+      <div
+        className={`detail-panel-collapsed${detailCollapsed ? '' : ' detail-panel-collapsed--hidden'}`}
+        onClick={toggleDetailCollapse}>
+        <MenuUnfoldOutlined style={{ fontSize: 14 }} />
+      </div>
+    </>
+  );
+});
+
+// ── 主布局 ──
+export default function App() {
   return (
     <div className='app-root'>
       <Routes>
@@ -120,31 +143,7 @@ export default function App() {
 
       <TreeBrowserSidebar />
       <FloatingStatusBar />
-
-      {detailOpen && (
-        <>
-          <div
-            className={`detail-panel detail-transition${detailCollapsed ? ' detail-panel--hidden' : ''}`}
-            style={{ width: detailWidth }}>
-            <div className='detail-panel__resize-handle' onMouseDown={handleResizeStart} />
-            <div className='detail-panel__actions'>
-              <Button
-                size='small'
-                type='text'
-                icon={<MenuFoldOutlined />}
-                onClick={toggleDetailCollapse}
-              />
-              <Button size='small' type='text' icon={<CloseOutlined />} onClick={closeDetail} />
-            </div>
-            <DetailPanel />
-          </div>
-          <div
-            className={`detail-panel-collapsed${detailCollapsed ? '' : ' detail-panel-collapsed--hidden'}`}
-            onClick={toggleDetailCollapse}>
-            <MenuUnfoldOutlined style={{ fontSize: 14 }} />
-          </div>
-        </>
-      )}
+      <DetailPanelContainer />
     </div>
   );
 }

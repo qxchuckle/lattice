@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { Input, Button, Skeleton, Empty, Tag, Checkbox, Tooltip } from 'antd';
 import {
   RightOutlined,
@@ -24,8 +24,33 @@ import {
   focusDepthOptions,
 } from './treeUtils';
 
-/** 可截断标题：溢出时悬浮显示完整标题（右侧、延迟触发） */
-function TruncatableTitle({ title }: { title: string }) {
+// ── 模块级常量 ──
+
+const ENTITY_COLOR_MAP: Record<string, string> = {
+  task: getEntityColor('task'),
+  project: getEntityColor('project'),
+  spec: getEntityColor('spec'),
+  checkpoint: getEntityColor('checkpoint'),
+  relation: getEntityColor('project'),
+};
+
+function getTabStyle(active: boolean): React.CSSProperties {
+  return {
+    flex: 1,
+    textAlign: 'center' as const,
+    padding: '6px 0',
+    fontSize: 11,
+    fontWeight: active ? 600 : 400,
+    cursor: 'pointer',
+    color: active ? 'var(--brand-color)' : 'var(--text-secondary)',
+    borderBottom: active ? '2px solid var(--brand-color)' : '2px solid transparent',
+    transition: 'all 0.2s',
+  };
+}
+
+// ── 可截断标题 ──
+
+const TruncatableTitle = memo(function TruncatableTitle({ title }: { title: string }) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -57,9 +82,10 @@ function TruncatableTitle({ title }: { title: string }) {
       </span>
     </Tooltip>
   );
-}
+});
 
-/** 树节点图标 */
+// ── 树节点图标 ──
+
 function getNodeIcon(node: TreeNode): React.ReactNode {
   switch (node.type) {
     case 'spec-root':
@@ -83,22 +109,23 @@ function getNodeIcon(node: TreeNode): React.ReactNode {
   }
 }
 
-/** 递归树节点组件 */
-function TreeItem({
+// ── 递归树节点组件 ──
+
+function TreeItemBase({
   node,
   depth,
-  expandedKeys,
-  onToggle,
+  forceExpand = false,
   onNavigate,
 }: {
   node: TreeNode;
   depth: number;
-  expandedKeys: Record<string, boolean>;
-  onToggle: (key: string) => void;
+  forceExpand?: boolean;
   onNavigate: (node: TreeNode) => void;
 }) {
+  // useSnapshot 追踪 expandedKeys[node.key] 的访问，仅该 key 变化时重渲染本组件
+  const { expandedKeys } = useSnapshot(sidebarStore);
+  const isExpanded = forceExpand || !!expandedKeys[node.key];
   const hasChildren = node.children && node.children.length > 0;
-  const isExpanded = expandedKeys[node.key];
   const isLeaf =
     (node.type === 'task-item' && !hasChildren) ||
     (node.type === 'spec-item' && !hasChildren) ||
@@ -115,14 +142,6 @@ function TreeItem({
       node.type === 'spec-scope' ||
       (node.type === 'project-item' && hasChildren) ||
       (node.type === 'task-item' && hasChildren));
-
-  const colorMap: Record<string, string> = {
-    task: getEntityColor('task'),
-    project: getEntityColor('project'),
-    spec: getEntityColor('spec'),
-    checkpoint: getEntityColor('checkpoint'),
-    relation: getEntityColor('project'),
-  };
 
   return (
     <>
@@ -150,7 +169,7 @@ function TreeItem({
           if (node.entityId && node.viewMode) {
             onNavigate(node);
           } else if (hasChildren && !isLeaf) {
-            onToggle(node.key);
+            sidebarStore.expandedKeys[node.key] = !sidebarStore.expandedKeys[node.key];
           }
         }}>
         {hasChildren && !isLeaf ? (
@@ -174,7 +193,7 @@ function TreeItem({
             }}
             onClick={(e) => {
               e.stopPropagation();
-              onToggle(node.key);
+              sidebarStore.expandedKeys[node.key] = !sidebarStore.expandedKeys[node.key];
             }}>
             {isExpanded ? (
               <DownOutlined style={{ fontSize: 11 }} />
@@ -202,7 +221,7 @@ function TreeItem({
         )}
         {isSearchResult && node.meta?.desc && (
           <Tag
-            color={colorMap[node.meta.desc] || undefined}
+            color={ENTITY_COLOR_MAP[node.meta.desc] || undefined}
             style={{
               fontSize: 9,
               margin: 0,
@@ -236,12 +255,11 @@ function TreeItem({
       {isExpanded &&
         hasChildren &&
         node.children!.map((child) => (
-          <TreeItem
+          <MemoizedTreeItem
             key={child.key}
             node={child}
             depth={depth + 1}
-            expandedKeys={expandedKeys}
-            onToggle={onToggle}
+            forceExpand={forceExpand}
             onNavigate={onNavigate}
           />
         ))}
@@ -249,42 +267,255 @@ function TreeItem({
   );
 }
 
-/** 树形浏览器侧栏：顶部 Tab 切换搜索/筛选 */
-export function TreeBrowserSidebar() {
+// memo 默认浅比较：props（node/depth/forceExpand/onNavigate）全部稳定时跳过。
+// useSnapshot 触发的重渲染不受 memo 影响（直接调 hook，不经过 props）。
+const MemoizedTreeItem = memo(TreeItemBase);
+
+// ── 搜索 Tab：仅订阅 sidebarStore，不订阅 canvasStore ──
+
+const SearchTreeTab = memo(function SearchTreeTab() {
   const navigate = useNavigate();
-  const { collapsed, searchKeyword, width } = useSnapshot(sidebarStore);
-  const { visibleTypes, visibleEdgeTypes, focusDepth, selectedNodeId } = useSnapshot(canvasStore);
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  const { searchKeyword } = useSnapshot(sidebarStore);
   const searchResult = useSearch();
   const { tree, loading } = useTreeData();
-  const [activeTab, setActiveTab] = useState<'search' | 'filter'>('search');
-  // 用本地 useState 管理 expandedKeys，确保展开/折叠立即触发重渲染
-  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
 
-  const handleToggle = useCallback((key: string) => {
-    setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  const handleNavigate = useCallback((node: TreeNode) => {
+    if (node.entityId && node.viewMode)
+      navigateRef.current(getViewPath(node.viewMode, node.entityId));
   }, []);
-  const handleNavigate = useCallback(
-    (node: TreeNode) => {
-      if (node.entityId && node.viewMode) navigate(getViewPath(node.viewMode, node.entityId));
-    },
-    [navigate],
-  );
 
   const isSearching = searchKeyword.length > 0;
-  const searchItems = isSearching && searchResult.data ? flattenSearch(searchResult.data) : [];
-  const filteredTree = isSearching ? filterTree(tree, searchKeyword) : tree;
+  const searchItems = useMemo(
+    () => (isSearching && searchResult.data ? flattenSearch(searchResult.data) : []),
+    [isSearching, searchResult.data],
+  );
+  const filteredTree = useMemo(
+    () => (isSearching ? filterTree(tree, searchKeyword) : tree),
+    [isSearching, tree, searchKeyword],
+  );
 
-  const allNodesChecked = nodeLegendItems.every((item) => visibleTypes[item.key]);
-  const allEdgesChecked = edgeLegendItems.every((item) => visibleEdgeTypes[item.key]);
+  return (
+    <>
+      <div style={{ padding: 8 }}>
+        <Input.Search
+          id='sidebar-search-input'
+          size='small'
+          placeholder='搜索 spec/项目/任务...'
+          defaultValue=''
+          onChange={(e) => {
+            sidebarStore.searchKeyword = e.target.value;
+          }}
+          allowClear
+        />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 8px' }}>
+        {loading && <Skeleton active paragraph={{ rows: 6 }} />}
+        {!loading && isSearching && searchResult.isLoading && <Skeleton active />}
+        {!loading && isSearching && searchItems.length === 0 && !searchResult.isLoading && (
+          <Empty description='无搜索结果' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+        {!loading && !isSearching && filteredTree.length === 0 && (
+          <Empty description='暂无数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
+        {!loading && isSearching && searchItems.length > 0 && (
+          <>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: 4,
+              }}>
+              搜索结果 ({searchItems.length})
+            </div>
+            {searchItems.map((node) => (
+              <MemoizedTreeItem key={node.key} node={node} depth={0} onNavigate={handleNavigate} />
+            ))}
+            {filteredTree.length > 0 && (
+              <>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    margin: '8px 0 4px',
+                  }}>
+                  浏览器匹配
+                </div>
+                {filteredTree.map((node) => (
+                  <MemoizedTreeItem
+                    key={node.key}
+                    node={node}
+                    depth={0}
+                    forceExpand
+                    onNavigate={handleNavigate}
+                  />
+                ))}
+              </>
+            )}
+          </>
+        )}
+        {!loading &&
+          !isSearching &&
+          filteredTree.map((node) => (
+            <MemoizedTreeItem key={node.key} node={node} depth={0} onNavigate={handleNavigate} />
+          ))}
+      </div>
+    </>
+  );
+});
 
-  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+// ── 筛选 Tab：订阅 canvasStore（visibleTypes/visibleEdgeTypes/focusDepth/selectedNodeId）──
+
+const FilterTreeTab = memo(function FilterTreeTab() {
+  const { visibleTypes, visibleEdgeTypes, focusDepth, selectedNodeId } = useSnapshot(canvasStore);
+
+  const allNodesChecked = useMemo(
+    () => nodeLegendItems.every((item) => visibleTypes[item.key]),
+    [visibleTypes],
+  );
+  const allEdgesChecked = useMemo(
+    () => edgeLegendItems.every((item) => visibleEdgeTypes[item.key]),
+    [visibleEdgeTypes],
+  );
+
+  return (
+    <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          marginBottom: 4,
+        }}>
+        节点类型
+      </div>
+      <Checkbox
+        checked={allNodesChecked}
+        indeterminate={!allNodesChecked && nodeLegendItems.some((item) => visibleTypes[item.key])}
+        onChange={(e) =>
+          nodeLegendItems.forEach((item) => {
+            canvasStore.visibleTypes[item.key] = e.target.checked;
+          })
+        }
+        style={{ fontSize: 11, marginBottom: 2 }}>
+        全选
+      </Checkbox>
+      {nodeLegendItems.map((item) => (
+        <Checkbox
+          key={item.key}
+          checked={!!visibleTypes[item.key]}
+          onChange={(e) => {
+            canvasStore.visibleTypes[item.key] = e.target.checked;
+          }}
+          style={{ fontSize: 11, marginLeft: 8 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              borderRadius: 2,
+              background: item.color,
+              marginRight: 4,
+              verticalAlign: 'middle',
+            }}
+          />
+          {item.label}
+        </Checkbox>
+      ))}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          margin: '10px 0 4px',
+        }}>
+        边类型
+      </div>
+      <Checkbox
+        checked={allEdgesChecked}
+        indeterminate={
+          !allEdgesChecked && edgeLegendItems.some((item) => visibleEdgeTypes[item.key])
+        }
+        onChange={(e) =>
+          edgeLegendItems.forEach((item) => {
+            canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+          })
+        }
+        style={{ fontSize: 11, marginBottom: 2 }}>
+        全选
+      </Checkbox>
+      {edgeLegendItems.map((item) => (
+        <Checkbox
+          key={item.key}
+          checked={!!visibleEdgeTypes[item.key]}
+          onChange={(e) => {
+            canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
+          }}
+          style={{ fontSize: 11, marginLeft: 8 }}>
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: 3,
+              borderRadius: 1,
+              background: item.color,
+              marginRight: 4,
+              verticalAlign: 'middle',
+            }}
+          />
+          <span>{item.label}</span>
+          <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
+            {item.desc}
+          </span>
+        </Checkbox>
+      ))}
+      {selectedNodeId && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              margin: '10px 0 4px',
+            }}>
+            聚焦深度
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {focusDepthOptions.map((opt) => (
+              <Button
+                key={opt.value}
+                size='small'
+                type={focusDepth === opt.value ? 'primary' : 'text'}
+                onClick={() => {
+                  canvasStore.focusDepth = opt.value;
+                }}
+                style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
+// ── 侧栏容器：仅订阅 sidebarStore（collapsed/width），不订阅 canvasStore ──
+
+export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
+  const { collapsed, width } = useSnapshot(sidebarStore);
+  const [activeTab, setActiveTab] = useState<'search' | 'filter'>('search');
+
+  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
     const startWidth = sidebarStore.width;
 
     const onMouseMove = (ev: MouseEvent) => {
-      // 侧栏在左侧，右边缘向右拖 → delta 正 → 宽度增加
       setSidebarWidth(startWidth + (ev.clientX - startX));
     };
     const onMouseUp = () => {
@@ -298,19 +529,7 @@ export function TreeBrowserSidebar() {
     document.addEventListener('mouseup', onMouseUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  };
-
-  const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    textAlign: 'center' as const,
-    padding: '6px 0',
-    fontSize: 11,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-    color: active ? 'var(--brand-color)' : 'var(--text-secondary)',
-    borderBottom: active ? '2px solid var(--brand-color)' : '2px solid transparent',
-    transition: 'all 0.2s',
-  });
+  }, []);
 
   return (
     <>
@@ -350,223 +569,16 @@ export function TreeBrowserSidebar() {
           }}
         />
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          <div style={tabStyle(activeTab === 'search')} onClick={() => setActiveTab('search')}>
+          <div style={getTabStyle(activeTab === 'search')} onClick={() => setActiveTab('search')}>
             搜索
           </div>
-          <div style={tabStyle(activeTab === 'filter')} onClick={() => setActiveTab('filter')}>
+          <div style={getTabStyle(activeTab === 'filter')} onClick={() => setActiveTab('filter')}>
             筛选
           </div>
         </div>
 
-        {activeTab === 'search' && (
-          <>
-            <div style={{ padding: 8 }}>
-              <Input.Search
-                id='sidebar-search-input'
-                size='small'
-                placeholder='搜索 spec/项目/任务...'
-                defaultValue=''
-                onChange={(e) => {
-                  sidebarStore.searchKeyword = e.target.value;
-                }}
-                allowClear
-              />
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: '0 8px 8px' }}>
-              {loading && <Skeleton active paragraph={{ rows: 6 }} />}
-              {!loading && isSearching && searchResult.isLoading && <Skeleton active />}
-              {!loading && isSearching && searchItems.length === 0 && !searchResult.isLoading && (
-                <Empty description='无搜索结果' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-              {!loading && !isSearching && filteredTree.length === 0 && (
-                <Empty description='暂无数据' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-              {!loading && isSearching && searchItems.length > 0 && (
-                <>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: 'var(--text-secondary)',
-                      marginBottom: 4,
-                    }}>
-                    搜索结果 ({searchItems.length})
-                  </div>
-                  {searchItems.map((node) => (
-                    <TreeItem
-                      key={node.key}
-                      node={node}
-                      depth={0}
-                      expandedKeys={{}}
-                      onToggle={() => {}}
-                      onNavigate={handleNavigate}
-                    />
-                  ))}
-                  {filteredTree.length > 0 && (
-                    <>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          color: 'var(--text-secondary)',
-                          margin: '8px 0 4px',
-                        }}>
-                        浏览器匹配
-                      </div>
-                      {filteredTree.map((node) => (
-                        <TreeItem
-                          key={node.key}
-                          node={node}
-                          depth={0}
-                          expandedKeys={Object.fromEntries(
-                            Object.keys(expandedKeys).map((k) => [k, true]),
-                          )}
-                          onToggle={handleToggle}
-                          onNavigate={handleNavigate}
-                        />
-                      ))}
-                    </>
-                  )}
-                </>
-              )}
-              {!loading &&
-                !isSearching &&
-                filteredTree.map((node) => (
-                  <TreeItem
-                    key={node.key}
-                    node={node}
-                    depth={0}
-                    expandedKeys={expandedKeys}
-                    onToggle={handleToggle}
-                    onNavigate={handleNavigate}
-                  />
-                ))}
-            </div>
-          </>
-        )}
-
-        {activeTab === 'filter' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                marginBottom: 4,
-              }}>
-              节点类型
-            </div>
-            <Checkbox
-              checked={allNodesChecked}
-              indeterminate={
-                !allNodesChecked && nodeLegendItems.some((item) => visibleTypes[item.key])
-              }
-              onChange={(e) =>
-                nodeLegendItems.forEach((item) => {
-                  canvasStore.visibleTypes[item.key] = e.target.checked;
-                })
-              }
-              style={{ fontSize: 11, marginBottom: 2 }}>
-              全选
-            </Checkbox>
-            {nodeLegendItems.map((item) => (
-              <Checkbox
-                key={item.key}
-                checked={!!visibleTypes[item.key]}
-                onChange={(e) => {
-                  canvasStore.visibleTypes[item.key] = e.target.checked;
-                }}
-                style={{ fontSize: 11, marginLeft: 8 }}>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: 8,
-                    height: 8,
-                    borderRadius: 2,
-                    background: item.color,
-                    marginRight: 4,
-                    verticalAlign: 'middle',
-                  }}
-                />
-                {item.label}
-              </Checkbox>
-            ))}
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                margin: '10px 0 4px',
-              }}>
-              边类型
-            </div>
-            <Checkbox
-              checked={allEdgesChecked}
-              indeterminate={
-                !allEdgesChecked && edgeLegendItems.some((item) => visibleEdgeTypes[item.key])
-              }
-              onChange={(e) =>
-                edgeLegendItems.forEach((item) => {
-                  canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-                })
-              }
-              style={{ fontSize: 11, marginBottom: 2 }}>
-              全选
-            </Checkbox>
-            {edgeLegendItems.map((item) => (
-              <Checkbox
-                key={item.key}
-                checked={!!visibleEdgeTypes[item.key]}
-                onChange={(e) => {
-                  canvasStore.visibleEdgeTypes[item.key] = e.target.checked;
-                }}
-                style={{ fontSize: 11, marginLeft: 8 }}>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: 8,
-                    height: 3,
-                    borderRadius: 1,
-                    background: item.color,
-                    marginRight: 4,
-                    verticalAlign: 'middle',
-                  }}
-                />
-                <span>{item.label}</span>
-                <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
-                  {item.desc}
-                </span>
-              </Checkbox>
-            ))}
-            {selectedNodeId && (
-              <>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    margin: '10px 0 4px',
-                  }}>
-                  聚焦深度
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {focusDepthOptions.map((opt) => (
-                    <Button
-                      key={opt.value}
-                      size='small'
-                      type={focusDepth === opt.value ? 'primary' : 'text'}
-                      onClick={() => {
-                        canvasStore.focusDepth = opt.value;
-                      }}
-                      style={{ fontSize: 10, padding: '0 8px', height: 22 }}>
-                      {opt.label}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        {activeTab === 'search' && <SearchTreeTab />}
+        {activeTab === 'filter' && <FilterTreeTab />}
       </div>
       <div
         style={{
@@ -594,4 +606,4 @@ export function TreeBrowserSidebar() {
       </div>
     </>
   );
-}
+});

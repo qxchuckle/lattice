@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { useNavigate } from 'react-router';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
@@ -19,7 +19,7 @@ import { toElements } from './graph/elements';
 
 cytoscape.use(fcose);
 
-export function CytoscapeGraph() {
+export const CytoscapeGraph = memo(function CytoscapeGraph() {
   const { mode } = useSnapshot(themeStore);
   const isDark = mode === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -280,4 +280,4 @@ export function CytoscapeGraph() {
       />
     </div>
   );
-}
+});

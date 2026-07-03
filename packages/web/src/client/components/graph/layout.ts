@@ -167,14 +167,24 @@ export function runLayout(
   }
 }
 
-/** Focus+Context：高亮选中节点的 N 跳邻域，其余变灰 */
+// ── Focus 状态追踪：用于 diff 增量更新，避免每次全量遍历 ──
+let lastFocusedNodeId: string | null = null;
+let lastNeighborhood: cytoscape.Collection | null = null;
+
+/** Focus+Context：高亮选中节点的 N 跳邻域，其余变灰。
+ *  优化点：cy.batch() 合并 class 操作为单次 style recalculation；
+ *  diff 增量更新仅触碰变化的元素。 */
 export function applyFocus(cy: cytoscape.Core, nodeId: string, depth: number = 0): void {
   const node = cy.getElementById(nodeId);
   if (node.length === 0) return;
 
+  // 同一节点重复聚焦：完全跳过，避免重复动画导致闪动
+  if (nodeId === lastFocusedNodeId && lastNeighborhood) {
+    return;
+  }
+
   let neighborhood: cytoscape.Collection;
   if (depth === 0) {
-    // 全部 = 无限深度：从选中节点出发不断扩展邻域直到不再增长
     neighborhood = node.closedNeighborhood();
     let prevSize = 0;
     let currSize = neighborhood.size();
@@ -190,17 +200,59 @@ export function applyFocus(cy: cytoscape.Core, nodeId: string, depth: number = 0
     }
   }
 
-  cy.elements().removeClass('dimmed highlighted focused');
-  cy.elements().not(neighborhood).addClass('dimmed');
-  neighborhood.addClass('highlighted');
-  node.addClass('focused');
+  // 检查上次追踪状态是否仍有效（元素可能已被重建）
+  const hasValidLast =
+    lastNeighborhood && lastFocusedNodeId ? cy.getElementById(lastFocusedNodeId).length > 0 : false;
 
-  cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.0), duration: 400 });
+  cy.batch(() => {
+    if (hasValidLast && lastNeighborhood) {
+      // diff 增量：仅触碰状态变化的元素
+      const all = cy.elements();
+      const oldHighlight = lastNeighborhood!;
+      const oldDimmed = all.not(oldHighlight);
+      const newDimmed = all.not(neighborhood);
+
+      // dimmed → highlighted（旧 dimmed 中不在新 dimmed 的）
+      oldDimmed.not(newDimmed).removeClass('dimmed');
+      // highlighted → dimmed（新 dimmed 中不在旧 dimmed 的）
+      newDimmed.not(oldDimmed).addClass('dimmed');
+      // highlighted → 非 highlighted（旧 highlight 中不在新 highlight 的）
+      oldHighlight.not(neighborhood).removeClass('highlighted');
+      // 非 highlighted → highlighted（新 highlight 中不在旧 highlight 的）
+      neighborhood.not(oldHighlight).addClass('highlighted');
+      // focused 节点切换
+      cy.getElementById(lastFocusedNodeId!).removeClass('focused');
+    } else {
+      // 首次聚焦或元素已重建：全量更新
+      cy.elements().removeClass('dimmed highlighted focused');
+      cy.elements().not(neighborhood).addClass('dimmed');
+    }
+    neighborhood.addClass('highlighted');
+    node.addClass('focused');
+  });
+
+  lastFocusedNodeId = nodeId;
+  lastNeighborhood = neighborhood;
+
+  // 手动计算目标 pan 替代 cy.animate({ center: ... })，
+  // 避免 center 选项与 zoom 同时变化时产生位置跳变
+  const targetZoom = Math.max(cy.zoom(), 1.0);
+  const nodePos = node.position();
+  const container = cy.container();
+  if (container) {
+    const targetPan = {
+      x: container.clientWidth / 2 - nodePos.x * targetZoom,
+      y: container.clientHeight / 2 - nodePos.y * targetZoom,
+    };
+    cy.animate({ pan: targetPan, zoom: targetZoom, duration: 200 });
+  }
 }
 
 /** 清除 Focus 状态 */
 export function clearFocus(cy: cytoscape.Core): void {
   cy.elements().removeClass('dimmed highlighted focused');
+  lastFocusedNodeId = null;
+  lastNeighborhood = null;
 }
 
 /** 根据 anchorId 查找图中的节点（处理 spec 前缀问题） */

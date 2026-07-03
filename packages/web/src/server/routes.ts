@@ -27,6 +27,7 @@ import {
   getTaskDesignPath,
   getTaskPrd,
   readText,
+  getSmartContext,
 } from '@qcqx/lattice-core';
 
 const execAsync = promisify(exec);
@@ -139,11 +140,40 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return getTaskLineage(username, req.params.id);
   });
 
+  // 任务语义上下文（含语义关联 Spec）
+  app.get<{ Params: { id: string } }>('/api/tasks/:id/context', async (req) => {
+    const username = await getUsername();
+    try {
+      const ctx = await getSmartContext(username, req.params.id, { crossUser: false });
+      return {
+        directSpecs: ctx.directSpecs,
+        relatedSpecs: ctx.relatedSpecs,
+        semanticSpecs: ctx.semanticSpecs,
+      };
+    } catch {
+      return { directSpecs: [], relatedSpecs: [], semanticSpecs: [] };
+    }
+  });
+
   // ── 项目关系 ──
 
   app.get('/api/relations', async () => {
     const username = await getUsername();
     return listRelations(username);
+  });
+
+  // ── 活跃任务 Checkpoint（全局图用）──
+
+  app.get('/api/checkpoints/active', async () => {
+    const username = await getUsername();
+    const tasks = await listTasks(username, { status: 'in_progress' });
+    const results = await Promise.all(
+      tasks.map(async (t) => ({
+        taskId: t.id,
+        checkpoints: await listCheckpoints(username, t.id),
+      })),
+    );
+    return results;
   });
 
   // ── Spec ──

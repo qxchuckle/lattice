@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Button, Segmented, Tooltip } from 'antd';
 import {
   ReloadOutlined,
@@ -20,7 +21,7 @@ const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] =
 ];
 
 /** 顶部浮动状态岛：布局切换 + 缩放/聚焦 + 统计 + 刷新 + 主题 */
-export function FloatingStatusBar() {
+export const FloatingStatusBar = memo(function FloatingStatusBar() {
   const { mode } = useSnapshot(themeStore);
   const { layoutMode, selectedNodeId, layoutRunning } = useSnapshot(canvasStore);
   const queryClient = useQueryClient();
@@ -133,4 +134,4 @@ export function FloatingStatusBar() {
       />
     </div>
   );
-}
+});
