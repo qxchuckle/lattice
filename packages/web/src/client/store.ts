@@ -48,6 +48,8 @@ export const canvasStore = proxy({
   focusDepth: 1 as number,
   /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
   layoutRunning: false,
+  /** 画布首次渲染完成（首次数据加载 + 布局完成），用于控制 loading 遮罩 */
+  canvasReady: false,
 });
 
 /** Cytoscape 实例引用（非响应式，由 CytoscapeGraph 赋值，供 FloatingStatusBar 等跨组件访问） */

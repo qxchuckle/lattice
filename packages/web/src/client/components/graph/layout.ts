@@ -29,12 +29,15 @@ function seedMathRandom(seed: number): () => void {
 export function buildLayoutConfig(
   nodeCount: number,
   layoutMode: LayoutMode = 'force',
+  skipAnimation = false,
 ): cytoscape.LayoutOptions {
+  const animate = skipAnimation ? false : 'end';
+  const animationDuration = skipAnimation ? 0 : 500;
   if (layoutMode === 'sequential') {
     return {
       name: 'breadthfirst',
-      animate: 'end',
-      animationDuration: 500,
+      animate,
+      animationDuration,
       directed: true,
       padding: 60,
       spacingFactor: Math.max(0.8, Math.min(1.5, 200 / nodeCount)),
@@ -46,8 +49,8 @@ export function buildLayoutConfig(
   if (layoutMode === 'radial') {
     return {
       name: 'concentric',
-      animate: 'end',
-      animationDuration: 500,
+      animate,
+      animationDuration,
       padding: 60,
       concentric: (ele: cytoscape.SingularElementReturnValue) => ele.degree(),
       levelWidth: () => 2,
@@ -61,8 +64,8 @@ export function buildLayoutConfig(
   const numIter = Math.max(2500, Math.min(6000, Math.ceil(nodeCount * 25)));
   return {
     name: 'fcose',
-    animate: 'end',
-    animationDuration: 500,
+    animate,
+    animationDuration,
     nodeRepulsion,
     idealEdgeLength,
     edgeElasticity: 0.35,
@@ -99,6 +102,7 @@ export function runLayout(
   nodeCount: number,
   layoutMode: LayoutMode = 'force',
   onComplete?: () => void,
+  skipAnimation = false,
 ): void {
   // 清理无效边（端点节点不存在），所有模式通用
   const invalidEdges = cy.edges().filter((e) => e.source().length === 0 || e.target().length === 0);
@@ -106,15 +110,22 @@ export function runLayout(
     invalidEdges.remove();
   }
 
+  // 首次加载跳过入场动画和 fit 动画，直接到位
+  const fitDuration = skipAnimation ? 0 : 300;
+
   // 径向：preset 动画 → layoutstop → 持续防重叠 → fit
   if (layoutMode === 'radial') {
     runRadialLayout(cy, nodeCount, () => {
       canvasStore.layoutRunning = true;
       resolveOverlapsContinuous(cy, {
-        maxDuration: 3000,
+        maxDuration: skipAnimation ? 0 : 3000,
         onDone: () => {
           canvasStore.layoutRunning = false;
-          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+          if (skipAnimation) {
+            cy.fit(cy.elements(), 60);
+          } else {
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+          }
           onComplete?.();
         },
       });
@@ -128,10 +139,14 @@ export function runLayout(
       runSequentialLayout(cy, nodeCount, () => {
         canvasStore.layoutRunning = true;
         resolveOverlapsContinuous(cy, {
-          maxDuration: 3000,
+          maxDuration: skipAnimation ? 0 : 3000,
           onDone: () => {
             canvasStore.layoutRunning = false;
-            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+            if (skipAnimation) {
+              cy.fit(cy.elements(), 60);
+            } else {
+              cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+            }
             onComplete?.();
           },
         });
@@ -144,16 +159,20 @@ export function runLayout(
 
   // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit
   const restoreRandom = seedMathRandom(LAYOUT_SEED);
-  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force'));
+  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force', skipAnimation));
 
   layout.one('layoutstop', () => {
     restoreRandom();
     canvasStore.layoutRunning = true;
     resolveOverlapsContinuous(cy, {
-      maxDuration: 3000,
+      maxDuration: skipAnimation ? 0 : 3000,
       onDone: () => {
         canvasStore.layoutRunning = false;
-        cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: 300 });
+        if (skipAnimation) {
+          cy.fit(cy.elements(), 60);
+        } else {
+          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+        }
         onComplete?.();
       },
     });
@@ -174,7 +193,12 @@ let lastNeighborhood: cytoscape.Collection | null = null;
 /** Focus+Context：高亮选中节点的 N 跳邻域，其余变灰。
  *  优化点：cy.batch() 合并 class 操作为单次 style recalculation；
  *  diff 增量更新仅触碰变化的元素。 */
-export function applyFocus(cy: cytoscape.Core, nodeId: string, depth: number = 0): void {
+export function applyFocus(
+  cy: cytoscape.Core,
+  nodeId: string,
+  depth: number = 0,
+  skipAnimation = false,
+): void {
   const node = cy.getElementById(nodeId);
   if (node.length === 0) return;
 
@@ -234,7 +258,7 @@ export function applyFocus(cy: cytoscape.Core, nodeId: string, depth: number = 0
   lastFocusedNodeId = nodeId;
   lastNeighborhood = neighborhood;
 
-  // 手动计算目标 pan 替代 cy.animate({ center: ... })，
+  // 手动计算目标 pan 替代 cy.animate({ center: ... }),
   // 避免 center 选项与 zoom 同时变化时产生位置跳变
   const targetZoom = Math.max(cy.zoom(), 1.0);
   const nodePos = node.position();
@@ -244,7 +268,11 @@ export function applyFocus(cy: cytoscape.Core, nodeId: string, depth: number = 0
       x: container.clientWidth / 2 - nodePos.x * targetZoom,
       y: container.clientHeight / 2 - nodePos.y * targetZoom,
     };
-    cy.animate({ pan: targetPan, zoom: targetZoom, duration: 200 });
+    if (skipAnimation) {
+      cy.viewport({ zoom: targetZoom, pan: targetPan });
+    } else {
+      cy.animate({ pan: targetPan, zoom: targetZoom, duration: 200 });
+    }
   }
 }
 

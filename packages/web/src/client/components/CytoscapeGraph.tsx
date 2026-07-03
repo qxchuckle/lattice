@@ -1,4 +1,5 @@
 import { useEffect, useRef, memo } from 'react';
+import { Spin } from 'antd';
 import { useNavigate } from 'react-router';
 import cytoscape from 'cytoscape';
 import fcose from 'cytoscape-fcose';
@@ -24,6 +25,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   const isDark = mode === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
   const lastElementCountRef = useRef<number>(0);
+  const isFirstRenderRef = useRef(true);
   const navigate = useNavigate();
   const {
     anchorId,
@@ -33,6 +35,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     focusDepth,
     selectedNodeId,
     layoutMode,
+    canvasReady,
   } = useSnapshot(canvasStore);
   const graphData = useGlobalGraph();
   const visibleTypesRef = useRef(visibleTypes);
@@ -107,39 +110,86 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     const cy = cyRef.current;
     if (!cy || graphData.isLoading) return;
     const elementCount = graphData.nodes.length + graphData.edges.length;
-    if (elementCount === lastElementCountRef.current) return;
+    if (elementCount === lastElementCountRef.current) {
+      // 首次加载但元素为 0 时也需标记 ready，避免 loading 遮罩永远不消失
+      if (isFirstRenderRef.current && elementCount === 0) {
+        canvasStore.canvasReady = true;
+        isFirstRenderRef.current = false;
+      }
+      return;
+    }
     lastElementCountRef.current = elementCount;
 
+    const isFirst = isFirstRenderRef.current;
     const elements = toElements(
       graphData.nodes,
       graphData.edges,
       visibleTypesRef.current,
       visibleEdgeTypesRef.current,
     );
-    cy.elements().remove();
-    cy.add(elements);
-    cy.nodes().ungrabify();
-    canvasStore.layoutRunning = true;
-    runLayout(cy, elements.length, layoutMode, () => {
-      canvasStore.layoutRunning = false;
-    });
 
-    if (anchorId) {
-      const node = findNodeById(cy, anchorId);
-      if (node.length > 0) {
-        const data = node.data() as Record<string, unknown>;
-        selectNode(
-          anchorId,
-          data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
-          data,
-        );
-        applyFocus(cy, anchorId, canvasStore.focusDepth);
+    if (isFirst) {
+      // 首次加载：batch 合并 DOM 操作，禁用布局/fit/focus 动画，避免中间状态闪烁
+      cy.batch(() => {
+        cy.elements().remove();
+        cy.add(elements);
+      });
+      cy.nodes().ungrabify();
+      canvasStore.layoutRunning = true;
+      runLayout(
+        cy,
+        elements.length,
+        layoutMode,
+        () => {
+          canvasStore.layoutRunning = false;
+          canvasStore.canvasReady = true;
+          isFirstRenderRef.current = false;
+          // 首次布局完成后处理 anchorId 聚焦（无动画）
+          if (anchorId) {
+            const node = findNodeById(cy, anchorId);
+            if (node.length > 0) {
+              const data = node.data() as Record<string, unknown>;
+              selectNode(
+                anchorId,
+                data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
+                data,
+              );
+              // 标记跳过 selectedNodeId useEffect 的重复 applyFocus
+              skipAnchorRef.current = true;
+              applyFocus(cy, node.id(), canvasStore.focusDepth, true);
+            }
+          }
+        },
+        true,
+      );
+    } else {
+      // 后续更新：保持原有动画逻辑
+      cy.elements().remove();
+      cy.add(elements);
+      cy.nodes().ungrabify();
+      canvasStore.layoutRunning = true;
+      runLayout(cy, elements.length, layoutMode, () => {
+        canvasStore.layoutRunning = false;
+      });
+
+      if (anchorId) {
+        const node = findNodeById(cy, anchorId);
+        if (node.length > 0) {
+          const data = node.data() as Record<string, unknown>;
+          selectNode(
+            anchorId,
+            data.entityType as 'task' | 'project' | 'spec' | 'checkpoint' | 'document',
+            data,
+          );
+          applyFocus(cy, anchorId, canvasStore.focusDepth);
+        }
       }
     }
   }, [graphData.nodes, graphData.edges, graphData.isLoading]);
 
   // 布局模式变化时重新运行布局
   useEffect(() => {
+    if (isFirstRenderRef.current) return;
     const cy = cyRef.current;
     if (!cy || cy.elements().length === 0) return;
     canvasStore.layoutRunning = true;
@@ -152,6 +202,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || !anchorId) return;
+    if (isFirstRenderRef.current) return;
     if (skipAnchorRef.current) {
       skipAnchorRef.current = false;
       return;
@@ -278,6 +329,20 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         ref={containerRef}
         style={{ width: '100%', height: '100%', background: isDark ? '#1D1D26' : '#F5F5F5' }}
       />
+      {(graphData.isLoading || !canvasReady) && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDark ? '#1D1D26' : '#F5F5F5',
+            zIndex: 10,
+          }}>
+          <Spin size='large' />
+        </div>
+      )}
     </div>
   );
 });
