@@ -1,7 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { basename as pathBasename, resolve as pathResolve } from 'node:path';
-import { machineIdSync } from 'node-machine-id';
+import { createRequire } from 'node:module';
+const nodeMachineId: typeof import('node-machine-id') = createRequire(import.meta.url)(
+  'node-machine-id',
+);
+const { machineIdSync } = nodeMachineId;
 import type { ProjectMeta, ProjectRow } from '../types';
 import {
   getProjectDir,

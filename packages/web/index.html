@@ -4,6 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lattice Web</title>
+    <!-- 关键 CSS：防止 FOUC，global.less 加载前生效 -->
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1d1d26;
+      }
+      [data-theme='dark'] {
+        --bg: #1d1d26;
+        --text: #e8e8e8;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+      }
+    </style>
+    <!-- 主题检测：在 CSS 加载前同步设置 data-theme，确保首屏 CSS 变量正确 -->
+    <script>
+      (function () {
+        var stored = localStorage.getItem('lattice-web-theme');
+        var mode = stored;
+        if (!mode) {
+          mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          localStorage.setItem('lattice-web-theme', mode);
+        }
+        document.documentElement.setAttribute('data-theme', mode);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

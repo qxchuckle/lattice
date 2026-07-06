@@ -11,11 +11,8 @@ import { useKeyboard } from './hooks';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/global.less';
 
-// 初始化主题：如果用户没有手动设置过，跟随系统 prefers-color-scheme
-if (!localStorage.getItem('lattice-web-theme')) {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  themeStore.mode = prefersDark ? 'dark' : 'light';
-}
+// 主题初始化由 index.html 内联脚本完成（在 CSS 加载前同步设置 data-theme + localStorage）
+// store.ts 从 localStorage 读取 themeStore.mode，此时值已正确
 
 const queryClient = new QueryClient({
   defaultOptions: {
