@@ -1,12 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import 'dayjs/locale/zh-cn';
 import { tokens } from './theme';
 import type { LatticeNode, LatticeEdge } from './types/graph';
-
-dayjs.extend(relativeTime);
-dayjs.locale('zh-cn');
 
 // ── 实体配色 ──
 
@@ -79,12 +74,7 @@ export function layoutGraph(
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '-';
-  return dayjs(iso).format('YYYY-MM-DD HH:mm');
-}
-
-export function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return '-';
-  return dayjs(iso).fromNow();
+  return dayjs(iso).format('YYYY-MM-DD HH:mm:ss');
 }
 
 /** 不再截断文本，由 CSS 控制溢出 */

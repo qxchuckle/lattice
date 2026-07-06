@@ -260,6 +260,32 @@
     min-height: 0;
   }
 
+  // 板块 Tab 切换
+  &__tabs {
+    // 两级 tab nav 都 sticky，第二级排在第一级下方
+    // antd small tabs nav 高度约 40px（padding 8+8 + line-height 22 + border 2）
+    --tab-nav-height: 40px;
+
+    > .ant-tabs-nav {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      margin-bottom: 8px;
+      background: var(--bg-secondary);
+      padding-top: 4px;
+    }
+
+    // 嵌套子 Tabs（文档预览内的 PRD/Design/Progress）
+    .ant-tabs .ant-tabs-nav {
+      position: sticky;
+      top: calc(var(--tab-nav-height) + 4px);
+      z-index: 5;
+      background: var(--bg-secondary);
+      padding-top: 4px;
+      margin-bottom: 4px;
+    }
+  }
+
   &__section-title {
     font-size: 12px;
     font-weight: 500;

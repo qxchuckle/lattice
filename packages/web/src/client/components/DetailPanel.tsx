@@ -5,7 +5,6 @@ import {
   Button,
   Timeline,
   List,
-  Divider,
   Dropdown,
   App as AntdApp,
   Tooltip,
@@ -20,7 +19,6 @@ import {
   DownOutlined,
   CheckCircleOutlined,
   WarningOutlined,
-  BranchesOutlined,
   CopyOutlined,
   AimOutlined,
   MenuFoldOutlined,
@@ -30,8 +28,6 @@ import type { ReferencedSpec, ScopePath } from '@qcqx/lattice-core';
 import {
   useState,
   useRef as useReactRef,
-  useEffect,
-  useCallback,
   useMemo,
   memo,
   isValidElement,
@@ -44,14 +40,7 @@ import { useNavigate } from 'react-router';
 import { detailStore, closeDetail, getViewPath, locateNode, toggleDetailCollapse } from '../store';
 import { useEntityDetail } from '../hooks';
 import { getAdapter } from '../adapters';
-import {
-  formatDate,
-  formatRelative,
-  getTaskStatusColor,
-  getEntityColor,
-  truncate,
-  queryKeys,
-} from '../lib';
+import { formatDate, getTaskStatusColor, getEntityColor, truncate, queryKeys } from '../lib';
 import type { EditorApp } from '../adapters/types';
 import type {
   TaskMeta,
@@ -187,68 +176,6 @@ const MarkdownWithToc = memo(function MarkdownWithToc({ content }: { content: st
   );
 });
 
-// ── ScrollSpyBar：滚动时固定在顶部显示当前 section，点击回到 section 开头 ──
-
-interface SpySection {
-  key: string;
-  label: string;
-  el: HTMLDivElement | null;
-}
-
-function ScrollSpyBar({
-  scrollRef,
-  sections,
-}: {
-  scrollRef: React.RefObject<HTMLDivElement | null>;
-  sections: SpySection[];
-}) {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const handleScroll = () => {
-      let current: string | null = null;
-      for (const s of sections) {
-        if (!s.el) continue;
-        if (s.el.offsetTop <= container.scrollTop + 20) {
-          current = s.key;
-        }
-      }
-      setActiveKey(current);
-    };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll();
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [scrollRef, sections]);
-
-  const active = sections.find((s) => s.key === activeKey);
-  if (!active || !active.el) return null;
-
-  return (
-    <div
-      className='scroll-spy-bar'
-      onClick={() => active.el?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-      <span className='scroll-spy-bar__dot'>●</span>
-      {active.label}
-    </div>
-  );
-}
-
-// ── 构建 sections 数组的辅助 hook ──
-
-function useScrollSections(
-  scrollRef: React.RefObject<HTMLDivElement | null>,
-  sectionRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>,
-  labels: Record<string, string>,
-): SpySection[] {
-  return useCallback(() => {
-    return Object.entries(labels)
-      .filter(([key]) => sectionRefs.current[key] != null)
-      .map(([key, label]) => ({ key, label, el: sectionRefs.current[key] }));
-  }, [sectionRefs, labels])();
-}
-
 // ── 文件路径获取 hook ──
 
 function useFilePath(pathType: string | null | undefined, id: string | null | undefined) {
@@ -329,8 +256,6 @@ const editorMenuItems = [
 function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEntry[] }) {
   const navigate = useNavigate();
   const statusColor = getTaskStatusColor(task.status);
-  const sectionRefs = useReactRef<Record<string, HTMLDivElement | null>>({});
-  const scrollRef = useReactRef<HTMLDivElement>(null);
   const adapter = getAdapter();
   // 获取所有文档内容
   const prdQuery = useQuery({
@@ -399,6 +324,170 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
     progressContentQuery.data,
   ]);
 
+  // 构建详情板块 tabs
+  const detailTabs = useMemo(() => {
+    const items: { key: string; label: string; children: ReactNode }[] = [];
+    if (task.projects && task.projects.length > 0) {
+      items.push({
+        key: 'projects',
+        label: `关联项目 (${task.projects.length})`,
+        children: (
+          <List
+            size='small'
+            dataSource={task.projects}
+            renderItem={(pid: string) => {
+              const project = projectsQuery.data?.find((p) => p.id === pid);
+              return (
+                <List.Item
+                  className='detail-list-item'
+                  onClick={() => navigate(getViewPath('project', pid))}>
+                  <div>
+                    <div className='detail-list-item__name'>
+                      {project?.name || pid.slice(0, 12)}
+                    </div>
+                    <div className='mono detail-list-item__id'>{pid}</div>
+                    {project?.description && (
+                      <div className='detail-list-item__desc'>{project.description}</div>
+                    )}
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        ),
+      });
+    }
+    if (task.referencedSpecs && task.referencedSpecs.length > 0) {
+      items.push({
+        key: 'specs',
+        label: `引用 Spec (${task.referencedSpecs.length})`,
+        children: (
+          <List
+            size='small'
+            dataSource={task.referencedSpecs}
+            renderItem={(ref: ReferencedSpec) => (
+              <List.Item
+                className='detail-list-item'
+                onClick={() => navigate(getViewPath('spec', ref.id))}>
+                <div className='detail-list-item__row'>
+                  <Tag color={getEntityColor('spec')} style={{ fontSize: 10, margin: 0 }}>
+                    spec
+                  </Tag>
+                  <span className='mono detail-list-item__id-mono'>{ref.id}</span>
+                  <span className='detail-list-item__scope'>{ref.scope}</span>
+                </div>
+              </List.Item>
+            )}
+          />
+        ),
+      });
+    }
+    if (task.scopePaths && task.scopePaths.length > 0) {
+      items.push({
+        key: 'scopePaths',
+        label: `范围路径 (${task.scopePaths.length})`,
+        children: (
+          <List
+            size='small'
+            dataSource={task.scopePaths}
+            renderItem={(sp: ScopePath) => (
+              <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
+                <div style={{ width: '100%' }}>
+                  <div className='scope-path__path-row'>
+                    <span className='mono scope-path__path' title={sp.path}>
+                      {sp.path}
+                    </span>
+                  </div>
+                  <div className='scope-path__actions'>
+                    <Dropdown.Button
+                      size='small'
+                      type='text'
+                      icon={<DownOutlined />}
+                      onClick={async () => {
+                        const adapter = getAdapter();
+                        await adapter.openPath(sp.path, 'finder');
+                      }}
+                      menu={{
+                        items: editorMenuItems,
+                        onClick: async ({ key }) => {
+                          const adapter = getAdapter();
+                          await adapter.openPath(sp.path, key as EditorApp);
+                        },
+                      }}>
+                      <FolderOpenOutlined />
+                    </Dropdown.Button>
+                    {sp.projectId && (
+                      <Tag
+                        color={getEntityColor('project')}
+                        style={{ fontSize: 10, margin: 0, cursor: 'pointer' }}
+                        onClick={() => navigate(getViewPath('project', sp.projectId))}>
+                        {truncate(sp.projectId, 16)}
+                      </Tag>
+                    )}
+                    {sp.note && <Tag style={{ fontSize: 10, margin: 0 }}>{sp.note}</Tag>}
+                  </div>
+                </div>
+              </List.Item>
+            )}
+          />
+        ),
+      });
+    }
+    if (docTabs.length > 0) {
+      items.push({
+        key: 'docs',
+        label: '文档预览',
+        children: (
+          <Tabs
+            size='small'
+            items={docTabs.map((tab) => ({
+              key: tab.key,
+              label: tab.label,
+              children: (
+                <>
+                  {tab.loading ? (
+                    <div className='markdown-body detail-markdown'>
+                      <Skeleton active paragraph={{ rows: 4 }} />
+                    </div>
+                  ) : tab.content ? (
+                    <MarkdownWithToc content={tab.content} />
+                  ) : (
+                    <Empty description='文件为空' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                  )}
+                </>
+              ),
+            }))}
+          />
+        ),
+      });
+    }
+    if (progress && progress.length > 0) {
+      items.push({
+        key: 'checkpoints',
+        label: `Checkpoint (${progress.length})`,
+        children: (
+          <Timeline
+            items={progress.map((cp: CheckpointEntry) => ({
+              color: getCheckpointTimelineColor(cp.type),
+              children: (
+                <div>
+                  <div className='checkpoint-item__title'>{cp.title}</div>
+                  <div className='checkpoint-item__meta'>
+                    <Tag style={{ fontSize: 10, margin: 0 }}>{cp.type}</Tag> {formatDate(cp.time)}
+                  </div>
+                  {cp.message && (
+                    <div className='checkpoint-item__message'>{truncate(cp.message, 200)}</div>
+                  )}
+                </div>
+              ),
+            }))}
+          />
+        ),
+      });
+    }
+    return items;
+  }, [task, progress, docTabs, projectsQuery.data, navigate]);
+
   return (
     <div className='detail-component'>
       {/* 固定头部 */}
@@ -426,243 +515,12 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
       <div className='detail-component__meta'>
         <div className='mono detail-component__meta-id'>ID: {task.id}</div>
         <div>创建: {formatDate(task.created)}</div>
-        {task.updated && <div>更新: {formatRelative(task.updated)}</div>}
+        {task.updated && <div>更新: {formatDate(task.updated)}</div>}
       </div>
 
-      {/* 导航目录 */}
-      <div className='detail-component__nav'>
-        {task.projects && task.projects.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.projects?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            关联项目 ({task.projects.length})
-          </a>
-        )}
-        {task.referencedSpecs && task.referencedSpecs.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.specs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            引用 Spec ({task.referencedSpecs.length})
-          </a>
-        )}
-        {task.scopePaths && task.scopePaths.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.scopePaths?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            范围路径 ({task.scopePaths.length})
-          </a>
-        )}
-        {docTabs.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.docs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            文档 ({docTabs.length})
-          </a>
-        )}
-        {progress && progress.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.checkpoints?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-              })
-            }>
-            Checkpoint ({progress.length})
-          </a>
-        )}
-      </div>
-
-      {/* 可滚动内容区：所有内容平铺，导航目录点击跳转 */}
-      <div ref={scrollRef} className='detail-component__scroll'>
-        <ScrollSpyBar
-          scrollRef={scrollRef}
-          sections={useScrollSections(scrollRef, sectionRefs, {
-            projects: '关联项目',
-            specs: '引用 Spec',
-            scopePaths: '范围路径',
-            docs: '文档预览',
-            checkpoints: 'Checkpoint 时间线',
-          })}
-        />
-        {task.projects && task.projects.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.projects = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>关联项目</div>
-            <List
-              size='small'
-              dataSource={task.projects}
-              renderItem={(pid: string) => {
-                const project = projectsQuery.data?.find((p) => p.id === pid);
-                return (
-                  <List.Item
-                    className='detail-list-item'
-                    onClick={() => navigate(getViewPath('project', pid))}>
-                    <div>
-                      <div className='detail-list-item__name'>
-                        {project?.name || pid.slice(0, 12)}
-                      </div>
-                      <div className='mono detail-list-item__id'>{pid}</div>
-                      {project?.description && (
-                        <div className='detail-list-item__desc'>{project.description}</div>
-                      )}
-                    </div>
-                  </List.Item>
-                );
-              }}
-            />
-          </div>
-        )}
-
-        {task.referencedSpecs && task.referencedSpecs.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.specs = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>引用 Spec</div>
-            <List
-              size='small'
-              dataSource={task.referencedSpecs}
-              renderItem={(ref: ReferencedSpec) => (
-                <List.Item
-                  className='detail-list-item'
-                  onClick={() => navigate(getViewPath('spec', ref.id))}>
-                  <div className='detail-list-item__row'>
-                    <Tag color={getEntityColor('spec')} style={{ fontSize: 10, margin: 0 }}>
-                      spec
-                    </Tag>
-                    <span className='mono detail-list-item__id-mono'>{ref.id}</span>
-                    <span className='detail-list-item__scope'>{ref.scope}</span>
-                  </div>
-                </List.Item>
-              )}
-            />
-          </div>
-        )}
-
-        {task.scopePaths && task.scopePaths.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.scopePaths = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>范围路径</div>
-            <List
-              size='small'
-              dataSource={task.scopePaths}
-              renderItem={(sp: ScopePath) => (
-                <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
-                  <div style={{ width: '100%' }}>
-                    <div className='scope-path__path-row'>
-                      <span className='mono scope-path__path' title={sp.path}>
-                        {sp.path}
-                      </span>
-                    </div>
-                    <div className='scope-path__actions'>
-                      <Dropdown.Button
-                        size='small'
-                        type='text'
-                        icon={<DownOutlined />}
-                        onClick={async () => {
-                          const adapter = getAdapter();
-                          await adapter.openPath(sp.path, 'finder');
-                        }}
-                        menu={{
-                          items: editorMenuItems,
-                          onClick: async ({ key }) => {
-                            const adapter = getAdapter();
-                            await adapter.openPath(sp.path, key as EditorApp);
-                          },
-                        }}>
-                        <FolderOpenOutlined />
-                      </Dropdown.Button>
-                      {sp.projectId && (
-                        <Tag
-                          color={getEntityColor('project')}
-                          style={{ fontSize: 10, margin: 0, cursor: 'pointer' }}
-                          onClick={() => navigate(getViewPath('project', sp.projectId))}>
-                          {truncate(sp.projectId, 16)}
-                        </Tag>
-                      )}
-                      {sp.note && <Tag style={{ fontSize: 10, margin: 0 }}>{sp.note}</Tag>}
-                    </div>
-                  </div>
-                </List.Item>
-              )}
-            />
-          </div>
-        )}
-
-        {docTabs.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.docs = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>文档预览</div>
-            <Tabs
-              size='small'
-              items={docTabs.map((tab) => ({
-                key: tab.key,
-                label: tab.label,
-                children: (
-                  <>
-                    {tab.loading ? (
-                      <div className='markdown-body detail-markdown'>
-                        <Skeleton active paragraph={{ rows: 4 }} />
-                      </div>
-                    ) : tab.content ? (
-                      <MarkdownWithToc content={tab.content} />
-                    ) : (
-                      <Empty description='文件为空' image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    )}
-                  </>
-                ),
-              }))}
-            />
-          </div>
-        )}
-
-        {progress && progress.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.checkpoints = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title' style={{ marginBottom: 8 }}>
-              Checkpoint 时间线
-            </div>
-            <Timeline
-              items={progress.map((cp: CheckpointEntry) => ({
-                color: getCheckpointTimelineColor(cp.type),
-                children: (
-                  <div>
-                    <div className='checkpoint-item__title'>{cp.title}</div>
-                    <div className='checkpoint-item__meta'>
-                      <Tag style={{ fontSize: 10, margin: 0 }}>{cp.type}</Tag>{' '}
-                      {formatRelative(cp.time)}
-                    </div>
-                    {cp.message && (
-                      <div className='checkpoint-item__message'>{truncate(cp.message, 200)}</div>
-                    )}
-                  </div>
-                ),
-              }))}
-            />
-          </div>
-        )}
+      {/* 板块 Tab 切换 */}
+      <div className='detail-component__scroll'>
+        <Tabs size='small' className='detail-component__tabs' items={detailTabs} />
       </div>
     </div>
   );
@@ -701,8 +559,6 @@ function ProjectDetail({
   relations: ProjectRelation[];
 }) {
   const navigate = useNavigate();
-  const sectionRefs = useReactRef<Record<string, HTMLDivElement | null>>({});
-  const scrollRef = useReactRef<HTMLDivElement>(null);
   if (!project) {
     return <Empty description='项目不存在' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -728,196 +584,156 @@ function ProjectDetail({
         {project.tags && project.tags.length > 0 && <div>标签: {project.tags.join(', ')}</div>}
       </div>
 
-      {/* 导航目录 */}
-      <div className='detail-component__nav'>
-        {gitStatus && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.git?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            Git 状态
-          </a>
-        )}
-        {tasks && tasks.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.tasks?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            关联任务 ({tasks.length})
-          </a>
-        )}
-        {relations && relations.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.relations?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            项目关系 ({relations.length})
-          </a>
-        )}
-        {specs && specs.length > 0 && (
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.specs?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            Spec ({specs.length})
-          </a>
-        )}
-      </div>
-
-      {/* 可滚动内容区 */}
-      <div ref={scrollRef} className='detail-component__scroll'>
-        <ScrollSpyBar
-          scrollRef={scrollRef}
-          sections={useScrollSections(scrollRef, sectionRefs, {
-            git: 'Git 状态',
-            tasks: '关联任务',
-            relations: '项目关系',
-            specs: 'Spec',
-          })}
-        />
-        {/* Git 状态 */}
-        {gitStatus && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.git = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>
-              <BranchesOutlined /> Git 状态
-            </div>
-            <div className='git-status'>
-              <div>
-                <span className='git-status__label'>分支: </span>
-                <span className='mono'>{gitStatus.branch || '-'}</span>
-                {gitStatus.dirty ? (
-                  <Tag color='orange' style={{ marginLeft: 8, fontSize: 10 }}>
-                    <WarningOutlined /> {gitStatus.uncommittedCount} 未提交
-                  </Tag>
-                ) : (
-                  <Tag color='green' style={{ marginLeft: 8, fontSize: 10 }}>
-                    <CheckCircleOutlined /> 干净
-                  </Tag>
-                )}
-              </div>
-              {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-                <div>
-                  <span className='git-status__label'>远程: </span>
-                  {gitStatus.ahead > 0 && (
-                    <Tag color='green' style={{ fontSize: 10 }}>
-                      ↑{gitStatus.ahead}
-                    </Tag>
-                  )}
-                  {gitStatus.behind > 0 && (
-                    <Tag color='orange' style={{ fontSize: 10 }}>
-                      ↓{gitStatus.behind}
-                    </Tag>
-                  )}
-                </div>
-              )}
-              {gitStatus.lastCommitMessage && (
-                <Tooltip
-                  title={gitStatus.lastCommitTime ? formatDate(gitStatus.lastCommitTime) : ''}>
-                  <div className='git-status__commit'>
-                    <span className='git-status__label'>最近: </span>
-                    {gitStatus.lastCommitMessage}
-                  </div>
-                </Tooltip>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 关联任务 */}
-        {tasks && tasks.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.tasks = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>关联任务 ({tasks.length})</div>
-            <List
-              size='small'
-              dataSource={tasks}
-              renderItem={(t: TaskMeta) => (
-                <List.Item
-                  className='detail-list-item'
-                  onClick={() => navigate(getViewPath('task', t.id))}>
-                  <div className='detail-list-item__row'>
-                    <Tag color={getTaskStatusColor(t.status)} style={{ fontSize: 10, margin: 0 }}>
-                      {t.status}
-                    </Tag>
-                    <span>{truncate(t.title, 30)}</span>
-                  </div>
-                </List.Item>
-              )}
-            />
-          </div>
-        )}
-
-        {/* 项目关系 */}
-        {relations && relations.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.relations = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>项目关系 ({relations.length})</div>
-            <List
-              size='small'
-              dataSource={relations}
-              renderItem={(r: ProjectRelation) => {
-                const otherId = r.projectA === project.id ? r.projectB : r.projectA;
-                return (
-                  <List.Item
-                    className='detail-list-item'
-                    onClick={() => navigate(getViewPath('project', otherId))}>
-                    <div className='detail-list-item__row'>
-                      <Tag color={getEntityColor('project')} style={{ fontSize: 10, margin: 0 }}>
-                        {r.type}
-                      </Tag>
-                      <span className='mono'>{truncate(otherId, 16)}</span>
-                    </div>
-                  </List.Item>
-                );
-              }}
-            />
-          </div>
-        )}
-
-        {/* Spec */}
-        {specs && specs.length > 0 && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.specs = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <div className='detail-component__section-title'>Spec ({specs.length})</div>
-            <List
-              size='small'
-              dataSource={specs}
-              renderItem={(s: ParsedSpec) => (
-                <List.Item
-                  className='detail-list-item'
-                  onClick={() => navigate(getViewPath('spec', s.frontmatter.id || s.fileName))}>
-                  <div>
-                    <span>{truncate(s.frontmatter.title || s.fileName, 30)}</span>
-                    {s.frontmatter.tags && s.frontmatter.tags.length > 0 && (
-                      <div className='spec-tags'>
-                        {s.frontmatter.tags.slice(0, 3).map((tag: string) => (
-                          <Tag key={tag}>{tag}</Tag>
-                        ))}
+      {/* 板块 Tab 切换 */}
+      <div className='detail-component__scroll'>
+        <Tabs
+          size='small'
+          className='detail-component__tabs'
+          items={[
+            ...(gitStatus
+              ? [
+                  {
+                    key: 'git',
+                    label: 'Git 状态',
+                    children: (
+                      <div className='git-status'>
+                        <div>
+                          <span className='git-status__label'>分支: </span>
+                          <span className='mono'>{gitStatus.branch || '-'}</span>
+                          {gitStatus.dirty ? (
+                            <Tag color='orange' style={{ marginLeft: 8, fontSize: 10 }}>
+                              <WarningOutlined /> {gitStatus.uncommittedCount} 未提交
+                            </Tag>
+                          ) : (
+                            <Tag color='green' style={{ marginLeft: 8, fontSize: 10 }}>
+                              <CheckCircleOutlined /> 干净
+                            </Tag>
+                          )}
+                        </div>
+                        {(gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+                          <div>
+                            <span className='git-status__label'>远程: </span>
+                            {gitStatus.ahead > 0 && (
+                              <Tag color='green' style={{ fontSize: 10 }}>
+                                ↑{gitStatus.ahead}
+                              </Tag>
+                            )}
+                            {gitStatus.behind > 0 && (
+                              <Tag color='orange' style={{ fontSize: 10 }}>
+                                ↓{gitStatus.behind}
+                              </Tag>
+                            )}
+                          </div>
+                        )}
+                        {gitStatus.lastCommitMessage && (
+                          <Tooltip
+                            title={
+                              gitStatus.lastCommitTime ? formatDate(gitStatus.lastCommitTime) : ''
+                            }>
+                            <div className='git-status__commit'>
+                              <span className='git-status__label'>最近: </span>
+                              {gitStatus.lastCommitMessage}
+                            </div>
+                          </Tooltip>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </List.Item>
-              )}
-            />
-          </div>
-        )}
+                    ),
+                  },
+                ]
+              : []),
+            ...(tasks && tasks.length > 0
+              ? [
+                  {
+                    key: 'tasks',
+                    label: `关联任务 (${tasks.length})`,
+                    children: (
+                      <List
+                        size='small'
+                        dataSource={tasks}
+                        renderItem={(t: TaskMeta) => (
+                          <List.Item
+                            className='detail-list-item'
+                            onClick={() => navigate(getViewPath('task', t.id))}>
+                            <div className='detail-list-item__row'>
+                              <Tag
+                                color={getTaskStatusColor(t.status)}
+                                style={{ fontSize: 10, margin: 0 }}>
+                                {t.status}
+                              </Tag>
+                              <span>{truncate(t.title, 30)}</span>
+                            </div>
+                          </List.Item>
+                        )}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+            ...(relations && relations.length > 0
+              ? [
+                  {
+                    key: 'relations',
+                    label: `项目关系 (${relations.length})`,
+                    children: (
+                      <List
+                        size='small'
+                        dataSource={relations}
+                        renderItem={(r: ProjectRelation) => {
+                          const otherId = r.projectA === project.id ? r.projectB : r.projectA;
+                          return (
+                            <List.Item
+                              className='detail-list-item'
+                              onClick={() => navigate(getViewPath('project', otherId))}>
+                              <div className='detail-list-item__row'>
+                                <Tag
+                                  color={getEntityColor('project')}
+                                  style={{ fontSize: 10, margin: 0 }}>
+                                  {r.type}
+                                </Tag>
+                                <span className='mono'>{truncate(otherId, 16)}</span>
+                              </div>
+                            </List.Item>
+                          );
+                        }}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+            ...(specs && specs.length > 0
+              ? [
+                  {
+                    key: 'specs',
+                    label: `Spec (${specs.length})`,
+                    children: (
+                      <List
+                        size='small'
+                        dataSource={specs}
+                        renderItem={(s: ParsedSpec) => (
+                          <List.Item
+                            className='detail-list-item'
+                            onClick={() =>
+                              navigate(getViewPath('spec', s.frontmatter.id || s.fileName))
+                            }>
+                            <div>
+                              <span>{truncate(s.frontmatter.title || s.fileName, 30)}</span>
+                              {s.frontmatter.tags && s.frontmatter.tags.length > 0 && (
+                                <div className='spec-tags'>
+                                  {s.frontmatter.tags.slice(0, 3).map((tag: string) => (
+                                    <Tag key={tag}>{tag}</Tag>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </List.Item>
+                        )}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
       </div>
     </div>
   );
@@ -927,8 +743,6 @@ function ProjectDetail({
 
 function SpecDetail({ data }: { data: Record<string, unknown> }) {
   const adapter = getAdapter();
-  const sectionRefs = useReactRef<Record<string, HTMLDivElement | null>>({});
-  const scrollRef = useReactRef<HTMLDivElement>(null);
   const title = (data.title as string) || '未知';
   const specId = (data.specId as string) || '';
   const scope = (data.scope as string) || 'project';
@@ -956,32 +770,9 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
       <div className='detail-component__meta'>
         <div className='mono detail-component__meta-id'>文件: {specId}</div>
       </div>
-      {/* 导航目录 */}
-      {spec?.content && (
-        <div className='detail-component__nav'>
-          <a
-            className='nav-link'
-            onClick={() =>
-              sectionRefs.current.content?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }>
-            Spec 内容
-          </a>
-        </div>
-      )}
-      <div ref={scrollRef} className='detail-component__scroll'>
-        <ScrollSpyBar
-          scrollRef={scrollRef}
-          sections={useScrollSections(scrollRef, sectionRefs, { content: 'Spec 内容' })}
-        />
-        {spec?.content && (
-          <div
-            ref={(el) => {
-              sectionRefs.current.content = el;
-            }}>
-            <Divider style={{ margin: '8px 0' }} />
-            <MarkdownWithToc content={spec.content} />
-          </div>
-        )}
+      {/* Spec 内容 */}
+      <div className='detail-component__scroll'>
+        {spec?.content && <MarkdownWithToc content={spec.content} />}
       </div>
     </div>
   );
