@@ -77,6 +77,8 @@ export function toElements(
   edges: LatticeEdge[],
   visibleTypes: Record<string, boolean>,
   visibleEdgeTypes?: Record<string, boolean>,
+  taskStatusFilter?: readonly string[],
+  specScopeFilter?: readonly string[],
 ): cytoscape.ElementDefinition[] {
   const visibleSet = new Set(
     Object.entries(visibleTypes)
@@ -90,6 +92,19 @@ export function toElements(
     const data = n.data as Record<string, unknown>;
     const entityType = data.entityType as string;
     if (!visibleSet.has(entityType)) return;
+
+    // 任务状态筛选
+    if (entityType === 'task' && taskStatusFilter && taskStatusFilter.length > 0) {
+      const status = (data.status as string) || 'planning';
+      if (!taskStatusFilter.includes(status)) return;
+    }
+
+    // Spec 范围筛选
+    if (entityType === 'spec' && specScopeFilter && specScopeFilter.length > 0) {
+      const scope = (data.scope as string) || '';
+      if (!specScopeFilter.includes(scope)) return;
+    }
+
     visibleNodeIds.add(n.id);
     const label = getNodeLabel(data);
     let color = '#8C8C8C';

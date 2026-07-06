@@ -1,5 +1,10 @@
 import type cytoscape from 'cytoscape';
-import { canvasStore, type LayoutMode } from '../../store';
+import {
+  canvasStore,
+  type LayoutMode,
+  getVisibleCanvasCenter,
+  getVisibleCanvasBounds,
+} from '../../store';
 import { runRadialLayout } from './radial-layout';
 import { runSequentialLayout } from './sequential-layout';
 import { resolveOverlapsContinuous } from './overlap-resolution';
@@ -32,6 +37,7 @@ export function buildLayoutConfig(
   layoutMode: LayoutMode = 'force',
   skipAnimation = false,
   preserveViewport = false,
+  incremental = false,
 ): cytoscape.LayoutOptions {
   const animate = skipAnimation ? false : 'end';
   const animationDuration = skipAnimation ? 0 : 500;
@@ -80,7 +86,7 @@ export function buildLayoutConfig(
     tilingPaddingHorizontal: 80,
     fit,
     padding: 60,
-    randomize: true,
+    randomize: !incremental,
     nodeSeparation: 120,
     packingQuality: 'default',
   } as unknown as cytoscape.LayoutOptions;
@@ -272,15 +278,17 @@ export function applyFocus(
   lastFocusedNodeId = nodeId;
   lastNeighborhood = neighborhood;
 
-  // 手动计算目标 pan 替代 cy.animate({ center: ... }),
-  // 避免 center 选项与 zoom 同时变化时产生位置跳变
+  // 手动计算目标 pan：以面板遮蔽后的可视区域中心为目标，
+  // 避免 center 选项与 zoom 同时变化时产生位置跳变，
+  // 同时避免定位节点落在左右面板背后
   const targetZoom = Math.max(cy.zoom(), 1.0);
   const nodePos = node.position();
   const container = cy.container();
   if (container) {
+    const center = getVisibleCanvasCenter(container.clientWidth, container.clientHeight);
     const targetPan = {
-      x: container.clientWidth / 2 - nodePos.x * targetZoom,
-      y: container.clientHeight / 2 - nodePos.y * targetZoom,
+      x: center.x - nodePos.x * targetZoom,
+      y: center.y - nodePos.y * targetZoom,
     };
     if (skipAnimation) {
       cy.viewport({ zoom: targetZoom, pan: targetPan });
@@ -302,4 +310,28 @@ export function findNodeById(cy: cytoscape.Core, id: string): cytoscape.NodeSing
   let node = cy.getElementById(id);
   if (node.length === 0) node = cy.getElementById(`spec-${id}`);
   return node;
+}
+
+/** 将元素集合适配到可视区域（考虑面板遮蔽）。
+ *  替代 cy.animate({ fit }) — 后者使用容器整体尺寸，不考虑面板遮蔽。 */
+export function fitToElements(
+  cy: cytoscape.Core,
+  eles: cytoscape.Collection,
+  padding = 40,
+  duration = 500,
+): void {
+  const container = cy.container();
+  if (!container || eles.length === 0) return;
+  const bounds = getVisibleCanvasBounds(container.clientWidth, container.clientHeight);
+  const bbox = eles.boundingBox();
+  const zoomX = bounds.width / (bbox.w + padding * 2);
+  const zoomY = bounds.height / (bbox.h + padding * 2);
+  const targetZoom = Math.max(cy.minZoom(), Math.min(zoomX, zoomY, 2.0));
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  const targetPan = {
+    x: centerX - (bbox.x1 + bbox.w / 2) * targetZoom,
+    y: centerY - (bbox.y1 + bbox.h / 2) * targetZoom,
+  };
+  cy.animate({ pan: targetPan, zoom: targetZoom, duration });
 }

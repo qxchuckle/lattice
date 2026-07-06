@@ -44,6 +44,10 @@ export const canvasStore = proxy({
   } as Record<string, boolean>,
   /** 聚焦深度（选中节点后高亮的跳数，0 = 全部，默认 1 跳） */
   focusDepth: 1 as number,
+  /** 画布任务状态筛选：空数组 = 全部（值: in_progress / completed / archived） */
+  taskStatusFilter: [] as string[],
+  /** 画布 Spec 范围筛选：空数组 = 全部（值: global / user / project） */
+  specScopeFilter: [] as string[],
   /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
   layoutRunning: false,
   /** 画布首次渲染完成（首次数据加载 + 布局完成），用于控制 loading 遮罩 */
@@ -205,6 +209,50 @@ export function setSidebarWidth(width: number): void {
 /** 切换节点展开状态 */
 export function toggleNodeExpand(nodeId: string): void {
   canvasStore.expandedNodes[nodeId] = !canvasStore.expandedNodes[nodeId];
+}
+
+// ── 可视区域计算（面板遮蔽适配）──
+
+/** 面板遮蔽后的可视画布区域边界 */
+export interface VisibleCanvasBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/** 计算面板遮蔽后的可视区域边界。
+ *  左侧栏展开时占据左侧（12px 边距 + width + 12px 间隔），
+ *  详情面板展开时占据右侧（同理）。面板折叠或未打开时遮蔽可忽略。 */
+export function getVisibleCanvasBounds(
+  containerWidth: number,
+  containerHeight: number,
+): VisibleCanvasBounds {
+  const leftOffset = sidebarStore.collapsed ? 0 : sidebarStore.width + 24;
+  const rightOffset = detailStore.collapsed || !detailStore.open ? 0 : detailStore.width + 24;
+  const width = Math.max(containerWidth - leftOffset - rightOffset, 200);
+  return {
+    left: leftOffset,
+    right: containerWidth - rightOffset,
+    top: 0,
+    bottom: containerHeight,
+    width,
+    height: containerHeight,
+  };
+}
+
+/** 计算面板遮蔽后的可视区域中心点 */
+export function getVisibleCanvasCenter(
+  containerWidth: number,
+  containerHeight: number,
+): { x: number; y: number } {
+  const bounds = getVisibleCanvasBounds(containerWidth, containerHeight);
+  return {
+    x: (bounds.left + bounds.right) / 2,
+    y: containerHeight / 2,
+  };
 }
 
 /** 获取面包屑路径 */

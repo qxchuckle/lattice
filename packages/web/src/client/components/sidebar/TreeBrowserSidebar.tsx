@@ -481,7 +481,14 @@ const SearchTreeTab = memo(function SearchTreeTab() {
 // ── 筛选 Tab：订阅 canvasStore（visibleTypes/visibleEdgeTypes/focusDepth/selectedNodeId）──
 
 const FilterTreeTab = memo(function FilterTreeTab() {
-  const { visibleTypes, visibleEdgeTypes, focusDepth, selectedNodeId } = useSnapshot(canvasStore);
+  const {
+    visibleTypes,
+    visibleEdgeTypes,
+    focusDepth,
+    selectedNodeId,
+    taskStatusFilter,
+    specScopeFilter,
+  } = useSnapshot(canvasStore);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['spec', 'project']));
 
   const activePreset = useMemo(() => {
@@ -504,6 +511,8 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     edgeLegendItems.forEach((item) => {
       canvasStore.visibleEdgeTypes[item.key] = preset.edges[item.key] ?? false;
     });
+    canvasStore.taskStatusFilter = [];
+    canvasStore.specScopeFilter = [];
   };
 
   return (
@@ -537,6 +546,89 @@ const FilterTreeTab = memo(function FilterTreeTab() {
           </Checkbox>
         ))}
       </div>
+
+      {/* 任务状态筛选（当 task 节点可见时） */}
+      {visibleTypes.task && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: 4,
+            }}>
+            任务状态
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+            {taskStatusOptions.map((opt) => {
+              const active = taskStatusFilter.includes(opt.value);
+              return (
+                <div
+                  key={opt.value}
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    borderRadius: 10,
+                    border: `1px solid ${active ? 'var(--brand-color)' : 'var(--border)'}`,
+                    background: active ? 'var(--brand-color)' : 'transparent',
+                    color: active ? '#fff' : 'var(--text-secondary)',
+                    transition: 'all 0.15s',
+                    userSelect: 'none',
+                  }}
+                  onClick={() => {
+                    canvasStore.taskStatusFilter = active
+                      ? taskStatusFilter.filter((s) => s !== opt.value)
+                      : [...taskStatusFilter, opt.value];
+                  }}>
+                  {opt.label}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {/* Spec 范围筛选（当 spec 节点可见时） */}
+      {visibleTypes.spec && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: 4,
+            }}>
+            Spec 范围
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+            {specScopeOptions.map((opt) => {
+              const active = specScopeFilter.includes(opt.value);
+              return (
+                <div
+                  key={opt.value}
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    borderRadius: 10,
+                    border: `1px solid ${active ? 'var(--brand-color)' : 'var(--border)'}`,
+                    background: active ? 'var(--brand-color)' : 'transparent',
+                    color: active ? '#fff' : 'var(--text-secondary)',
+                    transition: 'all 0.15s',
+                    userSelect: 'none',
+                  }}
+                  onClick={() => {
+                    canvasStore.specScopeFilter = active
+                      ? specScopeFilter.filter((s) => s !== opt.value)
+                      : [...specScopeFilter, opt.value];
+                  }}>
+                  {opt.label}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* 快捷预设 */}
       <div

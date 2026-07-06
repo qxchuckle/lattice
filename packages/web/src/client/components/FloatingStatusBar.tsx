@@ -11,7 +11,8 @@ import {
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
-import { canvasStore, cyRef, themeStore, toggleTheme } from '../store';
+import { canvasStore, cyRef, themeStore, toggleTheme, getVisibleCanvasCenter } from '../store';
+import { fitToElements } from './graph/layout';
 import { useStats } from '../hooks';
 
 const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] = [
@@ -32,7 +33,7 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
   const handleFitAll = () => {
     const cy = cyRef.current;
     if (!cy) return;
-    cy.animate({ fit: { eles: cy.elements(), padding: 40 }, duration: 500 });
+    fitToElements(cy, cy.elements(), 40, 500);
   };
 
   const handleFitSelected = () => {
@@ -41,7 +42,7 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
     const node = cy.getElementById(selectedNodeId);
     if (node.length === 0) return;
     const neighborhood = node.closedNeighborhood();
-    cy.animate({ fit: { eles: neighborhood, padding: 60 }, duration: 500 });
+    fitToElements(cy, neighborhood, 60, 500);
   };
 
   const handleFocusSelected = () => {
@@ -49,7 +50,17 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
     if (!cy || !selectedNodeId) return;
     const node = cy.getElementById(selectedNodeId);
     if (node.length === 0) return;
-    cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.2), duration: 400 });
+    const container = cy.container();
+    if (!container) return;
+    // 手动计算 pan：以可视区域中心为目标，避免 center+zoom 跳变和面板遮蔽
+    const center = getVisibleCanvasCenter(container.clientWidth, container.clientHeight);
+    const targetZoom = Math.max(cy.zoom(), 1.2);
+    const nodePos = node.position();
+    const targetPan = {
+      x: center.x - nodePos.x * targetZoom,
+      y: center.y - nodePos.y * targetZoom,
+    };
+    cy.animate({ pan: targetPan, zoom: targetZoom, duration: 400 });
   };
 
   return (

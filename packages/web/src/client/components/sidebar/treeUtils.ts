@@ -366,7 +366,7 @@ export const canvasPresets: CanvasPreset[] = [
   },
   {
     label: '任务',
-    nodes: { task: true, project: false, spec: false },
+    nodes: { task: true, project: true, spec: false },
     edges: Object.fromEntries(edgeLegendItems.map((i) => [i.key, i.group === 'task'])),
   },
   {
@@ -376,7 +376,7 @@ export const canvasPresets: CanvasPreset[] = [
   },
   {
     label: 'Spec',
-    nodes: { task: false, project: false, spec: true },
+    nodes: { task: false, project: true, spec: true },
     edges: Object.fromEntries(edgeLegendItems.map((i) => [i.key, i.group === 'spec'])),
   },
 ];
