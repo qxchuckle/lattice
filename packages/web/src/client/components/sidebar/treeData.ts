@@ -6,6 +6,22 @@ import type { ViewMode } from '../../store';
 import type { TreeNode } from './treeUtils';
 import type { TaskMeta, ProjectMeta, ParsedSpec } from '@qcqx/lattice-core';
 
+/** 构建 spec-item 的关联任务子节点（无关联任务时返回 undefined） */
+function buildSpecTaskChildren(specId: string, tasks: TaskMeta[]): TreeNode[] | undefined {
+  const refTasks = tasks.filter((t: TaskMeta) =>
+    (t.referencedSpecs || []).some((r: { id: string }) => r.id === specId),
+  );
+  if (refTasks.length === 0) return undefined;
+  return refTasks.map((t: TaskMeta) => ({
+    key: `spec-task-${specId}-${t.id}`,
+    title: truncate(t.title, 30),
+    type: 'task-item' as const,
+    entityId: t.id,
+    viewMode: 'task' as ViewMode,
+    meta: { status: t.status },
+  }));
+}
+
 /** 构建树形数据：Spec / 项目 / 任务 三级树 */
 export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: TaskMeta[] } {
   const adapter = getAdapter();
@@ -36,14 +52,18 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
         key: 'spec-global',
         title: `全局级 (${globalSpecs.length})`,
         type: 'spec-scope',
-        children: globalSpecs.map((s: ParsedSpec) => ({
-          key: `spec-g-${s.frontmatter.id || s.fileName}`,
-          title: s.frontmatter.title || s.fileName,
-          type: 'spec-item' as const,
-          entityId: s.frontmatter.id || s.fileName,
-          viewMode: 'spec' as ViewMode,
-          meta: { scope: '全局级' },
-        })),
+        children: globalSpecs.map((s: ParsedSpec) => {
+          const specId = s.frontmatter.id || s.fileName;
+          return {
+            key: `spec-g-${specId}`,
+            title: s.frontmatter.title || s.fileName,
+            type: 'spec-item' as const,
+            entityId: specId,
+            viewMode: 'spec' as ViewMode,
+            meta: { scope: '全局级' },
+            children: buildSpecTaskChildren(specId, tasks as TaskMeta[]),
+          };
+        }),
       });
     }
     if (userSpecs.length > 0) {
@@ -51,14 +71,18 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
         key: 'spec-user',
         title: `用户级 (${userSpecs.length})`,
         type: 'spec-scope',
-        children: userSpecs.map((s: ParsedSpec) => ({
-          key: `spec-u-${s.frontmatter.id || s.fileName}`,
-          title: s.frontmatter.title || s.fileName,
-          type: 'spec-item' as const,
-          entityId: s.frontmatter.id || s.fileName,
-          viewMode: 'spec' as ViewMode,
-          meta: { scope: '用户级' },
-        })),
+        children: userSpecs.map((s: ParsedSpec) => {
+          const specId = s.frontmatter.id || s.fileName;
+          return {
+            key: `spec-u-${specId}`,
+            title: s.frontmatter.title || s.fileName,
+            type: 'spec-item' as const,
+            entityId: specId,
+            viewMode: 'spec' as ViewMode,
+            meta: { scope: '用户级' },
+            children: buildSpecTaskChildren(specId, tasks as TaskMeta[]),
+          };
+        }),
       });
     }
     const projectSpecMap = new Map<string, ParsedSpec[]>();
@@ -76,17 +100,6 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
         type: 'spec-scope',
         children: specs.map((s: ParsedSpec) => {
           const specId = s.frontmatter.id || s.fileName;
-          const refTasks = tasks.filter((t: TaskMeta) =>
-            (t.referencedSpecs || []).some((r: { id: string }) => r.id === specId),
-          );
-          const taskChildren = refTasks.map((t: TaskMeta) => ({
-            key: `spec-task-${specId}-${t.id}`,
-            title: truncate(t.title, 30),
-            type: 'task-item' as const,
-            entityId: t.id,
-            viewMode: 'task' as ViewMode,
-            meta: { status: t.status },
-          }));
           return {
             key: `spec-pi-${pid}-${specId}`,
             title: s.frontmatter.title || s.fileName,
@@ -94,7 +107,7 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
             entityId: specId,
             viewMode: 'spec' as ViewMode,
             meta: { scope: '项目级' },
-            children: taskChildren.length > 0 ? taskChildren : undefined,
+            children: buildSpecTaskChildren(specId, tasks as TaskMeta[]),
           };
         }),
       });

@@ -88,11 +88,18 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       const data = node.data() as Record<string, unknown>;
       const entityType = data.entityType as string;
       const nodeId = node.id();
+      // 记录是否点击的是当前已选中节点：若已选中，selectNode 不改变 selectedNodeId、
+      // navigate 不改变 URL，skipAnchorRef 不会被任何 useEffect 消费，会导致残留 true
+      const wasAlreadySelected = canvasStore.selectedNodeId === nodeId;
       selectNode(nodeId, entityType as 'task' | 'project' | 'spec', data);
       applyFocus(cy, nodeId, canvasStore.focusDepth);
       if (entityType === 'task' || entityType === 'project' || entityType === 'spec') {
         const urlId = nodeId.startsWith('spec-') ? nodeId.slice(5) : nodeId;
-        skipAnchorRef.current = true;
+        // 仅在 URL 会变化（节点非已选中）时设置 skipAnchorRef，
+        // 否则 skipAnchorRef 残留为 true 会导致下一次 anchorId 变化被错误跳过
+        if (!wasAlreadySelected) {
+          skipAnchorRef.current = true;
+        }
         navigate(getViewPath(entityType as ViewMode, urlId));
       }
     });
@@ -323,9 +330,11 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
             const node = findNodeById(cy, anchorId);
             if (node.length > 0) {
               const data = node.data() as Record<string, unknown>;
+              // 仅在 selectedNodeId 会变化时设置 skipAnchorRef（HMR 后可能已选中同一节点）
+              if (canvasStore.selectedNodeId !== anchorId) {
+                skipAnchorRef.current = true;
+              }
               selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
-              // 标记跳过 selectedNodeId useEffect 的重复 applyFocus
-              skipAnchorRef.current = true;
               applyFocus(cy, node.id(), canvasStore.focusDepth, true);
             }
           } else if (selectedNodeId) {
@@ -401,9 +410,13 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       skipAnchorRef.current = false;
       return;
     }
-    // 标记跳过 selectedNodeId useEffect 的重复 applyFocus
-    skipAnchorRef.current = true;
+    // 仅在 selectNode 会改变 selectedNodeId 时设置 skipAnchorRef，
+    // 否则 selectedNodeId useEffect 不触发，skipAnchorRef 残留为 true
     const node = findNodeById(cy, anchorId);
+    const targetNodeId = node.length > 0 ? node.id() : anchorId;
+    if (canvasStore.selectedNodeId !== targetNodeId) {
+      skipAnchorRef.current = true;
+    }
     if (node.length > 0) {
       const data = node.data() as Record<string, unknown>;
       selectNode(node.id(), data.entityType as 'task' | 'project' | 'spec', data);
@@ -412,8 +425,6 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       const entityType = canvasStore.viewMode === 'global' ? 'task' : canvasStore.viewMode;
       selectNode(anchorId, entityType as 'task' | 'project' | 'spec');
     }
-    // selectNode 是同步的，但 React useEffect 批量执行，
-    // selectedNodeId 变化触发的 useEffect 会在本 effect 之后执行，此时 skipAnchorRef 仍为 true
   }, [anchorId]);
 
   // 筛选变化时重建图（防抖 300ms）
