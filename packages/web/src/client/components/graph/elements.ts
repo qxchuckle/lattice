@@ -71,6 +71,12 @@ export function getNodeLabel(data: Record<string, unknown>): string {
   return attrTag ? `${typeTag}${attrTag}\n${title}` : `${typeTag}\n${title}`;
 }
 
+/** 从 spec filePath 提取 projectId */
+function extractSpecProjectId(filePath: string): string | null {
+  const match = filePath.match(/\/projects\/([^/]+)\//);
+  return match ? match[1] : null;
+}
+
 /** 转换为 Cytoscape 元素，按可见类型过滤 */
 export function toElements(
   nodes: LatticeNode[],
@@ -79,6 +85,8 @@ export function toElements(
   visibleEdgeTypes?: Record<string, boolean>,
   taskStatusFilter?: readonly string[],
   specScopeFilter?: readonly string[],
+  projectFilter?: readonly string[],
+  canvasKeyword?: string,
 ): cytoscape.ElementDefinition[] {
   const visibleSet = new Set(
     Object.entries(visibleTypes)
@@ -87,6 +95,16 @@ export function toElements(
   );
   const visibleNodeIds = new Set<string>();
   const cyNodes: cytoscape.ElementDefinition[] = [];
+
+  const hasProjectFilter = projectFilter && projectFilter.length > 0;
+  const projectFilterSet = hasProjectFilter ? new Set(projectFilter!) : null;
+  const keyword = canvasKeyword?.toLowerCase().trim() || '';
+
+  // 关键字匹配辅助
+  const matchesKeyword = (text: string): boolean => {
+    if (!keyword) return true;
+    return text.toLowerCase().includes(keyword);
+  };
 
   nodes.forEach((n) => {
     const data = n.data as Record<string, unknown>;
@@ -103,6 +121,39 @@ export function toElements(
     if (entityType === 'spec' && specScopeFilter && specScopeFilter.length > 0) {
       const scope = (data.scope as string) || '';
       if (!specScopeFilter.includes(scope)) return;
+    }
+
+    // 项目筛选
+    if (hasProjectFilter) {
+      if (entityType === 'project') {
+        const projectId = (data.projectId as string) || '';
+        if (!projectFilterSet!.has(projectId)) return;
+      } else if (entityType === 'task') {
+        const taskProjectIds = (data.projectIds as string[]) || [];
+        if (!taskProjectIds.some((pid) => projectFilterSet!.has(pid))) return;
+      } else if (entityType === 'spec') {
+        const scope = (data.scope as string) || '';
+        if (scope === 'project') {
+          const filePath = (data.filePath as string) || '';
+          const specProjectId = extractSpecProjectId(filePath);
+          if (!specProjectId || !projectFilterSet!.has(specProjectId)) return;
+        }
+        // 全局级/用户级 spec 不受项目筛选影响
+      }
+    }
+
+    // 关键字筛选
+    if (keyword) {
+      if (entityType === 'task') {
+        const title = (data.title as string) || '';
+        if (!matchesKeyword(title)) return;
+      } else if (entityType === 'project') {
+        const name = (data.name as string) || '';
+        if (!matchesKeyword(name)) return;
+      } else if (entityType === 'spec') {
+        const title = (data.title as string) || '';
+        if (!matchesKeyword(title)) return;
+      }
     }
 
     visibleNodeIds.add(n.id);

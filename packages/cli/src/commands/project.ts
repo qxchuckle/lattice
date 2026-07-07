@@ -23,10 +23,10 @@ import {
   deleteRelationFile,
   listRelations,
   findProjectByPath,
-  findProjectsByPathSmart,
   normalizeLocalPath,
   isPathPrefixOf,
   dirExists,
+  mergeProjects,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource } from '@qcqx/lattice-core';
 import { logger, outputJson, shouldSkipConfirm } from '../utils';
@@ -360,7 +360,7 @@ export function registerProjectCommand(program: Command): void {
           }
         }
         // 3. 指纹回退（智能查找）
-        const smart = await findProjectsByPathSmart(absPath);
+        const smart = findProjectByPath(absPath);
         closeDb();
 
         if (opts.json) {
@@ -372,7 +372,7 @@ export function registerProjectCommand(program: Command): void {
                 id: m.row?.id,
                 matchedPath: m.matchedPath,
               })),
-              fingerprintCandidates: smart,
+              fingerprintCandidates: smart ? [{ id: smart.id, name: smart.name }] : [],
             },
             opts.jsonFormat,
           );
@@ -395,17 +395,13 @@ export function registerProjectCommand(program: Command): void {
           }
         }
 
-        if (smart.length > 0) {
-          logger.raw(chalk.cyan(`\n指纹候选（${smart.length}）：`));
-          for (const c of smart.slice(0, 5)) {
-            logger.raw(
-              `  ${c.projectName} ${chalk.dim(`(${c.projectId})`)} ${chalk.cyan(`[${c.confidence}]`)} score=${c.score}`,
-            );
-            logger.raw(chalk.dim(`    证据：${c.evidence.map((e) => e.key).join(', ')}`));
-          }
+
+        if (smart) {
+          logger.raw(chalk.cyan(`\n路径匹配：`));
+          logger.raw(`  ${smart.name} ${chalk.dim(`(${smart.id})`)}`);
         }
 
-        if (!exact && prefixMatches.length === 0 && smart.length === 0) {
+        if (!exact && prefixMatches.length === 0 && !smart) {
           logger.raw(chalk.yellow('未找到与该路径匹配的已注册项目'));
         }
         logger.raw('');
@@ -652,6 +648,58 @@ export function registerProjectCommand(program: Command): void {
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── merge ───
+  cmd
+    .command('merge')
+    .description('将两个项目物理合并为一个（from → to）')
+    .argument('<from>', '源项目 ID')
+    .argument('<to>', '目标项目 ID')
+    .option('-f, --force', '跳过确认')
+    .action(async (fromId: string, toId: string, opts: { force?: boolean }) => {
+      try {
+        await initDb();
+
+        // 确认
+        if (!opts.force) {
+          const confirmed = await confirm({
+            message: `确认将项目 ${fromId} 合并到 ${toId}？此操作不可撤销。`,
+            default: false,
+          });
+          if (!confirmed) {
+            logger.raw(chalk.dim('已取消'));
+            closeDb();
+            return;
+          }
+        }
+
+        logger.raw(chalk.cyan('正在合并...'));
+        const result = await mergeProjects(fromId, toId);
+        closeDb();
+
+        if (result.success) {
+          logger.raw(chalk.green(`✓ ${result.message}`));
+          if (result.steps) {
+            for (const step of result.steps) {
+              logger.raw(chalk.dim(`  ${step}`));
+            }
+          }
+        } else {
+          logger.raw(chalk.red(`✗ ${result.message}`));
+          if (result.steps) {
+            logger.raw(chalk.dim('已完成步骤：'));
+            for (const step of result.steps) {
+              logger.raw(chalk.dim(`  ${step}`));
+            }
+          }
+          process.exitCode = 1;
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
         process.exitCode = 1;
       }
     });

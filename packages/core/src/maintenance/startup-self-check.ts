@@ -1,10 +1,11 @@
 import { isAbsolute, join } from 'node:path';
 import type { ProjectRow, TaskProjectRow } from '../types';
-import { getUsername, isInitialized } from '../config';
+import { getUsername, isInitialized, readResolvedConfig } from '../config';
 import {
   closeDb,
   deleteProject,
   getProjectById,
+  getLatticeMeta,
   initDb,
   listAllProjects,
   listIndexedDocumentPaths,
@@ -21,11 +22,15 @@ import {
 } from '../paths';
 import { findProjectDirName } from '../project';
 import { removeSearchDocumentIndex } from '../rag';
+import { readScanCache, writeScanCache, shouldScan } from '../cache/scan-cache';
+import { scanForProjects } from '../project/scan';
 
 export interface StartupSelfCheckResult {
   removedProjects: number;
   removedTaskLinks: number;
   removedSearchDocs: number;
+  scanResult?: { added: number; updated: number };
+  ragRebuildNeeded?: boolean;
 }
 
 export async function runStartupSelfCheck(): Promise<StartupSelfCheckResult> {
@@ -73,9 +78,51 @@ export async function runStartupSelfCheck(): Promise<StartupSelfCheckResult> {
       }
     }
 
+    // 定时扫描检查
+    await maybeRunScheduledScan(currentUsername, result);
+
+    // 检查是否需要 rag rebuild（DB schema 重建后标记）
+    if (getLatticeMeta('rag_rebuild_needed') === 'true') {
+      result.ragRebuildNeeded = true;
+    }
+
     return result;
   } finally {
     closeDb();
+  }
+}
+
+/**
+ * 定时扫描：超过 12h 则自动扫描
+ * 只在扫描成功后更新时间
+ */
+async function maybeRunScheduledScan(
+  username: string,
+  result: StartupSelfCheckResult,
+): Promise<void> {
+  const needScan = await shouldScan();
+  if (!needScan) return;
+
+  const config = await readResolvedConfig();
+  const scanDirs = config.scanDirs;
+  if (!scanDirs?.length) return;
+
+  try {
+    const scanResult = await scanForProjects(username, scanDirs);
+
+    // 只在扫描成功后更新时间
+    await writeScanCache({
+      lastSuccessAt: new Date().toISOString(),
+      lastScanDirs: scanDirs,
+      lastResult: { added: scanResult.added.length, updated: scanResult.updated.length },
+    });
+
+    result.scanResult = {
+      added: scanResult.added.length,
+      updated: scanResult.updated.length,
+    };
+  } catch {
+    // 扫描失败不更新时间，下次启动时重试
   }
 }
 

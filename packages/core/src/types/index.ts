@@ -1,6 +1,12 @@
 /** 项目元数据，存储在 ~/.lattice/users/<username>/projects/<id>/project.json */
 export interface ProjectMeta {
-  id: string;
+  /** 所有可匹配 ID，优先级由 selectPrimaryId() 在运行时基于 ID_PRIORITY_MAP 动态计算 */
+  ids: string[];
+  /**
+   * @deprecated 兼容历史数据读取；新建项目不写入此字段
+   * 读取时：ids = meta.ids ?? (meta.id ? [legacy:id] : [])
+   */
+  id?: string;
   name: string;
   description?: string;
   /** 项目的本地路径（数组：同一项目可能在多台机器/多个 worktree 上有多个本地路径） */
@@ -425,31 +431,6 @@ export interface ProjectRelation {
 export interface RelationsFile {
   version: number;
   relations: ProjectRelation[];
-}
-
-/** 项目指纹的内存视图 */
-export interface ProjectFingerprintEntry {
-  key: string;
-  value: string;
-  weight: number;
-}
-
-export interface ProjectFingerprint {
-  projectId: string;
-  entries: ProjectFingerprintEntry[];
-  collectedAt: string;
-}
-
-/** 指纹反查的候选项 */
-export interface ProjectMatchCandidate {
-  projectId: string;
-  projectName: string;
-  /** 总评分 */
-  score: number;
-  /** 命中的指纹证据 */
-  evidence: { key: string; value: string; weight: number }[];
-  /** 高/中/低 置信度 */
-  confidence: 'high' | 'medium' | 'low';
 }
 
 /** SQLite 中的任务-项目关联行 */

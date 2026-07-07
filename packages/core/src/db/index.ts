@@ -17,6 +17,7 @@ import {
   listDir,
   readJSON,
 } from '../paths';
+import { selectPrimaryId, resolveProjectIds, normalizeProjectMeta } from '../project/identity';
 
 let _db: Database.Database | null = null;
 
@@ -24,8 +25,10 @@ let _db: Database.Database | null = null;
  * DB schema 版本号。当 schema 发生不兼容变更（如主键变化）时递增。
  * v1: projects 表以 id 为单列主键（同一 project ID 仅一行）
  * v2: projects 表改为 (id, username) 复合主键（同一 project 允许多用户）
+ * v3: 多 ID 策略 — project_fingerprints 表复用存储 key='project_id' 的行；
+ *     旧版评分指纹不再使用，项目识别改为精确 ID 匹配
  */
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 3;
 const DB_SCHEMA_VERSION_KEY = 'db_schema_version';
 
 const SCHEMA_SQL = `
@@ -249,7 +252,7 @@ function checkAndMigrateDbSchema(): boolean {
 
   let tempDb: Database.Database | null = null;
   try {
-    tempDb = new Database(dbPath, { readonly: true });
+    tempDb = new Database(dbPath);
 
     // 检查 lattice_meta 表是否存在
     const hasMetaTable = tempDb
@@ -262,25 +265,13 @@ function checkAndMigrateDbSchema(): boolean {
         .get(DB_SCHEMA_VERSION_KEY) as { value: string } | undefined;
       const currentVersion = row ? Number.parseInt(row.value, 10) : 0;
       if (currentVersion >= DB_SCHEMA_VERSION) {
+        tempDb.close();
+        tempDb = null;
         return false; // 版本已是最新
       }
+      // 版本号低于当前版本 → 重建
     }
-
-    // 额外检查：projects 表的主键结构（兜底判断）
-    const pkColumns = tempDb.prepare("PRAGMA table_info('projects')").all() as {
-      name: string;
-      pk: number;
-    }[];
-    const pkColNames = pkColumns.filter((c) => c.pk > 0).map((c) => c.name);
-    // 新 schema: pk 列为 [id, username]
-    if (pkColNames.length === 2 && pkColNames.includes('id') && pkColNames.includes('username')) {
-      // 结构正确但版本号未记录，仅需要写入版本号（不重建）
-      tempDb.close();
-      tempDb = null;
-      return false;
-    }
-
-    // 老 schema，需要重建
+    // 没有 lattice_meta 表 或 版本号过低 → 重建
     tempDb.close();
     tempDb = null;
     unlinkSync(dbPath);
@@ -327,6 +318,7 @@ function checkAndMigrateDbSchema(): boolean {
 /**
  * 从文件系统重建 projects 表缓存。
  * 扫描 ~/.lattice/users/{user}/projects/{dir}/project.json 并逐条写入 DB。
+ * v3: 同时为每个项目计算 ids 并写入 project_fingerprints key='project_id' 行。
  */
 async function rebuildProjectsCache(): Promise<void> {
   let usernames: string[];
@@ -349,10 +341,14 @@ async function rebuildProjectsCache(): Promise<void> {
       if (dirName.startsWith('.')) continue;
       try {
         const metaPath = `${getUserProjectsDir(username)}/${dirName}/project.json`;
-        const meta = await readJSON<ProjectMeta>(metaPath);
-        if (!meta || !meta.id) continue;
+        const rawMeta = await readJSON<ProjectMeta>(metaPath);
+        if (!rawMeta) continue;
+        const meta = normalizeProjectMeta(rawMeta);
+        // normalizeProjectMeta 已处理兼容性，直接用 meta.ids
+        const primaryId = selectPrimaryId(meta.ids);
+        if (!primaryId) continue;
         upsertProject({
-          id: meta.id,
+          id: primaryId,
           name: meta.name,
           local_path: JSON.stringify(meta.localPaths ?? []),
           description: meta.description ?? null,
@@ -374,6 +370,16 @@ async function rebuildProjectsCache(): Promise<void> {
           created: meta.created,
           updated: meta.updated ?? null,
         });
+
+        // v3: 写入 key='project_id' 的 fingerprints 行
+        for (const id of meta.ids) {
+          upsertFingerprint({
+            project_id: primaryId,
+            key: 'project_id',
+            value: id,
+            weight: 0,
+          });
+        }
       } catch {
         continue;
       }
@@ -448,6 +454,8 @@ export async function initDb(): Promise<Database.Database> {
   // 如果发生了 schema 重建，触发项目数据重建
   if (rebuilt) {
     await rebuildProjectsCache();
+    // 标记需要 rag rebuild（上层启动时检查并执行）
+    setLatticeMeta('rag_rebuild_needed', 'true');
   }
 
   return _db;
@@ -455,6 +463,12 @@ export async function initDb(): Promise<Database.Database> {
 
 export function closeDb(): void {
   if (_db) {
+    // WAL checkpoint：把 WAL 数据写回主 DB 文件，防止下次只读打开时看不到数据
+    try {
+      _db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      // ignore
+    }
     _db.close();
     _db = null;
   }

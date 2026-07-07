@@ -488,8 +488,24 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     selectedNodeId,
     taskStatusFilter,
     specScopeFilter,
+    projectFilter,
+    canvasKeyword,
   } = useSnapshot(canvasStore);
+  const { tree } = useTreeData();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['spec', 'project']));
+  const [projectCollapsed, setProjectCollapsed] = useState(false);
+  const [projectSearchKeyword, setProjectSearchKeyword] = useState('');
+
+  const projects = useMemo(() => {
+    const projectRoot = tree.find((n) => n.type === 'project-root');
+    return (projectRoot?.children || []).filter((n) => n.type === 'project-item');
+  }, [tree]);
+
+  const filteredProjects = useMemo(() => {
+    if (!projectSearchKeyword) return projects;
+    const lower = projectSearchKeyword.toLowerCase();
+    return projects.filter((p) => p.title.toLowerCase().includes(lower));
+  }, [projects, projectSearchKeyword]);
 
   const activePreset = useMemo(() => {
     for (const preset of canvasPresets) {
@@ -513,10 +529,24 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     });
     canvasStore.taskStatusFilter = [];
     canvasStore.specScopeFilter = [];
+    canvasStore.projectFilter = [];
+    canvasStore.canvasKeyword = '';
   };
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
+      {/* 关键字搜索 */}
+      <Input
+        size='small'
+        placeholder='过滤画布节点...'
+        value={canvasKeyword}
+        onChange={(e) => {
+          canvasStore.canvasKeyword = e.target.value;
+        }}
+        allowClear
+        style={{ marginBottom: 8 }}
+      />
+
       {/* 节点类型 - 横向 */}
       <div
         style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
@@ -546,6 +576,76 @@ const FilterTreeTab = memo(function FilterTreeTab() {
           </Checkbox>
         ))}
       </div>
+
+      {/* 项目筛选 */}
+      {projects.length > 0 && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}>
+            <span
+              style={{
+                cursor: 'pointer',
+                fontSize: 10,
+                width: 16,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => setProjectCollapsed(!projectCollapsed)}>
+              {projectCollapsed ? '▸' : '▾'}
+            </span>
+            项目
+            {projectFilter.length > 0 && (
+              <span style={{ fontSize: 9, color: 'var(--brand-color)' }}>
+                ({projectFilter.length}/{projects.length})
+              </span>
+            )}
+          </div>
+          {!projectCollapsed && (
+            <>
+              {projects.length > 6 && (
+                <Input
+                  size='small'
+                  placeholder='搜索项目...'
+                  value={projectSearchKeyword}
+                  onChange={(e) => setProjectSearchKeyword(e.target.value)}
+                  allowClear
+                  style={{ marginBottom: 4, fontSize: 10 }}
+                />
+              )}
+              <div style={{ maxHeight: 120, overflow: 'auto', marginBottom: 8 }}>
+                {filteredProjects.map((p) => (
+                  <Checkbox
+                    key={p.entityId}
+                    checked={projectFilter.includes(p.entityId || '')}
+                    onChange={(e) => {
+                      const pid = p.entityId || '';
+                      canvasStore.projectFilter = e.target.checked
+                        ? [...projectFilter, pid]
+                        : projectFilter.filter((id) => id !== pid);
+                    }}
+                    style={{
+                      fontSize: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      margin: '1px 0',
+                    }}>
+                    <TruncatableTitle title={truncate(p.title, 20)} />
+                  </Checkbox>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
 
       {/* 任务状态筛选（当 task 节点可见时） */}
       {visibleTypes.task && (

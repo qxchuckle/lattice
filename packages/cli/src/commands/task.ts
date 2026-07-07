@@ -27,11 +27,10 @@ import {
   addCheckpoint,
   listCheckpoints,
   getCheckpoint,
-  findProjectsByPathSmart,
+  findProjectByPath,
   normalizeLocalPath,
   resolveProjectById,
   listAllUsernames,
-  CONFIDENCE_THRESHOLDS,
   addSpecRefs,
   removeSpecRefs,
   nowISO,
@@ -939,15 +938,14 @@ export function registerTaskCommand(program: Command): void {
         if (opts.paths) {
           for (const raw of opts.paths as string[]) {
             const norm = normalizeLocalPath(pathResolve(raw));
-            const candidates = await findProjectsByPathSmart(norm);
-            const top = candidates[0];
-            if (top && top.score >= CONFIDENCE_THRESHOLDS.high) {
-              currentProjects.add(top.projectId);
+            const project = findProjectByPath(norm);
+            if (project) {
+              currentProjects.add(project.id);
               recognized.push({
                 path: norm,
-                projectName: top.projectName,
-                projectId: top.projectId,
-                score: top.score,
+                projectName: project.name,
+                projectId: project.id,
+                score: 0,
               });
             } else {
               if (!scopePaths.find((s) => s.path === norm)) {

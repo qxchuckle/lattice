@@ -1,18 +1,11 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { execSync } from 'node:child_process';
-import { basename as pathBasename, resolve as pathResolve } from 'node:path';
-import { createRequire } from 'node:module';
-const nodeMachineId: typeof import('node-machine-id') = createRequire(import.meta.url)(
-  'node-machine-id',
-);
-const { machineIdSync } = nodeMachineId;
+import { basename as pathBasename } from 'node:path';
+import simpleGit from 'simple-git';
 import type { ProjectMeta, ProjectRow } from '../types';
 import {
   getProjectDir,
   getProjectMetaPath,
   getProjectSpecDir,
   getUserProjectsDir,
-  makeProjectDirName,
   readJSON,
   writeJSON,
   ensureDir,
@@ -23,6 +16,7 @@ import {
 } from '../paths';
 import {
   upsertProject,
+  upsertFingerprint,
   deleteProject as dbDeleteProject,
   getProjectById as dbGetProjectById,
   getProjectByPath as dbGetProjectByPath,
@@ -30,36 +24,23 @@ import {
 } from '../db';
 import {
   collectFingerprint,
-  persistFingerprints,
   normalizeGitRemote,
   normalizeLocalPath,
-  findProjectByPathSmart,
   isPathPrefixOf,
 } from './fingerprint';
 import { deleteRelationsByProject, listRelations as listRelationsFromFile } from './relation';
 import { nowISO } from '../utils/time';
 import type { ProjectRelation } from '../types';
 import { moveToTrash } from '../trash';
-
-// ─── ID 生成 ───
-
-const PROJECT_ID_PATTERN = /^[0-9a-f]{16}$/;
-
-function hashSegment(input: string, length: number): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, length);
-}
-
-function getMachineCode(): string {
-  return hashSegment(machineIdSync(), 4);
-}
-
-function getDirectoryCode(projectPath: string): string {
-  return hashSegment(pathResolve(projectPath), 4);
-}
-
-export function generateProjectId(projectPath: string): string {
-  return `${getMachineCode()}${getDirectoryCode(projectPath)}${randomBytes(4).toString('hex')}`;
-}
+import {
+  parsePrefixedId,
+  resolveProjectIds,
+  normalizeLegacyId,
+  computeProjectIds,
+  selectPrimaryId,
+  generateProjectId,
+  normalizeProjectMeta,
+} from './identity';
 
 // ─── 项目信息自动检测（轻量）───
 
@@ -81,29 +62,13 @@ export async function detectProjectInfo(projectPath: string): Promise<DetectedPr
   }
 
   try {
-    const remoteNames = execSync('git remote', {
-      cwd: projectPath,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8',
-      timeout: 3000,
-    })
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-    for (const r of remoteNames) {
-      try {
-        const url = execSync(`git remote get-url ${r}`, {
-          cwd: projectPath,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          encoding: 'utf-8',
-          timeout: 3000,
-        }).trim();
-        if (url) {
-          const normalized = normalizeGitRemote(url);
-          if (normalized && !gitRemotes.includes(normalized)) gitRemotes.push(normalized);
-        }
-      } catch {
-        // 忽略
+    const git = simpleGit(projectPath);
+    const remotes = await git.getRemotes(true);
+    for (const remote of remotes) {
+      const url = remote.refs?.fetch || remote.refs?.push;
+      if (url) {
+        const normalized = normalizeGitRemote(url);
+        if (normalized && !gitRemotes.includes(normalized)) gitRemotes.push(normalized);
       }
     }
   } catch {
@@ -126,10 +91,15 @@ export async function registerProject(
   const detected = await detectProjectInfo(localPath);
   const fingerprint = await collectFingerprint(localPath);
   const now = nowISO();
-  const dirName = makeProjectDirName(id);
-  const existingMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+  const dirName = normalizeLegacyId(id);
+  const rawExisting = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+  const existingMeta = rawExisting ? normalizeProjectMeta(rawExisting) : null;
   const name = opts?.name ?? detected.name ?? existingMeta?.name;
   const normalizedPath = normalizeLocalPath(localPath);
+
+  // 生成完整 IDs（legacy + git + remote）
+  const legacyId = normalizeLegacyId(id);
+  const ids = computeProjectIds(fingerprint.derived, legacyId);
 
   // localPaths 合并（去重）
   const localPaths = new Set<string>();
@@ -147,7 +117,7 @@ export async function registerProject(
   for (const r of detected.gitRemotes) gitRemotes.add(r);
 
   const meta: ProjectMeta = {
-    id,
+    ids,
     name,
     description: opts?.description ?? existingMeta?.description ?? undefined,
     localPaths: [...localPaths],
@@ -178,7 +148,6 @@ export async function registerProject(
   await writeJSON(getProjectMetaPath(username, dirName), meta);
 
   syncProjectToDb(username, meta);
-  persistFingerprints(id, fingerprint.entries);
 
   return meta;
 }
@@ -189,7 +158,8 @@ export async function unregisterProject(username: string, id: string): Promise<v
   const dirName = await findProjectDirName(username, id);
   if (dirName) {
     const projectDir = getProjectDir(username, dirName);
-    const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+    const rawMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+    const meta = rawMeta ? normalizeProjectMeta(rawMeta) : null;
     await moveToTrash(projectDir, {
       type: 'project',
       originalPath: projectDir,
@@ -226,7 +196,8 @@ export async function purgeProject(username: string, id: string): Promise<void> 
 export async function getProjectMeta(username: string, id: string): Promise<ProjectMeta | null> {
   const dirName = await findProjectDirName(username, id);
   if (!dirName) return null;
-  return readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+  const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+  return meta ? normalizeProjectMeta(meta) : null;
 }
 
 export async function updateProjectMeta(
@@ -238,13 +209,13 @@ export async function updateProjectMeta(
   if (!dirName) return null;
 
   const metaPath = getProjectMetaPath(username, dirName);
-  const existing = await readJSON<ProjectMeta>(metaPath);
-  if (!existing) return null;
+  const rawExisting = await readJSON<ProjectMeta>(metaPath);
+  if (!rawExisting) return null;
+  const existing = normalizeProjectMeta(rawExisting);
 
   const updated: ProjectMeta = {
     ...existing,
     ...updates,
-    id: existing.id,
     created: existing.created,
     updated: nowISO(),
   };
@@ -283,11 +254,6 @@ export function findProjectByPath(localPath: string): ProjectRow | undefined {
   const direct = dbGetProjectByPath(localPath);
   if (direct) return direct;
   return undefined;
-}
-
-/** 智能查找：返回带评分的候选列表 */
-export async function findProjectsByPathSmart(localPath: string) {
-  return findProjectByPathSmart(localPath);
 }
 
 export function findProjectById(id: string): ProjectRow | undefined {
@@ -361,114 +327,40 @@ export function parseProjectRow(
 }
 
 // ─── 扫描发现 ───
-
-export async function scanForProjects(
-  username: string,
-  dirs: string[],
-): Promise<{ added: string[]; updated: string[]; total: number }> {
-  const added: string[] = [];
-  const updated: string[] = [];
-
-  for (const dir of dirs) {
-    await scanDir(username, dir, added, updated);
-  }
-
-  return { added, updated, total: added.length + updated.length };
-}
-
-async function scanDir(
-  username: string,
-  dir: string,
-  added: string[],
-  updated: string[],
-): Promise<void> {
-  const latticeJsonPath = join(dir, 'lattice.json');
-
-  if (await fileExists(latticeJsonPath)) {
-    const data = await readJSON<{ id?: string }>(latticeJsonPath);
-    if (data?.id && PROJECT_ID_PATTERN.test(data.id)) {
-      const existing = dbGetProjectById(data.id);
-      if (existing) {
-        // 检查当前路径是否在 localPaths 中；不在则追加
-        const dirName = await findProjectDirName(username, data.id);
-        let pathChanged = false;
-        if (dirName) {
-          const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
-          if (meta) {
-            const norm = normalizeLocalPath(dir);
-            const existingPaths = new Set(meta.localPaths ?? []);
-            if (!existingPaths.has(norm)) {
-              existingPaths.add(norm);
-              meta.localPaths = [...existingPaths];
-              meta.updated = nowISO();
-              await writeJSON(getProjectMetaPath(username, dirName), meta);
-              syncProjectToDb(username, meta);
-              pathChanged = true;
-            }
-          }
-        }
-        if (pathChanged) updated.push(dir);
-      } else {
-        await registerProject(username, data.id, dir);
-        added.push(dir);
-      }
-      return;
-    }
-  }
-
-  // 递归子目录（跳过 node_modules/.git 等）
-  const entries = await listDir(dir);
-  const SKIP_DIRS = new Set([
-    'node_modules',
-    '.git',
-    '.hg',
-    '.svn',
-    'dist',
-    'build',
-    '.cache',
-    '.next',
-    '.nuxt',
-    '.output',
-    'target',
-    'vendor',
-    '__pycache__',
-  ]);
-
-  for (const entry of entries) {
-    if (SKIP_DIRS.has(entry) || entry.startsWith('.')) continue;
-    const fullPath = join(dir, entry);
-    try {
-      const { stat } = await import('node:fs/promises');
-      const s = await stat(fullPath);
-      if (s.isDirectory()) {
-        await scanDir(username, fullPath, added, updated);
-      }
-    } catch {
-      // 权限问题等跳过
-    }
-  }
-}
+// scanForProjects 已迁移到 ./scan.ts，通过 re-export 导出
 
 // ─── 工具函数 ───
 
 /**
  * 解析项目 id 对应的目录名。
- * 主路径：dirName === makeProjectDirName(id)（当前为 id 本身）。
- * 兼容回退：扫描 projects 目录，匹配 project.json 中 id 一致的 legacy 短前缀目录。
+ * 主路径：dirName === id（完整的带前缀 ID）。
+ * 兼容回退 1：无前缀的历史 ID，补 legacy: 前缀匹配。
+ * 兼容回退 2：扫描 projects 目录，匹配 project.json 中 ids 包含该 id 的目录。
  */
 async function findProjectDirName(username: string, id: string): Promise<string | null> {
-  const direct = makeProjectDirName(id);
-  if (await fileExists(getProjectMetaPath(username, direct))) {
-    return direct;
+  // 主路径：用完整 ID 作为目录名
+  if (await fileExists(getProjectMetaPath(username, id))) {
+    return id;
   }
+  // 兼容：无前缀的历史 ID，补 legacy: 前缀
+  if (!id.includes(':')) {
+    const legacyId = normalizeLegacyId(id);
+    if (legacyId !== id && (await fileExists(getProjectMetaPath(username, legacyId)))) {
+      return legacyId;
+    }
+  }
+  // 兼容回退：扫描 projects 目录
   try {
     const entries = await listDir(getUserProjectsDir(username));
     for (const entry of entries) {
-      if (entry === direct) continue;
+      if (entry === id) continue;
       const metaPath = getProjectMetaPath(username, entry);
       if (!(await fileExists(metaPath))) continue;
-      const meta = await readJSON<ProjectMeta>(metaPath);
-      if (meta?.id === id) return entry;
+      const rawMeta = await readJSON<ProjectMeta>(metaPath);
+      if (!rawMeta) continue;
+      const meta = normalizeProjectMeta(rawMeta);
+      // normalizeProjectMeta 已把 id 字段转换为 ids 数组，直接检查 ids
+      if (meta.ids.includes(id)) return entry;
     }
   } catch {
     // projects 目录不存在或不可读，安静失败
@@ -478,8 +370,10 @@ async function findProjectDirName(username: string, id: string): Promise<string 
 
 function syncProjectToDb(username: string, meta: ProjectMeta): void {
   try {
+    const primaryId = selectPrimaryId(meta.ids);
+    if (!primaryId) return;
     upsertProject({
-      id: meta.id,
+      id: primaryId,
       name: meta.name,
       local_path: JSON.stringify(meta.localPaths ?? []),
       description: meta.description ?? null,
@@ -501,6 +395,20 @@ function syncProjectToDb(username: string, meta: ProjectMeta): void {
       created: meta.created,
       updated: meta.updated ?? null,
     });
+    // 同步 IDs 到 fingerprints 表（v3）
+    const ids = meta.ids ?? (meta.id ? [`legacy:${meta.id}`] : []);
+    for (const id of ids) {
+      try {
+        upsertFingerprint({
+          project_id: primaryId,
+          key: 'project_id',
+          value: id,
+          weight: 0,
+        });
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     // 数据库可能未初始化（scan 时），静默跳过
   }
@@ -510,3 +418,42 @@ function syncProjectToDb(username: string, meta: ProjectMeta): void {
 export { isPathPrefixOf };
 
 export { findProjectDirName };
+
+// ─── 新模块 re-export ───
+export {
+  computeProjectIds,
+  resolveProjectIds,
+  normalizeLegacyId,
+  normalizeProjectMeta,
+  parsePrefixedId,
+  selectPrimaryId,
+  sortIdsByPriority,
+  mergeIds,
+  generateProjectId,
+  ID_PREFIX,
+  type IdPrefix,
+  type FingerprintDerived,
+} from './identity';
+
+export {
+  findProjectByAnyId,
+  getRelatedProjectIds,
+  getProjectIdsFromDb,
+  clearLookupCache,
+  findUsernameAndDirName,
+  getProjectMetaById,
+} from './lookup';
+
+export { isTaskAssociatedWithProject, isTaskAssociatedWithProjectId } from './association';
+
+export {
+  registerProjectWithIds,
+  updateProjectPaths,
+  autoRegisterProject,
+  syncProjectIdsToDb,
+  syncProjectMetaToDb,
+} from './register';
+
+export { scanForProjects, isBlacklisted, type ScanResult } from './scan';
+
+export { mergeProjects, type MergeResult } from './merge';

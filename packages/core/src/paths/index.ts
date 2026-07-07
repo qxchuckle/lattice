@@ -5,6 +5,9 @@ import { mkdir, readFile, writeFile, rm, stat, readdir, access } from 'node:fs/p
 // ─── 根路径 ───
 
 export function getLatticeRoot(): string {
+  // 支持 LATTICE_HOME 环境变量覆盖（测试/CI/多实例用）
+  const envRoot = process.env.LATTICE_HOME;
+  if (envRoot) return envRoot;
   return pathJoin(homedir(), '.lattice');
 }
 
@@ -107,12 +110,6 @@ export function getTaskProgressPath(username: string, taskId: string): string {
 
 export function getTaskDesignPath(username: string, taskId: string): string {
   return pathJoin(getTaskDir(username, taskId), 'design.md');
-}
-
-// ─── 生成目录名 ───
-
-export function makeProjectDirName(id: string): string {
-  return id;
 }
 
 export function toKebabCase(str: string): string {

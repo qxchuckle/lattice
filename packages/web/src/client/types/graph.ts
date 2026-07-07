@@ -8,6 +8,7 @@ export interface TaskNodeData {
   title: string;
   status: string;
   projectId?: string;
+  projectIds?: string[];
   [key: string]: unknown;
 }
 

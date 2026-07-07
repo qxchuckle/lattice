@@ -48,6 +48,10 @@ export const canvasStore = proxy({
   taskStatusFilter: [] as string[],
   /** 画布 Spec 范围筛选：空数组 = 全部（值: global / user / project） */
   specScopeFilter: [] as string[],
+  /** 画布项目筛选：空数组 = 全部（值为 projectId） */
+  projectFilter: [] as string[],
+  /** 画布关键字筛选：空字符串 = 不筛选 */
+  canvasKeyword: '' as string,
   /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
   layoutRunning: false,
   /** 画布首次渲染完成（首次数据加载 + 布局完成），用于控制 loading 遮罩 */

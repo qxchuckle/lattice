@@ -29,6 +29,10 @@ import {
   initDb,
   closeDb,
   scanForProjects,
+  readScanCache,
+  writeScanCache,
+  readResolvedConfig,
+  getUsername,
   syncSpecTemplateRegistry,
   generateEmbedding,
   isModelInstalled,
@@ -79,8 +83,8 @@ const GITIGNORE_SECTIONS: GitignoreSection[] = [
 ];
 
 export function registerInitCommand(program: Command): void {
-  program
-    .command('init')
+  const initCmd: Command = program.command('init');
+  initCmd
     .description('初始化 Lattice（~/.lattice/）')
     .option('-f, --force', '跳过确认')
     .option('--username <name>', '指定用户名')
@@ -273,6 +277,9 @@ export function registerInitCommand(program: Command): void {
         process.exitCode = 1;
       }
     });
+
+  // 注册 init scan 子命令
+  registerInitScanSubcommand(initCmd);
 }
 
 function parseCommaSeparatedOption(value: string): string[] {
@@ -702,4 +709,94 @@ async function detectAndConfigureAITools(): Promise<void> {
       }
     }
   }
+}
+
+function registerInitScanSubcommand(initCmd: Command): void {
+  initCmd
+    .command('scan')
+    .description('扫描本地 git 项目并注册到 Lattice')
+    .option('-f, --force', '跳过确认')
+    .option('--dirs <dirs>', '扫描目录（逗号分隔）')
+    .option('--auto', '使用配置中的 scanDirs')
+    .action(async (opts) => {
+      try {
+        if (!(await isInitialized())) {
+          logger.raw(chalk.yellow('Lattice 尚未初始化，请先运行 lattice init'));
+          return;
+        }
+
+        const username = await getUsername();
+
+        // 确定扫描目录
+        let scanDirs: string[] | undefined;
+        if (opts.dirs) {
+          scanDirs = opts.dirs
+            .split(',')
+            .map((d: string) => d.trim())
+            .filter(Boolean);
+        } else {
+          const config = await readResolvedConfig();
+          scanDirs = config.scanDirs;
+        }
+
+        if (!scanDirs?.length) {
+          // 交互式询问
+          const inputDirs = await input({
+            message: '请输入要扫描的目录（逗号分隔）：',
+            default: '~/projects',
+          });
+          scanDirs = inputDirs
+            .split(',')
+            .map((d) => d.trim())
+            .filter(Boolean);
+
+          // 写入配置
+          const localConfig: Record<string, unknown> = (await readLocalConfig()) ?? {};
+          await writeLocalConfig({
+            ...localConfig,
+            username: (localConfig.username as string) ?? username,
+            scanDirs,
+          });
+          logger.raw(chalk.dim('已保存扫描目录到配置'));
+        }
+
+        // 确认
+        if (!opts.force && !opts.auto) {
+          const confirmed = await confirm({
+            message: `将扫描以下目录：\n${scanDirs.map((d) => `  ${d}`).join('\n')}\n确认开始？`,
+            default: true,
+          });
+          if (!confirmed) {
+            logger.raw(chalk.dim('已取消'));
+            return;
+          }
+        }
+
+        logger.raw(chalk.cyan('正在扫描...'));
+        await initDb();
+        const result = await scanForProjects(username, scanDirs);
+        closeDb();
+
+        // 写入扫描缓存
+        await writeScanCache({
+          lastSuccessAt: new Date().toISOString(),
+          lastScanDirs: scanDirs,
+          lastResult: { added: result.added.length, updated: result.updated.length },
+        });
+
+        logger.raw(chalk.green(`\n扫描完成：`));
+        logger.raw(chalk.green(`  新增项目：${result.added.length}`));
+        logger.raw(chalk.green(`  更新项目：${result.updated.length}`));
+
+        if (result.added.length > 0) {
+          logger.raw(chalk.dim('\n新增项目路径：'));
+          for (const p of result.added) {
+            logger.raw(chalk.dim(`  ${p}`));
+          }
+        }
+      } catch (err) {
+        logger.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
 }

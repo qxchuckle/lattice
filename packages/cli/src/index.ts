@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runStartupSelfCheck } from '@qcqx/lattice-core';
+import { runStartupSelfCheck, closeDb } from '@qcqx/lattice-core';
 import { registerInitCommand } from './commands/init';
 import { registerLinkCommand } from './commands/link';
 import { registerUnlinkCommand } from './commands/unlink';
@@ -65,9 +65,30 @@ function ensureForceOption(cmd: Command): void {
 }
 ensureForceOption(program);
 
+// 确保所有可执行命令都接受 --debug 选项
+function ensureDebugOption(cmd: Command): void {
+  if (cmd.commands.length === 0) {
+    const hasDebug = cmd.options.some((opt) => opt.long === '--debug');
+    if (!hasDebug) {
+      cmd.option('-d, --debug', '输出调试信息');
+    }
+  } else {
+    for (const sub of cmd.commands) {
+      ensureDebugOption(sub);
+    }
+  }
+}
+ensureDebugOption(program);
+
 async function main(): Promise<void> {
+  // 进程退出时确保 DB 正确关闭（WAL checkpoint）
+  process.on('exit', () => closeDb());
+
   try {
-    await runStartupSelfCheck();
+    const checkResult = await runStartupSelfCheck();
+    if (checkResult.ragRebuildNeeded) {
+      console.warn('⚠ DB schema 已升级，建议运行 `lattice rag rebuild` 重建搜索索引');
+    }
   } catch {
     // 启动自检失败不阻断主命令执行
   }

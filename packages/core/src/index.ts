@@ -33,10 +33,7 @@ export type {
   EmbeddingRecord,
   ProjectRow,
   ProjectRelation,
-  ProjectFingerprintEntry,
-  ProjectFingerprint,
   ProjectFingerprintRow,
-  ProjectMatchCandidate,
   RelationsFile,
   TaskProjectRow,
   AncestorProjectInfo,
@@ -67,7 +64,6 @@ export {
   getTaskPrdPath,
   getTaskProgressPath,
   getTaskDesignPath,
-  makeProjectDirName,
   toKebabCase,
   ensureDir,
   fileExists,
@@ -120,7 +116,6 @@ export {
   deleteFingerprintsByProject,
   listFingerprintsByProject,
   findProjectsByFingerprint,
-  findProjectsByFingerprintKeyPrefix,
   linkTaskProject,
   unlinkTaskProject,
   getTasksForProject,
@@ -160,7 +155,6 @@ export {
   updateProjectMeta,
   listProjects,
   findProjectByPath,
-  findProjectsByPathSmart,
   findProjectById,
   findProjectDirName,
   scanForProjects,
@@ -168,6 +162,35 @@ export {
   getAllUniqueRelations,
   parseProjectRow,
   isPathPrefixOf,
+  // 新模块 re-export（通过 project/index.ts 间接导出）
+  computeProjectIds,
+  resolveProjectIds,
+  normalizeLegacyId,
+  normalizeProjectMeta,
+  parsePrefixedId,
+  selectPrimaryId,
+  sortIdsByPriority,
+  mergeIds,
+  ID_PREFIX,
+  type IdPrefix,
+  type FingerprintDerived,
+  findProjectByAnyId,
+  getRelatedProjectIds,
+  getProjectIdsFromDb,
+  clearLookupCache,
+  findUsernameAndDirName,
+  getProjectMetaById,
+  isTaskAssociatedWithProject,
+  isTaskAssociatedWithProjectId,
+  registerProjectWithIds,
+  updateProjectPaths,
+  autoRegisterProject,
+  syncProjectIdsToDb,
+  syncProjectMetaToDb,
+  isBlacklisted,
+  type ScanResult,
+  mergeProjects,
+  type MergeResult,
 } from './project';
 
 // 项目 git 状态
@@ -195,20 +218,10 @@ export {
 export { findSameProjectInOtherUsers, listAllUsernames } from './project/cross-user';
 
 // 项目指纹
-export {
-  FINGERPRINT_WEIGHTS,
-  CONFIDENCE_THRESHOLDS,
-  collectFingerprint,
-  persistFingerprints,
-  listFingerprintsForProject,
-  findCandidatesByFingerprint,
-  findProjectByPathSmart,
-  buildFingerprint,
-  hashFile,
-  listAllProjectFingerprintSummaries,
-  normalizeGitRemote,
-  normalizeLocalPath,
-} from './project/fingerprint';
+export { collectFingerprint, normalizeGitRemote, normalizeLocalPath } from './project/fingerprint';
+
+// 扫描缓存
+export { readScanCache, writeScanCache, shouldScan, type ScanCache } from './cache/scan-cache';
 
 // Spec
 export {

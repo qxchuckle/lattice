@@ -1,47 +1,67 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { select, confirm } from '@inquirer/prompts';
+import { dirname, resolve as pathResolve, sep } from 'node:path';
+
 import {
-  generateProjectId,
-  registerProject,
   applySpecTemplate,
   getSpecTemplate,
   listSpecTemplates,
-  writeJSON,
-  removeFile,
+  generateProjectId,
   getUsername,
   initDb,
   closeDb,
   collectFingerprint,
-  findCandidatesByFingerprint,
-  findProjectById,
+  computeProjectIds,
+  normalizeLegacyId,
+  registerProjectWithIds,
+  updateProjectPaths,
+  updateProjectMeta,
+  findProjectByAnyId,
   getProjectMeta,
-  findAllUpwards,
-  readJSON,
+  getProjectMetaById,
+  selectPrimaryId,
+  resolveProjectIds,
+  syncProjectIdsToDb,
   upsertRelationFile,
   deleteRelationsByFilter,
-  CONFIDENCE_THRESHOLDS,
+  fileExists,
+  readJSON,
+  writeJSON,
+  type ProjectMeta,
+  type FingerprintDerived,
 } from '@qcqx/lattice-core';
-import type { ProjectMatchCandidate } from '@qcqx/lattice-core';
-import { logger, resolveProjectAtDirectory } from '../utils';
+import { logger } from '../utils';
+
+// ─── Debug ───
+
+let _debugEnabled = false;
+
+function debug(msg: string, ...args: unknown[]): void {
+  if (_debugEnabled) {
+    logger.raw(chalk.gray(`[debug] ${msg}`));
+    if (args.length > 0) {
+      logger.raw(chalk.gray(JSON.stringify(args)));
+    }
+  }
+}
+
+function setDebug(enabled: boolean): void {
+  _debugEnabled = enabled;
+}
 
 export function registerLinkCommand(program: Command): void {
   program
     .command('link')
-    .description('将当前项目注册到 Lattice（含指纹识别与选单）')
+    .description('将当前项目注册到 Lattice（基于 git 指纹 + lattice.json）')
     .option('--name <name>', '手动指定项目名称')
     .option('--description <desc>', '项目描述')
     .option('--groups <groups>', '项目分组（逗号分隔）')
     .option('--tags <tags>', '标签（逗号分隔）')
     .option('--template <templates>', '应用 spec 模板（逗号分隔，或使用 all）')
-    .option('--restore <id>', '恢复到已有项目 ID（不交互）')
-    .option('--force-new', '强制创建新项目，跳过相似检测（若当前目录已有 lattice.json 将被覆盖）')
-    .option(
-      '--no-auto-restore',
-      '--yes 下检测到唯一 high score 候选时默认自动恢复；添加该选项可关闭此行为',
-    )
-    .option('-y, --yes', '跳过交互确认，默认创建新项目（启用 auto-restore 时可能恢复）')
+    .option('--restore <id>', '绑定到已有项目 ID（用于 git 历史不同但确认为同一项目的场景）')
+    .option('-y, --yes', '跳过交互确认')
     .action(async (opts) => {
+      setDebug(!!opts.debug);
       try {
         const cwd = process.cwd();
         const groups = opts.groups
@@ -51,234 +71,307 @@ export function registerLinkCommand(program: Command): void {
           ? (opts.tags as string).split(',').map((s: string) => s.trim())
           : undefined;
 
-        // 1. 检查当前目录是否已有 lattice.json
-        //    - 默认：幂等更新元数据
-        //    - --force-new：覆盖原绑定，走新建分支
-        //    - --restore：同样覆盖原绑定
-        const project = await resolveProjectAtDirectory(cwd);
-        if (project && !opts.forceNew && !opts.restore) {
-          const username = await getUsername();
-          await initDb();
-          const meta = await registerProject(username, project.id, project.root, {
-            name: opts.name,
-            description: opts.description,
-            groups,
-            tags,
-          });
-          closeDb();
-
-          logger.raw(chalk.yellow('当前目录已注册为 Lattice 项目，已更新项目元数据'));
-          logger.raw(chalk.dim(`  名称：${meta.name}`));
-          logger.raw(chalk.dim(`  ID：${project.id}`));
-          logger.raw(chalk.dim(`  路径：${project.root}`));
-          if (meta.gitRemotes?.length) {
-            logger.raw(chalk.dim(`  Git：${meta.gitRemotes.join(', ')}`));
-          }
-          return;
-        }
-
-        // 如果 --force-new 且存在原 lattice.json，先刪掉让其走新建分支
-        if (project && opts.forceNew) {
-          await removeFile(project.latticeJsonPath);
-          logger.raw(
-            chalk.yellow(
-              `⚠ --force-new：已移除原绑定 lattice.json（原项目 ${project.id.slice(0, 8)}… 本地数据在 Lattice 中仍保留）`,
-            ),
-          );
-        }
-
-        // 如果 --restore 且存在原 lattice.json，先刪掉让其走明确恢复分支
-        if (project && opts.restore) {
-          await removeFile(project.latticeJsonPath);
-        }
-
         const username = await getUsername();
         await initDb();
 
-        // 2. --restore <id>：直接绑定到已有项目
+        // ── --restore <id> 分支 ──
         if (opts.restore) {
-          const target = findProjectById(opts.restore as string);
-          if (!target) {
-            closeDb();
-            logger.raw(chalk.red(`未找到项目：${opts.restore}`));
-            process.exitCode = 1;
-            return;
-          }
-          await writeJSON(`${cwd}/lattice.json`, { id: target.id });
-          const meta = await registerProject(username, target.id, cwd, {
-            name: opts.name,
-            description: opts.description,
-            groups,
-            tags,
-          });
-          closeDb();
-          logger.raw(chalk.green(`✓ 已将当前目录关联到项目：${meta.name}`));
-          logger.raw(chalk.dim(`  ID：${target.id}`));
-          logger.raw(chalk.dim(`  路径：${cwd}`));
+          await handleRestore(opts.restore as string, cwd, username, opts, groups, tags);
           return;
         }
 
-        // 3. 指纹采集 + 相似检测
-        let chosenId: string | null = null;
-        if (!opts.forceNew) {
-          const fp = await collectFingerprint(cwd);
-          const candidates = findCandidatesByFingerprint(fp.entries);
-
-          if (candidates.length > 0) {
-            if (opts.yes) {
-              const highOnes = candidates.filter((c) => c.score >= CONFIDENCE_THRESHOLDS.high);
-              // --yes + 唯一 high 候选 + auto-restore 未关闭 → 自动恢复避免重复创建
-              if (highOnes.length === 1 && opts.autoRestore !== false) {
-                chosenId = highOnes[0].projectId;
-                logger.raw(
-                  chalk.green(
-                    `✓ --yes 检测到唯一 high score 候选 ${highOnes[0].projectName} (${highOnes[0].projectId.slice(0, 8)}…, score=${highOnes[0].score})，已自动恢复绑定。`,
-                  ),
-                );
-                logger.raw(
-                  chalk.dim('  如需强制新建请使用 --force-new，或加 --no-auto-restore 跳过此行为'),
-                );
-              } else {
-                logger.raw(
-                  chalk.yellow(
-                    `⚠ 检测到 ${candidates.length} 个可能重复的已有项目，--yes 下跳过选单，将创建新项目。`,
-                  ),
-                );
-                for (const c of candidates.slice(0, 5)) {
-                  logger.raw(
-                    chalk.dim(
-                      `  - ${c.projectName} (${c.projectId.slice(0, 8)}…, ${c.confidence}, score=${c.score})`,
-                    ),
-                  );
-                }
-                logger.raw(
-                  chalk.dim('  提示：若想恢复到其中某个项目，请使用 lattice link --restore <id>'),
-                );
-              }
-            } else {
-              chosenId = await promptCandidateSelection(candidates, username);
-            }
-          }
-        }
-
-        // 4. 根据选择创建或绑定
-        let id: string;
-        if (chosenId) {
-          id = chosenId;
-          logger.raw(chalk.dim(`  关联到已有项目：${id}`));
-        } else {
-          id = generateProjectId(cwd);
-        }
-
-        await writeJSON(`${cwd}/lattice.json`, { id });
-
-        const meta = await registerProject(username, id, cwd, {
-          name: opts.name,
-          description: opts.description,
-          groups,
-          tags,
+        // ── 主流程 ──
+        // 1. 采集 git 指纹
+        const { derived } = await collectFingerprint(cwd);
+        debug('fingerprint derived', {
+          gitFirstCommit: derived.gitFirstCommit?.slice(0, 16),
+          gitRemotes: derived.gitRemotes,
         });
 
-        const appliedTemplatePaths: string[] = [];
-        if (opts.template) {
-          const templateNames = await resolveTemplateNames(opts.template as string);
+        // 2. 读取已有 lattice.json
+        const existingLegacyId = await readLegacyIdFromLatticeJson(cwd);
+        debug('existing lattice.json legacyId', existingLegacyId);
 
-          if (templateNames.length === 0) {
+        // 3. 计算 IDs（git: + remote: + 已有 legacy:）
+        const ids = computeProjectIds(derived, existingLegacyId);
+        debug('computed ids', ids);
+
+        if (ids.length === 0) {
+          closeDb();
+          logger.raw(chalk.yellow('当前目录不是 git 仓库，也没有 lattice.json，无法注册。'));
+          logger.raw(
+            chalk.dim('  提示：lattice 通过 git 指纹自动识别项目，请确保在 git 仓库中运行。'),
+          );
+          return;
+        }
+
+        // 4. 查 DB 是否已有项目匹配任意 ID
+        const existing = findProjectByAnyId(ids);
+        debug(
+          'findProjectByAnyId result',
+          existing ? { id: existing.id, username: existing.username } : null,
+        );
+
+        if (existing && existing.username === username) {
+          // ── 分支 A：找到当前用户的已注册项目 ──
+          const meta = await getProjectMeta(username, existing.id);
+          const allIds = meta ? resolveProjectIds(meta) : [existing.id];
+          const hasLegacyId = allIds.some((id) => id.startsWith('legacy:'));
+
+          if (hasLegacyId) {
+            // ── 分支 A1：有 legacy: ID → 幂等更新元数据，确保 lattice.json 写入该 ID ──
+            debug('branch A1: has legacy ID, updating meta');
+            await updateProjectPaths(existing.id, username, cwd);
+
+            // 确保 lattice.json 包含 legacy ID
+            const legacyId = allIds.find((id) => id.startsWith('legacy:'));
+            if (legacyId) {
+              await ensureLatticeJson(cwd, legacyId);
+            }
+
+            if (opts.name || opts.description || groups || tags) {
+              await updateProjectMeta(username, existing.id, {
+                ...(opts.name ? { name: opts.name } : {}),
+                ...(opts.description ? { description: opts.description } : {}),
+                ...(groups ? { groups } : {}),
+                ...(tags ? { tags } : {}),
+              });
+            }
+
+            await applyTemplatesIfRequested(username, existing.id, opts.template);
+            const parentRelations = await detectAndLinkParentProject(username, existing.id, cwd);
             closeDb();
-            logger.raw(chalk.yellow('未匹配到任何可用模板。'));
+
+            const updatedMeta = await getProjectMeta(username, existing.id);
+            logger.raw(chalk.yellow('当前目录已注册为 Lattice 项目，已更新项目元数据'));
+            printProjectInfo(updatedMeta, existing.id, cwd, derived);
+            printParentRelations(parentRelations);
             return;
           }
 
-          for (const templateName of templateNames) {
-            const filePath = await applySpecTemplate(username, id, templateName);
-            if (filePath) {
-              appliedTemplatePaths.push(filePath);
-            }
+          // ── 分支 A2：无 legacy: ID → 不修改原项目，新建项目 ──
+          debug('branch A2: no legacy ID, creating new project with lattice.json');
+
+          // 如果 lattice.json 已存在，用其中的 legacy ID；否则生成新的
+          let normalizedLegacyId = existingLegacyId;
+          if (!normalizedLegacyId) {
+            const newLegacyId = generateProjectId(cwd);
+            normalizedLegacyId = normalizeLegacyId(newLegacyId);
+            // 写入 lattice.json
+            await writeJSON(pathResolve(cwd, 'lattice.json'), { id: newLegacyId });
+            debug('wrote new lattice.json', { id: newLegacyId });
           }
+          // lattice.json 已存在时，legacy ID 已在其中，不需要重复写入
+
+          // 新建项目（含 legacy: + git: + remote:）
+          // 不修改原项目，新项目通过虚拟合并关联原项目的任务和 spec
+          const newIds = computeProjectIds(derived, normalizedLegacyId);
+          const newMeta = await registerProjectWithIds(username, newIds, cwd, derived);
+
+          // 应用元数据更新
+          let finalMeta = newMeta;
+          if (opts.name || opts.description || groups || tags) {
+            const primaryId = selectPrimaryId(newMeta.ids) ?? newMeta.ids[0];
+            finalMeta =
+              (await updateProjectMeta(username, primaryId, {
+                ...(opts.name ? { name: opts.name } : {}),
+                ...(opts.description ? { description: opts.description } : {}),
+                ...(groups ? { groups } : {}),
+                ...(tags ? { tags } : {}),
+              })) ?? newMeta;
+          }
+
+          await applyTemplatesIfRequested(
+            username,
+            selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0],
+            opts.template,
+          );
+          const primaryId = selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0];
+          const parentRelations = await detectAndLinkParentProject(username, primaryId, cwd);
+          closeDb();
+
+          logger.raw(chalk.green('✓ 项目已注册到 Lattice（新建，原项目通过虚拟合并关联）'));
+          printProjectInfo(finalMeta, primaryId, cwd, derived);
+          printParentRelations(parentRelations);
+          return;
         }
 
-        // 5. 自动检测父级 Lattice 项目并建立 nested-in 关系
-        const parentRelations = await detectAndLinkParentProject(username, id, cwd);
+        // ── 分支 B：未找到 或 其他用户的项目 → 新建项目 ──
+        debug('branch B: not found or other user, creating new project');
 
+        // 生成 legacy ID（如果 lattice.json 不存在）
+        let legacyId = existingLegacyId;
+        if (!legacyId) {
+          const newLegacyId = generateProjectId(cwd);
+          legacyId = normalizeLegacyId(newLegacyId);
+          // 写入 lattice.json
+          await writeJSON(pathResolve(cwd, 'lattice.json'), { id: newLegacyId });
+          debug('wrote new lattice.json', { id: newLegacyId });
+        }
+
+        // 计算完整 IDs
+        const newIds = computeProjectIds(derived, legacyId);
+        const newMeta = await registerProjectWithIds(username, newIds, cwd, derived);
+
+        // 应用元数据更新
+        let finalMeta = newMeta;
+        if (opts.name || opts.description || groups || tags) {
+          const primaryId = selectPrimaryId(newMeta.ids) ?? newMeta.ids[0];
+          finalMeta =
+            (await updateProjectMeta(username, primaryId, {
+              ...(opts.name ? { name: opts.name } : {}),
+              ...(opts.description ? { description: opts.description } : {}),
+              ...(groups ? { groups } : {}),
+              ...(tags ? { tags } : {}),
+            })) ?? newMeta;
+        }
+
+        await applyTemplatesIfRequested(
+          username,
+          selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0],
+          opts.template,
+        );
+        const primaryId = selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0];
+        const parentRelations = await detectAndLinkParentProject(username, primaryId, cwd);
         closeDb();
 
-        logger.raw(
-          chalk.green(chosenId ? '✓ 项目已重新关联（恢复到已有项目）' : '✓ 项目已注册到 Lattice'),
-        );
-        logger.raw(chalk.dim(`  名称：${meta.name}`));
-        logger.raw(chalk.dim(`  ID：${id}`));
-        logger.raw(chalk.dim(`  路径：${cwd}`));
-        if (meta.gitRemotes?.length) {
-          logger.raw(chalk.dim(`  Git：${meta.gitRemotes.join(', ')}`));
-        }
-        if (appliedTemplatePaths.length > 0) {
-          logger.raw(chalk.green(`\n✓ 已应用 ${appliedTemplatePaths.length} 个模板文件`));
-          for (const filePath of appliedTemplatePaths) {
-            logger.raw(chalk.dim(`  ${filePath}`));
-          }
-        }
-        if (parentRelations.length > 0) {
-          logger.raw(chalk.cyan(`\n✓ 检测到嵌套项目关系：`));
-          for (const r of parentRelations) {
-            logger.raw(chalk.dim(`  ← ${r.name} (${r.type === 'direct' ? '直接父级' : '祖先'})`));
-          }
-        }
+        logger.raw(chalk.green('✓ 项目已注册到 Lattice'));
+        printProjectInfo(finalMeta, primaryId, cwd, derived);
+        printParentRelations(parentRelations);
       } catch (err) {
+        debug('link error', (err as Error).message);
         console.error(chalk.red('注册失败：'), (err as Error).message);
+        if (_debugEnabled && (err as Error).stack) {
+          console.error(chalk.gray((err as Error).stack));
+        }
         process.exitCode = 1;
       }
     });
 }
 
-/**
- * 根据候选信度决定交互方式：
- * - high：仅 1 个 high 则默认选择它；N 个 high 则让用户选择
- * - medium：列出候选，默认创建新项目
- * - low：提示但默认创建新项目
- * 返回选中的 projectId，null 表示选择创建新项目
- */
-async function promptCandidateSelection(
-  candidates: ProjectMatchCandidate[],
+// ── --restore 分支 ──
+
+async function handleRestore(
+  restoreId: string,
+  cwd: string,
   username: string,
-): Promise<string | null> {
-  const top = candidates.slice(0, 5);
-  const high = top.filter((c) => c.score >= CONFIDENCE_THRESHOLDS.high);
-
-  logger.raw(chalk.yellow('⚠ 检测到当前目录与以下已有项目可能重复：\n'));
-  for (const c of top) {
-    const meta = await getProjectMeta(username, c.projectId).catch(() => null);
-    const paths = meta?.localPaths?.length ? meta.localPaths.join(', ') : '(无路径记录)';
-    logger.raw(
-      `  ${chalk.bold(c.projectName)} ${chalk.dim(`(${c.projectId.slice(0, 8)}…)`)} ${chalk.cyan(`[${c.confidence}]`)} score=${c.score}`,
-    );
-    logger.raw(chalk.dim(`    证据：${c.evidence.map((e) => e.key).join(', ')}`));
-    logger.raw(chalk.dim(`    路径：${paths}`));
+  opts: { name?: string; description?: string; template?: string },
+  groups: string[] | undefined,
+  tags: string[] | undefined,
+): Promise<void> {
+  const target = findProjectByAnyId([restoreId]);
+  if (!target) {
+    closeDb();
+    logger.raw(chalk.red(`未找到项目：${restoreId}`));
+    process.exitCode = 1;
+    return;
   }
-  logger.raw('');
 
-  // 如果仅有一个 high，默认选择该项
-  if (high.length === 1) {
-    const ok = await confirm({
-      message: `是否将当前目录关联到“${high[0].projectName}”？`,
-      default: true,
+  debug('restore: target found', { id: target.id, username: target.username });
+
+  // 采集当前目录指纹，合并 IDs
+  const { derived } = await collectFingerprint(cwd);
+  const legacyId = await readLegacyIdFromLatticeJson(cwd);
+  const currentIds = computeProjectIds(derived, legacyId);
+
+  // 合并目标项目的 IDs 和当前目录的 IDs
+  const targetMeta = await getProjectMeta(username, target.id);
+  const targetIds = targetMeta ? resolveProjectIds(targetMeta) : [target.id];
+  const mergedIdSet = new Set([...targetIds, ...currentIds, target.id]);
+
+  // 更新目标项目的 localPaths
+  await updateProjectPaths(target.id, username, cwd);
+  // 同步合并后的 IDs 到 DB
+  syncProjectIdsToDb(target.id, [...mergedIdSet]);
+
+  // 确保 lattice.json 包含 legacy ID（如果有）
+  const targetLegacyId = [...mergedIdSet].find((id) => id.startsWith('legacy:'));
+  if (targetLegacyId) {
+    const rawId = targetLegacyId.replace(/^legacy:/, '');
+    await writeJSON(pathResolve(cwd, 'lattice.json'), { id: rawId });
+    debug('restore: wrote lattice.json', { id: rawId });
+  }
+
+  // 应用元数据更新
+  if (opts.name || opts.description || groups || tags) {
+    await updateProjectMeta(username, target.id, {
+      ...(opts.name ? { name: opts.name } : {}),
+      ...(opts.description ? { description: opts.description } : {}),
+      ...(groups ? { groups } : {}),
+      ...(tags ? { tags } : {}),
     });
-    return ok ? high[0].projectId : null;
   }
 
-  // 多个候选，弹选单
-  const choices = [
-    ...top.map((c) => ({
-      name: `${c.projectName} (${c.confidence}, score=${c.score})`,
-      value: c.projectId,
-    })),
-    { name: chalk.green('创建新项目'), value: '__new__' },
-  ];
-  const answer = await select<string>({
-    message: '请选择操作：',
-    choices,
-    default: high.length > 0 ? high[0].projectId : '__new__',
-  });
-  return answer === '__new__' ? null : answer;
+  await applyTemplatesIfRequested(username, target.id, opts.template);
+  const parentRelations = await detectAndLinkParentProject(username, target.id, cwd);
+  closeDb();
+
+  const finalMeta = await getProjectMeta(username, target.id);
+  logger.raw(chalk.green(`✓ 已将当前目录关联到项目：${finalMeta?.name ?? target.id}`));
+  printProjectInfo(finalMeta, target.id, cwd, derived);
+  printParentRelations(parentRelations);
+}
+
+// ─── 辅助函数 ───
+
+/** 读取 lattice.json 中的 id */
+async function readLegacyIdFromLatticeJson(dir: string): Promise<string | null> {
+  try {
+    const latticeJsonPath = pathResolve(dir, 'lattice.json');
+    if (!(await fileExists(latticeJsonPath))) return null;
+    const data = await readJSON<{ id?: string }>(latticeJsonPath);
+    if (!data?.id) return null;
+    return normalizeLegacyId(data.id);
+  } catch (err) {
+    debug('readLegacyIdFromLatticeJson error', (err as Error).message);
+    return null;
+  }
+}
+
+/** 确保 lattice.json 存在且包含指定的 legacy ID */
+async function ensureLatticeJson(dir: string, legacyId: string): Promise<void> {
+  try {
+    const latticeJsonPath = pathResolve(dir, 'lattice.json');
+    const rawId = legacyId.replace(/^legacy:/, '');
+
+    // 如果已存在且 id 一致，不需要写入
+    if (await fileExists(latticeJsonPath)) {
+      const data = await readJSON<{ id?: string }>(latticeJsonPath);
+      if (data?.id === rawId || normalizeLegacyId(data?.id ?? '') === legacyId) return;
+    }
+
+    await writeJSON(latticeJsonPath, { id: rawId });
+    debug('ensureLatticeJson: wrote', { id: rawId });
+  } catch (err) {
+    debug('ensureLatticeJson error', (err as Error).message);
+  }
+}
+
+/** 应用 spec 模板（如果指定了 --template） */
+async function applyTemplatesIfRequested(
+  username: string,
+  projectId: string,
+  templateOpt: string | undefined,
+): Promise<void> {
+  if (!templateOpt) return;
+
+  try {
+    const templateNames = await resolveTemplateNames(templateOpt);
+    if (templateNames.length === 0) {
+      logger.raw(chalk.yellow('未匹配到任何可用模板。'));
+      return;
+    }
+
+    for (const templateName of templateNames) {
+      const filePath = await applySpecTemplate(username, projectId, templateName);
+      if (filePath) {
+        logger.raw(chalk.dim(`  模板：${filePath}`));
+      }
+    }
+  } catch (err) {
+    debug('applyTemplatesIfRequested error', (err as Error).message);
+    throw err;
+  }
 }
 
 async function resolveTemplateNames(input: string): Promise<string[]> {
@@ -314,7 +407,8 @@ interface ParentRelationResult {
 
 /**
  * 自动检测父级 Lattice 项目并建立 nested-in 关系
- * 类似 npm 向上查找 node_modules 的机制
+ *
+ * 向上查找 .git 目录 + lattice.json，通过 DB 查找已注册的祖先项目。
  */
 async function detectAndLinkParentProject(
   username: string,
@@ -324,43 +418,107 @@ async function detectAndLinkParentProject(
   const results: ParentRelationResult[] = [];
 
   try {
-    // 自愈：先清除该项目旧的 auto nested-in 关系，再根据当前文件系统重新建立
+    // 自愈：先清除该项目旧的 auto nested-in 关系
     await deleteRelationsByFilter(username, {
       projectId: childProjectId,
       type: 'nested-in',
       createdBy: 'auto',
     });
 
-    // 从当前项目目录向上查找所有祖先 lattice.json
-    const ancestorRoots = await findAllUpwards('lattice.json', childDir);
+    // 向上查找所有祖先 .git 目录 + lattice.json
+    const ancestorRoots = await findAncestorProjectRoots(childDir);
+    debug('ancestor roots', ancestorRoots);
 
     for (let i = 0; i < ancestorRoots.length; i++) {
       const ancestorRoot = ancestorRoots[i];
-      const data = await readJSON<{ id?: string }>(`${ancestorRoot}/lattice.json`);
-      if (!data?.id || data.id === childProjectId) continue;
 
-      // 检查该祖先项目是否已注册在 Lattice 中
-      const parentRow = findProjectById(data.id);
-      if (!parentRow) continue;
+      try {
+        // 采集祖先目录的指纹，计算 IDs
+        const { derived: ancestorDerived } = await collectFingerprint(ancestorRoot);
+        const ancestorLegacyId = await readLegacyIdFromLatticeJson(ancestorRoot);
+        const ancestorIds = computeProjectIds(ancestorDerived, ancestorLegacyId);
 
-      // 建立 nested-in 关系（幂等：已存在则更新）
-      await upsertRelationFile(username, {
-        projectA: childProjectId,
-        projectB: data.id,
-        type: 'nested-in',
-        description: i === 0 ? '直接父级项目' : `第 ${i + 1} 级祖先项目`,
-        createdBy: 'auto',
-      });
+        if (ancestorIds.length === 0) continue;
 
-      results.push({
-        id: data.id,
-        name: parentRow.name,
-        type: i === 0 ? 'direct' : 'ancestor',
-      });
+        // 查 DB 是否已注册
+        const ancestorRow = findProjectByAnyId(ancestorIds);
+        if (!ancestorRow) continue;
+        if (ancestorRow.id === childProjectId) continue;
+
+        // 建立 nested-in 关系（幂等）
+        await upsertRelationFile(username, {
+          projectA: childProjectId,
+          projectB: ancestorRow.id,
+          type: 'nested-in',
+          description: i === 0 ? '直接父级项目' : `第 ${i + 1} 级祖先项目`,
+          createdBy: 'auto',
+        });
+
+        results.push({
+          id: ancestorRow.id,
+          name: ancestorRow.name,
+          type: i === 0 ? 'direct' : 'ancestor',
+        });
+      } catch (err) {
+        debug(`detectAndLinkParentProject: ancestor ${ancestorRoot} error`, (err as Error).message);
+      }
     }
-  } catch {
-    // 向上查找失败不影响 link 主流程
+  } catch (err) {
+    debug('detectAndLinkParentProject error', (err as Error).message);
   }
 
   return results;
+}
+
+/**
+ * 向上查找所有祖先项目根目录（有 .git 或 lattice.json 的目录）
+ * 返回从近到远排序的列表
+ */
+async function findAncestorProjectRoots(startDir: string): Promise<string[]> {
+  const roots: string[] = [];
+  let currentDir = pathResolve(startDir);
+
+  while (currentDir && currentDir !== sep && currentDir !== '.') {
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+
+    try {
+      const hasGit = await fileExists(pathResolve(currentDir, '.git'));
+      const hasLatticeJson = await fileExists(pathResolve(currentDir, 'lattice.json'));
+      if (hasGit || hasLatticeJson) {
+        roots.push(currentDir);
+      }
+    } catch {
+      // 权限问题等跳过
+    }
+  }
+
+  return roots;
+}
+
+function printProjectInfo(
+  meta: ProjectMeta | null,
+  primaryId: string,
+  cwd: string,
+  derived: FingerprintDerived,
+): void {
+  logger.raw(chalk.dim(`  名称：${meta?.name ?? primaryId}`));
+  logger.raw(chalk.dim(`  ID：${primaryId}`));
+  if (meta?.ids && meta.ids.length > 1) {
+    logger.raw(chalk.dim(`  IDs：${meta.ids.join(', ')}`));
+  }
+  logger.raw(chalk.dim(`  路径：${cwd}`));
+  if (derived.gitRemotes.length > 0) {
+    logger.raw(chalk.dim(`  Git：${derived.gitRemotes.join(', ')}`));
+  }
+}
+
+function printParentRelations(parents: ParentRelationResult[]): void {
+  if (parents.length > 0) {
+    logger.raw(chalk.cyan(`\n✓ 检测到嵌套项目关系：`));
+    for (const r of parents) {
+      logger.raw(chalk.dim(`  ← ${r.name} (${r.type === 'direct' ? '直接父级' : '祖先'})`));
+    }
+  }
 }

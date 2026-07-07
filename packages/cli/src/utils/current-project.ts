@@ -1,9 +1,27 @@
-import { findUpwards, findAllUpwards, readJSON } from '@qcqx/lattice-core';
+import { resolve as pathResolve, dirname, sep, join } from 'node:path';
+import {
+  findUpwards,
+  findAllUpwards,
+  readJSON,
+  fileExists,
+  initDb,
+  collectFingerprint,
+  computeProjectIds,
+  normalizeLegacyId,
+  selectPrimaryId,
+  findProjectByAnyId,
+  autoRegisterProject,
+  getProjectMetaById,
+  resolveProjectIds,
+  type ProjectMeta,
+} from '@qcqx/lattice-core';
 
 export interface CurrentProject {
   root: string;
-  latticeJsonPath: string;
+  latticeJsonPath?: string;
   id: string;
+  /** 所有 IDs（含主 ID 在内） */
+  ids: string[];
 }
 
 export interface CurrentProjectWithAncestors {
@@ -12,55 +30,178 @@ export interface CurrentProjectWithAncestors {
   ancestors: CurrentProject[];
 }
 
-async function readProjectAtRoot(root: string): Promise<CurrentProject | null> {
-  const latticeJsonPath = `${root}/lattice.json`;
-  const data = await readJSON<{ id?: string }>(latticeJsonPath);
-  if (!data?.id) return null;
+// ─── 进程内缓存 ───
 
-  return {
-    root,
-    latticeJsonPath,
-    id: data.id,
-  };
-}
+let _cachedCurrent: CurrentProject | null | undefined;
+let _cachedAncestors: CurrentProject[] | undefined;
 
-export async function resolveCurrentProject(
-  startDir = process.cwd(),
-): Promise<CurrentProject | null> {
-  const root = await findUpwards('lattice.json', startDir);
-  if (!root) return null;
-  return readProjectAtRoot(root);
+/**
+ * 从目录中收集 ID 源（.git / lattice.json）
+ */
+async function collectIdSources(
+  dir: string,
+): Promise<{ gitRepo: boolean; legacyId: string | null }> {
+  const gitRepo = await fileExists(join(dir, '.git'));
+  const latticeJsonPath = join(dir, 'lattice.json');
+  let legacyId: string | null = null;
+
+  if (await fileExists(latticeJsonPath)) {
+    const data = await readJSON<{ id?: string }>(latticeJsonPath);
+    if (data?.id) {
+      legacyId = normalizeLegacyId(data.id);
+    }
+  }
+
+  return { gitRepo, legacyId };
 }
 
 /**
- * 解析当前项目及其所有祖先 Lattice 项目（npm 风格向上查找）
+ * 从目录生成 IDs
+ */
+async function generateIdsForDir(
+  dir: string,
+): Promise<{ ids: string[]; legacyId: string | null; hasLatticeJson: boolean }> {
+  const { gitRepo, legacyId } = await collectIdSources(dir);
+  const hasLatticeJson = legacyId !== null;
+
+  if (!gitRepo && !legacyId) {
+    return { ids: [], legacyId: null, hasLatticeJson };
+  }
+
+  const { derived } = await collectFingerprint(dir);
+  const ids = computeProjectIds(derived, legacyId);
+  return { ids, legacyId, hasLatticeJson };
+}
+
+/**
+ * 解析当前项目（查找 + 自动注册）
+ *
+ * 从 cwd 向上逐级查找 id 源（.git / lattice.json），未注册的自动注册。
+ * 返回距 cwd 最近的已注册项目。
+ */
+export async function resolveCurrentProject(
+  startDir = process.cwd(),
+): Promise<CurrentProject | null> {
+  // 缓存检查
+  if (_cachedCurrent !== undefined) return _cachedCurrent;
+
+  try {
+    await initDb();
+  } catch {
+    // DB 初始化失败，跳过自动注册
+  }
+
+  const username = await getUsername();
+
+  // 从 cwd 向上逐级查找所有有 id 源的目录
+  const idSourceDirs: { dir: string; ids: string[]; hasLatticeJson: boolean }[] = [];
+  let currentDir = pathResolve(startDir);
+
+  while (currentDir && currentDir !== sep && currentDir !== '.') {
+    const { ids, hasLatticeJson } = await generateIdsForDir(currentDir);
+    if (ids.length > 0) {
+      idSourceDirs.push({ dir: currentDir, ids, hasLatticeJson });
+    }
+    currentDir = dirname(currentDir);
+  }
+
+  if (idSourceDirs.length === 0) {
+    _cachedCurrent = null;
+    return null;
+  }
+
+  // 对每个有 id 源的目录：查 DB 或自动注册
+  const registered: CurrentProject[] = [];
+  for (const { dir, ids, hasLatticeJson } of idSourceDirs) {
+    // 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
+    try {
+      const { meta, isNew } = await autoRegisterProject(username, ids, dir);
+      if (meta && isNew) {
+        console.log(`✓ 自动注册项目：${meta.name} (${selectPrimaryId(ids) ?? ids[0]})`);
+      }
+      if (meta) {
+        const allIds = resolveProjectIds(meta);
+        registered.push({
+          root: dir,
+          latticeJsonPath: hasLatticeJson ? join(dir, 'lattice.json') : undefined,
+          id: selectPrimaryId(allIds) ?? allIds[0],
+          ids: allIds,
+        });
+      }
+    } catch {
+      // 自动注册失败，跳过
+    }
+  }
+
+  if (registered.length === 0) {
+    _cachedCurrent = null;
+    return null;
+  }
+
+  // 返回距 cwd 最近的已注册项目（idSourceDirs 是从近到远排序的）
+  _cachedCurrent = registered[0];
+  _cachedAncestors = registered.slice(1);
+  return _cachedCurrent;
+}
+
+/**
+ * 解析当前项目及其所有祖先项目
+ *
  * 返回当前项目和按距离排序（近→远）的祖先项目列表
  */
 export async function resolveCurrentProjectWithAncestors(
   startDir = process.cwd(),
 ): Promise<CurrentProjectWithAncestors | null> {
-  const root = await findUpwards('lattice.json', startDir);
-  if (!root) return null;
-
-  const current = await readProjectAtRoot(root);
+  const current = await resolveCurrentProject(startDir);
   if (!current) return null;
 
-  // 从当前项目根目录向上查找所有祖先 lattice.json
-  const ancestorRoots = await findAllUpwards('lattice.json', root);
-  const ancestors: CurrentProject[] = [];
-
-  for (const ancestorRoot of ancestorRoots) {
-    const ancestor = await readProjectAtRoot(ancestorRoot);
-    if (ancestor && ancestor.id !== current.id) {
-      ancestors.push(ancestor);
-    }
-  }
-
-  return { current, ancestors };
+  return {
+    current,
+    ancestors: _cachedAncestors ?? [],
+  };
 }
 
+/**
+ * 在指定目录解析项目（不向上查找，不自动注册）
+ */
 export async function resolveProjectAtDirectory(
   dir = process.cwd(),
 ): Promise<CurrentProject | null> {
-  return readProjectAtRoot(dir);
+  const { ids, hasLatticeJson } = await generateIdsForDir(dir);
+  if (ids.length === 0) return null;
+
+  try {
+    await initDb();
+  } catch {
+    // ignore
+  }
+
+  const existing = findProjectByAnyId(ids);
+  if (!existing) return null;
+
+  const meta = await getProjectMetaById(existing.id);
+  if (!meta) return null;
+
+  const allIds = resolveProjectIds(meta.meta);
+  return {
+    root: dir,
+    latticeJsonPath: hasLatticeJson ? join(dir, 'lattice.json') : undefined,
+    id: existing.id,
+    ids: allIds,
+  };
+}
+
+/**
+ * 清除进程内缓存
+ */
+export function clearCurrentProjectCache(): void {
+  _cachedCurrent = undefined;
+  _cachedAncestors = undefined;
+}
+
+// ─── 辅助 ───
+
+async function getUsername(): Promise<string> {
+  const { getUsername: coreGetUsername } = await import('@qcqx/lattice-core');
+  return coreGetUsername();
 }

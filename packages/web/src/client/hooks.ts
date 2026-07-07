@@ -133,7 +133,13 @@ export function useGlobalGraph() {
         id: t.id,
         type: 'taskNode',
         position: { x: 0, y: 0 },
-        data: { entityType: 'task', taskId: t.id, title: t.title, status: t.status },
+        data: {
+          entityType: 'task',
+          taskId: t.id,
+          title: t.title,
+          status: t.status,
+          projectIds: t.projects || [],
+        },
       });
       (t.projects || []).forEach((pid: string) => {
         edges.push({

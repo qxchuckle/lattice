@@ -21,8 +21,25 @@ import { getTaskMeta } from '../task';
 import { getProjectMeta, listProjects } from '../project';
 import { getRelationsByProject } from '../project/relation';
 import { findSameProjectInOtherUsers } from '../project/cross-user';
+import { getRelatedProjectIds } from '../project/lookup';
+import { selectPrimaryId } from '../project/identity';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
+
+/**
+ * 获取虚拟合并组的所有任务 ID（去重）
+ */
+function getTaskIdsForProjectGroup(projectId: string): string[] {
+  const relatedIds = getRelatedProjectIds(projectId);
+  const taskIdSet = new Set<string>();
+  for (const rid of relatedIds) {
+    const ids = getTasksForProject(rid);
+    for (const id of ids) {
+      taskIdSet.add(id);
+    }
+  }
+  return [...taskIdSet];
+}
 
 export interface ContextOptions {
   /** 是否启用跨用户聚合（默认 true） */
@@ -49,7 +66,7 @@ async function collectCrossUserProjectData(
   // 活跃任务
   let activeTasks: TaskMeta[] = [];
   try {
-    const taskIds = getTasksForProject(otherProjectId);
+    const taskIds = getTaskIdsForProjectGroup(otherProjectId);
     const allTasks = await Promise.all(taskIds.map((id) => getTaskMeta(otherUsername, id)));
     activeTasks = allTasks.filter(
       (t): t is TaskMeta => t !== null && t.status !== 'archived' && t.status !== 'completed',
@@ -69,7 +86,11 @@ async function collectCrossUserProjectData(
       if (!entry) {
         const meta = await getProjectMeta(otherUsername, relatedId);
         if (!meta) continue;
-        entry = { id: meta.id, name: meta.name, relations: [] };
+        entry = {
+          id: selectPrimaryId(meta.ids) ?? relatedId,
+          name: meta.name,
+          relations: [],
+        };
         relatedMap.set(relatedId, entry);
         relatedProjects.push(entry);
       }
@@ -137,7 +158,7 @@ export async function getContextForProject(
   // 查找关联的活跃任务
   let activeTasks: TaskMeta[] = [];
   try {
-    const taskIds = getTasksForProject(projectId);
+    const taskIds = getTaskIdsForProjectGroup(projectId);
     const allTasks = await Promise.all(taskIds.map((id) => getTaskMeta(username, id)));
     activeTasks = allTasks.filter(
       (t): t is TaskMeta => t !== null && t.status !== 'archived' && t.status !== 'completed',
@@ -157,7 +178,11 @@ export async function getContextForProject(
       if (!entry) {
         const meta = await getProjectMeta(username, relatedId);
         if (!meta) continue;
-        entry = { id: meta.id, name: meta.name, relations: [] };
+        entry = {
+          id: selectPrimaryId(meta.ids) ?? relatedId,
+          name: meta.name,
+          relations: [],
+        };
         relatedMap.set(relatedId, entry);
         relatedProjects.push(entry);
       }

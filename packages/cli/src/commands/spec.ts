@@ -28,7 +28,6 @@ import {
   getGlobalSpecDir,
   getUserSpecDir,
   getProjectSpecDir,
-  makeProjectDirName,
   ensureDir,
   fileExists,
   lintSpecFrontmatter,
@@ -917,7 +916,7 @@ async function resolveSpecScopeDir(
   if (scope === 'project') {
     const cur = await resolveCurrentProject();
     if (!cur) return null;
-    return getProjectSpecDir(username, makeProjectDirName(cur.id));
+    return getProjectSpecDir(username, cur.id);
   }
   return null;
 }

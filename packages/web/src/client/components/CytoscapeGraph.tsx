@@ -38,6 +38,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     canvasReady,
     taskStatusFilter,
     specScopeFilter,
+    projectFilter,
+    canvasKeyword,
   } = useSnapshot(canvasStore);
   const graphData = useGlobalGraph();
   const visibleTypesRef = useRef(visibleTypes);
@@ -48,6 +50,10 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   taskStatusFilterRef.current = taskStatusFilter;
   const specScopeFilterRef = useRef(specScopeFilter);
   specScopeFilterRef.current = specScopeFilter;
+  const projectFilterRef = useRef(projectFilter);
+  projectFilterRef.current = projectFilter;
+  const canvasKeywordRef = useRef(canvasKeyword);
+  canvasKeywordRef.current = canvasKeyword;
   const skipAnchorRef = useRef(false);
   const visibleTypesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -307,6 +313,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       visibleEdgeTypesRef.current,
       taskStatusFilterRef.current,
       specScopeFilterRef.current,
+      projectFilterRef.current,
+      canvasKeywordRef.current,
     );
 
     if (isFirst) {
@@ -441,6 +449,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         .join('|'),
       taskStatusFilter.join(','),
       specScopeFilter.join(','),
+      projectFilter.join(','),
+      canvasKeyword,
     ].join('||');
     if (key === lastVisibleKey.current) return;
     lastVisibleKey.current = key;
@@ -454,6 +464,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         { ...visibleEdgeTypes },
         [...taskStatusFilter],
         [...specScopeFilter],
+        [...projectFilter],
+        canvasKeyword,
       );
 
       // 增量增减：diff 当前画布与期望集合

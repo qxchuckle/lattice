@@ -78,6 +78,14 @@ export function registerUnlinkCommand(program: Command): void {
         }
 
         const latticeJsonPath = project.latticeJsonPath;
+        if (!latticeJsonPath) {
+          logger.raw(
+            chalk.yellow(
+              '当前项目无 lattice.json，无法按目录解绑。可使用 lattice unlink --id <projectId> 直接按 ID 解绑',
+            ),
+          );
+          return;
+        }
         const data = await readJSON<{ id?: string }>(latticeJsonPath);
         if (!data?.id) {
           logger.raw(chalk.yellow('lattice.json 格式无效'));

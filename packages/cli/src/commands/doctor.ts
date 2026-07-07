@@ -22,9 +22,14 @@ import {
   getGlobalConfigPath,
   getProjectMeta,
   collectFingerprint,
-  persistFingerprints,
-  findProjectsByPathSmart,
-  CONFIDENCE_THRESHOLDS,
+  computeProjectIds,
+  syncProjectIdsToDb,
+  normalizeLegacyId,
+  normalizeProjectMeta,
+  selectPrimaryId,
+  resolveProjectIds,
+  getRelatedProjectIds,
+  findProjectByPath,
   updateTask,
   findProjectDirName,
   writeJSON,
@@ -255,7 +260,10 @@ export function registerDoctorCommand(program: Command): void {
             }
             try {
               const fp = await collectFingerprint(candidate);
-              persistFingerprints(p.id, fp.entries);
+              // 重新计算 IDs 并同步到 DB
+              const legacyId = p.id.startsWith('legacy:') ? p.id : normalizeLegacyId(p.id);
+              const ids = computeProjectIds(fp.derived, legacyId);
+              syncProjectIdsToDb(p.id, ids);
               count++;
             } catch {
               failed++;
@@ -310,8 +318,11 @@ async function runMigrate(username: string): Promise<{
     scanned++;
 
     try {
-      const meta = await readJSON<ProjectMeta>(metaPath);
-      if (!meta || !meta.id) continue;
+      const rawMeta = await readJSON<ProjectMeta>(metaPath);
+      if (!rawMeta) continue;
+      const meta = normalizeProjectMeta(rawMeta);
+      const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+      if (!primaryId) continue;
 
       // legacy 字段一次性迁移：localPath / gitRemote 字符串 → 数组，完成后删除旧字段
       const legacy = meta as unknown as { localPath?: string; gitRemote?: string };
@@ -340,9 +351,9 @@ async function runMigrate(username: string): Promise<{
 
       // 检测 db 是否已有该 id（用 listProjects 已传入会过期，重新查 db 也可以）
       // 简化：每个 project.json 都 upsert，等价于「回填或刷新」
-      const beforeRow = listProjects(username).find((p) => p.id === meta.id);
+      const beforeRow = listProjects(username).find((p) => p.id === primaryId);
       upsertProject({
-        id: meta.id,
+        id: primaryId,
         name: meta.name,
         local_path: JSON.stringify(meta.localPaths ?? []),
         description: meta.description ?? null,
@@ -392,10 +403,9 @@ async function recheckScopePaths(
     const newProjects = new Set(t.projects ?? []);
     let changed = false;
     for (const sp of t.scopePaths) {
-      const cands = await findProjectsByPathSmart(sp.path);
-      const top = cands[0];
-      if (top && top.score >= CONFIDENCE_THRESHOLDS.high) {
-        newProjects.add(top.projectId);
+      const project = findProjectByPath(sp.path);
+      if (project) {
+        newProjects.add(project.id);
         promoted++;
         changed = true;
       } else {
@@ -427,15 +437,18 @@ async function checkDiskDbConsistency(
   const projectsRoot = getUserProjectsDir(username);
   const dirEntries: string[] = await listDir(projectsRoot).catch(() => []);
 
-  // 收集磁盘上所有 project.json 的 id
+  // 收集磁盘上所有 project.json 的 id（用 normalizeProjectMeta 处理兼容性）
   const diskProjectIds = new Map<string, string>(); // id → dirName
   for (const dirName of dirEntries) {
     if (dirName.startsWith('.')) continue;
     const metaPath = getProjectMetaPath(username, dirName);
     if (!(await fileExists(metaPath))) continue;
-    const meta = await readJSON<ProjectMeta>(metaPath);
-    if (meta?.id) {
-      diskProjectIds.set(meta.id, dirName);
+    const rawMeta = await readJSON<ProjectMeta>(metaPath);
+    if (!rawMeta) continue;
+    const meta = normalizeProjectMeta(rawMeta);
+    const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+    if (primaryId) {
+      diskProjectIds.set(primaryId, dirName);
     }
   }
 
@@ -464,11 +477,14 @@ async function checkDiskDbConsistency(
   if (fix && missingInDb.length > 0) {
     for (const id of missingInDb) {
       const dirName = diskProjectIds.get(id)!;
-      const meta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
-      if (!meta) continue;
+      const rawMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
+      if (!rawMeta) continue;
+      const meta = normalizeProjectMeta(rawMeta);
+      const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+      if (!primaryId) continue;
       try {
         upsertProject({
-          id: meta.id,
+          id: primaryId,
           name: meta.name,
           local_path: JSON.stringify(meta.localPaths ?? []),
           description: meta.description ?? null,
@@ -545,9 +561,17 @@ function checkDuplicateProjects(projects: ProjectRow[]): DoctorEntry[] {
     }
   }
 
+  // 过滤掉虚拟合并组内的预期重复（同一路径被 git: 和 legacy: 项目引用是正常的）
   const duplicatePaths: { path: string; projects: { id: string; name: string }[] }[] = [];
   for (const [path, projs] of pathToProjects) {
-    if (projs.length > 1) {
+    if (projs.length <= 1) continue;
+
+    // 检查这些项目是否都在同一个虚拟合并组内
+    const firstRelated = getRelatedProjectIds(projs[0].id);
+    const allInSameGroup = projs.every((p) => firstRelated.includes(p.id));
+
+    if (!allInSameGroup) {
+      // 不在同一个虚拟合并组 → 真正的重复
       duplicatePaths.push({ path, projects: projs });
     }
   }
@@ -565,8 +589,8 @@ function checkDuplicateProjects(projects: ProjectRow[]): DoctorEntry[] {
     entries.push({
       item: '重复项目检测',
       status: 'stale',
-      message: `${duplicatePaths.length} 个路径被多个项目引用：${detail}`,
-      fix: '使用 lattice project remove <id> -f 移除重复项目',
+      message: `${duplicatePaths.length} 个路径被非虚拟合并的项目引用：${detail}`,
+      fix: '使用 lattice project remove <id> -f 移除重复项目，或 lattice project merge 合并',
     });
   }
 
@@ -592,7 +616,13 @@ async function checkLatticeJsonConsistency(projects: ProjectRow[]): Promise<Doct
       if (!(await fileExists(latticeJsonPath))) continue;
       const data = await readJSON<{ id?: string }>(latticeJsonPath);
       if (!data?.id) continue;
-      if (data.id !== p.id) {
+
+      // lattice.json 的 ID 加上 legacy: 前缀后，检查是否在当前项目的虚拟合并组内
+      const legacyId = normalizeLegacyId(data.id);
+      const relatedIds = getRelatedProjectIds(p.id);
+
+      if (!relatedIds.includes(legacyId) && p.id !== legacyId) {
+        // lattice.json 的 ID 不在虚拟合并组内 → 真正的不一致
         mismatches.push({
           localPath,
           latticeJsonId: data.id,
@@ -607,29 +637,21 @@ async function checkLatticeJsonConsistency(projects: ProjectRow[]): Promise<Doct
     entries.push({
       item: 'lattice.json 引用一致性',
       status: 'healthy',
-      message: '所有可达项目目录的 lattice.json 与注册 ID 一致',
+      message: '所有可达项目目录的 lattice.json 与注册项目一致（含虚拟合并组）',
     });
   } else {
     const detail = mismatches
       .slice(0, 3)
       .map(
         (m) =>
-          `${m.localPath}/lattice.json \u5f15\u7528 ${m.latticeJsonId} \u4f46\u76ee\u5f55\u6ce8\u518c\u4e3a ${m.registeredName}(${m.registeredId})`,
+          `${m.localPath}/lattice.json 引用 ${m.latticeJsonId} 但目录注册为 ${m.registeredName}(${m.registeredId})`,
       )
       .join('；');
-    const fixHint = mismatches
-      .slice(0, 2)
-      .map(
-        (m) =>
-          `保留 ${m.latticeJsonId} → lattice project remove ${m.registeredId} -f；` +
-          `保留 ${m.registeredId} → 修改 ${m.localPath}/lattice.json 的 id`,
-      )
-      .join('。');
     entries.push({
       item: 'lattice.json 引用一致性',
       status: 'stale',
       message: `${mismatches.length} 个不一致：${detail}${mismatches.length > 3 ? '…' : ''}`,
-      fix: fixHint,
+      fix: '运行 lattice link 重新关联，或手动修改 lattice.json 的 id',
     });
   }
 
@@ -675,7 +697,7 @@ async function checkDbFieldDrift(
       if (fix) {
         try {
           upsertProject({
-            id: meta.id,
+            id: selectPrimaryId(meta.ids) ?? meta.id!,
             name: meta.name,
             local_path: metaLocalPath,
             description: meta.description ?? null,
