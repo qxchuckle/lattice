@@ -201,7 +201,11 @@ export async function updateProjectPaths(
   const meta = normalizeProjectMeta(rawMeta);
 
   const localPaths = new Set(meta.localPaths ?? []);
+  const beforeSize = localPaths.size;
   localPaths.add(normalizedPath);
+
+  // 路径已存在，无需更新
+  if (localPaths.size === beforeSize) return;
 
   const updated: ProjectMeta = {
     ...meta,
