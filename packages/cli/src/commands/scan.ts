@@ -40,6 +40,7 @@ export function registerScanCommand(program: Command): void {
           logger.raw(chalk.dim(`  ${dir}`));
         }
 
+        const startTime = Date.now();
         const result = await scanForProjects(username, dirs, (p: ScanProgress) => {
           const dirShort =
             p.currentDir.length > 60 ? '...' + p.currentDir.slice(-57) : p.currentDir;
@@ -54,7 +55,8 @@ export function registerScanCommand(program: Command): void {
 
         closeDb();
 
-        logger.raw(chalk.green(`\n✓ 扫描完成`));
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        logger.raw(chalk.green(`\n✓ 扫描完成 (${elapsed}s)`));
         logger.raw(chalk.dim(`  新增：${result.added.length} 个项目`));
         logger.raw(chalk.dim(`  更新：${result.updated.length} 个项目`));
 

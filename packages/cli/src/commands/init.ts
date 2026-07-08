@@ -233,23 +233,34 @@ export function registerInitCommand(program: Command): void {
 
         // 10. 扫描项目
         if (scanDirs?.length) {
-          logger.raw(chalk.blue('正在扫描项目...'));
-          const result = await scanForProjects(username, scanDirs, (p: ScanProgress) => {
-            const dirShort =
-              p.currentDir.length > 60 ? '...' + p.currentDir.slice(-57) : p.currentDir;
-            process.stdout.write(
-              `\r${chalk.dim('扫描')} ${dirShort.padEnd(60)} ${chalk.green('+' + p.added)} ${chalk.blue('~' + p.updated)} ${chalk.dim('(' + p.found + ')')}`.slice(
-                0,
-                120,
-              ) + '\r',
+          let doScan = shouldSkipConfirm(opts);
+          if (!doScan) {
+            doScan = await confirm({
+              message: `将扫描以下目录：\n${scanDirs.map((d) => `  ${d}`).join('\n')}\n确认开始扫描？`,
+              default: true,
+            });
+          }
+          if (doScan) {
+            logger.raw(chalk.blue('正在扫描项目...'));
+            const result = await scanForProjects(username, scanDirs, (p: ScanProgress) => {
+              const dirShort =
+                p.currentDir.length > 60 ? '...' + p.currentDir.slice(-57) : p.currentDir;
+              process.stdout.write(
+                `\r${chalk.dim('扫描')} ${dirShort.padEnd(60)} ${chalk.green('+' + p.added)} ${chalk.blue('~' + p.updated)} ${chalk.dim('(' + p.found + ')')}`.slice(
+                  0,
+                  120,
+                ) + '\r',
+              );
+            });
+            process.stdout.write('\r' + ' '.repeat(120) + '\r');
+            logger.raw(
+              chalk.green(
+                `扫描完成：新增 ${result.added.length} 个，更新 ${result.updated.length} 个`,
+              ),
             );
-          });
-          process.stdout.write('\r' + ' '.repeat(120) + '\r');
-          logger.raw(
-            chalk.green(
-              `扫描完成：新增 ${result.added.length} 个，更新 ${result.updated.length} 个`,
-            ),
-          );
+          } else {
+            logger.raw(chalk.dim('已跳过项目扫描'));
+          }
         }
 
         const modelInstalled = await isModelInstalled();
@@ -282,7 +293,6 @@ export function registerInitCommand(program: Command): void {
         logger.raw(chalk.green(`\n✓ Lattice${initialized ? '重新' : ''}初始化完成！`));
         logger.raw(chalk.dim(`  用户名：${username}`));
         logger.raw(chalk.dim(`  目录：${root}`));
-        logger.raw(chalk.dim('\n使用 lattice link 在项目中注册'));
       } catch (err) {
         console.error(chalk.red('初始化失败：'), (err as Error).message);
         process.exitCode = 1;
@@ -785,6 +795,7 @@ function registerInitScanSubcommand(initCmd: Command): void {
 
         logger.raw(chalk.cyan('正在扫描...'));
         await initDb();
+        const startTime = Date.now();
         const result = await scanForProjects(username, scanDirs, (p: ScanProgress) => {
           const dirShort =
             p.currentDir.length > 60 ? '...' + p.currentDir.slice(-57) : p.currentDir;
@@ -805,7 +816,8 @@ function registerInitScanSubcommand(initCmd: Command): void {
           lastResult: { added: result.added.length, updated: result.updated.length },
         });
 
-        logger.raw(chalk.green(`\n扫描完成：`));
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        logger.raw(chalk.green(`\n扫描完成 (${elapsed}s)：`));
         logger.raw(chalk.green(`  新增项目：${result.added.length}`));
         logger.raw(chalk.green(`  更新项目：${result.updated.length}`));
 
