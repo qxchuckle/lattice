@@ -324,7 +324,7 @@ async function scanDir(
 
     if (ids.length > 0) {
       // 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
-      const { meta, isNew } = await autoRegisterProject(username, ids, dir);
+      const { meta, isNew } = await autoRegisterProject(username, ids, dir, derived);
       if (isNew) {
         added.push(dir);
       } else if (meta) {

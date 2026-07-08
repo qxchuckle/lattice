@@ -233,6 +233,7 @@ export async function autoRegisterProject(
   username: string,
   ids: string[],
   localPath: string,
+  existingDerived?: FingerprintDerived,
 ): Promise<{ meta: ProjectMeta | null; isNew: boolean }> {
   if (ids.length === 0) return { meta: null, isNew: false };
 
@@ -272,7 +273,7 @@ export async function autoRegisterProject(
     }
     if (!legacyMatched) {
       // 没有物理项目匹配 legacy: → 新建项目，不修改任何已有项目
-      const { derived } = await collectFingerprint(localPath);
+      const derived = existingDerived ?? (await collectFingerprint(localPath)).derived;
       const meta = await registerProjectWithIds(username, ids, localPath, derived);
       const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
       if (primaryId) await detectAndLinkNestedIn(username, primaryId, localPath);
@@ -282,7 +283,7 @@ export async function autoRegisterProject(
 
   if (ownMatches.length === 0) {
     // 未注册 / 其他用户 → 注册新项目
-    const { derived } = await collectFingerprint(localPath);
+    const derived = existingDerived ?? (await collectFingerprint(localPath)).derived;
     const meta = await registerProjectWithIds(username, ids, localPath, derived);
     const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
     if (primaryId) {
