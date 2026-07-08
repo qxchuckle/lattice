@@ -799,14 +799,17 @@ function registerInitScanSubcommand(initCmd: Command): void {
         const result = await scanForProjects(username, scanDirs, (p: ScanProgress) => {
           const dirShort =
             p.currentDir.length > 60 ? '...' + p.currentDir.slice(-57) : p.currentDir;
-          process.stdout.write(
-            `\r${chalk.dim('扫描')} ${dirShort.padEnd(60)} ${chalk.green('+' + p.added)} ${chalk.blue('~' + p.updated)} ${chalk.dim('(' + p.found + ')')}`.slice(
+          const line =
+            `${chalk.dim('扫描')} ${dirShort.padEnd(60)} ${chalk.green('+' + p.added)} ${chalk.blue('~' + p.updated)} ${chalk.dim('(' + p.found + ')')}`.slice(
               0,
               120,
-            ) + '\r',
-          );
+            );
+          process.stdout.clearLine(0);
+          process.stdout.cursorTo(0);
+          process.stdout.write(line);
         });
-        process.stdout.write('\r' + ' '.repeat(120) + '\r');
+        process.stdout.clearLine(0);
+        process.stdout.cursorTo(0);
         closeDb();
 
         // 写入扫描缓存

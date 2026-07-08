@@ -7,14 +7,16 @@
  * - SKIP_DIR_PATTERNS / isBlacklisted() — 黑名单 glob 匹配
  */
 
-import { stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
+import type { Dirent } from 'node:fs';
 import { minimatch } from 'minimatch';
 import type { FingerprintDerived } from './identity';
 import { normalizeLegacyId } from './identity';
 import { computeProjectIds } from './identity-generate';
 import { registerProjectWithIds, autoRegisterProject } from './register';
 import { collectFingerprint } from './fingerprint';
-import { fileExists, readJSON, listDir, join } from '../paths';
+import { readJSON, join } from '../paths';
 
 // ─── 黑名单 ───
 
@@ -85,7 +87,6 @@ const SKIP_DIR_PATTERNS = [
   '.clangd',
   'compile_commands',
   // ── .NET/C# ──
-  'bin',
   'obj',
   'packages',
   // ── Ruby ──
@@ -199,8 +200,6 @@ const SKIP_DIR_PATTERNS = [
   'opt',
   'root',
   // ── 虚拟/容器目录 ──
-  'proc',
-  'sys',
   'docker',
   '.docker',
   // ── 移动设备备份 ──
@@ -268,6 +267,8 @@ export async function scanForProjects(
  * 递归扫描目录，发现 git 项目或 lattice.json 并注册
  *
  * 所有目录都递归子目录（不因当前目录有 id 源就跳过）
+ * 使用 readdir({withFileTypes:true}) 一次获取 entries + 类型信息，避免额外 stat
+ * 子目录并行递归（并发限制 8）
  */
 async function scanDir(
   username: string,
@@ -286,27 +287,43 @@ async function scanDir(
     });
   }
 
-  // 1. 检查 .git 目录是否存在
-  const isGitRepo = await fileExists(join(dir, '.git'));
+  // 一次读取所有 entries + 类型信息（替代 listDir + stat）
+  let dirents: Dirent[];
+  try {
+    dirents = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return; // 目录不可读
+  }
 
-  // 2. 检查 lattice.json 是否存在（兼容）
-  const latticeJsonPath = join(dir, 'lattice.json');
-  const hasLatticeJson = await fileExists(latticeJsonPath);
+  // 一次遍历：检查 .git / lattice.json + 收集子目录
+  let isGitRepo = false;
+  let hasLatticeJson = false;
+  const subDirs: string[] = [];
+  for (const d of dirents) {
+    if (d.name === '.git') {
+      isGitRepo = true;
+    } else if (d.name === 'lattice.json') {
+      hasLatticeJson = true;
+    } else if (d.isDirectory() && !isBlacklisted(d.name)) {
+      subDirs.push(join(dir, d.name));
+    }
+  }
+
   let legacyId: string | null = null;
   if (hasLatticeJson) {
-    const data = await readJSON<{ id?: string }>(latticeJsonPath);
+    const data = await readJSON<{ id?: string }>(join(dir, 'lattice.json'));
     if (data?.id) {
       legacyId = normalizeLegacyId(data.id);
     }
   }
 
-  // 3. 如果是 git 仓库或有 lattice.json → 采集指纹
+  // 如果是 git 仓库或有 lattice.json → 采集指纹
   if (isGitRepo || legacyId) {
     const { derived } = await collectFingerprint(dir);
     const ids = computeProjectIds(derived as FingerprintDerived, legacyId);
 
     if (ids.length > 0) {
-      // 4. 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
+      // 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
       const { meta, isNew } = await autoRegisterProject(username, ids, dir);
       if (isNew) {
         added.push(dir);
@@ -316,26 +333,13 @@ async function scanDir(
     }
   }
 
-  // 7. 所有目录都递归子目录
-  let subEntries: string[];
-  try {
-    subEntries = await listDir(dir);
-  } catch {
-    return; // 目录不可读
-  }
-
-  for (const entry of subEntries) {
-    // 黑名单匹配
-    if (isBlacklisted(entry)) continue;
-
-    const fullPath = join(dir, entry);
-    try {
-      const s = await stat(fullPath);
-      if (s.isDirectory()) {
-        await scanDir(username, fullPath, added, updated, onProgress);
-      }
-    } catch {
-      // 权限问题等跳过
-    }
+  // 并行递归（并发数根据 CPU 核心数动态确定）
+  const concurrency = Math.max(4, availableParallelism());
+  for (let i = 0; i < subDirs.length; i += concurrency) {
+    await Promise.all(
+      subDirs
+        .slice(i, i + concurrency)
+        .map((d: string) => scanDir(username, d, added, updated, onProgress)),
+    );
   }
 }

@@ -1,7 +1,7 @@
 import { resolve as pathResolve, sep } from 'node:path';
 import simpleGit from 'simple-git';
 import { glob } from 'glob';
-import { fileExists, readJSON, dirExists, join } from '../paths';
+import { fileExists, readJSON, readText, dirExists, join } from '../paths';
 import { normalizeGitRemote } from './identity';
 import type { FingerprintDerived } from './identity';
 
@@ -36,22 +36,59 @@ export async function collectFingerprint(projectPath: string): Promise<{
     monorepoPackages: [],
   };
 
-  // git first commit — 使用 simple-git
-  try {
-    const git = simpleGit(projectPath);
-    const rootCommits = await git.raw(['rev-list', '--max-parents=0', 'HEAD']);
-    const rootSha = rootCommits.trim().split('\n')[0]?.trim();
-    if (rootSha && /^[0-9a-f]{7,}$/i.test(rootSha)) {
-      derived.gitFirstCommit = rootSha;
-    }
-  } catch {
-    // 无 git 或非首次 commit 历史
-  }
+  const git = simpleGit(projectPath);
 
-  // git remotes — 使用 simple-git
-  try {
-    const git = simpleGit(projectPath);
-    const remotes = await git.getRemotes(true);
+  // git 命令 + package.json 读取全部并行（复用单个 git 实例）
+  const [firstCommit, remotes, defaultBranch, pkg] = await Promise.all([
+    // git first commit
+    (async (): Promise<string | undefined> => {
+      try {
+        const rootCommits = await git.raw(['rev-list', '--max-parents=0', 'HEAD']);
+        const rootSha = rootCommits.trim().split('\n')[0]?.trim();
+        return rootSha && /^[0-9a-f]{7,}$/i.test(rootSha) ? rootSha : undefined;
+      } catch {
+        return undefined;
+      }
+    })(),
+    // git remotes
+    (async () => {
+      try {
+        return await git.getRemotes(true);
+      } catch {
+        return undefined;
+      }
+    })(),
+    // git default branch（内部有 fallback，串行）
+    (async (): Promise<string | undefined> => {
+      try {
+        const headRef = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
+        const m = headRef.trim().match(/refs\/remotes\/origin\/(.+)$/);
+        if (m?.[1]) return m[1];
+      } catch {
+        // 没有 origin/HEAD
+      }
+      try {
+        const branch = await git.revparse(['--abbrev-ref', 'HEAD']);
+        const trimmed = branch.trim();
+        if (trimmed && trimmed !== 'HEAD') return trimmed;
+      } catch {
+        // 忽略
+      }
+      return undefined;
+    })(),
+    // package.json 读取
+    (async () => {
+      const pkgPath = join(projectPath, 'package.json');
+      if (!(await fileExists(pkgPath))) return null;
+      return readJSON<{ name?: string; workspaces?: string[] | { packages?: string[] } }>(pkgPath);
+    })(),
+  ]);
+
+  // first commit
+  if (firstCommit) derived.gitFirstCommit = firstCommit;
+
+  // remotes
+  if (remotes) {
     for (const remote of remotes) {
       const url = remote.refs?.fetch || remote.refs?.push;
       if (url) {
@@ -61,46 +98,22 @@ export async function collectFingerprint(projectPath: string): Promise<{
         }
       }
     }
-  } catch {
-    // 不是 git 仓库
   }
 
-  // git default branch — 使用 simple-git
-  try {
-    const git = simpleGit(projectPath);
-    try {
-      const headRef = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
-      const m = headRef.trim().match(/refs\/remotes\/origin\/(.+)$/);
-      if (m?.[1]) derived.gitDefaultBranch = m[1];
-    } catch {
-      // 没有 origin/HEAD
-    }
-    if (!derived.gitDefaultBranch) {
-      const branch = await git.revparse(['--abbrev-ref', 'HEAD']);
-      const trimmed = branch.trim();
-      if (trimmed && trimmed !== 'HEAD') derived.gitDefaultBranch = trimmed;
-    }
-  } catch {
-    // 忽略
+  // default branch
+  if (defaultBranch) derived.gitDefaultBranch = defaultBranch;
+
+  // package.json name + monorepo workspaces 扫描
+  if (pkg?.name) {
+    derived.packageNames.push(pkg.name);
   }
 
-  // package.json 名 + monorepo workspaces 扫描
-  const pkgPath = join(projectPath, 'package.json');
-  if (await fileExists(pkgPath)) {
-    const pkg = await readJSON<{
-      name?: string;
-      workspaces?: string[] | { packages?: string[] };
-    }>(pkgPath);
-    if (pkg?.name) {
-      derived.packageNames.push(pkg.name);
-    }
-
-    // monorepo workspaces
+  if (pkg) {
     const wsPatterns: string[] = [];
-    if (Array.isArray(pkg?.workspaces)) {
+    if (Array.isArray(pkg.workspaces)) {
       wsPatterns.push(...(pkg.workspaces as string[]));
     } else if (
-      pkg?.workspaces &&
+      pkg.workspaces &&
       typeof pkg.workspaces === 'object' &&
       Array.isArray((pkg.workspaces as { packages?: string[] }).packages)
     ) {
@@ -110,7 +123,6 @@ export async function collectFingerprint(projectPath: string): Promise<{
     const pnpmWsPath = join(projectPath, 'pnpm-workspace.yaml');
     if (await fileExists(pnpmWsPath)) {
       try {
-        const { readText } = await import('../paths');
         const content = (await readText(pnpmWsPath)) ?? '';
         const matches = content.match(/^\s*-\s*['"]?([^'"\n]+)['"]?\s*$/gm) ?? [];
         for (const m of matches) {
@@ -141,18 +153,25 @@ async function collectWorkspacePackageNames(
   rootPath: string,
   patterns: string[],
 ): Promise<string[]> {
-  const names = new Set<string>();
-  for (const pattern of patterns) {
-    // 使用 glob 库展开 workspace 模式（如 packages/*）
-    const matched = await glob(pattern, { cwd: rootPath, absolute: true, nodir: false });
-    for (const dir of matched) {
-      if (!(await dirExists(dir))) continue;
+  // 所有 pattern 的 glob 并行
+  const matchedPerPattern = await Promise.all(
+    patterns.map((pattern) => glob(pattern, { cwd: rootPath, absolute: true, nodir: false })),
+  );
+  const allDirs = matchedPerPattern.flat();
+
+  // 所有目录的 package.json 读取并行
+  const pkgResults = await Promise.all(
+    allDirs.map(async (dir) => {
+      if (!(await dirExists(dir))) return null;
       const pkgPath = join(dir, 'package.json');
-      if (await fileExists(pkgPath)) {
-        const pkg = await readJSON<{ name?: string }>(pkgPath);
-        if (pkg?.name) names.add(pkg.name);
-      }
-    }
+      if (!(await fileExists(pkgPath))) return null;
+      return readJSON<{ name?: string }>(pkgPath);
+    }),
+  );
+
+  const names = new Set<string>();
+  for (const pkg of pkgResults) {
+    if (pkg?.name) names.add(pkg.name);
   }
   return [...names];
 }
