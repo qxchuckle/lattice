@@ -24,6 +24,7 @@ import {
   collectFingerprint,
   computeProjectIds,
   syncProjectIdsToDb,
+  syncProjectMetaToDb,
   normalizeLegacyId,
   normalizeProjectMeta,
   selectPrimaryId,
@@ -352,25 +353,7 @@ async function runMigrate(username: string): Promise<{
       // 检测 db 是否已有该 id（用 listProjects 已传入会过期，重新查 db 也可以）
       // 简化：每个 project.json 都 upsert，等价于「回填或刷新」
       const beforeRow = listProjects(username).find((p) => p.id === primaryId);
-      upsertProject({
-        id: primaryId,
-        name: meta.name,
-        local_path: JSON.stringify(meta.localPaths ?? []),
-        description: meta.description ?? null,
-        git_remote:
-          meta.gitRemotes && meta.gitRemotes.length > 0 ? JSON.stringify(meta.gitRemotes) : null,
-        git_first_commit: meta.gitFirstCommit ?? null,
-        git_default_branch: meta.gitDefaultBranch ?? null,
-        package_names: meta.packageNames?.length ? JSON.stringify(meta.packageNames) : null,
-        monorepo_packages: meta.monorepoPackages?.length
-          ? JSON.stringify(meta.monorepoPackages)
-          : null,
-        groups: meta.groups ? JSON.stringify(meta.groups) : null,
-        tags: meta.tags ? JSON.stringify(meta.tags) : null,
-        username,
-        created: meta.created,
-        updated: meta.updated ?? null,
-      });
+      syncProjectMetaToDb(username, meta);
       if (!beforeRow) backfilled++;
     } catch {
       // ignore single-project failure
@@ -483,25 +466,7 @@ async function checkDiskDbConsistency(
       const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
       if (!primaryId) continue;
       try {
-        upsertProject({
-          id: primaryId,
-          name: meta.name,
-          local_path: JSON.stringify(meta.localPaths ?? []),
-          description: meta.description ?? null,
-          git_remote:
-            meta.gitRemotes && meta.gitRemotes.length > 0 ? JSON.stringify(meta.gitRemotes) : null,
-          git_first_commit: meta.gitFirstCommit ?? null,
-          git_default_branch: meta.gitDefaultBranch ?? null,
-          package_names: meta.packageNames?.length ? JSON.stringify(meta.packageNames) : null,
-          monorepo_packages: meta.monorepoPackages?.length
-            ? JSON.stringify(meta.monorepoPackages)
-            : null,
-          groups: meta.groups ? JSON.stringify(meta.groups) : null,
-          tags: meta.tags ? JSON.stringify(meta.tags) : null,
-          username,
-          created: meta.created,
-          updated: meta.updated ?? null,
-        });
+        syncProjectMetaToDb(username, meta);
         backfilled++;
       } catch {
         // ignore

@@ -15,7 +15,7 @@ import {
 } from '../store';
 import { useGlobalGraph } from '../hooks';
 import { buildStylesheet } from './graph/stylesheet';
-import { runLayout, applyFocus, clearFocus, findNodeById, buildLayoutConfig } from './graph/layout';
+import { runLayout, applyFocus, clearFocus, findNodeById } from './graph/layout';
 import { toElements } from './graph/elements';
 
 cytoscape.use(fcose);
@@ -550,32 +550,30 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         }
       };
       canvasStore.layoutRunning = true;
-      if (layoutMode === 'force') {
-        const layoutConfig = buildLayoutConfig(cy.nodes().length, layoutMode, false, true, true);
-        const layout = cy.layout(layoutConfig);
-        layout.one('layoutstop', () => {
+      runLayout(
+        cy,
+        cy.nodes().length,
+        layoutMode,
+        () => {
           canvasStore.layoutRunning = false;
           applyFocusAfter();
-        });
-        layout.run();
-      } else {
-        runLayout(
-          cy,
-          cy.nodes().length,
-          layoutMode,
-          () => {
-            canvasStore.layoutRunning = false;
-            applyFocusAfter();
-          },
-          false,
-          true,
-        );
-      }
+        },
+        false,
+        true,
+        false, // 全量重新布局，与其他图类型一致
+      );
     }, 300);
     return () => {
       if (visibleTypesTimerRef.current) clearTimeout(visibleTypesTimerRef.current);
     };
-  }, [visibleTypes, visibleEdgeTypes, taskStatusFilter, specScopeFilter]);
+  }, [
+    visibleTypes,
+    visibleEdgeTypes,
+    taskStatusFilter,
+    specScopeFilter,
+    projectFilter,
+    canvasKeyword,
+  ]);
 
   // focusDepth 变化时直接 applyFocus（force=true 跳过同节点去重，否则 depth 变了但 nodeId 没变会被 applyFocus 内部 return）
   useEffect(() => {

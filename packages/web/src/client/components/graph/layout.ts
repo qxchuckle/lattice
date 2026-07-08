@@ -7,7 +7,7 @@ import {
 } from '../../store';
 import { runRadialLayout } from './radial-layout';
 import { runSequentialLayout } from './sequential-layout';
-import { resolveOverlapsContinuous } from './overlap-resolution';
+import { resolveOverlaps, resolveOverlapsContinuous } from './overlap-resolution';
 
 // ── 确定性渲染：seeded LCG PRNG 临时替换 Math.random ──
 
@@ -68,8 +68,12 @@ export function buildLayoutConfig(
     } as unknown as cytoscape.LayoutOptions;
   }
   // 默认：fCoSE 力导向布局
-  const nodeRepulsion = Math.max(5000, Math.min(150000, nodeCount * 600));
-  const idealEdgeLength = Math.max(120, Math.min(350, nodeCount * 2.5));
+  // 排斥力与边长随节点数增长，让物理模拟自然处理节点密度
+  // 增量模式（筛选切换）：降低排斥力 + 提高重力，防止节点累积漂移越来越远
+  const nodeRepulsion = incremental
+    ? Math.max(10000, Math.min(150000, nodeCount * 600))
+    : Math.max(20000, Math.min(300000, nodeCount * 1200));
+  const idealEdgeLength = Math.max(150, Math.min(450, nodeCount * 2.8));
   const numIter = Math.max(2500, Math.min(6000, Math.ceil(nodeCount * 25)));
   return {
     name: 'fcose',
@@ -77,8 +81,8 @@ export function buildLayoutConfig(
     animationDuration,
     nodeRepulsion,
     idealEdgeLength,
-    edgeElasticity: 0.35,
-    gravity: 0.2,
+    edgeElasticity: 0.4,
+    gravity: incremental ? 0.35 : 0.25,
     gravityRange: 3.8,
     numIter,
     tile: false,
@@ -87,7 +91,7 @@ export function buildLayoutConfig(
     fit,
     padding: 60,
     randomize: !incremental,
-    nodeSeparation: 120,
+    nodeSeparation: 150,
     packingQuality: 'default',
   } as unknown as cytoscape.LayoutOptions;
 }
@@ -113,6 +117,7 @@ export function runLayout(
   onComplete?: () => void,
   skipAnimation = false,
   preserveViewport = false,
+  incremental = false,
 ): void {
   // 清理无效边（端点节点不存在），所有模式通用
   const invalidEdges = cy.edges().filter((e) => e.source().length === 0 || e.target().length === 0);
@@ -175,10 +180,15 @@ export function runLayout(
 
   // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit（可选）
   const restoreRandom = seedMathRandom(LAYOUT_SEED);
-  const layout = cy.layout(buildLayoutConfig(nodeCount, 'force', skipAnimation, preserveViewport));
+  const layout = cy.layout(
+    buildLayoutConfig(nodeCount, 'force', skipAnimation, preserveViewport, incremental),
+  );
 
   layout.one('layoutstop', () => {
     restoreRandom();
+    // 同步防重叠（fCoSE 不知实际节点尺寸，需后处理消除残余重叠）
+    resolveOverlaps(cy);
+    // continuous 仅处理残余 AABB 重叠（1-2 帧收敛）
     canvasStore.layoutRunning = true;
     resolveOverlapsContinuous(cy, {
       maxDuration: skipAnimation ? 0 : 3000,

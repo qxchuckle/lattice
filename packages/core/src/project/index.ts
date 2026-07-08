@@ -463,6 +463,7 @@ export { generateProjectId, computeProjectIds } from './identity-generate';
 export {
   findProjectByAnyId,
   findAllProjectsByAnyId,
+  findProjectsOnDisk,
   getRelatedProjectIds,
   getProjectIdsFromDb,
   clearLookupCache,

@@ -177,6 +177,7 @@ export {
   type FingerprintDerived,
   findProjectByAnyId,
   findAllProjectsByAnyId,
+  findProjectsOnDisk,
   getRelatedProjectIds,
   getProjectIdsFromDb,
   clearLookupCache,

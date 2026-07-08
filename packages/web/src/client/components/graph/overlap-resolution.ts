@@ -20,18 +20,35 @@ interface NodeData {
 // ── 核心算法 ──
 
 /**
- * AABB 防重叠：在布局完成后消除节点重叠。
+ * AABB 防重叠 + 密度扩展（同步一次性）：在布局完成后消除节点重叠并拉开密集节点。
  *
  * 1. 读取所有节点的实际位置和尺寸（node.width() / node.height()）
- * 2. 逐对检测 AABB 重叠
- * 3. 沿最小重叠轴推开，同步计算位移后批量应用
- * 4. 迭代直至无重叠或达到最大迭代次数
+ * 2. 逐对检测 AABB 重叠 → 沿最小重叠轴推开
+ * 3. 无重叠时检测密度 gap < minSpacing → 各轴独立推开（仅非连接对）
+ * 4. 迭代直至无工作或达到最大迭代次数
  * 5. cy.batch() 批量应用最终位置
  */
-export function resolveOverlaps(cy: cytoscape.Core): void {
+export function resolveOverlaps(
+  cy: cytoscape.Core,
+  options: { padding?: number; minSpacing?: number } = {},
+): void {
+  const padding = options.padding ?? PADDING;
+  const minSpacing = options.minSpacing ?? 0;
   const cyNodes = cy.nodes();
   const n = cyNodes.length;
   if (n < 2) return;
+
+  // 预计算有边连接的节点对（密度扩展仅对非连接对生效）
+  let connectedPairs: Set<string> | null = null;
+  if (minSpacing > 0) {
+    connectedPairs = new Set<string>();
+    cy.edges().forEach((edge) => {
+      const s = edge.source().id();
+      const t = edge.target().id();
+      connectedPairs!.add(`${s}\0${t}`);
+      connectedPairs!.add(`${t}\0${s}`);
+    });
+  }
 
   // 收集节点数据——读取实际尺寸而非估算
   const data: NodeData[] = [];
@@ -45,11 +62,11 @@ export function resolveOverlaps(cy: cytoscape.Core): void {
     });
   });
 
-  let hasOverlap = true;
+  let hasWork = true;
   let iter = 0;
 
-  while (hasOverlap && iter < MAX_ITERATIONS) {
-    hasOverlap = false;
+  while (hasWork && iter < MAX_ITERATIONS) {
+    hasWork = false;
     iter++;
 
     // 同步计算所有位移（避免连锁抖动）
@@ -63,24 +80,42 @@ export function resolveOverlaps(cy: cytoscape.Core): void {
         const dx = b.x - a.x;
         const dy = b.y - a.y;
 
-        const minDistX = a.hw + b.hw + PADDING;
-        const minDistY = a.hh + b.hh + PADDING;
+        const minDistX = a.hw + b.hw + padding;
+        const minDistY = a.hh + b.hh + padding;
 
         const overlapX = minDistX - Math.abs(dx);
         const overlapY = minDistY - Math.abs(dy);
 
         if (overlapX > 0 && overlapY > 0) {
-          hasOverlap = true;
-
+          // AABB 重叠——沿最小重叠轴推开
+          hasWork = true;
           if (overlapX < overlapY) {
-            // 沿 X 轴推开（重叠更小的方向）
             const push = overlapX / 2;
             const sign = dx >= 0 ? 1 : -1;
             displacements[i].dx -= sign * push;
             displacements[j].dx += sign * push;
           } else {
-            // 沿 Y 轴推开
             const push = overlapY / 2;
+            const sign = dy >= 0 ? 1 : -1;
+            displacements[i].dy -= sign * push;
+            displacements[j].dy += sign * push;
+          }
+        } else if (minSpacing > 0 && !(connectedPairs && connectedPairs.has(`${a.id}\0${b.id}`))) {
+          // 无 AABB 重叠但距离太近——密度扩展推开（仅非连接对，各轴独立）
+          const gapX = Math.abs(dx) - (a.hw + b.hw);
+          const gapY = Math.abs(dy) - (a.hh + b.hh);
+          if (gapX < minSpacing) {
+            hasWork = true;
+            const deficit = minSpacing - gapX;
+            const push = deficit * 0.2;
+            const sign = dx >= 0 ? 1 : -1;
+            displacements[i].dx -= sign * push;
+            displacements[j].dx += sign * push;
+          }
+          if (gapY < minSpacing) {
+            hasWork = true;
+            const deficit = minSpacing - gapY;
+            const push = deficit * 0.2;
             const sign = dy >= 0 ? 1 : -1;
             displacements[i].dy -= sign * push;
             displacements[j].dy += sign * push;
@@ -89,7 +124,7 @@ export function resolveOverlaps(cy: cytoscape.Core): void {
       }
     }
 
-    if (hasOverlap) {
+    if (hasWork) {
       for (let i = 0; i < n; i++) {
         data[i].x += displacements[i].dx;
         data[i].y += displacements[i].dy;
@@ -120,11 +155,14 @@ export function resolveOverlapsContinuous(
   options: {
     maxDuration?: number;
     padding?: number;
+    /** 非连接节点对之间的最小间距阈值（边界 gap）。>0 时启用密度扩展 */
+    minSpacing?: number;
     onDone?: () => void;
   } = {},
 ): void {
   const maxDuration = options.maxDuration ?? 3000;
   const padding = options.padding ?? PADDING;
+  const minSpacing = options.minSpacing ?? 0;
   const startTime = Date.now();
 
   const cyNodes = cy.nodes();
@@ -132,6 +170,18 @@ export function resolveOverlapsContinuous(
   if (n < 2) {
     options.onDone?.();
     return;
+  }
+
+  // 预计算有边连接的节点对（密度扩展仅对非连接对生效）
+  let connectedPairs: Set<string> | null = null;
+  if (minSpacing > 0) {
+    connectedPairs = new Set<string>();
+    cy.edges().forEach((edge) => {
+      const s = edge.source().id();
+      const t = edge.target().id();
+      connectedPairs!.add(`${s}\0${t}`);
+      connectedPairs!.add(`${t}\0${s}`);
+    });
   }
 
   function step() {
@@ -153,7 +203,7 @@ export function resolveOverlapsContinuous(
       });
     });
 
-    let hasOverlap = false;
+    let hasWork = false;
     const displacements: Array<{ dx: number; dy: number }> = data.map(() => ({ dx: 0, dy: 0 }));
 
     for (let i = 0; i < n; i++) {
@@ -168,7 +218,8 @@ export function resolveOverlapsContinuous(
         const overlapY = minDistY - Math.abs(dy);
 
         if (overlapX > 0 && overlapY > 0) {
-          hasOverlap = true;
+          // AABB 重叠——沿最小重叠轴推开
+          hasWork = true;
           if (overlapX < overlapY) {
             const push = overlapX / 2;
             const sign = dx >= 0 ? 1 : -1;
@@ -180,11 +231,32 @@ export function resolveOverlapsContinuous(
             displacements[i].dy -= sign * push;
             displacements[j].dy += sign * push;
           }
+        } else if (minSpacing > 0 && !(connectedPairs && connectedPairs.has(`${a.id}\0${b.id}`))) {
+          // 无 AABB 重叠但距离太近——密度扩展推开（仅非连接对）
+          // 各轴独立检测：水平近推水平，垂直近推垂直
+          const gapX = Math.abs(dx) - (a.hw + b.hw);
+          const gapY = Math.abs(dy) - (a.hh + b.hh);
+          if (gapX < minSpacing) {
+            hasWork = true;
+            const deficit = minSpacing - gapX;
+            const push = deficit * 0.2;
+            const sign = dx >= 0 ? 1 : -1;
+            displacements[i].dx -= sign * push;
+            displacements[j].dx += sign * push;
+          }
+          if (gapY < minSpacing) {
+            hasWork = true;
+            const deficit = minSpacing - gapY;
+            const push = deficit * 0.2;
+            const sign = dy >= 0 ? 1 : -1;
+            displacements[i].dy -= sign * push;
+            displacements[j].dy += sign * push;
+          }
         }
       }
     }
 
-    if (!hasOverlap) {
+    if (!hasWork) {
       options.onDone?.();
       return;
     }

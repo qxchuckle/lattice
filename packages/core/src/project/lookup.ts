@@ -8,9 +8,15 @@
 
 import type { ProjectRow } from '../types';
 import { getProjectById, findProjectsByFingerprint, listFingerprintsByProject } from '../db';
-import { resolveProjectIds, normalizeProjectMeta, ID_PREFIX } from './identity';
+import {
+  resolveProjectIds,
+  normalizeProjectMeta,
+  normalizeLegacyId,
+  selectPrimaryId,
+  ID_PREFIX,
+} from './identity';
 import type { ProjectMeta } from '../types';
-import { readJSON } from '../paths';
+import { readJSON, fileExists } from '../paths';
 import { getProjectMetaPath, getUserProjectsDir } from '../paths';
 import { listDir } from '../paths';
 
@@ -114,6 +120,79 @@ export function findAllProjectsByAnyId(ids: string[]): ProjectRow[] {
         }
       }
     }
+  }
+
+  return results;
+}
+
+/**
+ * 磁盘回退扫描：当 DB 查不到项目时，扫描 projects 目录查找匹配的项目
+ *
+ * 兼容旧格式：
+ * - 目录名无前缀（如 `f92c32b7fe5e4988` 而非 `legacy:f92c32b7fe5e4988`）
+ * - project.json 只有 `id` 字段（无 `ids` 数组）
+ * - `id` 字段无前缀
+ *
+ * @param username 当前用户名
+ * @param ids 要查找的 IDs 数组（可能有前缀也可能无前缀）
+ * @returns 匹配的 ProjectRow 数组（从磁盘 project.json 构造）
+ */
+export async function findProjectsOnDisk(username: string, ids: string[]): Promise<ProjectRow[]> {
+  // 归一化查询 IDs：无前缀的补 legacy: 前缀
+  const normalizedQueryIds = new Set<string>();
+  for (const id of ids) {
+    normalizedQueryIds.add(id);
+    if (!id.includes(':')) {
+      normalizedQueryIds.add(normalizeLegacyId(id));
+    }
+  }
+
+  const results: ProjectRow[] = [];
+  let entries: string[];
+  try {
+    entries = await listDir(getUserProjectsDir(username));
+  } catch {
+    return [];
+  }
+
+  for (const dirName of entries) {
+    if (dirName.startsWith('.')) continue;
+    const metaPath = getProjectMetaPath(username, dirName);
+    if (!(await fileExists(metaPath))) continue;
+    const rawMeta = await readJSON<ProjectMeta>(metaPath);
+    if (!rawMeta) continue;
+    const meta = normalizeProjectMeta(rawMeta);
+
+    // 检查项目的任一 ID 是否匹配查询 IDs
+    const hasMatch = meta.ids.some((id) => normalizedQueryIds.has(id));
+    if (!hasMatch) continue;
+
+    const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+    if (!primaryId) continue;
+
+    results.push({
+      id: primaryId,
+      name: meta.name,
+      local_path: JSON.stringify(meta.localPaths ?? []),
+      description: meta.description ?? null,
+      git_remote:
+        meta.gitRemotes && meta.gitRemotes.length > 0 ? JSON.stringify(meta.gitRemotes) : null,
+      git_first_commit: meta.gitFirstCommit ?? null,
+      git_default_branch: meta.gitDefaultBranch ?? null,
+      package_names:
+        meta.packageNames && meta.packageNames.length > 0
+          ? JSON.stringify(meta.packageNames)
+          : null,
+      monorepo_packages:
+        meta.monorepoPackages && meta.monorepoPackages.length > 0
+          ? JSON.stringify(meta.monorepoPackages)
+          : null,
+      groups: meta.groups ? JSON.stringify(meta.groups) : null,
+      tags: meta.tags ? JSON.stringify(meta.tags) : null,
+      username,
+      created: meta.created,
+      updated: meta.updated ?? null,
+    });
   }
 
   return results;

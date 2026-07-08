@@ -8,7 +8,7 @@
  */
 
 import type { ProjectMeta } from '../types';
-import { resolveProjectIds, mergeIds, selectPrimaryId } from './identity';
+import { resolveProjectIds, mergeIds, selectPrimaryId, normalizeLegacyId } from './identity';
 import { getProjectMetaById, findUsernameAndDirName } from './lookup';
 import {
   getProjectDir,
@@ -23,7 +23,13 @@ import {
   join,
   getCacheDir,
 } from '../paths';
-import { upsertProject, upsertFingerprint, deleteProject as dbDeleteProject } from '../db';
+import {
+  upsertProject,
+  upsertFingerprint,
+  deleteProject as dbDeleteProject,
+  deleteTaskLinks,
+  linkTaskProject,
+} from '../db';
 import { deleteFingerprintsByProject } from '../db';
 import { nowISO } from '../utils/time';
 import { moveToTrash } from '../trash';
@@ -203,7 +209,9 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
 
         let changed = false;
         const updatedProjects = taskMeta.projects.map((p) => {
-          if (p === fromId || fromIds.includes(p)) {
+          // 兼容旧格式：task.json 中可能存储无前缀 ID，归一化后比较
+          const normalizedP = p.includes(':') ? p : normalizeLegacyId(p);
+          if (normalizedP === fromId || fromIds.includes(normalizedP)) {
             changed = true;
             return primaryId;
           }
@@ -212,6 +220,15 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
 
         if (changed) {
           await writeJSON(taskMetaPath, { ...taskMeta, projects: updatedProjects });
+          // 同步 task_projects DB 表
+          try {
+            deleteTaskLinks(taskDir);
+            for (const pid of updatedProjects) {
+              linkTaskProject(taskDir, pid);
+            }
+          } catch {
+            // DB 可能未初始化
+          }
         }
       }
     }

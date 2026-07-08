@@ -29,7 +29,12 @@ import {
   type FingerprintDerived,
 } from './identity';
 import { computeProjectIds } from './identity-generate';
-import { findProjectByAnyId, findAllProjectsByAnyId, getProjectMetaById } from './lookup';
+import {
+  findProjectByAnyId,
+  findAllProjectsByAnyId,
+  getProjectMetaById,
+  findProjectsOnDisk,
+} from './lookup';
 import { collectFingerprint, normalizeLocalPath } from './fingerprint';
 import { detectAndLinkNestedIn } from './nested-in';
 import { nowISO } from '../utils/time';
@@ -235,7 +240,23 @@ export async function autoRegisterProject(
 
   // 查找所有匹配的物理注册项目（一个运行时项目可能由多个物理项目聚合）
   const allMatches = findAllProjectsByAnyId(ids);
-  const ownMatches = allMatches.filter((p) => p.username === username);
+  let ownMatches = allMatches.filter((p) => p.username === username);
+
+  // DB 未命中时，回退扫描磁盘（兼容磁盘有 project.json 但 DB 无记录的不一致状态）
+  // 兼容旧格式：目录名无前缀、project.json 只有 id 字段、id 无前缀
+  if (ownMatches.length === 0) {
+    const diskMatches = await findProjectsOnDisk(username, ids);
+    if (diskMatches.length > 0) {
+      // 磁盘找到 → 先同步到 DB（自愈），然后当作已有项目处理
+      for (const dm of diskMatches) {
+        const existingData = await getProjectMetaById(dm.id);
+        if (existingData) {
+          syncProjectMetaToDb(existingData.username, existingData.meta);
+        }
+      }
+      ownMatches = diskMatches;
+    }
+  }
 
   // ── Legacy ID 特殊处理 ──
   // 检查是否有任一物理项目匹配 legacy: ID

@@ -163,7 +163,9 @@ export async function startServer(opts?: StartServerOptions): Promise<void> {
     writePidFile(port);
 
     const url = `http://localhost:${port}`;
-    console.log(`\n  ✓ Lattice Web 已启动 → ${url}\n`);
+    const startTime = new Date().toISOString();
+    console.log(`\n  ✓ Lattice Web 已启动 → ${url}`);
+    console.log(`  PID: ${process.pid}  端口: ${port}  启动时间: ${startTime}\n`);
 
     if (shouldAutoOpen) {
       openBrowser(url);

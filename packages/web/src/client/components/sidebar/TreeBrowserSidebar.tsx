@@ -608,6 +608,32 @@ const FilterTreeTab = memo(function FilterTreeTab() {
                 ({projectFilter.length}/{projects.length})
               </span>
             )}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+              {projectFilter.length < filteredProjects.length && (
+                <Button
+                  size='small'
+                  type='text'
+                  onClick={() => {
+                    const ids = filteredProjects.map((p) => p.entityId || '').filter(Boolean);
+                    const merged = Array.from(new Set([...projectFilter, ...ids]));
+                    canvasStore.projectFilter = merged;
+                  }}
+                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+                  全选
+                </Button>
+              )}
+              {projectFilter.length > 0 && (
+                <Button
+                  size='small'
+                  type='text'
+                  onClick={() => {
+                    canvasStore.projectFilter = [];
+                  }}
+                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+                  清空
+                </Button>
+              )}
+            </div>
           </div>
           {!projectCollapsed && (
             <>
