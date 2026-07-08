@@ -37,23 +37,23 @@ ai会自动进入lattice工作流，管理任务、项目、生命周期
 
 | 命令 | 说明 |
 |---|---|
-| `lattice init` | 初始化 Lattice（含 `init scan` 扫描子命令） |
-| `lattice link` | 注册当前目录为 Lattice 项目 |
-| `lattice unlink` | 取消注册当前项目 |
-| `lattice scan` | 扫描目录树发现可注册项目 |
-| `lattice project` | 项目管理（list / info / where / merge / relation 等） |
-| `lattice task` | 任务管理（create / start / checkpoint / complete / archive 等） |
-| `lattice spec` | 规范管理（list / show / template / conflicts 等） |
-| `lattice context` | 聚合并输出当前项目上下文 |
-| `lattice status` | 当前项目状态概览 |
-| `lattice search` | 语义 + 全文混合搜索 |
-| `lattice config` | 查看和修改配置 |
-| `lattice rag` | RAG 索引管理（status / update / rebuild） |
-| `lattice sync` | 模板仓库同步 |
-| `lattice doctor` | 数据健康检查与自动修复 |
-| `lattice trash` | 垃圾桶管理（list / restore / purge） |
-| `lattice user` | 用户管理 |
-| `lattice web` | 启动可视化 Web 服务 |
+| `ltc init` | 初始化 Lattice（含 `init scan` 扫描子命令） |
+| `ltc link` | 注册当前目录为 Lattice 项目 |
+| `ltc unlink` | 取消注册当前项目 |
+| `ltc scan` | 扫描目录树发现可注册项目 |
+| `ltc project` | 项目管理（list / info / where / merge / relation 等） |
+| `ltc task` | 任务管理（create / start / checkpoint / complete / archive 等） |
+| `ltc spec` | 规范管理（list / show / template / conflicts 等） |
+| `ltc context` | 聚合并输出当前项目上下文 |
+| `ltc status` | 当前项目状态概览 |
+| `ltc search` | 语义 + 全文混合搜索 |
+| `ltc config` | 查看和修改配置 |
+| `ltc rag` | RAG 索引管理（status / update / rebuild） |
+| `ltc sync` | 模板仓库同步 |
+| `ltc doctor` | 数据健康检查与自动修复 |
+| `ltc trash` | 垃圾桶管理（list / restore / purge） |
+| `ltc user` | 用户管理 |
+| `ltc web` | 启动可视化 Web 服务 |
 
 详细参数说明见 [`packages/core/public/templates/skills/command-reference.md`](../core/public/templates/skills/command-reference.md)。
 

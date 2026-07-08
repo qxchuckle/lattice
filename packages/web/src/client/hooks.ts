@@ -13,10 +13,13 @@ import {
 } from './lib';
 import {
   canvasStore,
+  canvasSearchStore,
   sidebarStore,
   toggleTheme,
   themeStore,
   closeDetail,
+  openCanvasSearch,
+  closeCanvasSearch,
   type ViewMode,
 } from './store';
 import type { LatticeNode, LatticeEdge } from './types/graph';
@@ -1251,12 +1254,32 @@ export function useTheme() {
 export function useKeyboard() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInputFocused =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+      // Cmd/Ctrl + F → 打开画布搜索（阻止浏览器原生查找）
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        if (canvasSearchStore.open) {
+          document.querySelector<HTMLInputElement>('#canvas-search-input')?.focus();
+        } else {
+          openCanvasSearch();
+        }
+        return;
+      }
+
       // Cmd/Ctrl + K → 聚焦搜索
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>('#sidebar-search-input');
         input?.focus();
+        return;
       }
+
+      // 输入框聚焦时不触发以下非修饰键快捷键
+      if (isInputFocused) return;
+
       // 数字键 1-4 → 切换视角
       if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[1-4]$/.test(e.key)) {
         const modes: ViewMode[] = ['global', 'task', 'project', 'spec'];
@@ -1265,9 +1288,13 @@ export function useKeyboard() {
           canvasStore.viewMode = modes[idx];
         }
       }
-      // Esc → 关闭详情面板
+      // Esc → 关闭画布搜索或详情面板
       if (e.key === 'Escape') {
-        closeDetail();
+        if (canvasSearchStore.open) {
+          closeCanvasSearch();
+        } else {
+          closeDetail();
+        }
       }
       // F → 重置画布视口
       if (e.key === 'f' && !e.metaKey && !e.ctrlKey) {

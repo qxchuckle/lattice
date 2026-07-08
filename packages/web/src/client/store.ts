@@ -61,6 +61,42 @@ export const canvasStore = proxy({
 /** Cytoscape 实例引用（非响应式，由 CytoscapeGraph 赋值，供 FloatingStatusBar 等跨组件访问） */
 export const cyRef: { current: cytoscape.Core | null } = { current: null };
 
+// ── 画布搜索状态 ──
+
+export const canvasSearchStore = proxy({
+  /** 搜索框是否打开 */
+  open: false,
+  /** 搜索关键词 */
+  query: '',
+  /** 匹配的节点 ID 列表 */
+  matchIds: [] as string[],
+  /** 当前聚焦的匹配索引（-1 = 无匹配） */
+  matchIndex: -1,
+  /** 是否自动选中节点（true=选中+聚焦，false=仅聚焦视角不选中），持久化到 localStorage */
+  autoSelect: localStorage.getItem('lattice-canvas-search-autoselect') !== 'false',
+});
+
+/** 打开画布搜索，清除上次搜索高亮 */
+export function openCanvasSearch(): void {
+  const cy = cyRef.current;
+  if (cy) {
+    cy.nodes().removeClass('search-match search-current');
+  }
+  canvasSearchStore.open = true;
+  canvasSearchStore.query = '';
+  canvasSearchStore.matchIds = [];
+  canvasSearchStore.matchIndex = -1;
+}
+
+/** 关闭画布搜索，清除节点高亮 */
+export function closeCanvasSearch(): void {
+  const cy = cyRef.current;
+  if (cy) {
+    cy.nodes().removeClass('search-match search-current');
+  }
+  canvasSearchStore.open = false;
+}
+
 // ── 侧栏状态 ──
 
 export type FilterType = 'all' | 'task' | 'project' | 'spec';

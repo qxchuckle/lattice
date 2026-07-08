@@ -77,6 +77,24 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
     },
     { selector: '.dimmed', style: { 'opacity': 0.1 } as unknown as cytoscape.Css.Node },
     {
+      selector: '.search-match',
+      style: {
+        'text-background-color': '#FAAD14',
+        'text-background-opacity': 0.25,
+        'text-background-padding': '2px 4px',
+        'text-background-shape': 'roundrectangle',
+      } as unknown as cytoscape.Css.Node,
+    },
+    {
+      selector: '.search-current',
+      style: {
+        'text-background-color': '#FAAD14',
+        'text-background-opacity': 0.55,
+        'text-background-padding': '2px 4px',
+        'text-background-shape': 'roundrectangle',
+      } as unknown as cytoscape.Css.Node,
+    },
+    {
       selector: '.focused',
       style: {
         'border-width': 4,

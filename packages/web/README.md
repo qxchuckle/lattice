@@ -14,24 +14,19 @@ Lattice 可视化前端 — 基于 React Flow 的任务/项目/Spec 关系图浏
 ## 安装
 
 ```bash
-# 全局安装（可选）
+# 全局安装
 npm i -g @qcqx/lattice-web
-
-# 或在 lattice monorepo 中直接使用
-pnpm install
 ```
 
 ## 使用
 
 ```bash
 # 通过 lattice CLI 启动
-lattice web
-
-# 指定端口
-lattice web --port 8080
-
+ltc web
+# 指定端口，默认 3000
+ltc web --port 8080
 # 不自动打开浏览器
-lattice web --no-open
+ltc web --no-open
 ```
 
 启动后访问 `http://localhost:3000`。重复启动会检测已有服务并提示。

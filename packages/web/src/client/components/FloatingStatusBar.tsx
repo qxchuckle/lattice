@@ -8,12 +8,23 @@ import {
   CompressOutlined,
   ExpandOutlined,
   LoadingOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
-import { canvasStore, cyRef, themeStore, toggleTheme, getVisibleCanvasCenter } from '../store';
+import {
+  canvasStore,
+  cyRef,
+  themeStore,
+  toggleTheme,
+  getVisibleCanvasCenter,
+  openCanvasSearch,
+  closeCanvasSearch,
+  canvasSearchStore,
+} from '../store';
 import { fitToElements } from './graph/layout';
 import { useStats } from '../hooks';
+import { CanvasSearchBar } from './CanvasSearchBar';
 
 const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] = [
   { label: '力导向', value: 'force', icon: <AimOutlined /> },
@@ -64,85 +75,103 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
   };
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 12,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 20,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '5px 12px',
-        background: isDark ? 'rgba(29, 29, 38, 0.88)' : 'rgba(255, 255, 255, 0.88)',
-        backdropFilter: 'blur(12px)',
-        border: `1px solid ${isDark ? '#3D3D48' : '#E0E0E0'}`,
-        borderRadius: 24,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-        fontSize: 12,
-      }}>
-      <Segmented
-        size='small'
-        options={layoutOptions.map((opt) => ({
-          label: (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              {opt.icon}
-              {opt.label}
-            </span>
-          ),
-          value: opt.value,
-        }))}
-        value={layoutMode}
-        onChange={(v) => {
-          canvasStore.layoutMode = v as 'force' | 'sequential' | 'radial';
-        }}
-      />
-      <Tooltip title={selectedNodeId ? '缩放至选中节点及其关联节点' : '缩放至全部节点'}>
-        <Button
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '5px 12px',
+          background: isDark ? 'rgba(29, 29, 38, 0.88)' : 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(12px)',
+          border: `1px solid ${isDark ? '#3D3D48' : '#E0E0E0'}`,
+          borderRadius: 24,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          fontSize: 12,
+        }}>
+        <Segmented
           size='small'
-          type='text'
-          icon={selectedNodeId ? <CompressOutlined /> : <ExpandOutlined />}
-          onClick={selectedNodeId ? handleFitSelected : handleFitAll}
-          style={{ borderRadius: '50%' }}
+          options={layoutOptions.map((opt) => ({
+            label: (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
+                {opt.icon}
+                {opt.label}
+              </span>
+            ),
+            value: opt.value,
+          }))}
+          value={layoutMode}
+          onChange={(v) => {
+            canvasStore.layoutMode = v as 'force' | 'sequential' | 'radial';
+          }}
         />
-      </Tooltip>
-      {selectedNodeId && (
-        <Tooltip title='聚焦到选中节点'>
+        <Tooltip title={selectedNodeId ? '缩放至选中节点及其关联节点' : '缩放至全部节点'}>
           <Button
             size='small'
             type='text'
-            icon={<AimOutlined />}
-            onClick={handleFocusSelected}
+            icon={selectedNodeId ? <CompressOutlined /> : <ExpandOutlined />}
+            onClick={selectedNodeId ? handleFitSelected : handleFitAll}
             style={{ borderRadius: '50%' }}
           />
         </Tooltip>
-      )}
-      {layoutRunning && (
-        <Tooltip title='布局优化中…'>
-          <LoadingOutlined style={{ fontSize: 12, color: '#52C41A' }} />
+        {selectedNodeId && (
+          <Tooltip title='聚焦到选中节点'>
+            <Button
+              size='small'
+              type='text'
+              icon={<AimOutlined />}
+              onClick={handleFocusSelected}
+              style={{ borderRadius: '50%' }}
+            />
+          </Tooltip>
+        )}
+        {layoutRunning && (
+          <Tooltip title='布局优化中…'>
+            <LoadingOutlined style={{ fontSize: 12, color: '#52C41A' }} />
+          </Tooltip>
+        )}
+        {stats.data && (
+          <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: 11 }}>
+            {stats.data.projectCount} 项目 · {stats.data.taskCount} 任务 ·{' '}
+            {stats.data.activeTaskCount} 进行中
+          </span>
+        )}
+        <Tooltip title='搜索 (⌘F)'>
+          <Button
+            size='small'
+            type='text'
+            icon={<SearchOutlined />}
+            onClick={() => {
+              if (canvasSearchStore.open) {
+                closeCanvasSearch();
+              } else {
+                openCanvasSearch();
+              }
+            }}
+            style={{ borderRadius: '50%' }}
+          />
         </Tooltip>
-      )}
-      {stats.data && (
-        <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: 11 }}>
-          {stats.data.projectCount} 项目 · {stats.data.taskCount} 任务 ·{' '}
-          {stats.data.activeTaskCount} 进行中
-        </span>
-      )}
-      <Button
-        size='small'
-        type='text'
-        icon={<ReloadOutlined spin={isFetching} />}
-        onClick={() => queryClient.invalidateQueries()}
-        style={{ borderRadius: '50%' }}
-      />
-      <Button
-        size='small'
-        type='text'
-        icon={<BulbOutlined />}
-        onClick={toggleTheme}
-        style={{ borderRadius: '50%' }}
-      />
-    </div>
+        <Button
+          size='small'
+          type='text'
+          icon={<ReloadOutlined spin={isFetching} />}
+          onClick={() => queryClient.invalidateQueries()}
+          style={{ borderRadius: '50%' }}
+        />
+        <Button
+          size='small'
+          type='text'
+          icon={<BulbOutlined />}
+          onClick={toggleTheme}
+          style={{ borderRadius: '50%' }}
+        />
+      </div>
+      <CanvasSearchBar />
+    </>
   );
 });

@@ -10,10 +10,10 @@
 | **任务管理** | 创建、启动、checkpoint 进展追踪、完成与归档的完整生命周期 |
 | **项目关系** | 注册项目、维护跨仓库关系和嵌套项目继承 |
 | **RAG 搜索** | 本地嵌入式向量 + 全文索引，搜索 spec、任务、checkpoint 等文档 |
-| **上下文聚合** | `lattice context` 一键拿到当前项目所有 spec、活跃任务与关联项目 |
+| **上下文聚合** | `ltc context` 一键拿到当前项目所有 spec、活跃任务与关联项目 |
 | **模板系统** | 内置 spec 模板和远程模板仓库，快速初始化项目规范 |
-| **AI 集成** | 通过 `lattice init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入工作流 |
-| **Web 可视化** | `lattice web` 启动本地可视化服务，浏览任务/项目/Spec 关系图 |
+| **AI 集成** | 通过 `ltc init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入工作流 |
+| **Web 可视化** | `ltc web` 启动本地可视化服务，浏览任务/项目/Spec 关系图 |
 
 ## 适用场景
 
@@ -24,13 +24,26 @@
 
 ## 快速开始
 
+完整的上手指南请参阅 [快速开始](docs/quick-start.md)
+
 ```bash
-# 全局安装
+# 全局安装，提供两个命令 lattice / ltc
 npm install -g @qcqx/lattice-cli
 # 初始化 AI 客户端集成
-lattice init
-# 在项目目录注册
-lattice link
+ltc init
+# 扫描本地项目
+ltc scan
+# 在项目目录注册（用于非 git 项目）
+ltc link
+```
+
+web 可视化视图
+
+```bash
+# 全局安装 web 包
+npm install -g @qcqx/lattice-web
+# 启动 web
+ltc web
 ```
 
 ## 仓库结构
@@ -43,6 +56,10 @@ packages/
 ```
 
 ## 文档入口
+
+- [快速开始](docs/quick-start.md)
+- [技术架构详解](docs/architecture.md)
+- [Spec 模板仓库结构说明](docs/spec-template-registry.md)
 
 ### 子包说明
 
@@ -63,8 +80,9 @@ packages/
 - Subagent 委派策略：[`packages/core/public/templates/skills/subagent-delegation.md`](packages/core/public/templates/skills/subagent-delegation.md)
 - 异常排查与诊断：[`packages/core/public/templates/skills/troubleshooting.md`](packages/core/public/templates/skills/troubleshooting.md)
 
-### Spec 模板与规则
+### 参考文档
 
+- 目录结构与配置详解：[`docs/directory-and-config.md`](docs/directory-and-config.md)
 - Spec 模板仓库组织与导入规则：[`docs/spec-template-registry.md`](docs/spec-template-registry.md)
 - 内置公共模板、命令文档和平台规则：[`packages/core/public/templates/`](packages/core/public/templates/)
 
