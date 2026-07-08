@@ -3,12 +3,14 @@
  * Lattice 统一发布脚本
  *
  * 用法:
- *   pnpm release patch          # 两个包同时 patch 升级 (0.7.0 → 0.7.1)
- *   pnpm release minor          # 两个包同时 minor 升级 (0.7.0 → 0.8.0)
- *   pnpm release major          # 两个包同时 major 升级 (0.7.0 → 1.0.0)
- *   pnpm release 1.2.3          # 两个包同时设为指定版本
+ *   pnpm release patch          # 三个包同时 patch 升级
+ *   pnpm release minor          # 三个包同时 minor 升级
+ *   pnpm release major          # 三个包同时 major 升级
+ *   pnpm release 1.2.3          # 三个包同时设为指定版本
  *   pnpm release patch --core   # 只发布 core
  *   pnpm release patch --cli    # 只发布 cli
+ *   pnpm release patch --web    # 只发布 web
+ *   pnpm release patch --core --web  # 发布 core 和 web
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
  */
 
@@ -23,6 +25,7 @@ const root = resolve(__dirname, '..');
 const PACKAGES = {
   core: resolve(root, 'packages/core/package.json'),
   cli: resolve(root, 'packages/cli/package.json'),
+  web: resolve(root, 'packages/web/package.json'),
 };
 
 // --- 解析参数 ---
@@ -30,10 +33,13 @@ const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const onlyCore = args.includes('--core');
 const onlyCli = args.includes('--cli');
+const onlyWeb = args.includes('--web');
 const versionArg = args.find((a) => !a.startsWith('--'));
 
 if (!versionArg) {
-  console.error('❌ 请指定版本: pnpm release <patch|minor|major|x.y.z> [--core|--cli] [--dry-run]');
+  console.error(
+    '❌ 请指定版本: pnpm release <patch|minor|major|x.y.z> [--core|--cli|--web] [--dry-run]',
+  );
   process.exit(1);
 }
 
@@ -73,11 +79,13 @@ function run(cmd, opts = {}) {
 
 // --- 确定要发布的包 ---
 const targets = [];
-if (!onlyCore && !onlyCli) {
-  targets.push('core', 'cli');
+const hasFlag = onlyCore || onlyCli || onlyWeb;
+if (!hasFlag) {
+  targets.push('core', 'cli', 'web');
 } else {
   if (onlyCore) targets.push('core');
   if (onlyCli) targets.push('cli');
+  if (onlyWeb) targets.push('web');
 }
 
 // --- 升版本 ---
@@ -100,15 +108,20 @@ for (const name of targets) {
 
 // --- 构建 ---
 console.log('\n🔨 构建...');
+// core 是 cli 和 web 的共同依赖，有任一在 targets 中就需要先构建 core
+if (targets.includes('cli') || targets.includes('web')) {
+  if (!targets.includes('core')) {
+    run('pnpm run build:core');
+  }
+}
 if (targets.includes('core')) {
   run('pnpm run build:core');
 }
 if (targets.includes('cli')) {
-  // cli 依赖 core，确保 core 先构建
-  if (!targets.includes('core')) {
-    run('pnpm run build:core');
-  }
   run('pnpm run build:cli');
+}
+if (targets.includes('web')) {
+  run('pnpm run build:web');
 }
 
 // --- 发布 ---
@@ -119,7 +132,8 @@ for (const name of targets) {
 
 // --- Git tag (可选) ---
 console.log(`\n🏷️  创建 git tag: v${newVersion}`);
-run(`git add packages/core/package.json packages/cli/package.json`);
+const pkgPaths = targets.map((name) => `packages/${name}/package.json`).join(' ');
+run(`git add ${pkgPaths}`);
 run(`git commit -m "release: v${newVersion}"`);
 run(`git tag v${newVersion}`);
 
