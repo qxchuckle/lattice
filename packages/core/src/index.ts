@@ -345,6 +345,9 @@ export {
   contentHash,
   isModelInstalled,
   isModelLoaded,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
+  getModelLoadError,
   removeInstalledModel,
   collectAllSearchDocuments,
 } from './rag';

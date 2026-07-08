@@ -37,6 +37,8 @@ import {
   syncSpecTemplateRegistry,
   generateEmbedding,
   isModelInstalled,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
   removeInstalledModel,
   getBundledTemplateDir,
   renderCursorRules,
@@ -285,6 +287,9 @@ export function registerInitCommand(program: Command): void {
             logger.spinSuccess('embedding 模型已就绪');
           } else {
             logger.spinWarn('embedding 模型预热失败，可在首次搜索时重试下载');
+            if (isModelLoadNetworkError()) {
+              logger.raw(chalk.yellow(formatModelNetworkHint()));
+            }
           }
         }
 

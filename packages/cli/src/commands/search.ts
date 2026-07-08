@@ -7,6 +7,8 @@ import {
   closeDb,
   hybridSearch,
   isModelLoaded,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
   getRAGStatus,
 } from '@qcqx/lattice-core';
 import { formatRagTimestamp, logger, outputJson } from '../utils';
@@ -127,7 +129,14 @@ export function registerSearchCommand(program: Command): void {
         const showUsername = Boolean(opts.allUser || opts.users);
         const showDuplicates = Boolean(opts.showDuplicates);
 
-        logger.spinSuccess(modelLoaded ? '搜索完成' : '模型加载完成，搜索完成');
+        if (isModelLoaded()) {
+          logger.spinSuccess(modelLoaded ? '搜索完成' : '模型加载完成，搜索完成');
+        } else {
+          logger.spinFail('模型加载失败，搜索结果可能不完整');
+          if (isModelLoadNetworkError()) {
+            logger.raw(chalk.yellow(formatModelNetworkHint()));
+          }
+        }
         spinnerActive = false;
 
         if (opts.json) {

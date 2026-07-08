@@ -7,8 +7,48 @@ import type { RAGEmbeddingConfig } from '../types';
 
 let pipeline: ((text: string | string[]) => Promise<{ tolist: () => number[][] }>) | null = null;
 let loadingPromise: Promise<void> | null = null;
+let modelLoadError: Error | null = null;
 const defaultDispatcher = getGlobalDispatcher();
 let activeProxy: string | null = null;
+
+/** 判断错误是否为网络问题 */
+function isNetworkError(err: unknown): boolean {
+  const msg = (err as Error)?.message?.toLowerCase() ?? '';
+  return [
+    'fetch failed',
+    'network',
+    'econnrefused',
+    'etimedout',
+    'enotfound',
+    'econnreset',
+    'getaddrinfo',
+    'timeout',
+    'could not download',
+    'unable to connect',
+    'socket hang up',
+    'tunneling socket',
+  ].some((keyword) => msg.includes(keyword));
+}
+
+/** 生成网络问题时的代理/镜像配置提示 */
+export function formatModelNetworkHint(): string {
+  return [
+    '模型下载失败，可能是网络问题。请尝试以下方案：',
+    '',
+    '方案一：配置终端代理（在 shell 配置中设置后重启终端）',
+    '  export HTTPS_PROXY=http://127.0.0.1:7890',
+    '  export HTTP_PROXY=http://127.0.0.1:7890',
+    '',
+    '方案二：在 lattice 配置文件设置 HF 镜像',
+    '  ltc config set rag.embedding.remoteHost https://hf-mirror.com/',
+    '  或设置环境变量：export HF_ENDPOINT=https://hf-mirror.com',
+    '',
+    '方案三：在 lattice 配置文件直接设置代理',
+    '  ltc config set rag.embedding.proxy http://127.0.0.1:7890',
+    '',
+    '配置后重新执行命令即可。',
+  ].join('\n');
+}
 
 const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
   modelId: 'Xenova/all-MiniLM-L6-v2',
@@ -84,6 +124,7 @@ async function ensureModel(): Promise<void> {
   }
 
   loadingPromise = (async () => {
+    modelLoadError = null;
     try {
       const config = await getEmbeddingConfig();
       const { pipeline: createPipeline, env } = await import('@huggingface/transformers');
@@ -111,7 +152,11 @@ async function ensureModel(): Promise<void> {
         return result;
       };
     } catch (err) {
+      modelLoadError = err as Error;
       console.warn('Embedding 模型加载失败：', (err as Error).message);
+      if (isNetworkError(err)) {
+        console.warn(formatModelNetworkHint());
+      }
       pipeline = null;
     }
   })();
@@ -183,6 +228,7 @@ async function hasModelArtifacts(baseDir: string, modelId: string): Promise<bool
 function resetModelState(): void {
   pipeline = null;
   loadingPromise = null;
+  modelLoadError = null;
 }
 
 async function removeModelArtifacts(baseDir: string, modelId: string): Promise<boolean> {
@@ -217,6 +263,16 @@ export function contentHash(content: string): string {
 /** 检查模型是否已加载 */
 export function isModelLoaded(): boolean {
   return pipeline !== null;
+}
+
+/** 获取模型加载失败的原因（加载成功时返回 null） */
+export function getModelLoadError(): Error | null {
+  return modelLoadError;
+}
+
+/** 判断模型加载失败是否由网络问题引起 */
+export function isModelLoadNetworkError(): boolean {
+  return modelLoadError !== null && isNetworkError(modelLoadError);
 }
 
 /** 检查模型是否已落盘（已安装/已缓存） */

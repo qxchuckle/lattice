@@ -10,6 +10,8 @@ import {
   deleteSearchDocumentsByPrefixes,
   collectAllSearchDocuments,
   isModelLoaded,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
   FTS_INDEX_VERSION,
   getFtsIndexVersion,
   setFtsIndexVersion,
@@ -117,6 +119,12 @@ export function registerRagCommand(program: Command): void {
         closeDb();
 
         logger.spinSuccess('增量更新完成');
+        if (!isModelLoaded()) {
+          logger.spinWarn('embedding 模型未加载，部分文档可能未生成向量');
+          if (isModelLoadNetworkError()) {
+            logger.raw(chalk.yellow(formatModelNetworkHint()));
+          }
+        }
         const parts: string[] = [];
         if (result.added > 0) parts.push(chalk.green(`新增 ${result.added}`));
         if (result.updated > 0) parts.push(chalk.yellow(`更新 ${result.updated}`));
@@ -129,6 +137,9 @@ export function registerRagCommand(program: Command): void {
           logger.spinFail('增量更新失败');
         }
         console.error(chalk.red('错误：'), (err as Error).message);
+        if (isModelLoadNetworkError()) {
+          logger.raw(chalk.yellow(formatModelNetworkHint()));
+        }
         process.exitCode = 1;
       }
     });

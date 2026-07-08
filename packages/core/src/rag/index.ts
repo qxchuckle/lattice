@@ -31,6 +31,9 @@ import {
   getEmbeddingConfig,
   isModelInstalled,
   isModelLoaded,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
+  getModelLoadError,
   removeInstalledModel,
   resolveEmbeddingProxy,
 } from './embeddings';
@@ -41,6 +44,9 @@ export {
   getEmbeddingConfig,
   isModelInstalled,
   isModelLoaded,
+  isModelLoadNetworkError,
+  formatModelNetworkHint,
+  getModelLoadError,
   removeInstalledModel,
   resolveEmbeddingProxy,
 } from './embeddings';
