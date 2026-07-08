@@ -238,6 +238,7 @@ export async function autoRegisterProject(
   ids: string[],
   localPath: string,
   existingDerived?: FingerprintDerived,
+  skipNestedIn?: boolean,
 ): Promise<{ meta: ProjectMeta | null; isNew: boolean }> {
   if (ids.length === 0) return { meta: null, isNew: false };
 
@@ -280,7 +281,7 @@ export async function autoRegisterProject(
       const derived = existingDerived ?? (await collectFingerprint(localPath)).derived;
       const meta = await registerProjectWithIds(username, ids, localPath, derived);
       const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
-      if (primaryId) await detectAndLinkNestedIn(username, primaryId, localPath);
+      if (primaryId && !skipNestedIn) await detectAndLinkNestedIn(username, primaryId, localPath);
       return { meta, isNew: true };
     }
   }
@@ -290,7 +291,7 @@ export async function autoRegisterProject(
     const derived = existingDerived ?? (await collectFingerprint(localPath)).derived;
     const meta = await registerProjectWithIds(username, ids, localPath, derived);
     const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
-    if (primaryId) {
+    if (primaryId && !skipNestedIn) {
       await detectAndLinkNestedIn(username, primaryId, localPath);
     }
     return { meta, isNew: true };
@@ -324,7 +325,7 @@ export async function autoRegisterProject(
   }
 
   // 自动检测嵌套项目关系（用第一个匹配项目的 ID）
-  if (ownMatches.length > 0) {
+  if (ownMatches.length > 0 && !skipNestedIn) {
     await detectAndLinkNestedIn(username, ownMatches[0].id, localPath);
   }
 

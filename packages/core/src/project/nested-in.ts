@@ -12,7 +12,7 @@ import { collectFingerprint } from './fingerprint';
 import { computeProjectIds } from './identity-generate';
 import { normalizeLegacyId } from './identity';
 import { findProjectByAnyId } from './lookup';
-import { deleteRelationsByFilter, upsertRelation as upsertRelationFile } from './relation';
+import { upsertRelation as upsertRelationFile } from './relation';
 
 /**
  * 从 lattice.json 读取 legacy ID
@@ -71,13 +71,6 @@ export async function detectAndLinkNestedIn(
   const results: { id: string; name: string; type: 'direct' | 'ancestor' }[] = [];
 
   try {
-    // 幂等：先清除该项目旧的 auto nested-in 关系
-    await deleteRelationsByFilter(username, {
-      projectId: childProjectId,
-      type: 'nested-in',
-      createdBy: 'auto',
-    });
-
     // 向上查找所有祖先 .git / lattice.json 目录
     const ancestorRoots = await findAncestorProjectRoots(childDir);
 

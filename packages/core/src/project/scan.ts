@@ -14,8 +14,10 @@ import { minimatch } from 'minimatch';
 import type { FingerprintDerived } from './identity';
 import { normalizeLegacyId } from './identity';
 import { computeProjectIds } from './identity-generate';
-import { registerProjectWithIds, autoRegisterProject } from './register';
+import { autoRegisterProject } from './register';
 import { collectFingerprint } from './fingerprint';
+import { detectAndLinkNestedIn } from './nested-in';
+import { selectPrimaryId } from './identity';
 import { readJSON, join } from '../paths';
 
 // ─── 黑名单 ───
@@ -255,9 +257,16 @@ export async function scanForProjects(
 ): Promise<ScanResult> {
   const added: string[] = [];
   const updated: string[] = [];
+  const registeredProjects: { id: string; dir: string }[] = [];
 
   for (const dir of scanDirs) {
-    await scanDir(username, dir, added, updated, onProgress);
+    await scanDir(username, dir, added, updated, onProgress, registeredProjects);
+  }
+
+  // 所有项目注册完成后，统一串行执行嵌套关系检测
+  // （避免并行递归下多个 detectAndLinkNestedIn 同时写 relations.json 导致竞态）
+  for (const { id, dir } of registeredProjects) {
+    await detectAndLinkNestedIn(username, id, dir);
   }
 
   return { added, updated };
@@ -275,7 +284,8 @@ async function scanDir(
   dir: string,
   added: string[],
   updated: string[],
-  onProgress?: ScanProgressCallback,
+  onProgress: ScanProgressCallback | undefined,
+  registeredProjects: { id: string; dir: string }[],
 ): Promise<void> {
   // 通知进度
   if (onProgress) {
@@ -318,17 +328,21 @@ async function scanDir(
   }
 
   // 如果是 git 仓库或有 lattice.json → 采集指纹
+  // skipNestedIn=true：嵌套关系检测延迟到 scanForProjects 所有扫描完成后统一执行
   if (isGitRepo || legacyId) {
     const { derived } = await collectFingerprint(dir);
     const ids = computeProjectIds(derived as FingerprintDerived, legacyId);
 
     if (ids.length > 0) {
-      // 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
-      const { meta, isNew } = await autoRegisterProject(username, ids, dir, derived);
+      const { meta, isNew } = await autoRegisterProject(username, ids, dir, derived, true);
       if (isNew) {
         added.push(dir);
       } else if (meta) {
         updated.push(dir);
+      }
+      const primaryId = selectPrimaryId(ids);
+      if (primaryId) {
+        registeredProjects.push({ id: primaryId, dir });
       }
     }
   }
@@ -339,7 +353,7 @@ async function scanDir(
     await Promise.all(
       subDirs
         .slice(i, i + concurrency)
-        .map((d: string) => scanDir(username, d, added, updated, onProgress)),
+        .map((d: string) => scanDir(username, d, added, updated, onProgress, registeredProjects)),
     );
   }
 }
