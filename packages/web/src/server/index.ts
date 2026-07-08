@@ -128,7 +128,7 @@ function removePidFile(): void {
 
 export async function startServer(opts?: StartServerOptions): Promise<void> {
   const requestedPort = opts?.port ?? 3000;
-  const shouldAutoOpen = opts?.open ?? true;
+  const shouldAutoOpen = opts?.open ?? !process.env.LATTICE_WEB_NO_OPEN;
 
   // 检测是否已有 lattice web 在运行
   const existing = await checkExistingServer();

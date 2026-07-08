@@ -36,11 +36,10 @@ import {
   parsePrefixedId,
   resolveProjectIds,
   normalizeLegacyId,
-  computeProjectIds,
   selectPrimaryId,
-  generateProjectId,
   normalizeProjectMeta,
 } from './identity';
+import { computeProjectIds, generateProjectId } from './identity-generate';
 
 // ─── 项目信息自动检测（轻量）───
 
@@ -246,6 +245,31 @@ export function listProjects(
 }
 
 /**
+ * 列出用户所有项目的完整 ProjectMeta（含 ids 数组）
+ *
+ * 遍历 projects 目录，读取每个 project.json 并 normalizeProjectMeta。
+ * 比 listProjects 返回的 ProjectRow 多了 ids / localPaths / gitRemotes 等字段。
+ */
+export async function listProjectMetas(username: string): Promise<ProjectMeta[]> {
+  const results: ProjectMeta[] = [];
+  let entries: string[];
+  try {
+    entries = await listDir(getUserProjectsDir(username));
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+    const metaPath = getProjectMetaPath(username, entry);
+    if (!(await fileExists(metaPath))) continue;
+    const rawMeta = await readJSON<ProjectMeta>(metaPath);
+    if (!rawMeta) continue;
+    results.push(normalizeProjectMeta(rawMeta));
+  }
+  return results;
+}
+
+/**
  * 按本地路径查找项目：
  * 1. 先走 db 的 LIKE 精确包含查询（localPaths 存为 JSON 字符串）
  * 2. 如果未命中，再走 fingerprint 反查（父目录前缀 / basename / monorepo 包名）
@@ -421,7 +445,6 @@ export { findProjectDirName };
 
 // ─── 新模块 re-export ───
 export {
-  computeProjectIds,
   resolveProjectIds,
   normalizeLegacyId,
   normalizeProjectMeta,
@@ -429,14 +452,17 @@ export {
   selectPrimaryId,
   sortIdsByPriority,
   mergeIds,
-  generateProjectId,
+  normalizeGitRemote,
   ID_PREFIX,
   type IdPrefix,
   type FingerprintDerived,
 } from './identity';
 
+export { generateProjectId, computeProjectIds } from './identity-generate';
+
 export {
   findProjectByAnyId,
+  findAllProjectsByAnyId,
   getRelatedProjectIds,
   getProjectIdsFromDb,
   clearLookupCache,
@@ -454,6 +480,13 @@ export {
   syncProjectMetaToDb,
 } from './register';
 
-export { scanForProjects, isBlacklisted, type ScanResult } from './scan';
+export {
+  scanForProjects,
+  isBlacklisted,
+  type ScanResult,
+  type ScanProgress,
+  type ScanProgressCallback,
+} from './scan';
 
 export { mergeProjects, type MergeResult } from './merge';
+export { detectAndLinkNestedIn } from './nested-in';

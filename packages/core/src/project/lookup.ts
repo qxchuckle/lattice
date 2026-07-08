@@ -78,6 +78,48 @@ export function findProjectByAnyId(ids: string[]): ProjectRow | null {
 }
 
 /**
+ * 通过任意 ID 查找所有匹配的已注册项目（去重）
+ *
+ * 与 findProjectByAnyId 类似，但返回所有匹配项目，而非只返回第一个。
+ * 用于 autoRegisterProject 时需要更新所有物理注册项目的场景。
+ */
+export function findAllProjectsByAnyId(ids: string[]): ProjectRow[] {
+  const seen = new Set<string>();
+  const results: ProjectRow[] = [];
+
+  for (const id of ids) {
+    const candidates: string[] = [id];
+    // 无前缀 id 兼容匹配
+    if (!id.includes(':')) {
+      candidates.push(`legacy:${id}`);
+    }
+
+    for (const candidate of candidates) {
+      // 1. 查 projects.id
+      const row = getProjectById(candidate);
+      if (row && !seen.has(row.id)) {
+        seen.add(row.id);
+        results.push(row);
+      }
+
+      // 2. 查 fingerprints key='project_id'
+      const fpRows = findProjectsByFingerprint('project_id', candidate);
+      for (const fp of fpRows) {
+        if (!seen.has(fp.project_id)) {
+          const projectRow = getProjectById(fp.project_id);
+          if (projectRow) {
+            seen.add(projectRow.id);
+            results.push(projectRow);
+          }
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
  * 从 DB 获取项目的所有 IDs（通过 fingerprints 表）
  *
  * 读取 key='project_id' 的所有 value

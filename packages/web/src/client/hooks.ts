@@ -2,7 +2,15 @@ import { useEffect, useDeferredValue, useMemo, type CSSProperties } from 'react'
 import { useSnapshot } from 'valtio';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from './adapters';
-import { queryKeys, layoutGraph, getRelationStyle } from './lib';
+import {
+  queryKeys,
+  layoutGraph,
+  getRelationStyle,
+  buildIdMap,
+  resolvePrimaryId,
+  deduplicateProjects,
+  getProjectId,
+} from './lib';
 import {
   canvasStore,
   sidebarStore,
@@ -44,15 +52,21 @@ export function useGlobalGraph() {
     const nodes: LatticeNode[] = [];
     const edges: LatticeEdge[] = [];
 
+    // 多 ID 机制：去重虚拟合并项目 + 构建映射表
+    const projects = deduplicateProjects(projectsQuery.data || []);
+    const idMap = buildIdMap(projects);
+
     // 项目节点
-    (projectsQuery.data || []).forEach((p: ProjectMeta) => {
+    projects.forEach((p: ProjectMeta) => {
+      const pid = getProjectId(p);
+      if (!pid) return;
       nodes.push({
-        id: p.id,
+        id: pid,
         type: 'projectNode',
         position: { x: 0, y: 0 },
         data: {
           entityType: 'project',
-          projectId: p.id,
+          projectId: pid,
           name: p.name,
           hasGit: !!p.gitRemotes?.length,
         },
@@ -87,9 +101,12 @@ export function useGlobalGraph() {
       if (s.scopeLevel === 'project') {
         const match = s.filePath.match(/\/projects\/([^/]+)\//);
         if (match) {
+          const resolvedSpecPid = resolvePrimaryId(idMap, match[1]);
+          // 存储 resolved projectId 供 elements 筛选使用
+          (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedSpecPid;
           edges.push({
-            id: `edge-${match[1]}-${specNodeId}`,
-            source: match[1],
+            id: `edge-${resolvedSpecPid}-${specNodeId}`,
+            source: resolvedSpecPid,
             target: specNodeId,
             type: 'smoothstep',
             label: 'spec',
@@ -138,13 +155,14 @@ export function useGlobalGraph() {
           taskId: t.id,
           title: t.title,
           status: t.status,
-          projectIds: t.projects || [],
+          projectIds: (t.projects || []).map((pid: string) => resolvePrimaryId(idMap, pid)),
         },
       });
       (t.projects || []).forEach((pid: string) => {
+        const resolvedPid = resolvePrimaryId(idMap, pid);
         edges.push({
-          id: `edge-${pid}-${t.id}`,
-          source: pid,
+          id: `edge-${resolvedPid}-${t.id}`,
+          source: resolvedPid,
           target: t.id,
           type: 'smoothstep',
           label: 'task',
@@ -155,10 +173,11 @@ export function useGlobalGraph() {
       // scopePaths 中有 projectId 但不在 task.projects 中的 → 建 scope 边
       const projectSet = new Set(t.projects || []);
       (t.scopePaths || []).forEach((sp) => {
-        if (sp.projectId && !projectSet.has(sp.projectId)) {
+        if (sp.projectId && !projectSet.has(resolvePrimaryId(idMap, sp.projectId))) {
+          const resolvedScopePid = resolvePrimaryId(idMap, sp.projectId);
           edges.push({
-            id: `edge-scope-${sp.projectId}-${t.id}`,
-            source: sp.projectId,
+            id: `edge-scope-${resolvedScopePid}-${t.id}`,
+            source: resolvedScopePid,
             target: t.id,
             type: 'smoothstep',
             label: 'scope',
@@ -199,10 +218,12 @@ export function useGlobalGraph() {
     // 项目↔项目 关系边
     (relationsQuery.data || []).forEach((r: ProjectRelation) => {
       const style = getRelationStyle(r.type);
+      const relSource = resolvePrimaryId(idMap, r.projectA);
+      const relTarget = resolvePrimaryId(idMap, r.projectB);
       edges.push({
         id: r.id,
-        source: r.projectA,
-        target: r.projectB,
+        source: relSource,
+        target: relTarget,
         type: 'smoothstep',
         label: r.type,
         style: { stroke: style.stroke, strokeDasharray: style.strokeDasharray } as CSSProperties,
@@ -249,6 +270,16 @@ export function useTaskGraph(taskId: string | null) {
     queryKey: queryKeys.tasks(),
     queryFn: () => adapter.getTasks(),
   });
+  // 多 ID 机制：获取项目列表用于解析项目名称
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: () => adapter.getProjects(),
+  });
+  const taskIdMap = buildIdMap(deduplicateProjects(projectsQuery.data || []));
+  const taskProjectMap = new Map<string, ProjectMeta>();
+  deduplicateProjects(projectsQuery.data || []).forEach((p) => {
+    taskProjectMap.set(getProjectId(p), p);
+  });
 
   const nodes: LatticeNode[] = [];
   const edges: LatticeEdge[] = [];
@@ -290,16 +321,22 @@ export function useTaskGraph(taskId: string | null) {
 
     // 关联项目
     (task.projects || []).forEach((pid: string) => {
+      const resolvedPid = resolvePrimaryId(taskIdMap, pid);
+      const proj = taskProjectMap.get(resolvedPid);
       nodes.push({
-        id: pid,
+        id: resolvedPid,
         type: 'projectNode',
         position: { x: 0, y: 0 },
-        data: { entityType: 'project', projectId: pid, name: pid.slice(0, 12) },
+        data: {
+          entityType: 'project',
+          projectId: resolvedPid,
+          name: proj?.name || resolvedPid.slice(0, 12),
+        },
       });
       edges.push({
-        id: `edge-${task.id}-${pid}`,
+        id: `edge-${task.id}-${resolvedPid}`,
         source: task.id,
-        target: pid,
+        target: resolvedPid,
         type: 'smoothstep',
         label: 'belongs-to',
         style: { stroke: 'var(--text-secondary)', opacity: 0.5 } as CSSProperties,
@@ -307,24 +344,34 @@ export function useTaskGraph(taskId: string | null) {
       });
     });
     // scopePaths 中有 projectId 但不在 task.projects 中的 → 建 scope 边
-    const projectSet = new Set(task.projects || []);
+    const projectSet = new Set(
+      (task.projects || []).map((pid: string) => resolvePrimaryId(taskIdMap, pid)),
+    );
     (task.scopePaths || []).forEach((sp) => {
-      if (sp.projectId && !projectSet.has(sp.projectId)) {
-        nodes.push({
-          id: sp.projectId,
-          type: 'projectNode',
-          position: { x: 0, y: 0 },
-          data: { entityType: 'project', projectId: sp.projectId, name: sp.projectId.slice(0, 12) },
-        });
-        edges.push({
-          id: `edge-scope-${task.id}-${sp.projectId}`,
-          source: task.id,
-          target: sp.projectId,
-          type: 'smoothstep',
-          label: 'scope',
-          style: { stroke: '#FA8C16', opacity: 0.3, strokeDasharray: '2 4' } as CSSProperties,
-          data: { label: 'scope' },
-        });
+      if (sp.projectId) {
+        const resolvedScopePid = resolvePrimaryId(taskIdMap, sp.projectId);
+        if (!projectSet.has(resolvedScopePid)) {
+          const scopeProj = taskProjectMap.get(resolvedScopePid);
+          nodes.push({
+            id: resolvedScopePid,
+            type: 'projectNode',
+            position: { x: 0, y: 0 },
+            data: {
+              entityType: 'project',
+              projectId: resolvedScopePid,
+              name: scopeProj?.name || resolvedScopePid.slice(0, 12),
+            },
+          });
+          edges.push({
+            id: `edge-scope-${task.id}-${resolvedScopePid}`,
+            source: task.id,
+            target: resolvedScopePid,
+            type: 'smoothstep',
+            label: 'scope',
+            style: { stroke: '#FA8C16', opacity: 0.3, strokeDasharray: '2 4' } as CSSProperties,
+            data: { label: 'scope' },
+          });
+        }
       }
     });
 
@@ -506,6 +553,10 @@ export function useProjectGraph(projectId: string | null) {
   const edges: LatticeEdge[] = [];
   const nodeIds = new Set<string>();
 
+  // 多 ID 机制：构建映射表
+  const allProjects = deduplicateProjects(allProjectsQuery.data || []);
+  const idMap = buildIdMap(allProjects);
+
   const addNode = (node: LatticeNode) => {
     if (!nodeIds.has(node.id)) {
       nodeIds.add(node.id);
@@ -513,16 +564,18 @@ export function useProjectGraph(projectId: string | null) {
     }
   };
 
-  // 无错点模式：展示所有项目 + 关系
+  // 无锚点模式：展示所有项目 + 关系
   if (!projectId) {
-    (allProjectsQuery.data || []).forEach((p: ProjectMeta) => {
+    allProjects.forEach((p: ProjectMeta) => {
+      const pid = getProjectId(p);
+      if (!pid) return;
       addNode({
-        id: p.id,
+        id: pid,
         type: 'projectNode',
         position: { x: 0, y: 0 },
         data: {
           entityType: 'project',
-          projectId: p.id,
+          projectId: pid,
           name: p.name,
           hasGit: !!p.gitRemotes?.length,
         },
@@ -530,10 +583,12 @@ export function useProjectGraph(projectId: string | null) {
     });
     (allRelationsQuery.data || []).forEach((r: ProjectRelation) => {
       const style = getRelationStyle(r.type);
+      const sourceId = resolvePrimaryId(idMap, r.projectA);
+      const targetId = resolvePrimaryId(idMap, r.projectB);
       edges.push({
         id: r.id,
-        source: r.projectA,
-        target: r.projectB,
+        source: sourceId,
+        target: targetId,
         type: 'smoothstep',
         label: r.type,
         style: { stroke: style.stroke, strokeDasharray: style.strokeDasharray } as CSSProperties,
@@ -551,14 +606,15 @@ export function useProjectGraph(projectId: string | null) {
 
   if (projectQuery.data && !(projectQuery.data as { error?: string }).error) {
     const project = projectQuery.data;
+    const projectIdResolved = getProjectId(project);
     // 中心项目节点
     addNode({
-      id: project.id,
+      id: projectIdResolved,
       type: 'projectNode',
       position: { x: 0, y: 0 },
       data: {
         entityType: 'project',
-        projectId: project.id,
+        projectId: projectIdResolved,
         name: project.name,
         hasGit: !!project.gitRemotes?.length,
       },
@@ -567,7 +623,7 @@ export function useProjectGraph(projectId: string | null) {
     // 项目的 Spec
     const specIdToNodeId = new Map<string, string>();
     (specsQuery.data || []).forEach((s: ParsedSpec) => {
-      const specNodeId = `spec-${project.id}-${s.fileName}`;
+      const specNodeId = `spec-${projectIdResolved}-${s.fileName}`;
       const specId = s.frontmatter.id || s.fileName;
       specIdToNodeId.set(specId, specNodeId);
       specIdToNodeId.set(s.fileName, specNodeId);
@@ -584,8 +640,8 @@ export function useProjectGraph(projectId: string | null) {
         },
       });
       edges.push({
-        id: `edge-${project.id}-${specNodeId}`,
-        source: project.id,
+        id: `edge-${projectIdResolved}-${specNodeId}`,
+        source: projectIdResolved,
         target: specNodeId,
         type: 'smoothstep',
         label: 'spec',
@@ -678,8 +734,8 @@ export function useProjectGraph(projectId: string | null) {
         data: { entityType: 'task', taskId: t.id, title: t.title, status: t.status },
       });
       edges.push({
-        id: `edge-${project.id}-${t.id}`,
-        source: project.id,
+        id: `edge-${projectIdResolved}-${t.id}`,
+        source: projectIdResolved,
         target: t.id,
         type: 'smoothstep',
         label: 'task',
@@ -722,7 +778,9 @@ export function useProjectGraph(projectId: string | null) {
       .filter(
         (t) =>
           !taskIdsInGraph.has(t.id) &&
-          (t.scopePaths || []).some((sp) => sp.projectId === project.id),
+          (t.scopePaths || []).some(
+            (sp) => resolvePrimaryId(idMap, sp.projectId || '') === projectIdResolved,
+          ),
       )
       .forEach((t: TaskMeta) => {
         addNode({
@@ -732,8 +790,8 @@ export function useProjectGraph(projectId: string | null) {
           data: { entityType: 'task', taskId: t.id, title: t.title, status: t.status },
         });
         edges.push({
-          id: `edge-scope-${project.id}-${t.id}`,
-          source: project.id,
+          id: `edge-scope-${projectIdResolved}-${t.id}`,
+          source: projectIdResolved,
           target: t.id,
           type: 'smoothstep',
           label: 'scope',
@@ -772,7 +830,9 @@ export function useProjectGraph(projectId: string | null) {
     // 关系项目 + 递归一层
     const relatedIds = new Set<string>();
     (relationsQuery.data || []).forEach((r: ProjectRelation) => {
-      const otherId = r.projectA === project.id ? r.projectB : r.projectA;
+      const resolvedA = resolvePrimaryId(idMap, r.projectA);
+      const resolvedB = resolvePrimaryId(idMap, r.projectB);
+      const otherId = resolvedA === projectIdResolved ? resolvedB : resolvedA;
       relatedIds.add(otherId);
       addNode({
         id: otherId,
@@ -783,7 +843,7 @@ export function useProjectGraph(projectId: string | null) {
       const style = getRelationStyle(r.type);
       edges.push({
         id: r.id,
-        source: project.id,
+        source: projectIdResolved,
         target: otherId,
         type: 'smoothstep',
         label: r.type,
@@ -829,8 +889,10 @@ export function useProjectGraph(projectId: string | null) {
       (allTasksQuery.data || [])
         .filter(
           (t) =>
-            t.projects?.includes(otherId) ||
-            (t.scopePaths || []).some((sp) => sp.projectId === otherId),
+            (t.projects || []).some((pid) => resolvePrimaryId(idMap, pid) === otherId) ||
+            (t.scopePaths || []).some(
+              (sp) => resolvePrimaryId(idMap, sp.projectId || '') === otherId,
+            ),
         )
         .forEach((t) => {
           addNode({
@@ -839,7 +901,9 @@ export function useProjectGraph(projectId: string | null) {
             position: { x: 0, y: 0 },
             data: { entityType: 'task', taskId: t.id, title: t.title, status: t.status },
           });
-          const isFormal = t.projects?.includes(otherId);
+          const isFormal = (t.projects || []).some(
+            (pid) => resolvePrimaryId(idMap, pid) === otherId,
+          );
           edges.push({
             id: `edge-${otherId}-${t.id}`,
             source: otherId,
@@ -919,6 +983,10 @@ export function useSpecGraph(_specId: string | null) {
   const edges: LatticeEdge[] = [];
   const nodeIds = new Set<string>();
 
+  // 多 ID 机制：去重 + 映射表
+  const projects = deduplicateProjects(projectsQuery.data || []);
+  const idMap = buildIdMap(projects);
+
   const addNode = (node: LatticeNode) => {
     if (!nodeIds.has(node.id)) {
       nodeIds.add(node.id);
@@ -927,14 +995,16 @@ export function useSpecGraph(_specId: string | null) {
   };
 
   // 项目节点
-  (projectsQuery.data || []).forEach((p: ProjectMeta) => {
+  projects.forEach((p: ProjectMeta) => {
+    const pid = getProjectId(p);
+    if (!pid) return;
     addNode({
-      id: p.id,
+      id: pid,
       type: 'projectNode',
       position: { x: 0, y: 0 },
       data: {
         entityType: 'project',
-        projectId: p.id,
+        projectId: pid,
         name: p.name,
         hasGit: !!p.gitRemotes?.length,
       },
@@ -972,11 +1042,13 @@ export function useSpecGraph(_specId: string | null) {
       if (s.scope === 'project') {
         const match = s.filePath.match(/\/projects\/([^/]+)\//);
         if (match) {
-          const projectId = match[1];
-          if (nodeIds.has(projectId)) {
+          const resolvedPid = resolvePrimaryId(idMap, match[1]);
+          // 存储 resolved projectId 供 elements 筛选使用
+          (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedPid;
+          if (nodeIds.has(resolvedPid)) {
             edges.push({
-              id: `edge-${projectId}-${specNodeId}`,
-              source: projectId,
+              id: `edge-${resolvedPid}-${specNodeId}`,
+              source: resolvedPid,
               target: specNodeId,
               type: 'smoothstep',
               label: 'spec',
@@ -1043,10 +1115,11 @@ export function useSpecGraph(_specId: string | null) {
       });
       // Project → Task 边
       (t.projects || []).forEach((pid: string) => {
-        if (nodeIds.has(pid)) {
+        const resolvedTaskPid = resolvePrimaryId(idMap, pid);
+        if (nodeIds.has(resolvedTaskPid)) {
           edges.push({
-            id: `edge-task-${pid}-${t.id}`,
-            source: pid,
+            id: `edge-task-${resolvedTaskPid}-${t.id}`,
+            source: resolvedTaskPid,
             target: t.id,
             type: 'smoothstep',
             label: 'task',
@@ -1093,12 +1166,14 @@ export function useSpecGraph(_specId: string | null) {
 
   // 项目↔项目 关系边
   (relationsQuery.data || []).forEach((r: ProjectRelation) => {
-    if (nodeIds.has(r.projectA) && nodeIds.has(r.projectB)) {
+    const resolvedA = resolvePrimaryId(idMap, r.projectA);
+    const resolvedB = resolvePrimaryId(idMap, r.projectB);
+    if (nodeIds.has(resolvedA) && nodeIds.has(resolvedB)) {
       const style = getRelationStyle(r.type);
       edges.push({
         id: r.id,
-        source: r.projectA,
-        target: r.projectB,
+        source: resolvedA,
+        target: resolvedB,
         type: 'smoothstep',
         label: r.type,
         style: { stroke: style.stroke, strokeDasharray: style.strokeDasharray } as CSSProperties,

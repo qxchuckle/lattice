@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/client'),
+      // 指向 core 浏览器安全入口（只导出纯函数 + 类型，零 Node.js 依赖）
+      '@qcqx/lattice-core': resolve(__dirname, '../core/src/browser.ts'),
     },
   },
   server: {

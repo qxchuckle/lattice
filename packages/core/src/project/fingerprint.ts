@@ -2,22 +2,11 @@ import { resolve as pathResolve, sep } from 'node:path';
 import simpleGit from 'simple-git';
 import { glob } from 'glob';
 import { fileExists, readJSON, dirExists, join } from '../paths';
+import { normalizeGitRemote } from './identity';
+import type { FingerprintDerived } from './identity';
 
-/** 将 git remote URL 标准化（统一去 .git 后缀，统一 https/ssh 形式） */
-export function normalizeGitRemote(remote: string): string {
-  let r = remote.trim();
-  if (!r) return '';
-  // git@github.com:org/repo.git -> github.com/org/repo
-  const sshMatch = r.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
-  if (sshMatch) {
-    r = `${sshMatch[1]}/${sshMatch[2]}`;
-  } else {
-    // https://github.com/org/repo.git -> github.com/org/repo
-    r = r.replace(/^https?:\/\//, '');
-    r = r.replace(/\.git$/, '');
-  }
-  return r.toLowerCase();
-}
+// normalizeGitRemote 和 FingerprintDerived 已迁移到 identity.ts（纯函数模块）
+export { normalizeGitRemote, type FingerprintDerived } from './identity';
 
 /** 把本地路径标准化（去尾部斜杠） */
 export function normalizeLocalPath(p: string): string {
@@ -30,15 +19,6 @@ export function isPathPrefixOf(prefix: string, target: string): boolean {
   const b = normalizeLocalPath(target);
   if (a === b) return true;
   return b.startsWith(a + sep);
-}
-
-/** 指纹采集的 derived 部分（用于计算项目 IDs） */
-export interface FingerprintDerived {
-  gitFirstCommit?: string;
-  gitRemotes: string[];
-  gitDefaultBranch?: string;
-  packageNames: string[];
-  monorepoPackages: string[];
 }
 
 /**

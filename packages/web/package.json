@@ -15,9 +15,9 @@
   },
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
+    "dev": "concurrently \"vite\" \"LATTICE_WEB_NO_OPEN=1 tsx watch src/server/index.ts\"",
     "dev:client": "vite",
-    "dev:server": "tsx watch src/server/index.ts",
+    "dev:server": "LATTICE_WEB_NO_OPEN=1 tsx watch src/server/index.ts",
     "build": "vite build && tsup",
     "build:client": "vite build",
     "build:server": "tsup",

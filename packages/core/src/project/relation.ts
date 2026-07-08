@@ -3,6 +3,7 @@ import type { ProjectRelation, RelationsFile } from '../types';
 import { getRelationsFilePath, readJSON, writeJSON } from '../paths';
 import { findSameProjectInOtherUsers, listAllUsernames } from './cross-user';
 import { nowISO } from '../utils/time';
+import { normalizeLegacyId } from './identity';
 
 /** 生成关系 id（rel_ + 8 位 hex） */
 export function generateRelationId(): string {
@@ -14,11 +15,24 @@ export function normalizePairOrder(a: string, b: string): { projectA: string; pr
   return a <= b ? { projectA: a, projectB: b } : { projectA: b, projectB: a };
 }
 
+/**
+ * 归一化关系中的项目 ID：无前缀的自动补 legacy: 前缀
+ * 使旧数据（无前缀 ID）与新 ID 模型运行时兼容。
+ */
+function normalizeRelation(r: ProjectRelation): ProjectRelation {
+  const a = r.projectA.includes(':') ? r.projectA : normalizeLegacyId(r.projectA);
+  const b = r.projectB.includes(':') ? r.projectB : normalizeLegacyId(r.projectB);
+  if (a === r.projectA && b === r.projectB) return r;
+  return { ...r, projectA: a, projectB: b };
+}
+
 /** 读取 relations.json（不存在返回空文件） */
 export async function readRelationsFile(username: string): Promise<RelationsFile> {
   const file = await readJSON<RelationsFile>(getRelationsFilePath(username));
   if (!file) return { version: 1, relations: [] };
   if (!Array.isArray(file.relations)) return { version: 1, relations: [] };
+  // 归一化项目 ID 前缀
+  file.relations = file.relations.map(normalizeRelation);
   return file;
 }
 
@@ -48,7 +62,8 @@ export async function getRelationsByProject(
   projectId: string,
 ): Promise<ProjectRelation[]> {
   const file = await readRelationsFile(username);
-  return file.relations.filter((r) => r.projectA === projectId || r.projectB === projectId);
+  const normalizedId = projectId.includes(':') ? projectId : normalizeLegacyId(projectId);
+  return file.relations.filter((r) => r.projectA === normalizedId || r.projectB === normalizedId);
 }
 
 /** 创建或更新关系。重复 (a,b,type) 视为同一条，更新 description。 */
@@ -115,9 +130,10 @@ export async function deleteRelationsByProject(
   projectId: string,
 ): Promise<number> {
   const file = await readRelationsFile(username);
+  const normalizedId = projectId.includes(':') ? projectId : normalizeLegacyId(projectId);
   const before = file.relations.length;
   file.relations = file.relations.filter(
-    (r) => r.projectA !== projectId && r.projectB !== projectId,
+    (r) => r.projectA !== normalizedId && r.projectB !== normalizedId,
   );
   await writeRelationsFile(username, file);
   return before - file.relations.length;
@@ -129,9 +145,12 @@ export async function deleteRelationsByFilter(
   filter: { projectId: string; type?: string; createdBy?: ProjectRelation['createdBy'] },
 ): Promise<number> {
   const file = await readRelationsFile(username);
+  const normalizedId = filter.projectId.includes(':')
+    ? filter.projectId
+    : normalizeLegacyId(filter.projectId);
   const before = file.relations.length;
   file.relations = file.relations.filter((r) => {
-    const matchesProject = r.projectA === filter.projectId || r.projectB === filter.projectId;
+    const matchesProject = r.projectA === normalizedId || r.projectB === normalizedId;
     if (!matchesProject) return true;
     if (filter.type && r.type !== filter.type) return true;
     if (filter.createdBy && r.createdBy !== filter.createdBy) return true;
@@ -159,6 +178,7 @@ export async function getRelationsByProjectCrossUser(
   projectId: string,
   filterUsernames?: string[],
 ): Promise<RelationWithSource[]> {
+  const normalizedId = projectId.includes(':') ? projectId : normalizeLegacyId(projectId);
   // 判断当前用户是否在过滤范围内
   const includeCurrentUser = !filterUsernames || filterUsernames.includes(username);
 
@@ -166,18 +186,18 @@ export async function getRelationsByProjectCrossUser(
 
   // 当前用户的关系
   if (includeCurrentUser) {
-    const ownRelations = await getRelationsByProject(username, projectId);
+    const ownRelations = await getRelationsByProject(username, normalizedId);
     results.push(...ownRelations.map((r) => ({ ...r, sourceUser: username })));
   }
 
   // 其他用户的关系
-  const otherUsers = await findSameProjectInOtherUsers(username, projectId);
+  const otherUsers = await findSameProjectInOtherUsers(username, normalizedId);
   for (const { username: otherUsername } of otherUsers) {
     if (filterUsernames && !filterUsernames.includes(otherUsername)) continue;
     try {
       const otherFile = await readRelationsFile(otherUsername);
       const otherRelations = otherFile.relations.filter(
-        (r) => r.projectA === projectId || r.projectB === projectId,
+        (r) => r.projectA === normalizedId || r.projectB === normalizedId,
       );
       for (const r of otherRelations) {
         // 去重：如果已存在相同 (a,b,type) 的关系则跳过

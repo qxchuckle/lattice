@@ -37,7 +37,6 @@
     "glob": "^13.0.6",
     "gray-matter": "^4.0.3",
     "minimatch": "^10.2.5",
-    "node-machine-id": "^1.1.12",
     "simple-git": "^3.27.0",
     "sqlite-vec": "^0.1.9",
     "undici": "^6.24.1",

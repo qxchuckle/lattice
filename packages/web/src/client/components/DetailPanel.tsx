@@ -40,7 +40,14 @@ import { useNavigate } from 'react-router';
 import { detailStore, closeDetail, getViewPath, locateNode, toggleDetailCollapse } from '../store';
 import { useEntityDetail } from '../hooks';
 import { getAdapter } from '../adapters';
-import { formatDate, getTaskStatusColor, getEntityColor, truncate, queryKeys } from '../lib';
+import {
+  formatDate,
+  getTaskStatusColor,
+  getEntityColor,
+  truncate,
+  queryKeys,
+  getProjectId,
+} from '../lib';
 import type { EditorApp } from '../adapters/types';
 import type {
   TaskMeta,
@@ -336,16 +343,19 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
             size='small'
             dataSource={task.projects}
             renderItem={(pid: string) => {
-              const project = projectsQuery.data?.find((p) => p.id === pid);
+              const project = projectsQuery.data?.find(
+                (p) => p.ids?.includes(pid) || getProjectId(p) === pid,
+              );
+              const resolvedPid = project ? getProjectId(project) : pid;
               return (
                 <List.Item
                   className='detail-list-item'
-                  onClick={() => navigate(getViewPath('project', pid))}>
+                  onClick={() => navigate(getViewPath('project', resolvedPid))}>
                   <div>
                     <div className='detail-list-item__name'>
-                      {project?.name || pid.slice(0, 12)}
+                      {project?.name || resolvedPid.slice(0, 12)}
                     </div>
-                    <div className='mono detail-list-item__id'>{pid}</div>
+                    <div className='mono detail-list-item__id'>{resolvedPid}</div>
                     {project?.description && (
                       <div className='detail-list-item__desc'>{project.description}</div>
                     )}
@@ -573,10 +583,10 @@ function ProjectDetail({
         </p>
       )}
 
-      <ProjectPathBar projectId={project.id} />
+      <ProjectPathBar projectId={getProjectId(project)} />
 
       <div className='detail-component__meta'>
-        <div className='mono detail-component__meta-id'>ID: {project.id}</div>
+        <div className='mono detail-component__meta-id'>ID: {getProjectId(project)}</div>
         <div>创建: {formatDate(project.created)}</div>
         {project.groups && project.groups.length > 0 && (
           <div>分组: {project.groups.join(', ')}</div>
@@ -679,7 +689,8 @@ function ProjectDetail({
                         size='small'
                         dataSource={relations}
                         renderItem={(r: ProjectRelation) => {
-                          const otherId = r.projectA === project.id ? r.projectB : r.projectA;
+                          const pid = getProjectId(project);
+                          const otherId = r.projectA === pid ? r.projectB : r.projectA;
                           return (
                             <List.Item
                               className='detail-list-item'

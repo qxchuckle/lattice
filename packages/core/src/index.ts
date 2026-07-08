@@ -154,6 +154,7 @@ export {
   getProjectMeta,
   updateProjectMeta,
   listProjects,
+  listProjectMetas,
   findProjectByPath,
   findProjectById,
   findProjectDirName,
@@ -175,6 +176,7 @@ export {
   type IdPrefix,
   type FingerprintDerived,
   findProjectByAnyId,
+  findAllProjectsByAnyId,
   getRelatedProjectIds,
   getProjectIdsFromDb,
   clearLookupCache,
@@ -189,8 +191,11 @@ export {
   syncProjectMetaToDb,
   isBlacklisted,
   type ScanResult,
+  type ScanProgress,
+  type ScanProgressCallback,
   mergeProjects,
   type MergeResult,
+  detectAndLinkNestedIn,
 } from './project';
 
 // 项目 git 状态

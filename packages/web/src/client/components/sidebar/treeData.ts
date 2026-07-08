@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
-import { queryKeys, truncate } from '../../lib';
+import {
+  queryKeys,
+  truncate,
+  buildIdMap,
+  resolvePrimaryId,
+  deduplicateProjects,
+  getProjectId,
+} from '../../lib';
 import type { ViewMode } from '../../store';
 import type { TreeNode } from './treeUtils';
 import type { TaskMeta, ProjectMeta, ParsedSpec } from '@qcqx/lattice-core';
@@ -36,7 +43,10 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
 
   const tree = useMemo<TreeNode[]>(() => {
     if (loading) return [];
-    const projects = projectsQuery.data || [];
+    const rawProjects = projectsQuery.data || [];
+    // 多 ID 机制：去重 + 映射表
+    const projects = deduplicateProjects(rawProjects as ProjectMeta[]);
+    const idMap = buildIdMap(projects);
     const tasks = tasksQuery.data || [];
     const allSpecs = specsQuery.data;
 
@@ -88,12 +98,13 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
     const projectSpecMap = new Map<string, ParsedSpec[]>();
     projectSpecs.forEach((s: ParsedSpec) => {
       const match = s.filePath.match(/\/projects\/([^/]+)\//);
-      const pid = match ? match[1] : 'other';
+      const rawPid = match ? match[1] : 'other';
+      const pid = rawPid === 'other' ? 'other' : resolvePrimaryId(idMap, rawPid);
       if (!projectSpecMap.has(pid)) projectSpecMap.set(pid, []);
       projectSpecMap.get(pid)!.push(s);
     });
     projectSpecMap.forEach((specs, pid) => {
-      const project = projects.find((p) => p.id === pid);
+      const project = projects.find((p) => getProjectId(p) === pid);
       specChildren.push({
         key: `spec-p-${pid}`,
         title: `${project?.name || truncate(pid, 16)} (${specs.length})`,
@@ -114,20 +125,23 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
     });
 
     // ── 项目树 ──
-    const projectChildren: TreeNode[] = (projects as ProjectMeta[]).map((p) => {
-      const projectTasks = (tasks as TaskMeta[]).filter((t) => (t.projects || []).includes(p.id));
+    const projectChildren: TreeNode[] = projects.map((p) => {
+      const pid = getProjectId(p);
+      const projectTasks = (tasks as TaskMeta[]).filter((t) =>
+        (t.projects || []).some((tpid: string) => resolvePrimaryId(idMap, tpid) === pid),
+      );
       const projectSpecItems = projectSpecs.filter((s: ParsedSpec) => {
         const match = s.filePath.match(/\/projects\/([^/]+)\//);
-        return match && match[1] === p.id;
+        return match && resolvePrimaryId(idMap, match[1]) === pid;
       });
       const children: TreeNode[] = [];
       if (projectTasks.length > 0) {
         children.push({
-          key: `proj-tasks-${p.id}`,
+          key: `proj-tasks-${pid}`,
           title: `任务 (${projectTasks.length})`,
           type: 'spec-scope',
           children: projectTasks.map((t: TaskMeta) => ({
-            key: `proj-task-${p.id}-${t.id}`,
+            key: `proj-task-${pid}-${t.id}`,
             title: truncate(t.title, 30),
             type: 'task-item' as const,
             entityId: t.id,
@@ -138,11 +152,11 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
       }
       if (projectSpecItems.length > 0) {
         children.push({
-          key: `proj-specs-${p.id}`,
+          key: `proj-specs-${pid}`,
           title: `Spec (${projectSpecItems.length})`,
           type: 'spec-scope',
           children: projectSpecItems.map((s: ParsedSpec) => ({
-            key: `proj-spec-${p.id}-${s.frontmatter.id || s.fileName}`,
+            key: `proj-spec-${pid}-${s.frontmatter.id || s.fileName}`,
             title: s.frontmatter.title || s.fileName,
             type: 'spec-item' as const,
             entityId: s.frontmatter.id || s.fileName,
@@ -152,10 +166,10 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
         });
       }
       return {
-        key: `proj-${p.id}`,
+        key: `proj-${pid}`,
         title: p.name,
         type: 'project-item' as const,
-        entityId: p.id,
+        entityId: pid,
         viewMode: 'project' as ViewMode,
         meta: { desc: p.description },
         children: children.length > 0 ? children : undefined,
@@ -176,7 +190,9 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
 
       // 关联项目
       const taskProjects = (t.projects || [])
-        .map((pid: string) => (projects as ProjectMeta[]).find((p) => p.id === pid))
+        .map((pid: string) =>
+          projects.find((p) => getProjectId(p) === resolvePrimaryId(idMap, pid)),
+        )
         .filter((p): p is ProjectMeta => !!p);
       if (taskProjects.length > 0) {
         children.push({
@@ -184,10 +200,10 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
           title: `关联项目 (${taskProjects.length})`,
           type: 'spec-scope',
           children: taskProjects.map((p) => ({
-            key: `task-proj-${t.id}-${p.id}`,
+            key: `task-proj-${t.id}-${getProjectId(p)}`,
             title: p.name,
             type: 'project-item' as const,
-            entityId: p.id,
+            entityId: getProjectId(p),
             viewMode: 'project' as ViewMode,
             meta: { desc: p.description },
           })),

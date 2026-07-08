@@ -29,6 +29,7 @@ import {
   writeJSON,
   type ProjectMeta,
   type FingerprintDerived,
+  detectAndLinkNestedIn,
 } from '@qcqx/lattice-core';
 import { logger } from '../utils';
 
@@ -139,7 +140,7 @@ export function registerLinkCommand(program: Command): void {
             }
 
             await applyTemplatesIfRequested(username, existing.id, opts.template);
-            const parentRelations = await detectAndLinkParentProject(username, existing.id, cwd);
+            const parentRelations = await detectAndLinkNestedIn(username, existing.id, cwd);
             closeDb();
 
             const updatedMeta = await getProjectMeta(username, existing.id);
@@ -187,7 +188,7 @@ export function registerLinkCommand(program: Command): void {
             opts.template,
           );
           const primaryId = selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0];
-          const parentRelations = await detectAndLinkParentProject(username, primaryId, cwd);
+          const parentRelations = await detectAndLinkNestedIn(username, primaryId, cwd);
           closeDb();
 
           logger.raw(chalk.green('✓ 项目已注册到 Lattice（新建，原项目通过虚拟合并关联）'));
@@ -232,7 +233,7 @@ export function registerLinkCommand(program: Command): void {
           opts.template,
         );
         const primaryId = selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0];
-        const parentRelations = await detectAndLinkParentProject(username, primaryId, cwd);
+        const parentRelations = await detectAndLinkNestedIn(username, primaryId, cwd);
         closeDb();
 
         logger.raw(chalk.green('✓ 项目已注册到 Lattice'));
@@ -303,7 +304,7 @@ async function handleRestore(
   }
 
   await applyTemplatesIfRequested(username, target.id, opts.template);
-  const parentRelations = await detectAndLinkParentProject(username, target.id, cwd);
+  const parentRelations = await detectAndLinkNestedIn(username, target.id, cwd);
   closeDb();
 
   const finalMeta = await getProjectMeta(username, target.id);
@@ -405,97 +406,7 @@ interface ParentRelationResult {
   type: 'direct' | 'ancestor';
 }
 
-/**
- * 自动检测父级 Lattice 项目并建立 nested-in 关系
- *
- * 向上查找 .git 目录 + lattice.json，通过 DB 查找已注册的祖先项目。
- */
-async function detectAndLinkParentProject(
-  username: string,
-  childProjectId: string,
-  childDir: string,
-): Promise<ParentRelationResult[]> {
-  const results: ParentRelationResult[] = [];
-
-  try {
-    // 自愈：先清除该项目旧的 auto nested-in 关系
-    await deleteRelationsByFilter(username, {
-      projectId: childProjectId,
-      type: 'nested-in',
-      createdBy: 'auto',
-    });
-
-    // 向上查找所有祖先 .git 目录 + lattice.json
-    const ancestorRoots = await findAncestorProjectRoots(childDir);
-    debug('ancestor roots', ancestorRoots);
-
-    for (let i = 0; i < ancestorRoots.length; i++) {
-      const ancestorRoot = ancestorRoots[i];
-
-      try {
-        // 采集祖先目录的指纹，计算 IDs
-        const { derived: ancestorDerived } = await collectFingerprint(ancestorRoot);
-        const ancestorLegacyId = await readLegacyIdFromLatticeJson(ancestorRoot);
-        const ancestorIds = computeProjectIds(ancestorDerived, ancestorLegacyId);
-
-        if (ancestorIds.length === 0) continue;
-
-        // 查 DB 是否已注册
-        const ancestorRow = findProjectByAnyId(ancestorIds);
-        if (!ancestorRow) continue;
-        if (ancestorRow.id === childProjectId) continue;
-
-        // 建立 nested-in 关系（幂等）
-        await upsertRelationFile(username, {
-          projectA: childProjectId,
-          projectB: ancestorRow.id,
-          type: 'nested-in',
-          description: i === 0 ? '直接父级项目' : `第 ${i + 1} 级祖先项目`,
-          createdBy: 'auto',
-        });
-
-        results.push({
-          id: ancestorRow.id,
-          name: ancestorRow.name,
-          type: i === 0 ? 'direct' : 'ancestor',
-        });
-      } catch (err) {
-        debug(`detectAndLinkParentProject: ancestor ${ancestorRoot} error`, (err as Error).message);
-      }
-    }
-  } catch (err) {
-    debug('detectAndLinkParentProject error', (err as Error).message);
-  }
-
-  return results;
-}
-
-/**
- * 向上查找所有祖先项目根目录（有 .git 或 lattice.json 的目录）
- * 返回从近到远排序的列表
- */
-async function findAncestorProjectRoots(startDir: string): Promise<string[]> {
-  const roots: string[] = [];
-  let currentDir = pathResolve(startDir);
-
-  while (currentDir && currentDir !== sep && currentDir !== '.') {
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) break;
-    currentDir = parentDir;
-
-    try {
-      const hasGit = await fileExists(pathResolve(currentDir, '.git'));
-      const hasLatticeJson = await fileExists(pathResolve(currentDir, 'lattice.json'));
-      if (hasGit || hasLatticeJson) {
-        roots.push(currentDir);
-      }
-    } catch {
-      // 权限问题等跳过
-    }
-  }
-
-  return roots;
-}
+// detectAndLinkNestedIn 已下沉到 core（nested-in.ts），link.ts 直接调用 core 导出
 
 function printProjectInfo(
   meta: ProjectMeta | null,

@@ -23,14 +23,15 @@ import {
 } from '../paths';
 import { upsertProject, upsertFingerprint, getProjectById } from '../db';
 import {
-  computeProjectIds,
   selectPrimaryId,
   resolveProjectIds,
   normalizeProjectMeta,
   type FingerprintDerived,
 } from './identity';
-import { findProjectByAnyId } from './lookup';
+import { computeProjectIds } from './identity-generate';
+import { findProjectByAnyId, findAllProjectsByAnyId, getProjectMetaById } from './lookup';
 import { collectFingerprint, normalizeLocalPath } from './fingerprint';
+import { detectAndLinkNestedIn } from './nested-in';
 import { nowISO } from '../utils/time';
 
 // ─── 辅助 ───
@@ -230,40 +231,76 @@ export async function autoRegisterProject(
 ): Promise<{ meta: ProjectMeta | null; isNew: boolean }> {
   if (ids.length === 0) return { meta: null, isNew: false };
 
-  // 查 DB 是否已有项目匹配任一 ID
-  const existing = findProjectByAnyId(ids);
+  const newLegacyIds = ids.filter((id) => id.startsWith('legacy:'));
 
-  if (existing) {
-    // 当前用户的项目 → 检查是否真正是同一个项目
-    if (existing.username === username) {
-      // 如果 IDs 中含 legacy: ID，检查找到的项目是否也有该 legacy: ID
-      const legacyIds = ids.filter((id) => id.startsWith('legacy:'));
-      if (legacyIds.length > 0) {
-        const { getProjectMetaById } = await import('./lookup');
-        const existingData = await getProjectMetaById(existing.id);
-        const existingIds = existingData ? existingData.meta.ids : [];
-        const hasMatchingLegacy = legacyIds.some((id) => existingIds.includes(id));
+  // 查找所有匹配的物理注册项目（一个运行时项目可能由多个物理项目聚合）
+  const allMatches = findAllProjectsByAnyId(ids);
+  const ownMatches = allMatches.filter((p) => p.username === username);
 
-        if (!hasMatchingLegacy) {
-          // 找到的项目没有对应的 legacy: ID（通过 git: 匹配上）
-          // → 不修改原项目，为当前 legacy: ID 新建项目
-          const { derived } = await collectFingerprint(localPath);
-          const meta = await registerProjectWithIds(username, ids, localPath, derived);
-          return { meta, isNew: true };
-        }
+  // ── Legacy ID 特殊处理 ──
+  // 检查是否有任一物理项目匹配 legacy: ID
+  if (newLegacyIds.length > 0) {
+    let legacyMatched = false;
+    for (const match of ownMatches) {
+      const data = await getProjectMetaById(match.id);
+      const existingLegacyIds = (data?.meta.ids ?? []).filter((id) => id.startsWith('legacy:'));
+      if (newLegacyIds.some((id) => existingLegacyIds.includes(id))) {
+        legacyMatched = true;
+        break;
       }
-
-      // 无 legacy: ID 或 legacy: ID 匹配 → 更新 localPaths
-      await updateProjectPaths(existing.id, username, localPath);
-      const { getProjectMetaById } = await import('./lookup');
-      const updated = await getProjectMetaById(existing.id);
-      return { meta: updated?.meta ?? null, isNew: false };
     }
-    // 其他用户的项目 → 为当前用户注册新项目
+    if (!legacyMatched) {
+      // 没有物理项目匹配 legacy: → 新建项目，不修改任何已有项目
+      const { derived } = await collectFingerprint(localPath);
+      const meta = await registerProjectWithIds(username, ids, localPath, derived);
+      const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
+      if (primaryId) await detectAndLinkNestedIn(username, primaryId, localPath);
+      return { meta, isNew: true };
+    }
   }
 
-  // 未注册 / 其他用户 → 注册新项目
-  const { derived } = await collectFingerprint(localPath);
-  const meta = await registerProjectWithIds(username, ids, localPath, derived);
-  return { meta, isNew: true };
+  if (ownMatches.length === 0) {
+    // 未注册 / 其他用户 → 注册新项目
+    const { derived } = await collectFingerprint(localPath);
+    const meta = await registerProjectWithIds(username, ids, localPath, derived);
+    const primaryId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
+    if (primaryId) {
+      await detectAndLinkNestedIn(username, primaryId, localPath);
+    }
+    return { meta, isNew: true };
+  }
+
+  // ── 遍历所有匹配的物理项目，分别按规则更新 ──
+  let lastMeta: ProjectMeta | null = null;
+  for (const match of ownMatches) {
+    const existingData = await getProjectMetaById(match.id);
+    if (!existingData) continue;
+    const existingIds = existingData.meta.ids;
+
+    // 全匹配验证：已有项目的每个 ID 源都必须在当前扫描的 ids 中出现
+    const allExistingMatch = existingIds.every((id) => ids.includes(id));
+    if (allExistingMatch) {
+      // 补全非 legacy ID 源（legacy 永远不自动添加）
+      const newNonLegacyIds = ids.filter(
+        (id) => !id.startsWith('legacy:') && !existingIds.includes(id),
+      );
+      if (newNonLegacyIds.length > 0) {
+        existingData.meta.ids = [...existingIds, ...newNonLegacyIds];
+        existingData.meta.fingerprintsUpdated = nowISO();
+        await writeJSON(getProjectMetaPath(existingData.username, match.id), existingData.meta);
+        syncProjectMetaToDb(existingData.username, existingData.meta);
+      }
+    }
+
+    // 更新 localPaths（所有匹配项目都更新）
+    await updateProjectPaths(match.id, username, localPath);
+    lastMeta = (await getProjectMetaById(match.id))?.meta ?? null;
+  }
+
+  // 自动检测嵌套项目关系（用第一个匹配项目的 ID）
+  if (ownMatches.length > 0) {
+    await detectAndLinkNestedIn(username, ownMatches[0].id, localPath);
+  }
+
+  return { meta: lastMeta, isNew: false };
 }

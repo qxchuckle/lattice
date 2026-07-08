@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import {
   getUsername,
-  listProjects,
+  listProjectMetas,
   getProjectMeta,
   listTasks,
   getTaskMeta,
@@ -12,7 +12,6 @@ import {
   getTaskLineage,
   listCheckpoints,
   listRelations,
-  getRelationsByProject,
   getProjectSpecs,
   getAllProjectSpecs,
   getUserSpecs,
@@ -41,14 +40,14 @@ const OPEN_COMMANDS: Record<string, (path: string) => string> = {
 };
 
 /** 验证路径安全：只允许 ~/.lattice 下或已注册项目路径 */
-function isPathSafe(path: string, username: string): boolean {
+async function isPathSafe(path: string, username: string): Promise<boolean> {
   const latticeRoot = getLatticeRoot();
   if (path.startsWith(latticeRoot)) return true;
   // 项目路径验证：检查是否是某个已注册项目的 localPaths
   try {
-    const projects = listProjects(username);
+    const projects = await listProjectMetas(username);
     return projects.some((p) => {
-      const localPaths = JSON.parse(p.local_path || '[]') as string[];
+      const localPaths = p.localPaths || [];
       return localPaths.some((lp: string) => path.startsWith(lp));
     });
   } catch {
@@ -62,7 +61,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/projects', async () => {
     const username = await getUsername();
-    return listProjects(username);
+    return listProjectMetas(username);
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => {
@@ -86,12 +85,22 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => {
     const username = await getUsername();
-    return listTasks(username, { projectId: req.params.id });
+    // 多 ID 机制：task.projects 可能存储的是任意 ID，需用项目的全部 IDs 匹配
+    const meta = await getProjectMeta(username, req.params.id);
+    if (!meta) return [];
+    const idSet = new Set(meta.ids);
+    const allTasks = await listTasks(username);
+    return allTasks.filter((t) => (t.projects || []).some((pid) => idSet.has(pid)));
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/relations', async (req) => {
     const username = await getUsername();
-    return getRelationsByProject(username, req.params.id);
+    // 多 ID 机制：relation 的 projectA/projectB 可能存储的是任意 ID
+    const meta = await getProjectMeta(username, req.params.id);
+    if (!meta) return [];
+    const idSet = new Set(meta.ids);
+    const allRelations = await listRelations(username);
+    return allRelations.filter((r) => idSet.has(r.projectA) || idSet.has(r.projectB));
   });
 
   // 获取项目实际存在的本地路径
@@ -215,7 +224,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { path: string; app: string } }>('/api/open', async (req) => {
     const username = await getUsername();
     const { path, app } = req.query;
-    if (!isPathSafe(path, username)) {
+    if (!(await isPathSafe(path, username))) {
       return { error: 'forbidden', message: '路径不在允许范围内' };
     }
     const cmdFn = OPEN_COMMANDS[app];
@@ -300,7 +309,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/stats', async () => {
     const username = await getUsername();
-    const projects = listProjects(username);
+    const projects = await listProjectMetas(username);
     const tasks = await listTasks(username);
     const relations = await listRelations(username);
     const activeTasks = tasks.filter((t) => t.status === 'in_progress');

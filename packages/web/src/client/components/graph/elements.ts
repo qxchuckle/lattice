@@ -134,8 +134,9 @@ export function toElements(
       } else if (entityType === 'spec') {
         const scope = (data.scope as string) || '';
         if (scope === 'project') {
-          const filePath = (data.filePath as string) || '';
-          const specProjectId = extractSpecProjectId(filePath);
+          // 优先使用已解析的 projectId（多 ID 机制下已 resolve 为 primary ID）
+          const specProjectId =
+            (data.projectId as string) || extractSpecProjectId((data.filePath as string) || '');
           if (!specProjectId || !projectFilterSet!.has(specProjectId)) return;
         }
         // 全局级/用户级 spec 不受项目筛选影响

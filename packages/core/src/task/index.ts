@@ -16,6 +16,31 @@ import {
 import { linkTaskProject, deleteTaskLinks } from '../db';
 import { moveToTrash } from '../trash';
 import { nowISO, todayDateForId } from '../utils/time';
+import { normalizeLegacyId } from '../project/identity';
+
+/**
+ * 归一化 task 元数据中的项目 ID：无前缀的自动补 legacy: 前缀
+ *
+ * 对 projects 数组和 scopePaths[].projectId 生效。
+ * 使旧数据（无前缀 ID）与新 ID 模型（带前缀）运行时兼容。
+ */
+function normalizeTaskMeta(meta: TaskMeta): TaskMeta {
+  if (!meta.projects?.length && !meta.scopePaths?.length) return meta;
+  const result = { ...meta };
+  if (meta.projects?.length) {
+    result.projects = meta.projects.map((pid) =>
+      pid.includes(':') ? pid : normalizeLegacyId(pid),
+    );
+  }
+  if (meta.scopePaths?.length) {
+    result.scopePaths = meta.scopePaths.map((sp) =>
+      sp.projectId && !sp.projectId.includes(':')
+        ? { ...sp, projectId: normalizeLegacyId(sp.projectId) }
+        : sp,
+    );
+  }
+  return result;
+}
 
 interface TaskGraphSnapshot {
   tasks: TaskMeta[];
@@ -30,7 +55,7 @@ async function readAllTaskMeta(username: string): Promise<TaskMeta[]> {
 
   for (const entry of entries) {
     const meta = await readJSON<TaskMeta>(getTaskMetaPath(username, entry));
-    if (meta) tasks.push(meta);
+    if (meta) tasks.push(normalizeTaskMeta(meta));
   }
 
   return tasks;
@@ -171,9 +196,14 @@ export async function listTasks(
   filter?: { status?: TaskStatus; projectId?: string },
 ): Promise<TaskMeta[]> {
   const allTasks = await readAllTaskMeta(username);
+  const normalizedProjectId = filter?.projectId
+    ? filter.projectId.includes(':')
+      ? filter.projectId
+      : normalizeLegacyId(filter.projectId)
+    : undefined;
   const tasks = allTasks.filter((meta) => {
     if (filter?.status && meta.status !== filter.status) return false;
-    if (filter?.projectId && !meta.projects?.includes(filter.projectId)) return false;
+    if (normalizedProjectId && !meta.projects?.includes(normalizedProjectId)) return false;
     return true;
   });
 
@@ -198,6 +228,7 @@ export async function listTasksCrossUser(
   filter?: { status?: TaskStatus; usernames?: string[] },
 ): Promise<TaskMetaWithSource[]> {
   const { listAllUsernames } = await import('../project/cross-user');
+  const normalizedProjectId = projectId.includes(':') ? projectId : normalizeLegacyId(projectId);
 
   const filterUsernames = filter?.usernames;
   const includeCurrentUser = !filterUsernames || filterUsernames.includes(currentUsername);
@@ -217,7 +248,7 @@ export async function listTasksCrossUser(
     try {
       const otherTasks = await readAllTaskMeta(otherUsername);
       const filtered = otherTasks.filter((meta) => {
-        if (!meta.projects?.includes(projectId)) return false;
+        if (!meta.projects?.includes(normalizedProjectId)) return false;
         if (filter?.status && meta.status !== filter.status) return false;
         return true;
       });
@@ -234,7 +265,8 @@ export async function listTasksCrossUser(
 
 /** 获取任务元数据 */
 export async function getTaskMeta(username: string, taskId: string): Promise<TaskMeta | null> {
-  return readJSON<TaskMeta>(getTaskMetaPath(username, taskId));
+  const meta = await readJSON<TaskMeta>(getTaskMetaPath(username, taskId));
+  return meta ? normalizeTaskMeta(meta) : null;
 }
 
 /** 更新任务 */
