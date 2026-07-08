@@ -142,6 +142,24 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       }
     });
 
+    cy.on('tap', 'edge', () => {
+      if (wasPanningRef.current) {
+        wasPanningRef.current = false;
+        return;
+      }
+      clearFocus(cy);
+      if (hoveredEdgesRef.current) {
+        hoveredEdgesRef.current.removeClass('hovered');
+      }
+      if (hoveredElesRef.current) {
+        hoveredElesRef.current.addClass('dimmed');
+      }
+      hoveredElesRef.current = null;
+      hoveredEdgesRef.current = null;
+      closeDetail();
+      navigate('/');
+    });
+
     cy.on('tap', (evt) => {
       if (evt.target === cy) {
         clearFocus(cy);
