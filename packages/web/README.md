@@ -4,8 +4,8 @@ Lattice 可视化前端 — 基于 React Flow 的任务/项目/Spec 关系图浏
 
 ## 功能
 
-- **五种视角**：全局关系图、任务展开、项目展开、Spec 概览、Checkpoint 时间线
-- **交互画布**：React Flow + dagre 自动布局，节点点击打开详情，连线高亮
+- **四种视角**：全局关系图、任务展开、项目展开、Spec 概览
+- **交互画布**：Cytoscape 自动布局，节点点击打开详情，连线高亮
 - **实时搜索**：混合检索（BM25 + 语义），侧栏即时筛选
 - **表格模式**：项目/任务表格列表，支持排序分页
 - **明暗主题**：跟随系统或手动切换
@@ -41,16 +41,17 @@ lattice web --no-open
 | 路径 | 说明 |
 |---|---|
 | `/` | 全局关系图 |
-| `/task/:taskId` | 任务视角 |
-| `/project/:projectId` | 项目视角 |
+| `/task` | 任务视角（全部） |
+| `/task/:taskId` | 任务视角（指定） |
+| `/project` | 项目视角（全部） |
+| `/project/:projectId` | 项目视角（指定） |
 | `/spec` | Spec 概览 |
 | `/spec/:specId` | Spec 详情 |
-| `/checkpoint/:taskId` | Checkpoint 时间线 |
 | `?mode=table` | 切换表格显示 |
 
 ## 技术栈
 
-React 19 · Vite 8 · antd v6 · React Flow v12 · Valtio · TanStack Query · Fastify 5 · TypeBox
+React 19 · Vite 8 · antd v6 · Cytoscape · Valtio · TanStack Query · Fastify 5 · TypeBox
 
 ## 开发
 
@@ -69,7 +70,7 @@ pnpm build:web
 ```
 浏览器 → Fastify API → @qcqx/lattice-core → ~/.lattice/
          ↑
-  Vite SPA (React Flow + antd)
+  Vite SPA (Cytoscape + antd)
 ```
 
 前端通过 adapter 接口获取数据（`HttpAdapter` → fetch → Fastify API → core），为未来 VSCode 插件（`WebviewAdapter`）预留。

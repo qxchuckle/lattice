@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { GlobalConfig, LocalConfig, ResolvedConfig } from '../types';
+import type { GlobalConfig, LocalConfig, RAGEmbeddingConfig, ResolvedConfig } from '../types';
 import {
   getGlobalConfigPath,
   getLocalConfigPath,
@@ -141,6 +141,25 @@ export async function writeLocalConfig(config: LocalConfig): Promise<void> {
 export async function readResolvedConfig(): Promise<ResolvedConfig> {
   const [globalConfig, localConfig] = await Promise.all([readGlobalConfig(), readLocalConfig()]);
   return mergeResolvedConfig(globalConfig, localConfig);
+}
+
+/**
+ * 读取用户显式配置的 embedding 字段（未经默认值填充）。
+ *
+ * 用于判断某个字段是否被用户在 config.json / config-local.json 中显式设置，
+ * 而非来自 DEFAULT_GLOBAL_CONFIG 的填充值。典型场景：remoteHost 的环境变量
+ * fallback 判定——只有用户未显式配置 remoteHost 时，才回退到 HF_ENDPOINT。
+ */
+export async function readExplicitEmbeddingConfig(): Promise<Partial<RAGEmbeddingConfig>> {
+  const [globalRaw, localRaw] = await Promise.all([
+    readJSON<GlobalConfig>(getGlobalConfigPath()),
+    readJSON<LocalConfig>(getLocalConfigPath()),
+  ]);
+  const localRag = localRaw?.rag as { embedding?: Partial<RAGEmbeddingConfig> } | undefined;
+  return {
+    ...globalRaw?.rag?.embedding,
+    ...localRag?.embedding,
+  };
 }
 
 // ─── 便捷函数 ───

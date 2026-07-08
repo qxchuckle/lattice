@@ -4,7 +4,7 @@
 >
 > **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
 > - `spec-workflows.md`：spec 是什么 / 层级 / 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`lattice rag update`）
+> - `SKILL.md`：索引维护（`ltc rag update`）
 > - `lattice-rules.md` §五 / §七：spec 更新与冲突硬规则
 
 **目标**：把当前会话中对"当前项目"长期有效的经验沉淀到项目级 spec。
@@ -29,7 +29,7 @@ spec 同时承担行为约束 + 项目认知两种职能（详见 skill `spec-wo
 3. 冲突检测（语义层面）
 4. 写入到当前项目对应的 spec 目录
 5. 写入后二次审阅（强制）
-6. `lattice rag update`（详见 skill `SKILL.md` 的「索引维护」）
+6. `ltc rag update`（详见 skill `SKILL.md` 的「索引维护」）
 
 ### 项目级特有的写入原则
 

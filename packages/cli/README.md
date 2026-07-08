@@ -37,11 +37,11 @@ ai会自动进入lattice工作流，管理任务、项目、生命周期
 
 | 命令 | 说明 |
 |---|---|
-| `lattice init` | 初始化 AI 客户端集成（Cursor / Claude Code / Qoder / Trae 等） |
+| `lattice init` | 初始化 Lattice（含 `init scan` 扫描子命令） |
 | `lattice link` | 注册当前目录为 Lattice 项目 |
 | `lattice unlink` | 取消注册当前项目 |
 | `lattice scan` | 扫描目录树发现可注册项目 |
-| `lattice project` | 项目管理（list / info / relation 等） |
+| `lattice project` | 项目管理（list / info / where / merge / relation 等） |
 | `lattice task` | 任务管理（create / start / checkpoint / complete / archive 等） |
 | `lattice spec` | 规范管理（list / show / template / conflicts 等） |
 | `lattice context` | 聚合并输出当前项目上下文 |
@@ -53,6 +53,7 @@ ai会自动进入lattice工作流，管理任务、项目、生命周期
 | `lattice doctor` | 数据健康检查与自动修复 |
 | `lattice trash` | 垃圾桶管理（list / restore / purge） |
 | `lattice user` | 用户管理 |
+| `lattice web` | 启动可视化 Web 服务 |
 
 详细参数说明见 [`packages/core/public/templates/skills/command-reference.md`](../core/public/templates/skills/command-reference.md)。
 

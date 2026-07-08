@@ -14,9 +14,9 @@
 
 | 允许 | 禁止 |
 |---|---|
-| `lattice task list / info / progress` | 创建、修改、删除任何文件 |
-| `lattice context / search / spec show` | 创建或修改任务 |
-| `lattice project list / info` | run_in_terminal 执行有副作用的命令 |
+| `ltc task list / info / progress` | 创建、修改、删除任何文件 |
+| `ltc context / search / spec show` | 创建或修改任务 |
+| `ltc project list / info` | run_in_terminal 执行有副作用的命令 |
 | `read_file` 查阅 PRD / progress / design | `checkpoint` / `complete` / `archive` |
 | 综合信息后给出结论性回答 | 输出大段原始 CLI 结果不做总结 |
 
@@ -29,12 +29,12 @@
 
 | 用户问题 | 信息源 |
 |---|---|
-| "现在有哪些任务" / "当前任务是什么" | `lattice task list --status in_progress` |
-| "最近完成了什么" | `lattice task list --status completed` |
-| "XX 任务的进展" | `lattice task info <id>` + `lattice task progress <id>` |
-| "这个项目有什么规范" | `lattice spec show --project <id>` |
-| "之前有没有做过类似的事" | `lattice search <关键词> --json` |
-| "有哪些项目" / "项目间什么关系" | `lattice project list --with-relations` |
+| "现在有哪些任务" / "当前任务是什么" | `ltc task list --status in_progress` |
+| "最近完成了什么" | `ltc task list --status completed` |
+| "XX 任务的进展" | `ltc task info <id>` + `ltc task progress <id>` |
+| "这个项目有什么规范" | `ltc spec show --project <id>` |
+| "之前有没有做过类似的事" | `ltc search <关键词> --json` |
+| "有哪些项目" / "项目间什么关系" | `ltc project list --with-relations` |
 | "XX 任务的设计方案是什么" | read_file 任务 `design.md` |
 | "这个任务的 PRD 是什么" | read_file 任务 `prd.md` |
 

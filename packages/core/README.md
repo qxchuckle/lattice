@@ -12,19 +12,22 @@ pnpm add @qcqx/lattice-core
 
 ```
 src/
-├── config/       → 全局 & 本地配置读写
-├── db/           → SQLite 数据库（项目索引、FTS、向量搜索）
-├── maintenance/  → 启动自检与数据迁移
-├── paths/        → 路径计算与文件工具
-├── project/      → 项目注册、指纹、跨用户发现、关系管理
-├── rag/          → 嵌入生成、增量/全量索引、语义搜索
-├── search/       → 混合搜索（语义 + FTS）与上下文聚合
-├── spec/         → Spec 解析、级联、冲突检测、校验
-├── task/         → 任务 CRUD、checkpoint 进展追踪
-├── trash/        → 软删除与恢复
-├── types/        → 公共类型定义
-├── template-assets.ts → 模板分发与同步
-└── index.ts      → 统一导出入口
+├── browser.ts          → 浏览器打开工具
+├── cache/              → 扫描缓存
+├── config/             → 全局 & 本地配置读写
+├── db/                 → SQLite 数据库（项目索引、FTS、向量搜索）
+├── maintenance/        → 启动自检与数据迁移
+├── paths/              → 路径计算与文件工具
+├── project/            → 项目注册、多 ID 模型、虚拟合并、跨用户发现、关系管理
+├── rag/                → 嵌入生成、增量/全量索引、语义搜索
+├── search/             → 混合搜索（语义 + FTS）与上下文聚合
+├── spec/               → Spec 解析、级联、冲突检测、校验
+├── task/               → 任务 CRUD、checkpoint 进展追踪
+├── trash/              → 软删除与恢复
+├── types/              → 公共类型定义
+├── utils/              → 工具函数
+├── template-assets.ts  → 模板分发与同步
+└── index.ts            → 统一导出入口
 ```
 
 ## 核心导出
@@ -39,7 +42,7 @@ src/
 
 ### 项目
 
-`registerProject()` / `unregisterProject()` / `findProjectByPath()` / `scanForProjects()` — 项目注册、查找和批量扫描。
+`registerProject()` / `unregisterProject()` / `findProjectByPath()` / `findProjectByAnyId()` / `scanForProjects()` / `selectPrimaryId()` / `normalizeProjectMeta()` / `getRelatedProjectIds()` / `mergeProjects()` — 项目注册、多 ID 查找、批量扫描、虚拟合并与物理合并。
 
 ### 任务
 

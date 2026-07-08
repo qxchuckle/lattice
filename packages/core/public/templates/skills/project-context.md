@@ -11,8 +11,8 @@
 > 何时读：会话开始、进入一个项目、切换工作目录后，或上下文压缩恢复后 → 下一步：拿到上下文后跳到 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec) 选读 spec。
 
 ```bash
-lattice context
-lattice status
+ltc context
+ltc status
 ```
 
 需要明确的关键信息：
@@ -22,16 +22,16 @@ lattice status
 - 是否存在 spec 冲突或历史上下文
 - 是否处于嵌套项目中（自动从祖先继承 spec）
 
-> ⚠️ **spec 列表 ≠ spec 内容**：`lattice context` 输出只是标题 + 路径 + 摘要（摘要常缺失）。必须按当前主题精读相关 spec——详见 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)。
+> ⚠️ **spec 列表 ≠ spec 内容**：`ltc context` 输出只是标题 + 路径 + 摘要（摘要常缺失）。必须按当前主题精读相关 spec——详见 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)。
 
-如果当前目录不是 Lattice 项目，明确告诉用户，提示先 `lattice link`（详见 [project-discovery.md](project-discovery.md)）。
+如果当前目录不是 Lattice 项目，明确告诉用户，提示先 `ltc link`（详见 [project-discovery.md](project-discovery.md)）。
 
 ## 跨项目相似需求搜索
 
-> 何时读：用户提到"类似需求之前哪做过""有没有可复用方案""之前那个项目怎么做的"时 → 下一步：根据 search 结果决定是否进一步 `lattice spec show` / `read_file PRD`。
+> 何时读：用户提到"类似需求之前哪做过""有没有可复用方案""之前那个项目怎么做的"时 → 下一步：根据 search 结果决定是否进一步 `ltc spec show` / `read_file PRD`。
 
 ```bash
-lattice search "<查询词>" --json
+ltc search "<查询词>" --json
 ```
 
 > **AI 调用 search 时优先带 `--json`**，便于读取结构化结果（类型 / 分数 / 路径 / meta）后再推理与筛选。
@@ -39,46 +39,46 @@ lattice search "<查询词>" --json
 如果结果与任务相关，再补：
 
 ```bash
-lattice task list --current
-lattice context --task <id>
+ltc task list --current
+ltc context --task <id>
 ```
 
 ## 嵌套项目继承
 
-> 何时读：进入一个位于其它项目子目录下的项目时，或 `lattice status` 提示嵌套继承层级时 → 下一步：明晰 spec 来源后繼续作业。
+> 何时读：进入一个位于其它项目子目录下的项目时，或 `ltc status` 提示嵌套继承层级时 → 下一步：明晰 spec 来源后繼续作业。
 
-当前项目位于另一个已注册 Lattice 项目的子目录时，`lattice context` 自动继承祖先项目的 spec。
+当前项目位于另一个已注册 Lattice 项目的子目录时，`ltc context` 自动继承祖先项目的 spec。
 
-- **自动检测**：`lattice link` 时自动向上检测并创建 `nested-in` 关系（`createdBy=auto`）
+- **自动检测**：`ltc link` 时自动向上检测并创建 `nested-in` 关系（`createdBy=auto`）
 - **级联优先级**：`当前项目 > 直接父级 > 更远祖先 > 用户级 > 全局级`（就近优先覆盖）
 - **只继承 spec，不继承任务**
-- `lattice status` 显示嵌套继承层级信息
+- `ltc status` 显示嵌套继承层级信息
 
 典型场景：monorepo 中子包（`packages/foo`）和根目录都注册为 Lattice 项目，子包自动继承根项目规范。
 
 ## 项目关系
 
-> 何时读：工作涉及多个项目 / 共享组件 / 跨仓库依赖时，或 `lattice context` 输出“关联项目”段为空但有多个已注册项目时 → 下一步：发现未记录的依赖 / 协作 → 跳到 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断) 记录关系。
+> 何时读：工作涉及多个项目 / 共享组件 / 跨仓库依赖时，或 `ltc context` 输出“关联项目”段为空但有多个已注册项目时 → 下一步：发现未记录的依赖 / 协作 → 跳到 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断) 记录关系。
 
 工作涉及多个项目、共享组件或跨仓库依赖时：
 
 ```bash
-lattice project list --with-relations
-lattice project relation list <id>
+ltc project list --with-relations
+ltc project relation list <id>
 ```
 
 发现项目间存在未记录的依赖或协作关系时，**必须记录**，不要仅“建议添加”：
 
 ```bash
-lattice project relation add <a> <b> --type <type> \
+ltc project relation add <a> <b> --type <type> \
   --description "证据描述" --ai-inferred --from-task <task-id>
 ```
 
 典型触发场景：
 
 - 任务关联了多个项目（`task.json` 的 `projects` 有多个）
-- 在 PRD / 指纹里看到跨项目证据（共享 git first commit、package.json 依赖、monorepo 包名）
-- `lattice context` 输出“关联项目”段为空但本地有多个已注册项目
+- 在 PRD / 项目数据里看到跨项目证据（共享 git first commit、package.json 依赖、monorepo 包名）
+- `ltc context` 输出“关联项目”段为空但本地有多个已注册项目
 
 关系类型判定指引详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)。
 
@@ -86,19 +86,19 @@ lattice project relation add <a> <b> --type <type> \
 
 > 何时读：同一项目被多个本机用户同时使用 / 需要看到其他用户的 spec / 跨用户任务聚合时 → 下一步：按需加 `--user` / `--all-user` / `--current-user` 参数。
 
-`lattice context` 默认聚合所有用户为同一项目定义的 spec 和关系。需要精确控制时：
+`ltc context` 默认聚合所有用户为同一项目定义的 spec 和关系。需要精确控制时：
 
 ```bash
 # 关系：默认聚合所有用户
-lattice project relation list <id> --user <users>    # 仅指定用户
-lattice project relation list <id> --current-user    # 仅当前用户
+ltc project relation list <id> --user <users>    # 仅指定用户
+ltc project relation list <id> --current-user    # 仅当前用户
 
 # 任务：跨用户聚合需显式开启
-lattice task list --current --all-user               # 聚合所有用户
-lattice task list --current --user <users>           # 仅指定用户
+ltc task list --current --all-user               # 聚合所有用户
+ltc task list --current --user <users>           # 仅指定用户
 
 # Spec：查看其他用户的 spec
-lattice spec show <file> --user <username> --detail
+ltc spec show <file> --user <username> --detail
 ```
 
 > `--user` 中指定不存在的用户名会报错并列出可用用户。`--user` 与 `--current-user` / `--all-user` 互斥。
@@ -108,5 +108,5 @@ lattice spec show <file> --user <username> --detail
 > 何时读：任何状态下调用本文描述的各类命令后给用户输出时 → 下一步：以下原则决定输出体量与内容。
 
 - 不要直接转储整份上下文，提炼与当前请求最相关的规则、历史方案和风险
-- AI 调用 `lattice search` 优先带 `--json`
-- 当前目录不是 Lattice 项目时明确说明，并提示 `lattice link`
+- AI 调用 `ltc search` 优先带 `--json`
+- 当前目录不是 Lattice 项目时明确说明，并提示 `ltc link`

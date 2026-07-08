@@ -4,7 +4,7 @@
 >
 > **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
 > - `spec-workflows.md`：spec 是什么 / 层级（含 user / global 必须附 `## 适用范围`）/ 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`lattice rag update`）
+> - `SKILL.md`：索引维护（`ltc rag update`）
 > - `lattice-rules.md` §五 / §七：spec 更新与冲突硬规则
 
 **目标**：把跨多个项目可复用、但仍属于当前用户工作方式的经验沉淀到用户级 spec。

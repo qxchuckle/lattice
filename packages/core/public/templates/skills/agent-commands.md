@@ -21,6 +21,7 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 | `/lattice/task/start` | 开始实施任务并同步上下文 | [task-workflows.md](task-workflows.md) + [spec-workflows.md](spec-workflows.md) + [project-context.md](project-context.md) | `task/start.md` |
 | `/lattice/task/checkpoint` | 记录任务关键进展 | [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件) | `task/checkpoint.md` |
 | `/lattice/task/archive` | 结束任务并判断是否沉淀规则 | [task-workflows.md#归档流程](task-workflows.md#归档流程) + [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) | `task/archive.md` |
+| `/lattice/task/delete` | 删除任务（自然语言匹配 / 删除当前任务 / 风险确认） | [task-workflows.md](task-workflows.md) + [command-reference.md](command-reference.md) | `task/delete.md` |
 | `/lattice/spec/update/project` | 沉淀当前项目特有规则 / 认知 | [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/update/project.md` |
 | `/lattice/spec/update/user` | 沉淀跨项目可复用、属于当前用户的规则 / 认知 | [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/update/user.md` |
 | `/lattice/spec/update/global` | 沉淀多用户多项目共享的默认规则 | [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/update/global.md` |

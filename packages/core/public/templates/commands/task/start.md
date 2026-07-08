@@ -12,7 +12,7 @@
 
 ## 命令参数解析
 
-- 命令后是已存在的任务 ID → 直接 `lattice task start <task-id>`
+- 命令后是已存在的任务 ID → 直接 `ltc task start <task-id>`
 - 命令后是非 ID 的描述 / 关键词 / 文件引用 / 需求段 → 走"标题归纳与查重"流程，详见 skill `task-workflows.md` 的「命令参数不是任务 ID 时：标题归纳与查重」
 
 ## 执行步骤
@@ -20,8 +20,8 @@
 ### 情况一：参数是任务 ID
 
 ```bash
-lattice task start <task-id>
-lattice context --task <task-id>
+ltc task start <task-id>
+ltc context --task <task-id>
 ```
 
 ### 情况二：参数不是任务 ID

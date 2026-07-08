@@ -44,12 +44,12 @@ user / global 必须包含 `## 适用范围`，声明适用于哪些项目 / 语
 
 ## 按任务主题精读相关 spec
 
-> 何时读：任务起手（`lattice context` 之后、动手之前）、本轮涉及未读过的模块 / 概念、上下文压缩恢复后 → 下一步：精读完毕后回到 [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作) 或 [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件) 继续。
+> 何时读：任务起手（`ltc context` 之后、动手之前）、本轮涉及未读过的模块 / 概念、上下文压缩恢复后 → 下一步：精读完毕后回到 [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作) 或 [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件) 继续。
 
 ### 如何选
 
 - 标题 / 路径与任务目标、修改范围匹配
-- `lattice context --task <id>` 的语义关联推荐
+- `ltc context --task <id>` 的语义关联推荐
 - 认知类 spec 默认应读；约束类按修改范围决定
 
 ### 如何读
@@ -60,7 +60,7 @@ user / global 必须包含 `## 适用范围`，声明适用于哪些项目 / 语
 
 ### 关联
 
-实施时参照了某 spec → `lattice task ref-spec <task-id> <spec-name>`。
+实施时参照了某 spec → `ltc task ref-spec <task-id> <spec-name>`。
 
 ## 沉淀判定
 
@@ -93,24 +93,24 @@ AI 判断类、进程事件类不直接触发 spec 沉淀，但 `issue` + 解决
 
 ## 写入流程
 
-> 何时读：「沉淀判定」结果为「必须写 / 建议写」后 → 下一步：写完后 `lattice rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）。
+> 何时读：「沉淀判定」结果为「必须写 / 建议写」后 → 下一步：写完后 `ltc rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）。
 
-1. **前置采集**：`lattice context` + `lattice spec list --scope <层级>` + 回顾任务进展和对话结论
-2. **查已有 spec**：`lattice spec show <相关文件>`，优先补充而非重复创建
+1. **前置采集**：`ltc context` + `ltc spec list --scope <层级>` + 回顾任务进展和对话结论
+2. **查已有 spec**：`ltc spec show <相关文件>`，优先补充而非重复创建
 3. **冲突检测**：读取同层级及上下层级已有 spec，判断语义矛盾，发现冲突告知用户
 4. **写入**：一个文件聚焦一个主题；写具体可执行的内容；包含完整操作步骤和经验细节；user / global 带 `## 适用范围`
-5. **元数据刷新**：直接编辑 spec 正文后，运行 `lattice spec migrate` 刷新 frontmatter（自动补 `id`、刷新 `updated`）；仅改 frontmatter 字段时用 `lattice spec set <file> --title/--description/--add-tag`
+5. **元数据刷新**：直接编辑 spec 正文后，运行 `ltc spec migrate` 刷新 frontmatter（自动补 `id`、刷新 `updated`）；仅改 frontmatter 字段时用 `ltc spec set <file> --title/--description/--add-tag`
 6. **二次审阅**：对照 PRD + progress + 对话检查有无遗漏
-7. **索引更新**：`lattice rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）
+7. **索引更新**：`ltc rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）
 
 ## 模板命令
 
 > 何时读：需要查 spec 模板相关命令语法时 → 下一步：完整参数见 [command-reference.md](command-reference.md)。
 
 ```bash
-lattice spec template list
-lattice spec template apply <name>
-lattice spec template pull <repo>
-lattice spec template sync
-lattice spec template registry list
+ltc spec template list
+ltc spec template apply <name>
+ltc spec template pull <repo>
+ltc spec template sync
+ltc spec template registry list
 ```

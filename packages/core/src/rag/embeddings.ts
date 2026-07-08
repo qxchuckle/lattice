@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { getGlobalDispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { dirExists, ensureDir, fileExists, listDir, removeDir } from '../paths';
-import { readResolvedConfig } from '../config';
+import { readExplicitEmbeddingConfig, readResolvedConfig } from '../config';
 import type { RAGEmbeddingConfig } from '../types';
 
 let pipeline: ((text: string | string[]) => Promise<{ tolist: () => number[][] }>) | null = null;
@@ -63,11 +63,15 @@ function applyEmbeddingProxy(proxy: string | null): void {
 export async function getEmbeddingConfig(): Promise<Required<RAGEmbeddingConfig>> {
   const config = await readResolvedConfig();
   const embedding = config.rag?.embedding ?? {};
+  const explicit = await readExplicitEmbeddingConfig();
 
   return {
     ...DEFAULT_EMBEDDING_CONFIG,
     ...embedding,
-    remoteHost: normalizeHost(embedding.remoteHost ?? DEFAULT_EMBEDDING_CONFIG.remoteHost),
+    // 优先级：lattice config 显式配置 > HF_ENDPOINT 环境变量 > 默认值
+    remoteHost: normalizeHost(
+      explicit.remoteHost ?? process.env.HF_ENDPOINT ?? DEFAULT_EMBEDDING_CONFIG.remoteHost,
+    ),
   };
 }
 

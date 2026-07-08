@@ -10,20 +10,20 @@
 ## 命令参数解析
 
 - 命令后有任务 ID → 直接对该任务添加检查点
-- 命令后没有任务 ID → 通过 `lattice task list --current --status in_progress` 推断当前任务；多个时询问用户确认
+- 命令后没有任务 ID → 通过 `ltc task list --current --status in_progress` 推断当前任务；多个时询问用户确认
 
 ## 执行步骤
 
 ### 1. 确定目标任务
 
 ```bash
-lattice task info <task-id>     # 有 ID 时
-lattice task list --current     # 无 ID 时，选 in_progress 的
+ltc task info <task-id>     # 有 ID 时
+ltc task list --current     # 无 ID 时，选 in_progress 的
 ```
 
 ### 2. PRD 自检前置步骤（强制，打点前必过）
 
-执行 `lattice task checkpoint` **之前必须先过以下自检**——任意一条命中而 PRD 未同步，**必须先 `read_file prd.md` → `search_replace prd.md` 同步后再打点**（详见 skill `task-workflows.md` 「打 checkpoint 前的 PRD 自检」）：
+执行 `ltc task checkpoint` **之前必须先过以下自检**——任意一条命中而 PRD 未同步，**必须先 `read_file prd.md` → `search_replace prd.md` 同步后再打点**（详见 skill `task-workflows.md` 「打 checkpoint 前的 PRD 自检」）：
 
 - [ ] 本轮是否触发了 skill `task-workflows.md` 「PRD 同步硬触发清单（T1~T8）」中任一项（T1~T8）？
 - [ ] 本轮改动的文件是否全部出现在 PRD 的"修改文件索引"中？
@@ -39,7 +39,7 @@ lattice task list --current     # 无 ID 时，选 in_progress 的
 ### 4. 写入
 
 ```bash
-lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
+ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ```
 
 ## 输出要求

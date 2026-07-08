@@ -13,6 +13,7 @@
 | **上下文聚合** | `lattice context` 一键拿到当前项目所有 spec、活跃任务与关联项目 |
 | **模板系统** | 内置 spec 模板和远程模板仓库，快速初始化项目规范 |
 | **AI 集成** | 通过 `lattice init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入工作流 |
+| **Web 可视化** | `lattice web` 启动本地可视化服务，浏览任务/项目/Spec 关系图 |
 
 ## 适用场景
 
@@ -37,7 +38,8 @@ lattice link
 ```
 packages/
 ├── cli/   → @qcqx/lattice-cli  — 命令行入口
-└── core/  → @qcqx/lattice-core — 领域逻辑核心库
+├── core/  → @qcqx/lattice-core — 领域逻辑核心库
+└── web/   → @qcqx/lattice-web  — 可视化前端
 ```
 
 ## 文档入口
@@ -46,6 +48,7 @@ packages/
 
 - CLI 命令行工具：[`packages/cli/README.md`](packages/cli/README.md)
 - Core 领域逻辑核心库：[`packages/core/README.md`](packages/core/README.md)
+- Web 可视化前端：[`packages/web/README.md`](packages/web/README.md)
 
 ### AI / Agent 工作流
 
@@ -58,6 +61,7 @@ packages/
 - 项目发现与识别：[`packages/core/public/templates/skills/project-discovery.md`](packages/core/public/templates/skills/project-discovery.md)
 - Agent Commands 用途与边界：[`packages/core/public/templates/skills/agent-commands.md`](packages/core/public/templates/skills/agent-commands.md)
 - Subagent 委派策略：[`packages/core/public/templates/skills/subagent-delegation.md`](packages/core/public/templates/skills/subagent-delegation.md)
+- 异常排查与诊断：[`packages/core/public/templates/skills/troubleshooting.md`](packages/core/public/templates/skills/troubleshooting.md)
 
 ### Spec 模板与规则
 

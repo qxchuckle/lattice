@@ -22,8 +22,8 @@
 1. **前置信息采集（必须先读后写）**：见 skill `task-workflows.md` 的「任务归档前置信息采集」。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
    - 含代码变更审查：如项目使用 git，通过 diff 审查本次任务修改的代码（`git diff --stat`），必要时阅读完整源文件，以确保归档信息完整覆盖所有实际变更
 2. **更新 PRD**：补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落；确保 progress 中的关键决策已在 PRD 中体现
-   - 任务有父 / 子任务时先用 `lattice task lineage` / `lattice task tree --descendants` 检查链路是否仍合理
-3. **summary checkpoint** + **complete** + **archive** + **`lattice rag update`**
+   - 任务有父 / 子任务时先用 `ltc task lineage` / `ltc task tree --descendants` 检查链路是否仍合理
+3. **summary checkpoint** + **complete** + **archive** + **`ltc rag update`**
 4. **归档后二次审阅**（必做）：见 skill `task-workflows.md` 的「归档后的二次审阅与 spec 沉淀判定」
 5. **spec 沉淀判定**：见下文「归档前检查」
 

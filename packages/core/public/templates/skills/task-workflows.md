@@ -42,33 +42,33 @@ design 模式具体允许 / 禁止动作的硬约束清单见 [lattice-rules.md 
 > 何时读：`task create` / `task start` 收到的参数是描述 / 关键词 / 文件引用 / 需求段（不是已存在的任务 ID）时 → 下一步：拿到任务 ID 后跳到「task start 后的起手动作」。
 
 1. 归纳简洁标题
-2. `lattice task list --current` + `lattice search "<标题>" --project <project-id> --type task --json` 查重
+2. `ltc task list --current` + `ltc search "<标题>" --project <project-id> --type task --json` 查重
 3. 有相似 in_progress 任务 → 先停下列候选给用户确认
-4. `lattice task create "<标题>" --current [--parent <parent-task-id>]`
+4. `ltc task create "<标题>" --current [--parent <parent-task-id>]`
 
 ## 父子任务
 
 > 何时读：当前任务是另一任务的拆分 / 后续 / 子主题时 → 下一步：创建后回到「task start 后的起手动作」。
 
 ```bash
-lattice task create "<title>" --current --parent <parent-task-id>
-lattice task lineage <task-id>
-lattice task tree <task-id> [--descendants]
-lattice task update <task-id> --parent <parent-task-id>
-lattice task update <task-id> --clear-parent
+ltc task create "<title>" --current --parent <parent-task-id>
+ltc task lineage <task-id>
+ltc task tree <task-id> [--descendants]
+ltc task update <task-id> --parent <parent-task-id>
+ltc task update <task-id> --clear-parent
 ```
 
 ## task start 后的起手动作
 
-> 何时读：`lattice task start` 执行完毕后必跑 → 下一步：进入「实施期多轮对话循环」。
+> 何时读：`ltc task start` 执行完毕后必跑 → 下一步：进入「实施期多轮对话循环」。
 
 ```bash
-lattice task start <task-id>
-lattice context --task <task-id>
+ltc task start <task-id>
+ltc context --task <task-id>
 ```
 
 1. 按主题选读相关 spec（→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
-2. `lattice search "<关键词>" --type task --json` 参考近似任务
+2. `ltc search "<关键词>" --type task --json` 参考近似任务
 3. 完善 PRD（目标、约束、方案、文件索引）
 4. 如有 design.md 先 read_file
 5. 给用户输出整体确认（任务 ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
@@ -127,7 +127,7 @@ lattice context --task <task-id>
 
 ### 打 checkpoint 前的 PRD 自检
 
-> 步骤 4：每次打 checkpoint 前必做 → 下一步：自检通过后再 `lattice task checkpoint` 命令；命中任一未同步项必须先 `search_replace prd.md` 再打点。
+> 步骤 4：每次打 checkpoint 前必做 → 下一步：自检通过后再 `ltc task checkpoint` 命令；命中任一未同步项必须先 `search_replace prd.md` 再打点。
 
 打 checkpoint 前必须确认：
 
@@ -154,10 +154,10 @@ lattice context --task <task-id>
 
 ## checkpoint 类型与触发条件
 
-> 何时读：决定本轮要打什么类型 checkpoint 时 → 下一步：执行 `lattice task checkpoint <id> --type <type> --title "..." -m "..."`。
+> 何时读：决定本轮要打什么类型 checkpoint 时 → 下一步：执行 `ltc task checkpoint <id> --type <type> --title "..." -m "..."`。
 
 ```bash
-lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
+ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ```
 
 11 类，按信息来源分三组，完全正交（多类型是互补记录，不是重复记录）：
@@ -202,7 +202,7 @@ lattice task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ### 查看进展
 
 ```bash
-lattice task progress <task-id> [--last <n>] [--type <type>]
+ltc task progress <task-id> [--last <n>] [--type <type>]
 ```
 
 ## 项目关联同步
@@ -210,20 +210,20 @@ lattice task progress <task-id> [--last <n>] [--type <type>]
 > 何时读：任务刚 start 后 / 编辑了新项目文件 / 中途切换项目目录 / 归档前复核时 → 下一步：执行 `task associate` 让 task.json 的 projects/scopePaths 反映实际工作范围。
 
 ```bash
-lattice task associate <task-id> --current
-lattice task associate <task-id> --paths <path>
-lattice task associate <task-id> --project <project-id>
+ltc task associate <task-id> --current
+ltc task associate <task-id> --paths <path>
+ltc task associate <task-id> --project <project-id>
 ```
 
 发现任务涉及新路径 / 新项目时当轮执行，不延后。只有关联了用户可能未预期的项目时才输出说明。
 
 ### spec 引用同步
 
-实施时参照了某 spec → 用 `lattice task ref-spec` 记录到 task.json：
+实施时参照了某 spec → 用 `ltc task ref-spec` 记录到 task.json：
 
 ```bash
-lattice task ref-spec <task-id> <spec-name>     # 支持文件名 / 标题模糊匹配
-lattice task unref-spec <task-id> <spec-id>      # 移除引用
+ltc task ref-spec <task-id> <spec-name>     # 支持文件名 / 标题模糊匹配
+ltc task unref-spec <task-id> <spec-id>      # 移除引用
 ```
 
 ### 元数据与 PRD 一致性
@@ -232,17 +232,17 @@ lattice task unref-spec <task-id> <spec-id>      # 移除引用
 
 | PRD 中写入的内容 | 必须执行的 CLI 命令 |
 |---|---|
-| 工作目录 / 文件路径 | `lattice task associate <task-id> --paths <path>` |
-| 关联的项目名称 / ID | `lattice task associate <task-id> --project <project-id>` |
-| 参照的 spec 名称 | `lattice task ref-spec <task-id> <spec-name>` |
+| 工作目录 / 文件路径 | `ltc task associate <task-id> --paths <path>` |
+| 关联的项目名称 / ID | `ltc task associate <task-id> --project <project-id>` |
+| 参照的 spec 名称 | `ltc task ref-spec <task-id> <spec-name>` |
 
 ### 项目间关系记录
 
 任务涉及多个已注册项目时，检查项目间是否已有关系记录，无则推断并添加：
 
 ```bash
-lattice project relation list <project-id>   # 查看当前项目已有关系
-lattice project relation add <a> <b> --type <type> \
+ltc project relation list <project-id>   # 查看当前项目已有关系
+ltc project relation add <a> <b> --type <type> \
   --description "证据描述" --ai-inferred --from-task <task-id>
 ```
 
@@ -259,16 +259,16 @@ lattice project relation add <a> <b> --type <type> \
 
 ## 任务归档前置信息采集
 
-> 何时读：`lattice task complete` 之前必读 → 下一步：写归档总结、打 summary checkpoint、执行「归档流程」。
+> 何时读：`ltc task complete` 之前必读 → 下一步：写归档总结、打 summary checkpoint、执行「归档流程」。
 
 禁止跳过：未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策。
 
 ```bash
-lattice task info <task-id>                           # → read_file prd.md
-lattice task progress <task-id>
-lattice task progress <task-id> --type correction     # 用户纠错史
-lattice task progress <task-id> --type constraint     # 用户边界史
-lattice task progress <task-id> --type context        # 用户背景史
+ltc task info <task-id>                           # → read_file prd.md
+ltc task progress <task-id>
+ltc task progress <task-id> --type correction     # 用户纠错史
+ltc task progress <task-id> --type constraint     # 用户边界史
+ltc task progress <task-id> --type context        # 用户背景史
 # read_file design.md（如存在）
 # 审查代码变更（git diff --stat）
 ```
@@ -283,38 +283,38 @@ PRD 补全内容：最终方案 + 任务完成总结 + 遗留事项。
 # 1. 前置信息采集（详见上一节）
 # 2. 更新 prd.md：补最终方案 + 任务完成总结 + 遗留
 # 3. summary checkpoint
-lattice task checkpoint <task-id> --type summary --title "..." -m "..."
+ltc task checkpoint <task-id> --type summary --title "..." -m "..."
 # 4. 完成 + 归档
-lattice task complete <task-id>
-lattice task archive <task-id>
-# 5. lattice rag update（→ SKILL.md#索引维护）
+ltc task complete <task-id>
+ltc task archive <task-id>
+# 5. ltc rag update（→ SKILL.md#索引维护）
 # 6. 二次审阅 + spec 沉淀判定（详见下一节）
 ```
 
 ## 归档后的二次审阅与 spec 沉淀判定
 
-> 何时读：`archive` 完成后必跑 → 下一步：发现遗漏立即补充 PRD / 补打 checkpoint / `lattice rag update`；判定为可沉淀经验时跳到 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) 走沉淀流程。
+> 何时读：`archive` 完成后必跑 → 下一步：发现遗漏立即补充 PRD / 补打 checkpoint / `ltc rag update`；判定为可沉淀经验时跳到 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) 走沉淀流程。
 
 二次审阅对照 progress 和对话检查：
 
 - 关键决策是否全部体现在 PRD 或 checkpoint
 - 是否有遗漏改动
 - 经验是否已判断要不要沉淀为 spec（见 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
-- 任务中是否发现了未记录的项目间关系 → 补充 `lattice project relation add`（详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
+- 任务中是否发现了未记录的项目间关系 → 补充 `ltc project relation add`（详见 [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
 
-发现遗漏立即补充 + `lattice rag update`。
+发现遗漏立即补充 + `ltc rag update`。
 
 ## 命令参数为空时的归档推断规则
 
 > 何时读：`/lattice:task:archive` 不带参数时 → 下一步：根据推断结果归档单一候选，或列候选给用户确认。
 
-- `lattice task list --current` + `lattice search "<对话主题>" --type task --json`
+- `ltc task list --current` + `ltc search "<对话主题>" --type task --json`
 - in_progress 仅 1 个且与当前对话匹配 → 直接归档
 - 多个候选 → 列给用户确认
 
 ## 输出原则：精简但不静默
 
-> 何时读：实施期任意 CLI 调用后、或一次会话连续运行多条 lattice 命令时 → 下一步：按本段格式给出简短说明（2~5 行），不长篇复述 CLI 输出。
+> 何时读：实施期任意 CLI 调用后、或一次会话连续运行多条 ltc 命令时 → 下一步：按本段格式给出简短说明（2~5 行），不长篇复述 CLI 输出。
 
 **精简的含义**：不长篇复述 CLI 原始输出、不罗列每步执行了哪条命令、不贴 search 全部 JSON。
 
@@ -333,14 +333,14 @@ lattice task archive <task-id>
 > 何时读：需要查 task 子命令参数语法时 → 下一步：完整参数与字段含义见 [command-reference.md](command-reference.md)。
 
 ```bash
-lattice task list [--current] [--all-user]
-lattice task create "<title>" --current [--parent <id>]
-lattice task info <id>
-lattice task start <id>
-lattice task checkpoint <id> --type <type> --title "..." -m "..."
-lattice task progress <id> [--last <n>] [--type <type>]
-lattice task associate <id> [--current] [--paths ...] [--project <id>]
-lattice task complete <id>
-lattice task archive <id>
-lattice context --task <id>
+ltc task list [--current] [--all-user]
+ltc task create "<title>" --current [--parent <id>]
+ltc task info <id>
+ltc task start <id>
+ltc task checkpoint <id> --type <type> --title "..." -m "..."
+ltc task progress <id> [--last <n>] [--type <type>]
+ltc task associate <id> [--current] [--paths ...] [--project <id>]
+ltc task complete <id>
+ltc task archive <id>
+ltc context --task <id>
 ```

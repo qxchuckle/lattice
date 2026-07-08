@@ -16,6 +16,8 @@ description: >-
 
 Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs` 和搜索能力组织长期知识，默认数据根目录是 `~/.lattice/`。
 
+> **命令别名**：CLI 注册了 `lattice` 和 `ltc` 两个命令名，本文档统一使用 `ltc`。
+
 > **frontmatter `description` 与正文「何时使用」职责区分**：frontmatter 的 `description` 是 agent 加载本 skill 时的匹配元数据，保留触发关键词供平台调度；正文「何时使用」按概念化场景说明，不再重复枚举触发词。
 
 ## 何时使用
@@ -49,22 +51,77 @@ Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs
 
 | 场景 | 为什么读 | 文档 |
 |---|---|---|
-| 项目识别、多路径绑定、指纹选单、AI 推断与记录项目关系 | **身份与关系认知**：当前目录是不是已注册项目 / 应该绑哪个项目 / 项目间关系判定与记录 | [project-discovery.md](project-discovery.md) |
+| 项目识别、多路径绑定、ID 匹配、AI 推断与记录项目关系 | **身份与关系认知**：当前目录是不是已注册项目 / 应该绑哪个项目 / 项目间关系判定与记录 | [project-discovery.md](project-discovery.md) |
 | 触发或解析 `/lattice/...` agent command | **命令索引**：从 agent command 跳到底层 skill 子文档的依赖矩阵 | [agent-commands.md](agent-commands.md) |
 | 多命令并行 / 大输出场景下的 subagent 委派 | **委派判定**：什么时候该把工作拆给 subagent 而不是自己一把梭 | [subagent-delegation.md](subagent-delegation.md) |
 | 查 CLI 参数 / 子命令语法 | **字典**：所有 lattice CLI 参数与功能详细参考 | [command-reference.md](command-reference.md) |
 | Lattice 异常（命令报错、数据缺失、搜索无结果） | **排查流程**：doctor 诊断项速查、典型问题场景、AI 决策树 | [troubleshooting.md](troubleshooting.md) |
 
+## 自主信息获取
+
+> **本文权威范围**：AI 在对话过程中自主调用 ltc 命令获取信息的原则。各子文档定义的具体触发条件不在此复述。
+
+AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何时候发现信息不足，都应主动获取，不要凭记忆或猜测行事。
+
+### 核心原则
+
+- **信息齐备再动手**：开始写代码 / 做决策前，确保上下文中已有足够信息（项目约定、相关 spec、历史方案、修改文件范围）。信息缺口 = 返工风险。宁可多查一次，不要猜了再改
+- **不确定就先查**：对某个模块 / 概念 / 规范 / 历史方案不确定时，先查再做事
+- **渐进式获取**：不需要一开始全量加载，按当前需要获取；随着对话深入发现新信息需求时主动补充
+- **获取后不静默**：多轮信息获取可全部执行完后统一简述结论（查了什么 + 得到什么关键信息），单次获取则查完即简述
+
+### 常见场景
+
+| 对话中出现的情况 | 获取什么 | 命令 |
+|---|---|---|
+| 涉及不熟悉的模块 / 概念 | 相关 spec | `ltc spec show` / `ltc spec list` |
+| 技术选型 / 架构决策 | 历史决策记录 | `ltc search "<关键词>" --type task --json` → read_file PRD |
+| 遇到报错 / 兼容性问题 | 类似踩坑经验 | `ltc search "<错误关键词>" --json` |
+| 用户说"之前做过类似的" | 相似需求的方案 | `ltc search "<需求描述>" --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)） |
+| 不确定当前项目约定 | 项目规范 | `ltc context` / `ltc spec list` |
+| 需要参考已完成任务的经验 | 任务 PRD + progress | `ltc task progress <id>` → read_file PRD |
+| 不确定本地有哪些项目 | 已注册项目清单 | `ltc project list` / `ltc project list --with-relations` |
+| 当前目录属于哪个项目 | 项目身份 | `ltc project where .` / `ltc status` |
+| 不确定项目间依赖 / 关系 | 项目关系 | `ltc project relation list` / `ltc project list --with-relations` |
+| 任务关联了哪些项目 | 任务的项目集合 | `ltc task info <id>` |
+| 查看当前有哪些活跃任务 | 进行中任务 | `ltc task list --current` |
+| 数据 / 索引可能有问题 | 健康状态 | `ltc doctor` / `ltc rag status` |
+| 不确定某条 spec 的完整内容 | spec 正文 | `ltc spec show <name> --detail` |
+| 检查 spec 是否有层级冲突 | 冲突检测 | `ltc spec conflicts` |
+| 查看任务的父子链路 / 子任务树 | 任务谱系 | `ltc task lineage <id>` / `ltc task tree <id>` |
+| 不确定任务当前进展 | 最近 checkpoint | `ltc task progress <id> --last 5` |
+| 查看某次纠错 / 约束的来龙去脉 | 特定类型 checkpoint | `ltc task progress <id> --type correction` / `--type constraint` |
+| 不确定删除了什么能否恢复 | 垃圾桶内容 | `ltc trash list` |
+| 搜索结果不准 / 索引过旧 | 索引状态 | `ltc rag status` → `ltc rag update` / `ltc rag rebuild` |
+| 配置项不确定 / 需要确认默认值 | 当前配置 | `ltc config show` / `ltc config get <key>` |
+| 跨用户协作 / 需要看其他用户的 spec | 其他用户数据 | `ltc spec show <name> --user <username>` / `ltc task list --current --all-user` |
+
+> 各场景的具体触发条件与流程见对应子文档（[spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec) / [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索) / [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件)）。本节仅声明"可以随时自主获取"的原则。
+
+## 自主元数据维护
+
+> **本文权威范围**：AI 在任务进行中自主维护 task.json 元数据与项目关系的原则。具体命令与流程见 [lattice-rules.md §四](lattice-rules.md#四项目关联同步) 与 [task-workflows.md#项目关联同步](task-workflows.md#项目关联同步)。
+
+任务进行中发现实际情况变化时，当轮同步到 task.json，不拖到归档：
+
+| 发现的变化 | 同步动作 | 命令 |
+|---|---|---|
+| 任务涉及新项目 / 新路径 | 更新 `projects` / `scopePaths` | `ltc task associate` |
+| 参照了某 spec | 更新 `referencedSpecs` | `ltc task ref-spec` |
+| 发现未记录的项目间关系 | 写入 `relations.json` | `ltc project relation add --ai-inferred` |
+
+> **原则**：task.json 的结构化字段是机器可读元数据的唯一来源，PRD 中的自然语言描述不能替代 CLI 记录。
+
 ## 索引维护
 
-> **本文权威范围**：索引相关命令（`lattice rag update / rebuild / status`）的使用规则。其他文档涉及索引操作时通过 `SKILL.md#索引维护` 引用，不得复述。
+> **本文权威范围**：索引相关命令（`ltc rag update / rebuild / status`）的使用规则。其他文档涉及索引操作时通过 `SKILL.md#索引维护` 引用，不得复述。
 
-新建或修改 spec / 任务 PRD / 项目注册后，运行 `lattice rag update` 让搜索索引最新：
+新建或修改 spec / 任务 PRD / 项目注册后，运行 `ltc rag update` 让搜索索引最新：
 
 ```bash
-lattice rag update    # 增量更新（首选，只处理变更文档）
-lattice rag rebuild   # 全量重建（rag update 报错或搜索结果明显不对时降级使用）
-lattice rag status    # 查看索引状态
+ltc rag update    # 增量更新（首选，只处理变更文档）
+ltc rag rebuild   # 全量重建（rag update 报错或搜索结果明显不对时降级使用）
+ltc rag status    # 查看索引状态
 ```
 
 ## 终端输出读取原则
@@ -82,8 +139,8 @@ lattice rag status    # 查看索引状态
 ### 何时禁止过滤 / 必须全量
 
 - **第一次跑某条 lattice 命令** / 不熟悉输出结构 → 先全量看再决定
-- **从 `lattice search` / `lattice context` 判断"是否有相关 spec / 相似案例"** → 需看到所有候选才能下结论
-- **排查错误、构建 / 测试 / `lattice doctor` 失败** → 错误可能在任意位置
+- **从 `ltc search` / `ltc context` 判断"是否有相关 spec / 相似案例"** → 需看到所有候选才能下结论
+- **排查错误、构建 / 测试 / `ltc doctor` 失败** → 错误可能在任意位置
 - **判断"有无遗漏"类语义**（残留引用、`spec conflicts`、`project list --orphaned`）→ 必须全量或先 `wc -l` 探体量
 - **输出可能 stderr/stdout 交错** → 先 `2>&1` 再考虑过滤
 
@@ -98,12 +155,25 @@ lattice rag status    # 查看索引状态
 - `wc -l` 先看体量再决定要不要过滤
 - `grep -nC 5 <keyword>` 替代盲截
 - `awk '/起始模式/,/结束模式/'` 截取语义段落
-- 能带 `--json` 就带（`lattice search --json` 等），结构化抽取比字符串过滤可靠
+- 能带 `--json` 就带（`ltc search --json` 等），结构化抽取比字符串过滤可靠
+
+## 命令执行效率
+
+多条无依赖的 ltc 命令用 `&&` 串联一次性执行，减少请求轮次、节省 token。有依赖的（如先查 ID 再用 ID 查详情）仍需分步。
+
+```bash
+# 无依赖：串联执行
+ltc context && ltc task list --current && ltc spec list
+
+# 有依赖：分步执行
+ltc task list --current          # 先拿到 task-id
+ltc task progress <task-id>      # 再用 task-id 查进度
+```
 
 ## --force 跳过二次确认
 
 > **本文权威范围**：AI / Agent 自主调用 lattice CLI 时何时必须带 `-f` / `--force` 的硬约束。其他文档涉及 --force 时通过 `SKILL.md#--force-跳过二次确认` 引用，不得复述判定逻辑。
 
-AI / Agent 自主调用以下命令时**必须**带 `-f` / `--force`，否则会阻塞等待用户输入：`lattice init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove`。
+AI / Agent 自主调用以下命令时**必须**带 `-f` / `--force`，否则会阻塞等待用户输入：`ltc init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove`。
 
 完整命令清单与参数细节见 [command-reference.md#通用约定-f---force-跳过二次确认](command-reference.md#通用约定-f---force-跳过二次确认)。
