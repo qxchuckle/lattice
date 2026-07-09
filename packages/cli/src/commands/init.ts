@@ -27,6 +27,12 @@ import {
   writeGlobalConfig,
   writeLocalConfig,
   initDb,
+  rebuildProjectsCache,
+  collectAllSearchDocuments,
+  incrementalIndex,
+  FTS_INDEX_VERSION,
+  getFtsIndexVersion,
+  setFtsIndexVersion,
   closeDb,
   scanForProjects,
   type ScanProgress,
@@ -230,8 +236,9 @@ export function registerInitCommand(program: Command): void {
           }
         }
 
-        // 9. 初始化数据库
+        // 9. 初始化数据库 + 全用户项目回填
         await initDb();
+        await rebuildProjectsCache();
 
         // 10. 扫描项目
         if (scanDirs?.length) {
@@ -290,6 +297,34 @@ export function registerInitCommand(program: Command): void {
             if (isModelLoadNetworkError()) {
               logger.raw(chalk.yellow(formatModelNetworkHint()));
             }
+          }
+        }
+
+        // 11. 增量更新 RAG 索引（项目数据已回填，需同步索引）
+        if (shouldDownloadModel || (await isModelInstalled())) {
+          try {
+            logger.spin('正在更新搜索索引...');
+            const allDocs = await collectAllSearchDocuments();
+            logger.spinSuccess(`找到 ${allDocs.length} 个文档，正在索引...`);
+            const result = await incrementalIndex(allDocs, (p) => {
+              const pct = Math.round((p.current / p.total) * 100);
+              process.stdout.write(
+                `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${chalk.yellow('~' + p.updated)} ${pct}%`.slice(
+                  0,
+                  80,
+                ) + '\r',
+              );
+            });
+            process.stdout.write('\r' + ' '.repeat(80) + '\r');
+            setFtsIndexVersion(FTS_INDEX_VERSION);
+            const parts: string[] = [];
+            if (result.added > 0) parts.push(`新增 ${result.added}`);
+            if (result.updated > 0) parts.push(`更新 ${result.updated}`);
+            logger.spinSuccess(
+              `搜索索引更新完成${parts.length > 0 ? `（${parts.join('，')}）` : '，无变更'}`,
+            );
+          } catch {
+            logger.spinWarn('搜索索引更新失败，可稍后运行 `ltc rag update`');
           }
         }
 

@@ -26,6 +26,7 @@ import {
   isVecStoreReady,
 } from '../db';
 import { normalizeProjectId } from '../project';
+import { CONCURRENCY } from '../utils/constants';
 import {
   generateEmbedding,
   contentHash,
@@ -373,6 +374,17 @@ export async function semanticSearch(
 }
 
 /** 重建全部索引 */
+export type IndexProgressCallback = (progress: {
+  current: number;
+  total: number;
+  added: number;
+  updated: number;
+  skipped: number;
+}) => void;
+
+/** 批处理并发数 */
+const EMBEDDING_CONCURRENCY = CONCURRENCY;
+
 export async function rebuildIndex(
   docs: {
     filePath: string;
@@ -384,18 +396,32 @@ export async function rebuildIndex(
     projectId?: string;
     projectIds?: string[];
   }[],
+  onProgress?: IndexProgressCallback,
 ): Promise<number> {
   let indexed = 0;
-  for (const doc of docs) {
-    await indexSearchDocument(doc.filePath, doc.content, {
-      title: doc.title,
-      tags: doc.tags,
-      username: doc.username,
-      sourceType: doc.sourceType ?? 'spec',
-      projectId: doc.projectId,
-      projectIds: doc.projectIds,
-    });
-    indexed++;
+  let added = 0;
+  const total = docs.length;
+
+  // 分批并发处理：每批 EMBEDDING_CONCURRENCY 个文档
+  for (let i = 0; i < docs.length; i += EMBEDDING_CONCURRENCY) {
+    const batch = docs.slice(i, i + EMBEDDING_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (doc) => {
+        await indexSearchDocument(doc.filePath, doc.content, {
+          title: doc.title,
+          tags: doc.tags,
+          username: doc.username,
+          sourceType: doc.sourceType ?? 'spec',
+          projectId: doc.projectId,
+          projectIds: doc.projectIds,
+        });
+        indexed++;
+        added++;
+      }),
+    );
+    if (onProgress) {
+      onProgress({ current: indexed, total, added, updated: 0, skipped: 0 });
+    }
   }
   return indexed;
 }
@@ -420,6 +446,7 @@ export async function incrementalIndex(
     projectId?: string;
     projectIds?: string[];
   }[],
+  onProgress?: IndexProgressCallback,
 ): Promise<IncrementalIndexResult> {
   const result: IncrementalIndexResult = { added: 0, updated: 0, skipped: 0, removed: 0 };
 
@@ -430,29 +457,58 @@ export async function incrementalIndex(
   const { listIndexedDocumentPaths } = await import('../db');
   const indexedPaths = listIndexedDocumentPaths();
 
-  // 对每个文档检查是否需要更新
+  // 先分区：跳过的立即处理，需要索引的分批并发
+  const toIndex: typeof docs = [];
   for (const doc of docs) {
     const hash = contentHash(doc.content);
     const existing = getEmbeddingByPath(doc.filePath);
-
     if (existing?.content_hash === hash && existing.vector_indexed === 1) {
       result.skipped++;
-      continue;
-    }
-
-    await indexSearchDocument(doc.filePath, doc.content, {
-      title: doc.title,
-      tags: doc.tags,
-      username: doc.username,
-      sourceType: doc.sourceType ?? 'spec',
-      projectId: doc.projectId,
-      projectIds: doc.projectIds,
-    });
-
-    if (existing) {
-      result.updated++;
     } else {
-      result.added++;
+      toIndex.push(doc);
+    }
+  }
+
+  // 批量进度报告（跳过的部分）
+  if (onProgress && result.skipped > 0) {
+    onProgress({
+      current: result.skipped,
+      total: docs.length,
+      added: 0,
+      updated: 0,
+      skipped: result.skipped,
+    });
+  }
+
+  // 分批并发处理需要索引的文档
+  for (let i = 0; i < toIndex.length; i += EMBEDDING_CONCURRENCY) {
+    const batch = toIndex.slice(i, i + EMBEDDING_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (doc) => {
+        const existing = getEmbeddingByPath(doc.filePath);
+        await indexSearchDocument(doc.filePath, doc.content, {
+          title: doc.title,
+          tags: doc.tags,
+          username: doc.username,
+          sourceType: doc.sourceType ?? 'spec',
+          projectId: doc.projectId,
+          projectIds: doc.projectIds,
+        });
+        if (existing) {
+          result.updated++;
+        } else {
+          result.added++;
+        }
+      }),
+    );
+    if (onProgress) {
+      onProgress({
+        current: result.added + result.updated + result.skipped,
+        total: docs.length,
+        added: result.added,
+        updated: result.updated,
+        skipped: result.skipped,
+      });
     }
   }
 

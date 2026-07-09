@@ -333,7 +333,7 @@ function checkAndMigrateDbSchema(): boolean {
  * 扫描 ~/.lattice/users/{user}/projects/{dir}/project.json 并逐条写入 DB。
  * v3: 同时为每个项目计算 ids 并写入 project_fingerprints key='project_id' 行。
  */
-async function rebuildProjectsCache(): Promise<void> {
+export async function rebuildProjectsCache(): Promise<void> {
   let usernames: string[];
   try {
     usernames = await listUserDirs();

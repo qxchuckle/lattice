@@ -15,6 +15,7 @@ import {
   FTS_INDEX_VERSION,
   getFtsIndexVersion,
   setFtsIndexVersion,
+  setLatticeMeta,
 } from '@qcqx/lattice-core';
 import { formatRagTimestamp, logger, outputJson } from '../utils';
 
@@ -75,9 +76,19 @@ export function registerRagCommand(program: Command): void {
 
         logger.raw(chalk.blue(`找到 ${allDocs.length} 个搜索文档，正在建立索引...`));
 
-        const indexed = await rebuildIndex(allDocs);
+        const indexed = await rebuildIndex(allDocs, (p) => {
+          const pct = Math.round((p.current / p.total) * 100);
+          process.stdout.write(
+            `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${pct}%`.slice(
+              0,
+              80,
+            ) + '\r',
+          );
+        });
+        process.stdout.write('\r' + ' '.repeat(80) + '\r');
         // 全量重建完成后写入当前 FTS 索引版本，供 doctor / rag update 检测。
         setFtsIndexVersion(FTS_INDEX_VERSION);
+        setLatticeMeta('rag_rebuild_needed', 'false');
         closeDb();
 
         logger.raw(chalk.green(`✓ 索引重建完成，共 ${indexed} 个文档`));
@@ -101,12 +112,29 @@ export function registerRagCommand(program: Command): void {
         if (currentFtsVersion < FTS_INDEX_VERSION) {
           logger.raw(
             chalk.yellow(
-              `⚠ FTS 索引版本过期（当前 v${currentFtsVersion}，需 v${FTS_INDEX_VERSION}）。`,
+              `⚠ FTS 索引版本过期（当前 v${currentFtsVersion}，需 v${FTS_INDEX_VERSION}），已自动切换为全量重建。`,
             ),
           );
-          logger.raw(
-            chalk.yellow('  为让中文 FTS 检索生效，请运行 `lattice rag rebuild` 一次全量重建。'),
-          );
+
+          // FTS schema 变更需要全量重建，直接走 rebuild 逻辑
+          deleteSearchDocumentsByPrefixes(['task/', 'project/', 'user/']);
+          const allDocs = await collectAllSearchDocuments();
+          logger.raw(chalk.blue(`找到 ${allDocs.length} 个搜索文档，正在建立索引...`));
+          const indexed = await rebuildIndex(allDocs, (p) => {
+            const pct = Math.round((p.current / p.total) * 100);
+            process.stdout.write(
+              `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${pct}%`.slice(
+                0,
+                80,
+              ) + '\r',
+            );
+          });
+          process.stdout.write('\r' + ' '.repeat(80) + '\r');
+          setFtsIndexVersion(FTS_INDEX_VERSION);
+          setLatticeMeta('rag_rebuild_needed', 'false');
+          closeDb();
+          logger.raw(chalk.green(`✓ 索引重建完成，共 ${indexed} 个文档`));
+          return;
         }
 
         const modelLoaded = isModelLoaded();
@@ -115,7 +143,19 @@ export function registerRagCommand(program: Command): void {
         );
 
         const allDocs = await collectAllSearchDocuments();
-        const result = await incrementalIndex(allDocs);
+        logger.spinSuccess(`找到 ${allDocs.length} 个文档，正在增量更新...`);
+
+        const result = await incrementalIndex(allDocs, (p) => {
+          const pct = Math.round((p.current / p.total) * 100);
+          process.stdout.write(
+            `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${chalk.yellow('~' + p.updated)} ${chalk.dim('=' + p.skipped)} ${pct}%`.slice(
+              0,
+              100,
+            ) + '\r',
+          );
+        });
+        process.stdout.write('\r' + ' '.repeat(100) + '\r');
+        setLatticeMeta('rag_rebuild_needed', 'false');
         closeDb();
 
         logger.spinSuccess('增量更新完成');

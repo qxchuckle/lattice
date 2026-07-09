@@ -8,12 +8,12 @@
  */
 
 import { readdir } from 'node:fs/promises';
-import { availableParallelism } from 'node:os';
 import type { Dirent } from 'node:fs';
 import { minimatch } from 'minimatch';
 import type { FingerprintDerived } from './identity';
 import { normalizeLegacyId } from './identity';
 import { computeProjectIds } from './identity-generate';
+import { CONCURRENCY } from '../utils/constants';
 import { autoRegisterProject } from './register';
 import { collectFingerprint } from './fingerprint';
 import { detectAndLinkNestedIn } from './nested-in';
@@ -348,7 +348,7 @@ async function scanDir(
   }
 
   // 并行递归（并发数根据 CPU 核心数动态确定）
-  const concurrency = Math.max(4, availableParallelism());
+  const concurrency = CONCURRENCY;
   for (let i = 0; i < subDirs.length; i += concurrency) {
     await Promise.all(
       subDirs

@@ -37,9 +37,9 @@ import {
   readJSON,
   getProjectMetaPath,
   getTaskMetaPath,
-  upsertProject,
   deleteProject,
   listDir,
+  listUserDirs,
   listRelations,
   deleteRelationsByProject,
 } from '@qcqx/lattice-core';
@@ -159,12 +159,42 @@ export function registerDoctorCommand(program: Command): void {
               : undefined,
         });
 
-        // 5.1 磁盘/数据库一致性检查
-        const consistencyResult = await checkDiskDbConsistency(username, projects, opts.fix);
-        entries.push(...consistencyResult.entries);
-        // --fix 回填后刷新 projects 列表供后续使用
-        if (consistencyResult.backfilled > 0) {
-          // 重新获取列表（db 已更新）
+        // 5.1 磁盘/数据库一致性检查（遍历所有用户，不限于当前用户）
+        const allUsernames = await listUserDirs();
+        let totalBackfilled = 0;
+        let totalDiskOnly = 0;
+        let totalDbOnly = 0;
+        let totalDiskDirs = 0;
+        for (const checkUsername of allUsernames) {
+          const checkProjects = listProjects(checkUsername);
+          const result = await checkDiskDbConsistency(checkUsername, checkProjects, opts.fix);
+          totalBackfilled += result.backfilled;
+          totalDiskOnly += result.diskOnlyCount;
+          totalDbOnly += result.dbOnlyCount;
+          totalDiskDirs += result.diskDirsCount;
+        }
+        if (totalDiskOnly === 0 && totalDbOnly === 0) {
+          entries.push({
+            item: '磁盘/数据库一致性',
+            status: 'healthy',
+            message: `磁盘 ${totalDiskDirs} 个项目与数据库完全一致（全用户）`,
+          });
+        } else {
+          const parts: string[] = [];
+          if (totalDiskOnly > 0) parts.push(`${totalDiskOnly} 个磁盘项目未同步到数据库`);
+          if (totalDbOnly > 0) parts.push(`${totalDbOnly} 个数据库记录在磁盘无对应`);
+          entries.push({
+            item: '磁盘/数据库一致性',
+            status: opts.fix && totalDiskOnly === 0 && totalDbOnly === 0 ? 'repaired' : 'stale',
+            message: opts.fix
+              ? `已修复：回填 ${totalBackfilled} 个项目到数据库（全用户）`
+              : parts.join('，'),
+            fix: '运行 lattice doctor --fix 自动修复',
+          });
+        }
+
+        // --fix 回填后刷新当前用户的 projects 列表供后续使用
+        if (totalBackfilled > 0) {
           const refreshed = listProjects(username);
           projects.length = 0;
           projects.push(...refreshed);
@@ -353,7 +383,7 @@ async function runMigrate(username: string): Promise<{
       // 检测 db 是否已有该 id（用 listProjects 已传入会过期，重新查 db 也可以）
       // 简化：每个 project.json 都 upsert，等价于「回填或刷新」
       const beforeRow = listProjects(username).find((p) => p.id === primaryId);
-      syncProjectMetaToDb(username, meta);
+      syncProjectMetaToDb(username, meta, dirName);
       if (!beforeRow) backfilled++;
     } catch {
       // ignore single-project failure
@@ -411,8 +441,12 @@ async function checkDiskDbConsistency(
   username: string,
   dbProjects: ProjectRow[],
   fix?: boolean,
-): Promise<{ entries: DoctorEntry[]; backfilled: number }> {
-  const entries: DoctorEntry[] = [];
+): Promise<{
+  backfilled: number;
+  diskOnlyCount: number;
+  dbOnlyCount: number;
+  diskDirsCount: number;
+}> {
   let diskOnlyCount = 0;
   let dbOnlyCount = 0;
   let backfilled = 0;
@@ -420,8 +454,9 @@ async function checkDiskDbConsistency(
   const projectsRoot = getUserProjectsDir(username);
   const dirEntries: string[] = await listDir(projectsRoot).catch(() => []);
 
-  // 收集磁盘上所有 project.json 的 id（用 normalizeProjectMeta 处理兼容性）
-  const diskProjectIds = new Map<string, string>(); // id → dirName
+  // 收集磁盘上所有 project.json 的目录（按 dirName 去重，相同 primaryId 的多个目录各自记录）
+  const diskDirs = new Map<string, string>(); // dirName → primaryId
+  const diskPrimaryIds = new Set<string>();
   for (const dirName of dirEntries) {
     if (dirName.startsWith('.')) continue;
     const metaPath = getProjectMetaPath(username, dirName);
@@ -431,18 +466,19 @@ async function checkDiskDbConsistency(
     const meta = normalizeProjectMeta(rawMeta);
     const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
     if (primaryId) {
-      diskProjectIds.set(primaryId, dirName);
+      diskDirs.set(dirName, primaryId);
+      diskPrimaryIds.add(primaryId);
     }
   }
 
   // 数据库中有哪些项目 ID
   const dbProjectIds = new Set(dbProjects.map((p) => p.id));
 
-  // 磁盘有但数据库无
+  // 磁盘有但数据库无（按 primaryId 去重判断，但回填时遍历所有目录）
   const missingInDb: string[] = [];
-  for (const [id] of diskProjectIds) {
-    if (!dbProjectIds.has(id)) {
-      missingInDb.push(id);
+  for (const pid of diskPrimaryIds) {
+    if (!dbProjectIds.has(pid)) {
+      missingInDb.push(pid);
       diskOnlyCount++;
     }
   }
@@ -450,23 +486,23 @@ async function checkDiskDbConsistency(
   // 数据库有但磁盘无
   const missingOnDisk: string[] = [];
   for (const p of dbProjects) {
-    if (!diskProjectIds.has(p.id)) {
+    if (!diskPrimaryIds.has(p.id)) {
       missingOnDisk.push(p.id);
       dbOnlyCount++;
     }
   }
 
-  // --fix: 回填磁盘有但 db 无的项目
+  // --fix: 回填磁盘有但 db 无的项目（遍历所有磁盘目录，确保 project_dirs 完整）
   if (fix && missingInDb.length > 0) {
-    for (const id of missingInDb) {
-      const dirName = diskProjectIds.get(id)!;
+    for (const [dirName, primaryId] of diskDirs) {
+      if (!missingInDb.includes(primaryId)) continue;
       const rawMeta = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
       if (!rawMeta) continue;
       const meta = normalizeProjectMeta(rawMeta);
-      const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
-      if (!primaryId) continue;
+      const metaPrimaryId = selectPrimaryId(meta.ids) ?? meta.id;
+      if (!metaPrimaryId) continue;
       try {
-        syncProjectMetaToDb(username, meta);
+        syncProjectMetaToDb(username, meta, dirName);
         backfilled++;
       } catch {
         // ignore
@@ -485,30 +521,7 @@ async function checkDiskDbConsistency(
     }
   }
 
-  const total = diskOnlyCount + dbOnlyCount;
-  if (total === 0) {
-    entries.push({
-      item: '磁盘/数据库一致性',
-      status: 'healthy',
-      message: `磁盘 ${diskProjectIds.size} 个项目与数据库完全一致`,
-    });
-  } else {
-    const parts: string[] = [];
-    if (diskOnlyCount > 0) parts.push(`${diskOnlyCount} 个磁盘项目未同步到数据库`);
-    if (dbOnlyCount > 0) parts.push(`${dbOnlyCount} 个数据库记录在磁盘无对应`);
-    entries.push({
-      item: '磁盘/数据库一致性',
-      status: fix ? 'repaired' : 'stale',
-      message: fix
-        ? `已修复：回填 ${backfilled} 个项目到数据库${dbOnlyCount > 0 ? `，清理 ${dbOnlyCount} 个悬空记录` : ''}`
-        : parts.join('；'),
-      fix: fix
-        ? undefined
-        : '运行 lattice doctor --fix 自动修复，或 lattice doctor --migrate 手动迁移',
-    });
-  }
-
-  return { entries, backfilled };
+  return { backfilled, diskOnlyCount, dbOnlyCount, diskDirsCount: diskDirs.size };
 }
 
 // ─── 5.2 重复项目检测 ───
@@ -661,22 +674,8 @@ async function checkDbFieldDrift(
       driftCount++;
       if (fix) {
         try {
-          upsertProject({
-            id: selectPrimaryId(meta.ids) ?? meta.id!,
-            name: meta.name,
-            local_path: metaLocalPath,
-            description: meta.description ?? null,
-            git_remote: metaGitRemote,
-            git_first_commit: meta.gitFirstCommit ?? null,
-            git_default_branch: meta.gitDefaultBranch ?? null,
-            package_names: metaPackageNames,
-            monorepo_packages: metaMonorepoPackages,
-            groups: meta.groups ? JSON.stringify(meta.groups) : null,
-            tags: meta.tags ? JSON.stringify(meta.tags) : null,
-            username,
-            created: meta.created,
-            updated: meta.updated ?? null,
-          });
+          const dirName = await findProjectDirName(username, p.id);
+          syncProjectMetaToDb(username, meta, dirName ?? undefined);
           fixedCount++;
         } catch {
           // ignore

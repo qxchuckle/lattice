@@ -107,12 +107,16 @@ export {
   initDb,
   closeDb,
   getDb,
+  rebuildProjectsCache,
   upsertProject,
   deleteProject,
   getProjectById,
   getProjectByPath,
   listAllProjects,
   listProjectRowsById,
+  upsertProjectDir,
+  listProjectDirs,
+  deleteProjectDir,
   upsertFingerprint,
   deleteFingerprintsByProject,
   listFingerprintsByProject,
@@ -356,7 +360,7 @@ export {
   removeInstalledModel,
   collectAllSearchDocuments,
 } from './rag';
-export type { IncrementalIndexResult, SearchDocumentInput } from './rag';
+export type { IncrementalIndexResult, IndexProgressCallback, SearchDocumentInput } from './rag';
 
 // 垃圾桶
 export type { TrashMeta } from './trash';

@@ -504,7 +504,12 @@ export function formatContextAsMarkdown(ctx: ProjectContext): string {
         lines.push(`#### 用户级 Spec（${userData.userSpecs.length}）\n`);
         for (const spec of userData.userSpecs) {
           const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
-          lines.push(`- ${title}`);
+          const description =
+            typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+              ? spec.frontmatter.description.trim()
+              : '[缺失摘要]';
+          lines.push(`- **${title}** — ${description}`);
+          lines.push(`  路径：${spec.filePath}`);
         }
         lines.push('');
       }
