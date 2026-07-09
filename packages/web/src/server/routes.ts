@@ -4,8 +4,8 @@ import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import {
   getUsername,
-  listProjectMetas,
-  getProjectMeta,
+  listVirtualProjectMetas,
+  getVirtualProjectMeta,
   listTasks,
   getTaskMeta,
   getTaskGraphViews,
@@ -45,7 +45,7 @@ async function isPathSafe(path: string, username: string): Promise<boolean> {
   if (path.startsWith(latticeRoot)) return true;
   // 项目路径验证：检查是否是某个已注册项目的 localPaths
   try {
-    const projects = await listProjectMetas(username);
+    const projects = await listVirtualProjectMetas(username);
     return projects.some((p) => {
       const localPaths = p.localPaths || [];
       return localPaths.some((lp: string) => path.startsWith(lp));
@@ -61,19 +61,19 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/projects', async () => {
     const username = await getUsername();
-    return listProjectMetas(username);
+    return listVirtualProjectMetas(username);
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => {
     const username = await getUsername();
-    const meta = await getProjectMeta(username, req.params.id);
+    const meta = await getVirtualProjectMeta(username, req.params.id);
     if (!meta) return { error: 'not_found', message: '项目不存在' };
     return meta;
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/git-status', async (req) => {
     const username = await getUsername();
-    const meta = await getProjectMeta(username, req.params.id);
+    const meta = await getVirtualProjectMeta(username, req.params.id);
     if (!meta) return { error: 'not_found', message: '项目不存在' };
     return await getProjectGitStatus(meta);
   });
@@ -86,7 +86,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => {
     const username = await getUsername();
     // 多 ID 机制：task.projects 可能存储的是任意 ID，需用项目的全部 IDs 匹配
-    const meta = await getProjectMeta(username, req.params.id);
+    const meta = await getVirtualProjectMeta(username, req.params.id);
     if (!meta) return [];
     const idSet = new Set(meta.ids);
     const allTasks = await listTasks(username);
@@ -96,7 +96,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/api/projects/:id/relations', async (req) => {
     const username = await getUsername();
     // 多 ID 机制：relation 的 projectA/projectB 可能存储的是任意 ID
-    const meta = await getProjectMeta(username, req.params.id);
+    const meta = await getVirtualProjectMeta(username, req.params.id);
     if (!meta) return [];
     const idSet = new Set(meta.ids);
     const allRelations = await listRelations(username);
@@ -106,7 +106,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // 获取项目实际存在的本地路径
   app.get<{ Params: { id: string } }>('/api/projects/:id/local-paths', async (req) => {
     const username = await getUsername();
-    const meta = await getProjectMeta(username, req.params.id);
+    const meta = await getVirtualProjectMeta(username, req.params.id);
     if (!meta) return { error: 'not_found', message: '项目不存在' };
     const localPaths = meta.localPaths || [];
     const existingPaths = localPaths.filter((p) => existsSync(p));
@@ -309,7 +309,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/stats', async () => {
     const username = await getUsername();
-    const projects = await listProjectMetas(username);
+    const projects = await listVirtualProjectMetas(username);
     const tasks = await listTasks(username);
     const relations = await listRelations(username);
     const activeTasks = tasks.filter((t) => t.status === 'in_progress');

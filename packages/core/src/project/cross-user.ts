@@ -1,6 +1,6 @@
 import { listAllProjects, listProjectRowsById } from '../db';
 import { listUserDirs } from '../paths';
-import { getRelatedProjectIds } from './lookup';
+import { getRelatedProjectIds } from './virtual-merge';
 
 /**
  * 查找其他用户下与指定 projectId 匹配的项目。

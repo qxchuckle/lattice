@@ -18,10 +18,10 @@ import {
 } from '../spec';
 import { parseSpec } from '../spec/io';
 import { getTaskMeta } from '../task';
-import { getProjectMeta, listProjects } from '../project';
+import { listProjects, normalizeProjectId, getVirtualProjectMeta } from '../project';
 import { getRelationsByProject } from '../project/relation';
 import { findSameProjectInOtherUsers } from '../project/cross-user';
-import { getRelatedProjectIds } from '../project/lookup';
+import { getRelatedProjectIds } from '../project/virtual-merge';
 import { selectPrimaryId } from '../project/identity';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
@@ -84,7 +84,7 @@ async function collectCrossUserProjectData(
       const relatedId = r.projectA === otherProjectId ? r.projectB : r.projectA;
       let entry = relatedMap.get(relatedId);
       if (!entry) {
-        const meta = await getProjectMeta(otherUsername, relatedId);
+        const meta = await getVirtualProjectMeta(otherUsername, relatedId);
         if (!meta) continue;
         entry = {
           id: selectPrimaryId(meta.ids) ?? relatedId,
@@ -125,6 +125,9 @@ export async function getContextForProject(
   const ancestorProjectIds = options?.ancestorProjectIds;
   const ancestors = options?.ancestors;
 
+  // 入口归一化：确保 projectId 带前缀（兼容老格式无前缀 ID）
+  const normalizedProjectId = normalizeProjectId(projectId);
+
   // 根据是否有祖先项目，选择不同的级联策略
   let projectSpecs: ParsedSpec[];
   let userSpecs: ParsedSpec[];
@@ -135,10 +138,10 @@ export async function getContextForProject(
   if (ancestorProjectIds && ancestorProjectIds.length > 0) {
     // 有祖先项目：使用含祖先的级联聚合
     const [pSpecs, uSpecs, gSpecs, cascadeResult] = await Promise.all([
-      getProjectSpecs(username, projectId),
+      getProjectSpecs(username, normalizedProjectId),
       getUserSpecs(username),
       getGlobalSpecs(),
-      getCascadedSpecsWithAncestors(username, projectId, ancestorProjectIds),
+      getCascadedSpecsWithAncestors(username, normalizedProjectId, ancestorProjectIds),
     ]);
     projectSpecs = pSpecs;
     userSpecs = uSpecs;
@@ -148,17 +151,17 @@ export async function getContextForProject(
   } else {
     // 无祖先项目：使用原有三层级联
     [projectSpecs, userSpecs, globalSpecs, cascadedSpecs] = await Promise.all([
-      getProjectSpecs(username, projectId),
+      getProjectSpecs(username, normalizedProjectId),
       getUserSpecs(username),
       getGlobalSpecs(),
-      getCascadedSpecs(username, projectId),
+      getCascadedSpecs(username, normalizedProjectId),
     ]);
   }
 
   // 查找关联的活跃任务
   let activeTasks: TaskMeta[] = [];
   try {
-    const taskIds = getTaskIdsForProjectGroup(projectId);
+    const taskIds = getTaskIdsForProjectGroup(normalizedProjectId);
     const allTasks = await Promise.all(taskIds.map((id) => getTaskMeta(username, id)));
     activeTasks = allTasks.filter(
       (t): t is TaskMeta => t !== null && t.status !== 'archived' && t.status !== 'completed',
@@ -171,12 +174,12 @@ export async function getContextForProject(
   const relatedProjects: RelatedProjectEntry[] = [];
   const relatedMap = new Map<string, RelatedProjectEntry>();
   try {
-    const relations = await getRelationsByProject(username, projectId);
+    const relations = await getRelationsByProject(username, normalizedProjectId);
     for (const r of relations) {
-      const relatedId = r.projectA === projectId ? r.projectB : r.projectA;
+      const relatedId = r.projectA === normalizedProjectId ? r.projectB : r.projectA;
       let entry = relatedMap.get(relatedId);
       if (!entry) {
-        const meta = await getProjectMeta(username, relatedId);
+        const meta = await getVirtualProjectMeta(username, relatedId);
         if (!meta) continue;
         entry = {
           id: selectPrimaryId(meta.ids) ?? relatedId,
@@ -198,11 +201,11 @@ export async function getContextForProject(
   }
 
   // 同组项目
-  const projectMeta = await getProjectMeta(username, projectId);
+  const projectMeta = await getVirtualProjectMeta(username, normalizedProjectId);
   if (projectMeta?.groups?.length) {
     const allProjects = listProjects(username);
     for (const p of allProjects) {
-      if (p.id === projectId) continue;
+      if (p.id === normalizedProjectId) continue;
       if (relatedMap.has(p.id)) continue;
       const groups = p.groups ? JSON.parse(p.groups) : [];
       const shared = projectMeta.groups.filter((g) => groups.includes(g));
@@ -225,7 +228,7 @@ export async function getContextForProject(
   // 跨用户聚合
   let crossUserData: CrossUserProjectData[] | undefined;
   if (crossUser) {
-    const otherUsers = await findSameProjectInOtherUsers(username, projectId);
+    const otherUsers = await findSameProjectInOtherUsers(username, normalizedProjectId);
     if (otherUsers.length > 0) {
       crossUserData = await Promise.all(
         otherUsers.map((u) => collectCrossUserProjectData(u.username, u.projectId)),
@@ -273,10 +276,18 @@ export async function getSmartContext(
     const specArrays = await Promise.all(
       task.projects.map((pid) => getProjectSpecs(username, pid)),
     );
-    directSpecs.push(...specArrays.flat());
+    const seenPaths = new Set<string>();
+    for (const specs of specArrays) {
+      for (const s of specs) {
+        if (!seenPaths.has(s.filePath)) {
+          seenPaths.add(s.filePath);
+          directSpecs.push(s);
+        }
+      }
+    }
 
     for (const pid of task.projects) {
-      const meta = await getProjectMeta(username, pid);
+      const meta = await getVirtualProjectMeta(username, pid);
       if (meta?.groups) {
         for (const g of meta.groups) groupSet.add(g);
       }

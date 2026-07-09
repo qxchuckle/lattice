@@ -409,6 +409,13 @@ export interface ProjectFingerprintRow {
   weight: number;
 }
 
+/** SQLite 中的项目物理目录行 */
+export interface ProjectDirRow {
+  project_id: string;
+  username: string;
+  dir_name: string;
+}
+
 /** relations.json 文件结构 */
 export interface ProjectRelation {
   /** 全局唯一 id，例如 "rel_a1b2c3d4" */

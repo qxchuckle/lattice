@@ -3,7 +3,12 @@ import { stat } from 'node:fs/promises';
 import type { ParsedSpec } from '../types';
 import { getGlobalSpecDir, getUserSpecDir, getProjectSpecDir, listDir } from '../paths';
 import { parseSpec } from './io';
-import { findProjectDirName, listProjects } from '../project';
+import {
+  findProjectDirName,
+  listProjects,
+  getProjectDirNames,
+  normalizeProjectId,
+} from '../project';
 
 async function listMarkdownFiles(dir: string): Promise<string[]> {
   const entries = await listDir(dir);
@@ -47,22 +52,63 @@ export async function getUserSpecs(username: string): Promise<ParsedSpec[]> {
   return listSpecsInDir(getUserSpecDir(username));
 }
 
-/** 获取项目 spec */
+/**
+ * 获取项目 spec（含虚拟合并组聚合）
+ *
+ * 通过 DB project_dirs 表查询虚拟合并组的所有物理目录，
+ * 聚合所有目录的项目级 spec，按 relativePath 去重。
+ * 当前项目目录优先级最高（最后写入覆盖同名 spec）。
+ *
+ * 应用层只需调用本函数即可获得虚拟合并后的完整 spec 集合，
+ * 无需感知虚拟合并的存在。
+ */
 export async function getProjectSpecs(username: string, projectId: string): Promise<ParsedSpec[]> {
-  const dirName = await findProjectDirName(username, projectId);
-  if (!dirName) return [];
-  return listSpecsInDir(getProjectSpecDir(username, dirName));
+  const normalizedId = normalizeProjectId(projectId);
+
+  // 从 DB 查询虚拟合并组的所有物理目录名
+  let dirNames: string[];
+  try {
+    dirNames = getProjectDirNames(username, normalizedId);
+  } catch {
+    dirNames = [];
+  }
+  const currentDirName = await findProjectDirName(username, normalizedId);
+
+  const specMap = new Map<string, ParsedSpec>();
+
+  // 先获取其他目录（低优先级）
+  for (const dirName of dirNames) {
+    if (dirName === currentDirName) continue;
+    try {
+      const specs = await listSpecsInDir(getProjectSpecDir(username, dirName));
+      for (const s of specs) {
+        if (!specMap.has(s.relativePath)) specMap.set(s.relativePath, s);
+      }
+    } catch {
+      // 忽略单个目录读取失败
+    }
+  }
+
+  // 当前项目目录最后写入（高优先级）
+  if (currentDirName) {
+    const currentSpecs = await listSpecsInDir(getProjectSpecDir(username, currentDirName));
+    for (const s of currentSpecs) specMap.set(s.relativePath, s);
+  }
+
+  return [...specMap.values()];
 }
 
-/** 获取所有已注册项目的 spec（聚合） */
+/** 获取所有已注册项目的 spec（聚合，按 filePath 去重） */
 export async function getAllProjectSpecs(username: string): Promise<ParsedSpec[]> {
   const projects = listProjects(username);
-  const results: ParsedSpec[] = [];
+  const specMap = new Map<string, ParsedSpec>();
   for (const p of projects) {
     const specs = await getProjectSpecs(username, p.id);
-    results.push(...specs);
+    for (const s of specs) {
+      specMap.set(s.filePath, s);
+    }
   }
-  return results;
+  return [...specMap.values()];
 }
 
 /**

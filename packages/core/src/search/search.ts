@@ -1,6 +1,7 @@
 import type { SearchDocumentMeta, SearchDocumentType, SearchResult } from '../types';
 import { getSpecSearchMeta, searchFts, searchSpecsFallback } from '../db';
 import { semanticSearch } from '../rag';
+import { normalizeProjectId } from '../project';
 
 const RRF_K = 60;
 // 标题 boost：拉大到足以压倒 RRF 同类候选人的量级（RRF top1 约 0.05）
@@ -685,10 +686,12 @@ export async function hybridSearch(
   }
 
   if (opts?.projectId) {
+    const normalizedFilterId = normalizeProjectId(opts.projectId as string);
     sorted = sorted.filter((r) => {
       const projectIds =
         ((r.meta as Record<string, unknown>).projectIds as string[] | undefined) ?? [];
-      return projectIds.includes(opts.projectId as string);
+      // 双边归一化比较：存储侧可能有无前缀的老 ID
+      return projectIds.some((id) => normalizeProjectId(id) === normalizedFilterId);
     });
   }
 

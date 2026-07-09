@@ -48,11 +48,14 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
       });
     }
 
-    // 项目级 spec
+    // 项目级 spec（getProjectSpecs 内部已聚合虚拟合并组，需按 filePath 去重）
     const projects = listProjects(username);
+    const seenSpecPaths = new Set<string>();
     for (const project of projects) {
       const specs = await getProjectSpecs(username, project.id);
       for (const s of specs) {
+        if (seenSpecPaths.has(s.filePath)) continue;
+        seenSpecPaths.add(s.filePath);
         allDocs.push({
           filePath: s.filePath,
           content: s.content,

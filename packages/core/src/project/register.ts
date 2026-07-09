@@ -21,7 +21,7 @@ import {
   fileExists,
   join,
 } from '../paths';
-import { upsertProject, upsertFingerprint, getProjectById } from '../db';
+import { upsertProject, upsertFingerprint, getProjectById, upsertProjectDir } from '../db';
 import {
   selectPrimaryId,
   resolveProjectIds,
@@ -79,9 +79,12 @@ export function syncProjectIdsToDb(projectId: string, ids: string[]): void {
 }
 
 /**
- * 把 ProjectMeta 同步到 DB（projects 表 + fingerprints 表）
+ * 把 ProjectMeta 同步到 DB（projects 表 + fingerprints 表 + project_dirs 表）
+ *
+ * @param dirName 物理目录名（可选）。传入时写入 project_dirs 表，
+ *   用于记录同一 primaryId 下的多个物理目录实例。
  */
-export function syncProjectMetaToDb(username: string, meta: ProjectMeta): void {
+export function syncProjectMetaToDb(username: string, meta: ProjectMeta, dirName?: string): void {
   const primaryId = selectPrimaryId(meta.ids);
   if (!primaryId) return;
 
@@ -112,6 +115,11 @@ export function syncProjectMetaToDb(username: string, meta: ProjectMeta): void {
 
     // 同步 IDs 到 fingerprints 表
     syncProjectIdsToDb(primaryId, meta.ids);
+
+    // 同步物理目录到 project_dirs 表
+    if (dirName) {
+      upsertProjectDir(primaryId, username, dirName);
+    }
   } catch {
     // DB 可能未初始化，静默跳过
   }
@@ -163,7 +171,7 @@ export async function registerProjectWithIds(
   await ensureDir(getProjectSpecDir(username, dirName));
   await writeJSON(getProjectMetaPath(username, dirName), meta);
 
-  syncProjectMetaToDb(username, meta);
+  syncProjectMetaToDb(username, meta, dirName);
 
   return meta;
 }
@@ -214,7 +222,7 @@ export async function updateProjectPaths(
   };
 
   await writeJSON(actualMetaPath, updated);
-  syncProjectMetaToDb(actualUsername, updated);
+  syncProjectMetaToDb(actualUsername, updated, actualDirName);
 }
 
 /**
@@ -257,7 +265,7 @@ export async function autoRegisterProject(
       for (const dm of diskMatches) {
         const existingData = await getProjectMetaById(dm.id);
         if (existingData) {
-          syncProjectMetaToDb(existingData.username, existingData.meta);
+          syncProjectMetaToDb(existingData.username, existingData.meta, existingData.dirName);
         }
       }
       ownMatches = diskMatches;
@@ -314,8 +322,11 @@ export async function autoRegisterProject(
       if (newNonLegacyIds.length > 0) {
         existingData.meta.ids = [...existingIds, ...newNonLegacyIds];
         existingData.meta.fingerprintsUpdated = nowISO();
-        await writeJSON(getProjectMetaPath(existingData.username, match.id), existingData.meta);
-        syncProjectMetaToDb(existingData.username, existingData.meta);
+        await writeJSON(
+          getProjectMetaPath(existingData.username, existingData.dirName),
+          existingData.meta,
+        );
+        syncProjectMetaToDb(existingData.username, existingData.meta, existingData.dirName);
       }
     }
 

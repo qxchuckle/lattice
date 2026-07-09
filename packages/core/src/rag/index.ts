@@ -25,6 +25,7 @@ import {
   getLatestEmbeddingUpdate,
   isVecStoreReady,
 } from '../db';
+import { normalizeProjectId } from '../project';
 import {
   generateEmbedding,
   contentHash,
@@ -350,7 +351,11 @@ export async function semanticSearch(
     }
 
     const projectIds = decodeProjectIds(row.project_id);
-    if (opts?.projectId && !projectIds.includes(opts.projectId)) continue;
+    if (opts?.projectId) {
+      // 双边归一化比较：存储侧可能有无前缀的老 ID
+      const normalizedFilterId = normalizeProjectId(opts.projectId);
+      if (!projectIds.some((id) => normalizeProjectId(id) === normalizedFilterId)) continue;
+    }
 
     semanticResults.push({
       id: result.id,

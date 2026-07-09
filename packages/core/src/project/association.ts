@@ -7,7 +7,7 @@
 
 import type { TaskMeta, ProjectMeta } from '../types';
 import { resolveProjectIds, selectPrimaryId } from './identity';
-import { getRelatedProjectIds, getProjectIdsFromDb } from './lookup';
+import { getRelatedProjectIds, getProjectIdsFromDb } from './virtual-merge';
 
 /**
  * 判断任务是否关联到指定项目

@@ -100,6 +100,16 @@ export function normalizeLegacyId(rawId: string): string {
 }
 
 /**
+ * 归一化项目 ID：无前缀的补 `legacy:` 前缀
+ *
+ * 与 normalizeLegacyId 功能相同，但语义更清晰——用于"把任意项目 ID 归一化"
+ * 的场景（入口层归一化、比较前归一化等）。
+ */
+export function normalizeProjectId(id: string): string {
+  return normalizeLegacyId(id);
+}
+
+/**
  * 解析带前缀的 ID，返回 { prefix, content }
  */
 export function parsePrefixedId(id: string): { prefix: string; content: string } {

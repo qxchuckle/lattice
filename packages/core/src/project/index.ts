@@ -17,6 +17,7 @@ import {
 import {
   upsertProject,
   upsertFingerprint,
+  upsertProjectDir,
   deleteProject as dbDeleteProject,
   getProjectById as dbGetProjectById,
   getProjectByPath as dbGetProjectByPath,
@@ -146,7 +147,7 @@ export async function registerProject(
   await ensureDir(getProjectSpecDir(username, dirName));
   await writeJSON(getProjectMetaPath(username, dirName), meta);
 
-  syncProjectToDb(username, meta);
+  syncProjectToDb(username, meta, dirName);
 
   return meta;
 }
@@ -220,7 +221,7 @@ export async function updateProjectMeta(
   };
 
   await writeJSON(metaPath, updated);
-  syncProjectToDb(username, updated);
+  syncProjectToDb(username, updated, dirName);
   return updated;
 }
 
@@ -392,7 +393,7 @@ async function findProjectDirName(username: string, id: string): Promise<string 
   return null;
 }
 
-function syncProjectToDb(username: string, meta: ProjectMeta): void {
+function syncProjectToDb(username: string, meta: ProjectMeta, dirName?: string): void {
   try {
     const primaryId = selectPrimaryId(meta.ids);
     if (!primaryId) return;
@@ -433,6 +434,14 @@ function syncProjectToDb(username: string, meta: ProjectMeta): void {
         // ignore
       }
     }
+    // 同步物理目录到 project_dirs 表（v4）
+    if (dirName) {
+      try {
+        upsertProjectDir(primaryId, username, dirName);
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     // 数据库可能未初始化（scan 时），静默跳过
   }
@@ -447,6 +456,7 @@ export { findProjectDirName };
 export {
   resolveProjectIds,
   normalizeLegacyId,
+  normalizeProjectId,
   normalizeProjectMeta,
   parsePrefixedId,
   selectPrimaryId,
@@ -464,8 +474,6 @@ export {
   findProjectByAnyId,
   findAllProjectsByAnyId,
   findProjectsOnDisk,
-  getRelatedProjectIds,
-  getProjectIdsFromDb,
   clearLookupCache,
   findUsernameAndDirName,
   getProjectMetaById,
@@ -491,3 +499,13 @@ export {
 
 export { mergeProjects, type MergeResult } from './merge';
 export { detectAndLinkNestedIn } from './nested-in';
+
+// ─── 虚拟合并模块 ───
+export {
+  getRelatedProjectIds,
+  getProjectDirNames,
+  getProjectIdsFromDb,
+  getVirtualProjectMeta,
+  listVirtualProjectMetas,
+  clearVirtualMergeCache,
+} from './virtual-merge';

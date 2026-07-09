@@ -7,11 +7,12 @@
  */
 
 import type { ProjectRow } from '../types';
-import { getProjectById, findProjectsByFingerprint, listFingerprintsByProject } from '../db';
+import { getProjectById, findProjectsByFingerprint } from '../db';
 import {
   resolveProjectIds,
   normalizeProjectMeta,
   normalizeLegacyId,
+  normalizeProjectId,
   selectPrimaryId,
   ID_PREFIX,
 } from './identity';
@@ -22,7 +23,6 @@ import { listDir } from '../paths';
 
 // ─── 进程内缓存 ───
 
-const _relatedCache = new Map<string, string[]>();
 const _findCache = new Map<string, ProjectRow | null>();
 
 // ─── 查找 ───
@@ -199,64 +199,9 @@ export async function findProjectsOnDisk(username: string, ids: string[]): Promi
 }
 
 /**
- * 从 DB 获取项目的所有 IDs（通过 fingerprints 表）
- *
- * 读取 key='project_id' 的所有 value
- */
-export function getProjectIdsFromDb(projectId: string): string[] {
-  const rows = listFingerprintsByProject(projectId);
-  return rows.filter((r) => r.key === 'project_id').map((r) => r.value);
-}
-
-/**
- * 获取与指定项目 IDs 有交集的所有项目 ID（含自身）
- *
- * BFS 递归处理传递性：
- * A-B 交集 + B-C 交集 → getRelatedProjectIds(A) 返回 [A, B, C]
- *
- * 保护机制：有 `legacy:` ID 的项目，只匹配 `legacy:` ID 相同的项目；
- * 没有 `legacy:` ID 的项目，匹配所有 IDs 交集。
- *
- * 进程内缓存：单次 CLI 调用内缓存结果
- */
-export function getRelatedProjectIds(projectId: string): string[] {
-  // 缓存检查
-  const cached = _relatedCache.get(projectId);
-  if (cached) return cached;
-
-  const result = new Set<string>([projectId]);
-  const queue = [projectId];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    // 从 DB 获取当前项目的所有 IDs
-    const ids = getProjectIdsFromDb(current);
-
-    // 保护机制：有 legacy: ID 的项目只匹配 legacy: 交集
-    const legacyIds = ids.filter((id) => id.startsWith(`${ID_PREFIX.LEGACY}:`));
-    const idsToMatch = legacyIds.length > 0 ? legacyIds : ids;
-
-    for (const id of idsToMatch) {
-      const matches = findProjectsByFingerprint('project_id', id);
-      for (const match of matches) {
-        if (!result.has(match.project_id)) {
-          result.add(match.project_id);
-          queue.push(match.project_id); // 递归查找新发现的项目
-        }
-      }
-    }
-  }
-
-  const resultArr = [...result];
-  _relatedCache.set(projectId, resultArr);
-  return resultArr;
-}
-
-/**
  * 清除进程内缓存（测试用）
  */
 export function clearLookupCache(): void {
-  _relatedCache.clear();
   _findCache.clear();
 }
 
@@ -270,8 +215,11 @@ export function clearLookupCache(): void {
 export async function findUsernameAndDirName(
   projectId: string,
 ): Promise<{ username: string; dirName: string } | null> {
+  // 入口归一化：兼容老格式无前缀 ID
+  const normalizedId = normalizeProjectId(projectId);
+
   // 先从 DB 查 username
-  const row = getProjectById(projectId);
+  const row = getProjectById(normalizedId);
   if (row) {
     const username = row.username;
     // 目录名 = 完整的带前缀 ID
@@ -308,7 +256,7 @@ export async function findUsernameAndDirName(
         const rawMeta = await readJSON<ProjectMeta>(metaPath);
         if (rawMeta) {
           const meta = normalizeProjectMeta(rawMeta);
-          if (meta.ids.includes(projectId)) {
+          if (meta.ids.includes(normalizedId)) {
             return { username, dirName };
           }
         }
@@ -324,11 +272,11 @@ export async function findUsernameAndDirName(
  */
 export async function getProjectMetaById(
   projectId: string,
-): Promise<{ meta: ProjectMeta; username: string } | null> {
+): Promise<{ meta: ProjectMeta; username: string; dirName: string } | null> {
   const found = await findUsernameAndDirName(projectId);
   if (!found) return null;
   const rawMeta = await readJSON<ProjectMeta>(getProjectMetaPath(found.username, found.dirName));
   if (!rawMeta) return null;
   const meta = normalizeProjectMeta(rawMeta);
-  return { meta, username: found.username };
+  return { meta, username: found.username, dirName: found.dirName };
 }

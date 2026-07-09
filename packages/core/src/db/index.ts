@@ -4,6 +4,7 @@ import type {
   ProjectRow,
   ProjectMeta,
   ProjectFingerprintRow,
+  ProjectDirRow,
   TaskProjectRow,
   SearchDocumentMeta,
   SearchDocumentType,
@@ -27,8 +28,10 @@ let _db: Database.Database | null = null;
  * v2: projects 表改为 (id, username) 复合主键（同一 project 允许多用户）
  * v3: 多 ID 策略 — project_fingerprints 表复用存储 key='project_id' 的行；
  *     旧版评分指纹不再使用，项目识别改为精确 ID 匹配
+ * v4: 新增 project_dirs 表 — 记录每个 primaryId 下的物理目录实例，
+ *     解决多个物理目录 primaryId 相同导致 DB 只有一行、虚拟合并无法发现关联目录的问题
  */
-export const DB_SCHEMA_VERSION = 3;
+export const DB_SCHEMA_VERSION = 4;
 const DB_SCHEMA_VERSION_KEY = 'db_schema_version';
 
 const SCHEMA_SQL = `
@@ -65,6 +68,15 @@ CREATE TABLE IF NOT EXISTS task_projects (
   task_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   PRIMARY KEY (task_id, project_id)
+);
+
+-- 物理目录实例表：记录每个 primaryId 下有哪些物理目录
+-- 解决多个物理目录 primaryId 相同导致 projects 表只有一行的问题
+CREATE TABLE IF NOT EXISTS project_dirs (
+  project_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  dir_name TEXT NOT NULL,
+  PRIMARY KEY (project_id, username, dir_name)
 );
 
 -- Embedding 存储表
@@ -105,6 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_username ON projects(username);
 CREATE INDEX IF NOT EXISTS idx_projects_local_path ON projects(local_path);
 CREATE INDEX IF NOT EXISTS idx_task_projects_task ON task_projects(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_projects_project ON task_projects(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_dirs_lookup ON project_dirs(project_id, username);
 CREATE INDEX IF NOT EXISTS idx_embeddings_file_path ON embeddings(file_path);
 CREATE INDEX IF NOT EXISTS idx_spec_search_meta_doc_kind ON spec_search_meta(doc_kind);
 `;
@@ -379,6 +392,9 @@ async function rebuildProjectsCache(): Promise<void> {
             weight: 0,
           });
         }
+
+        // v4: 写入 project_dirs 物理目录记录
+        upsertProjectDir(primaryId, username, dirName);
       } catch {
         continue;
       }
@@ -512,6 +528,10 @@ export function deleteProject(id: string, username?: string): void {
   if (remaining.cnt === 0) {
     db.prepare('DELETE FROM task_projects WHERE project_id = ?').run(id);
     db.prepare('DELETE FROM project_fingerprints WHERE project_id = ?').run(id);
+    db.prepare('DELETE FROM project_dirs WHERE project_id = ?').run(id);
+  } else if (username) {
+    // 指定 username 删除时，只清理该用户的 project_dirs 记录
+    db.prepare('DELETE FROM project_dirs WHERE project_id = ? AND username = ?').run(id, username);
   }
 }
 
@@ -589,6 +609,29 @@ export function findProjectsByFingerprintKeyPrefix(
   return getDb()
     .prepare(`SELECT * FROM project_fingerprints WHERE key = ? AND value LIKE ? || '%'`)
     .all(key, valuePrefix) as ProjectFingerprintRow[];
+}
+
+// ─── 项目物理目录实例 CRUD ───
+
+/** 插入或忽略物理目录记录（同一 project_id + username + dir_name 只存一行） */
+export function upsertProjectDir(projectId: string, username: string, dirName: string): void {
+  getDb()
+    .prepare('INSERT OR IGNORE INTO project_dirs (project_id, username, dir_name) VALUES (?, ?, ?)')
+    .run(projectId, username, dirName);
+}
+
+/** 查询某个 project_id 在某用户下的所有物理目录名 */
+export function listProjectDirs(projectId: string, username: string): ProjectDirRow[] {
+  return getDb()
+    .prepare('SELECT * FROM project_dirs WHERE project_id = ? AND username = ?')
+    .all(projectId, username) as ProjectDirRow[];
+}
+
+/** 删除某个物理目录记录（取消注册时） */
+export function deleteProjectDir(projectId: string, username: string, dirName: string): void {
+  getDb()
+    .prepare('DELETE FROM project_dirs WHERE project_id = ? AND username = ? AND dir_name = ?')
+    .run(projectId, username, dirName);
 }
 
 // ─── 任务-项目关联 CRUD ───
