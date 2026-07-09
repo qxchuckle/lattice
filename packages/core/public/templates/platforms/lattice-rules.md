@@ -125,6 +125,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 **[安全]**
 
+- 在 spec/PRD/checkpoint 等文档正文中记录 token、cookie、密钥等敏感信息（应写入 `~/.lattice/.cache/sensitive/` 下的独立文件，正文只引用路径）
 - 主动同步 skill 真源到客户端副本目录（除非任务本身需要）
 - 主动 `pnpm build` / `ltc init` / `ltc rag update`（除非用户要求或任务需要）
 - AI 自主调用需确认的命令时不带 `--force`（→ [SKILL.md#--force-跳过二次确认](SKILL.md#--force-跳过二次确认)）

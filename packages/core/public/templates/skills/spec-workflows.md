@@ -98,7 +98,7 @@ AI 判断类、进程事件类不直接触发 spec 沉淀，但 `issue` + 解决
 1. **前置采集**：`ltc context` + `ltc spec list --scope <层级>` + 回顾任务进展和对话结论
 2. **查已有 spec**：`ltc spec show <相关文件>`，优先补充而非重复创建
 3. **冲突检测**：读取同层级及上下层级已有 spec，判断语义矛盾，发现冲突告知用户
-4. **写入**：一个文件聚焦一个主题；写具体可执行的内容；包含完整操作步骤和经验细节；user / global 带 `## 适用范围`
+4. **写入**：一个文件聚焦一个主题；写具体可执行的内容；包含完整操作步骤和经验细节；user / global 带 `## 适用范围`；**敏感信息（token/cookie/密钥等）不写入 spec/PRD 正文**，写入 `~/.lattice/.cache/sensitive/` 下的独立 txt/md 文件，正文只引用文件路径
 5. **元数据刷新**：直接编辑 spec 正文后，运行 `ltc spec migrate` 刷新 frontmatter（自动补 `id`、刷新 `updated`）；仅改 frontmatter 字段时用 `ltc spec set <file> --title/--description/--add-tag`
 6. **二次审阅**：对照 PRD + progress + 对话检查有无遗漏
 7. **索引更新**：`ltc rag update`（→ [SKILL.md#索引维护](SKILL.md#索引维护)）

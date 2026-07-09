@@ -26,7 +26,8 @@ Lattice 的所有数据都存储在 `~/.lattice/` 目录下。
 │   ├── lattice.db-shm                   # SQLite 共享内存
 │   ├── huggingface/                     # HuggingFace 模型下载缓存
 │   ├── last-scan.json                   # 最近一次扫描的结果
-│   └── web-server.json                  # Web 服务器运行状态
+│   ├── web-server.json                  # Web 服务器运行状态
+│   └── sensitive/                       # 敏感信息缓存（token/cookie/密钥等，文档正文不记录）
 ├── .trash/                              # 软删除回收站（删除的任务/项目暂存于此）
 ├── .git/                                # Git 仓库（可选，用于版本管理 ~/.lattice）
 ├── .gitignore                           # Git 忽略规则
@@ -56,7 +57,7 @@ Lattice 的所有数据都存储在 `~/.lattice/` 目录下。
 | `templates/spec/` | spec 模板，`ltc spec template apply` 使用 | 是 |
 | `templates/registries/` | `ltc spec template pull` 拉取的远程仓库 | 是 |
 | `models/` | RAG embedding 模型文件 | 否（体积大） |
-| `.cache/` | SQLite 数据库、模型缓存、运行状态 | 否（gitignore） |
+| `.cache/` | SQLite 数据库、模型缓存、运行状态、敏感信息缓存 | 否（gitignore） |
 | `.trash/` | 软删除回收站 | 否 |
 | `users/<user>/spec/` | 用户级 spec，跨项目复用 | 是 |
 | `users/<user>/projects/` | 项目注册数据 | 是 |
@@ -71,6 +72,8 @@ Lattice 的数据按以下层级组织：
 - **用户级**（`users/<username>/`）：按用户名隔离，包含该用户的 spec、项目、任务和关系数据
 - **项目级**（`projects/<project-id>/`）：单个项目的元数据和项目级 spec
 - **任务级**（`tasks/<task-id>/`）：单个任务的元数据、PRD、进度日志和方案讨论
+
+> **敏感信息存储约定**：spec、PRD、checkpoint 等文档中不记录 token、cookie、密钥等敏感信息。需要沉淀敏感信息时，写入 `~/.lattice/.cache/sensitive/` 下的独立 txt/md 文件（文件名标注来源任务或 spec），文档正文只引用文件路径。
 
 ### 项目根目录的 lattice.json
 
