@@ -1,6 +1,6 @@
 import { useEffect, useDeferredValue, useMemo, type CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { getAdapter } from './adapters';
 import {
   queryKeys,
@@ -10,6 +10,7 @@ import {
   resolvePrimaryId,
   deduplicateProjects,
   getProjectId,
+  hasIdIntersection,
 } from './lib';
 import {
   canvasStore,
@@ -35,27 +36,370 @@ import type {
 
 export function useGlobalGraph() {
   const adapter = getAdapter();
+  const { userFilter } = useSnapshot(canvasStore);
+
+  const singleUsername = userFilter.length === 1 ? userFilter[0] : undefined;
+  const isMultiUser = userFilter.length >= 2;
+  const targetUsers = isMultiUser ? [...userFilter] : [];
+
+  // 单用户模式查询（多用户模式下禁用）
   const projectsQuery = useQuery({
-    queryKey: queryKeys.projects,
-    queryFn: () => adapter.getProjects(),
+    queryKey: ['projects', singleUsername],
+    queryFn: () => adapter.getProjects(singleUsername),
+    enabled: !isMultiUser,
   });
   const tasksQuery = useQuery({
-    queryKey: queryKeys.tasks(),
-    queryFn: () => adapter.getTasks(),
+    queryKey: ['tasks', { username: singleUsername }],
+    queryFn: () => adapter.getTasks({ username: singleUsername }),
+    enabled: !isMultiUser,
   });
   const relationsQuery = useQuery({
-    queryKey: queryKeys.relations,
-    queryFn: () => adapter.getRelations(),
+    queryKey: ['relations', singleUsername],
+    queryFn: () => adapter.getRelations(singleUsername),
+    enabled: !isMultiUser,
   });
   const specsQuery = useQuery({
-    queryKey: queryKeys.specs(),
-    queryFn: () => adapter.getSpecs(),
+    queryKey: ['specs', undefined, singleUsername],
+    queryFn: () => adapter.getSpecs(undefined, undefined, singleUsername),
+    enabled: !isMultiUser,
+  });
+
+  // 多用户模式查询（单用户模式下空数组）
+  const multiQueries = useQueries({
+    queries:
+      targetUsers.length > 0
+        ? targetUsers.flatMap((username) => [
+            {
+              queryKey: ['projects', username] as const,
+              queryFn: () => adapter.getProjects(username),
+            },
+            {
+              queryKey: ['tasks', { username }] as const,
+              queryFn: () => adapter.getTasks({ username }),
+            },
+            {
+              queryKey: ['relations', username] as const,
+              queryFn: () => adapter.getRelations(username),
+            },
+            {
+              queryKey: ['specs', undefined, username] as const,
+              queryFn: () => adapter.getSpecs(undefined, undefined, username),
+            },
+          ])
+        : [],
   });
   const { nodes, edges } = useMemo(() => {
     const nodes: LatticeNode[] = [];
     const edges: LatticeEdge[] = [];
 
-    // 多 ID 机制：去重虚拟合并项目 + 构建映射表
+    // ── 多用户模式：各自独立节点 + 跨用户虚拟合并连线 ──
+    if (isMultiUser && targetUsers.length > 0) {
+      // 解析多用户查询结果
+      const userIndex = new Map<
+        string,
+        {
+          projects: ProjectMeta[];
+          tasks: TaskMeta[];
+          relations: ProjectRelation[];
+          specs: { global: ParsedSpec[]; user: ParsedSpec[]; project: ParsedSpec[] };
+        }
+      >();
+      const allReady = targetUsers.every((_, i) => {
+        const base = i * 4;
+        return multiQueries[base]?.data && multiQueries[base + 1]?.data;
+      });
+      if (!allReady) return { nodes, edges };
+
+      targetUsers.forEach((username, i) => {
+        const base = i * 4;
+        const specsData =
+          (multiQueries[base + 3]?.data as {
+            global?: ParsedSpec[];
+            user?: ParsedSpec[];
+            project?: ParsedSpec[];
+          }) || {};
+        userIndex.set(username, {
+          projects: (multiQueries[base]?.data as ProjectMeta[]) || [],
+          tasks: (multiQueries[base + 1]?.data as TaskMeta[]) || [],
+          relations: (multiQueries[base + 2]?.data as ProjectRelation[]) || [],
+          specs: {
+            global: specsData.global || [],
+            user: specsData.user || [],
+            project: specsData.project || [],
+          },
+        });
+      });
+
+      // 全局 Spec：共享节点（不带用户前缀，只添加一次）
+      const globalSpecAdded = new Set<string>();
+      // specIdToNodeId: key = `${username}:${specId或fileName}` → spec 节点 ID
+      const specIdToNodeId = new Map<string, string>();
+
+      targetUsers.forEach((username) => {
+        const userData = userIndex.get(username)!;
+        (userData.specs.global || []).forEach((s: ParsedSpec) => {
+          const specId = s.frontmatter.id || s.fileName;
+          const specNodeId = `spec-${specId}`;
+          specIdToNodeId.set(`${username}:${specId}`, specNodeId);
+          specIdToNodeId.set(`${username}:${s.fileName}`, specNodeId);
+          if (!globalSpecAdded.has(specId)) {
+            globalSpecAdded.add(specId);
+            nodes.push({
+              id: specNodeId,
+              type: 'specNode',
+              position: { x: 0, y: 0 },
+              data: {
+                entityType: 'spec',
+                specId,
+                title: s.frontmatter.title || s.fileName,
+                scope: 'global',
+                filePath: s.filePath,
+              },
+            });
+          }
+        });
+      });
+
+      // 每个用户的项目/任务/spec/关系
+      targetUsers.forEach((username) => {
+        const userData = userIndex.get(username)!;
+        const projects = userData.projects;
+        const idMap = buildIdMap(projects); // 每用户独立的 idMap
+
+        // 项目节点（带用户前缀）
+        projects.forEach((p: ProjectMeta) => {
+          const pid = getProjectId(p);
+          if (!pid) return;
+          nodes.push({
+            id: `${username}:${pid}`,
+            type: 'projectNode',
+            position: { x: 0, y: 0 },
+            data: {
+              entityType: 'project',
+              projectId: pid,
+              name: p.name,
+              username,
+              hasGit: !!p.gitRemotes?.length,
+            },
+          });
+        });
+
+        // 用户级 + 项目级 Spec 节点（带用户前缀）
+        const userSpecs = userData.specs.user || [];
+        const projectSpecs = userData.specs.project || [];
+        [...userSpecs, ...projectSpecs].forEach((s: ParsedSpec) => {
+          const specId = s.frontmatter.id || s.fileName;
+          const isProjectScope = s.filePath.includes('/projects/');
+          const scope = isProjectScope ? 'project' : 'user';
+          const specNodeId = `${username}:spec-${specId}`;
+          specIdToNodeId.set(`${username}:${specId}`, specNodeId);
+          specIdToNodeId.set(`${username}:${s.fileName}`, specNodeId);
+          nodes.push({
+            id: specNodeId,
+            type: 'specNode',
+            position: { x: 0, y: 0 },
+            data: {
+              entityType: 'spec',
+              specId,
+              title: s.frontmatter.title || s.fileName,
+              scope,
+              filePath: s.filePath,
+              username,
+            },
+          });
+          // 项目级 Spec → 项目 边
+          if (isProjectScope) {
+            const match = s.filePath.match(/\/projects\/([^/]+)\//);
+            if (match) {
+              const resolvedPid = resolvePrimaryId(idMap, match[1]);
+              const projectNodeId = `${username}:${resolvedPid}`;
+              (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedPid;
+              edges.push({
+                id: `edge-${projectNodeId}-${specNodeId}`,
+                source: projectNodeId,
+                target: specNodeId,
+                type: 'smoothstep',
+                label: 'spec',
+                style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+                data: { label: 'spec' },
+              });
+            }
+          }
+        });
+
+        // 任务节点 + 边（带用户前缀）
+        userData.tasks.forEach((t: TaskMeta) => {
+          const taskId = `${username}:${t.id}`;
+          const taskProjectIds = (t.projects || []).map(
+            (pid: string) => `${username}:${resolvePrimaryId(idMap, pid)}`,
+          );
+          nodes.push({
+            id: taskId,
+            type: 'taskNode',
+            position: { x: 0, y: 0 },
+            data: {
+              entityType: 'task',
+              taskId: t.id,
+              title: t.title,
+              status: t.status,
+              username,
+              projectIds: taskProjectIds,
+            },
+          });
+          // 项目 → 任务 边
+          (t.projects || []).forEach((pid: string) => {
+            const resolvedPid = resolvePrimaryId(idMap, pid);
+            const projectNodeId = `${username}:${resolvedPid}`;
+            edges.push({
+              id: `edge-${projectNodeId}-${taskId}`,
+              source: projectNodeId,
+              target: taskId,
+              type: 'smoothstep',
+              label: 'task',
+              style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+              data: { label: 'task' },
+            });
+          });
+          // scopePaths 边
+          const projectSet = new Set(t.projects || []);
+          (t.scopePaths || []).forEach((sp) => {
+            if (sp.projectId && !projectSet.has(resolvePrimaryId(idMap, sp.projectId))) {
+              const resolvedScopePid = resolvePrimaryId(idMap, sp.projectId);
+              const projectNodeId = `${username}:${resolvedScopePid}`;
+              edges.push({
+                id: `edge-scope-${projectNodeId}-${taskId}`,
+                source: projectNodeId,
+                target: taskId,
+                type: 'smoothstep',
+                label: 'scope',
+                style: { stroke: '#FA8C16', opacity: 0.3, strokeDasharray: '2 4' } as CSSProperties,
+                data: { label: 'scope' },
+              });
+            }
+          });
+          // 父任务 → 子任务 边
+          if (t.parentTaskId) {
+            edges.push({
+              id: `edge-parent-${username}:${t.parentTaskId}-${taskId}`,
+              source: `${username}:${t.parentTaskId}`,
+              target: taskId,
+              type: 'smoothstep',
+              label: 'parent',
+              style: { stroke: 'var(--brand-color)', opacity: 0.4 } as CSSProperties,
+              data: { label: 'parent' },
+            });
+          }
+          // 任务 → Spec 引用边
+          (t.referencedSpecs || []).forEach((ref: ReferencedSpec) => {
+            const specNodeId = specIdToNodeId.get(`${username}:${ref.id}`);
+            if (specNodeId) {
+              edges.push({
+                id: `edge-spec-${taskId}-${specNodeId}`,
+                source: taskId,
+                target: specNodeId,
+                type: 'smoothstep',
+                label: 'ref-spec',
+                style: { stroke: '#13C2C2', opacity: 0.4 } as CSSProperties,
+                data: { label: 'ref-spec' },
+              });
+            }
+          });
+        });
+
+        // 项目 ↔ 项目 关系边（用户内）
+        userData.relations.forEach((r: ProjectRelation) => {
+          const style = getRelationStyle(r.type);
+          const relSource = `${username}:${resolvePrimaryId(idMap, r.projectA)}`;
+          const relTarget = `${username}:${resolvePrimaryId(idMap, r.projectB)}`;
+          edges.push({
+            id: `${r.id}-${username}`,
+            source: relSource,
+            target: relTarget,
+            type: 'smoothstep',
+            label: r.type,
+            style: {
+              stroke: style.stroke,
+              strokeDasharray: style.strokeDasharray,
+            } as CSSProperties,
+            data: { relationType: r.type, label: r.type },
+            animated: r.type === 'depends-on',
+          });
+        });
+
+        // Spec 覆盖链边（用户内：global → user → project）
+        const specsByFileName = new Map<string, Array<{ scope: string; nodeId: string }>>();
+        (userData.specs.global || []).forEach((s) => {
+          const specId = s.frontmatter.id || s.fileName;
+          const nodeId = `spec-${specId}`;
+          const list = specsByFileName.get(s.fileName) || [];
+          list.push({ scope: 'global', nodeId });
+          specsByFileName.set(s.fileName, list);
+        });
+        [...userSpecs, ...projectSpecs].forEach((s) => {
+          const specId = s.frontmatter.id || s.fileName;
+          const scope = s.filePath.includes('/projects/') ? 'project' : 'user';
+          const nodeId = `${username}:spec-${specId}`;
+          const list = specsByFileName.get(s.fileName) || [];
+          list.push({ scope, nodeId });
+          specsByFileName.set(s.fileName, list);
+        });
+        const scopeOrderMU: Record<string, number> = { global: 0, user: 1, project: 2 };
+        specsByFileName.forEach((specs) => {
+          if (specs.length < 2) return;
+          specs.sort((a, b) => (scopeOrderMU[a.scope] ?? 99) - (scopeOrderMU[b.scope] ?? 99));
+          for (let i = 0; i < specs.length - 1; i++) {
+            edges.push({
+              id: `edge-overrides-${specs[i].nodeId}-${specs[i + 1].nodeId}`,
+              source: specs[i].nodeId,
+              target: specs[i + 1].nodeId,
+              type: 'smoothstep',
+              label: 'overrides',
+              style: { stroke: '#FA8C16', opacity: 0.3, strokeDasharray: '4 4' } as CSSProperties,
+              data: { label: 'overrides' },
+            });
+          }
+        });
+      });
+
+      // 跨用户虚拟合并连线
+      for (let i = 0; i < targetUsers.length; i++) {
+        for (let j = i + 1; j < targetUsers.length; j++) {
+          const userA = targetUsers[i];
+          const userB = targetUsers[j];
+          const projectsA = userIndex.get(userA)!.projects;
+          const projectsB = userIndex.get(userB)!.projects;
+          projectsA.forEach((pA) => {
+            const pidA = getProjectId(pA);
+            if (!pidA) return;
+            const nodeA = `${userA}:${pidA}`;
+            projectsB.forEach((pB) => {
+              const pidB = getProjectId(pB);
+              if (!pidB) return;
+              if (hasIdIntersection(pA.ids, pB.ids)) {
+                edges.push({
+                  id: `edge-cross-user-${nodeA}-${userB}:${pidB}`,
+                  source: nodeA,
+                  target: `${userB}:${pidB}`,
+                  type: 'smoothstep',
+                  label: 'cross-user',
+                  style: {
+                    stroke: '#722ED1',
+                    opacity: 0.5,
+                    strokeDasharray: '8 4',
+                  } as CSSProperties,
+                  data: { label: 'cross-user' },
+                  animated: true,
+                });
+              }
+            });
+          });
+        }
+      }
+
+      return { nodes, edges };
+    }
+
+    // ── 单用户模式（现有逻辑）──
     const projects = deduplicateProjects(projectsQuery.data || []);
     const idMap = buildIdMap(projects);
 
@@ -236,16 +580,25 @@ export function useGlobalGraph() {
     });
 
     return { nodes, edges };
-  }, [projectsQuery.data, tasksQuery.data, relationsQuery.data, specsQuery.data]);
+  }, [
+    isMultiUser,
+    targetUsers,
+    projectsQuery.data,
+    tasksQuery.data,
+    relationsQuery.data,
+    specsQuery.data,
+    multiQueries,
+  ]);
 
   return {
     nodes,
     edges,
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      relationsQuery.isLoading ||
-      specsQuery.isLoading,
+    isLoading: isMultiUser
+      ? multiQueries.some((q) => q.isLoading)
+      : projectsQuery.isLoading ||
+        tasksQuery.isLoading ||
+        relationsQuery.isLoading ||
+        specsQuery.isLoading,
   };
 }
 
@@ -1334,6 +1687,17 @@ export function useStats() {
   return useQuery({
     queryKey: queryKeys.stats,
     queryFn: () => adapter.getStats(),
+    staleTime: 60_000,
+  });
+}
+
+// ── 用户列表 hook ──
+
+export function useUsers() {
+  const adapter = getAdapter();
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: () => adapter.getUsers(),
     staleTime: 60_000,
   });
 }

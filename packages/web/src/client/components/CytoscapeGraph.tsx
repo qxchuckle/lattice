@@ -40,6 +40,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     specScopeFilter,
     projectFilter,
     canvasKeyword,
+    userFilter,
   } = useSnapshot(canvasStore);
   const graphData = useGlobalGraph();
   const visibleTypesRef = useRef(visibleTypes);
@@ -54,6 +55,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   projectFilterRef.current = projectFilter;
   const canvasKeywordRef = useRef(canvasKeyword);
   canvasKeywordRef.current = canvasKeyword;
+  const userFilterRef = useRef(userFilter);
+  userFilterRef.current = userFilter;
   const skipAnchorRef = useRef(false);
   const visibleTypesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -335,6 +338,21 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       canvasKeywordRef.current,
     );
 
+    // 同步 lastVisibleKey：图数据更新已全量重建，防止筛选变化 useEffect 重复触发布局
+    lastVisibleKey.current = [
+      Object.entries(visibleTypesRef.current)
+        .map(([k, v]) => `${k}:${v}`)
+        .join('|'),
+      Object.entries(visibleEdgeTypesRef.current)
+        .map(([k, v]) => `${k}:${v}`)
+        .join('|'),
+      taskStatusFilterRef.current.join(','),
+      specScopeFilterRef.current.join(','),
+      projectFilterRef.current.join(','),
+      canvasKeywordRef.current,
+      userFilterRef.current.join(','),
+    ].join('||');
+
     if (isFirst) {
       // 首次加载：batch 合并 DOM 操作，禁用布局/fit/focus 动画，避免中间状态闪烁
       cy.batch(() => {
@@ -469,6 +487,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       specScopeFilter.join(','),
       projectFilter.join(','),
       canvasKeyword,
+      userFilter.join(','),
     ].join('||');
     if (key === lastVisibleKey.current) return;
     lastVisibleKey.current = key;
@@ -591,6 +610,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     specScopeFilter,
     projectFilter,
     canvasKeyword,
+    userFilter,
   ]);
 
   // focusDepth 变化时直接 applyFocus（force=true 跳过同节点去重，否则 depth 变了但 nodeId 没变会被 applyFocus 内部 return）

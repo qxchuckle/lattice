@@ -339,6 +339,13 @@ export const edgeLegendItems: EdgeLegendItem[] = [
     group: 'project',
   },
   { key: 'related', label: '关联', desc: 'Project → Project', color: '#8C8C8C', group: 'project' },
+  {
+    key: 'cross_user',
+    label: '跨用户',
+    desc: '虚拟合并 (cross-user)',
+    color: '#722ED1',
+    group: 'project',
+  },
 ];
 
 export const edgeGroups: { key: EdgeGroupKey; label: string; items: EdgeLegendItem[] }[] = [

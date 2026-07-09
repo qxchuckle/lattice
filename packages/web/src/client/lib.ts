@@ -151,6 +151,17 @@ export function getProjectId(p: ProjectMeta): string {
 }
 
 /**
+ * 检测两个项目的 ids 是否有交集（虚拟合并条件）
+ *
+ * 虚拟合并保护机制：有 legacy: ID 的项目只匹配 legacy: 交集，
+ * 无 legacy: ID 的项目匹配所有 IDs 交集。
+ */
+export function hasIdIntersection(idsA: string[], idsB: string[]): boolean {
+  const setB = new Set(idsB);
+  return idsA.some((id) => setB.has(id));
+}
+
+/**
  * 虚拟合并去重：IDs 有交集的项目合并为一个
  *
  * 使用并查集（Union-Find）检测 IDs 交集，每组选 primary ID 优先级最高的作为代表，

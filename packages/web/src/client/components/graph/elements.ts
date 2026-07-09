@@ -17,7 +17,7 @@ const SPEC_SCOPE_LABEL: Record<string, string> = {
   project: '项目级',
 };
 
-/** 节点标签：单行多标签（[类型][状态] 标题） */
+/** 节点标签：单行多标签（[类型][状态] 标题），多用户模式追加用户名 */
 export function getNodeLabel(data: Record<string, unknown>): string {
   const type = data.entityType as string;
 
@@ -68,7 +68,11 @@ export function getNodeLabel(data: Record<string, unknown>): string {
     }
   })();
 
-  return attrTag ? `${typeTag}${attrTag}\n${title}` : `${typeTag}\n${title}`;
+  // 多用户模式：追加用户名后缀
+  const username = data.username as string | undefined;
+  const userTag = username ? `\n@${username}` : '';
+
+  return attrTag ? `${typeTag}${attrTag}\n${title}${userTag}` : `${typeTag}\n${title}${userTag}`;
 }
 
 /** 从 spec filePath 提取 projectId */

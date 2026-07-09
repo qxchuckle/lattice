@@ -7,6 +7,7 @@ import type {
   EditorApp,
   DashboardStats,
   TaskContextResult,
+  UsersResult,
 } from './types';
 import type {
   ProjectMeta,
@@ -28,9 +29,15 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 /** 浏览器环境 adapter：通过 fetch 调 Fastify API */
 export class HttpAdapter implements LatticeDataAdapter {
+  // ── 用户 ──
+  getUsers(): Promise<UsersResult> {
+    return fetchJson<UsersResult>(`${API_BASE}/users`);
+  }
+
   // ── 项目 ──
-  getProjects(): Promise<ProjectMeta[]> {
-    return fetchJson<ProjectMeta[]>(`${API_BASE}/projects`);
+  getProjects(username?: string): Promise<ProjectMeta[]> {
+    const qs = username ? `?username=${encodeURIComponent(username)}` : '';
+    return fetchJson<ProjectMeta[]>(`${API_BASE}/projects${qs}`);
   }
   getProject(id: string): Promise<ProjectMeta | null> {
     return fetchJson<ProjectMeta | null>(`${API_BASE}/projects/${encodeURIComponent(id)}`);
@@ -54,6 +61,7 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (opts?.status) params.set('status', opts.status);
     if (opts?.projectId) params.set('projectId', opts.projectId);
     if (opts?.allUser) params.set('allUser', 'true');
+    if (opts?.username) params.set('username', opts.username);
     const qs = params.toString();
     return fetchJson<TaskMeta[]>(`${API_BASE}/tasks${qs ? `?${qs}` : ''}`);
   }
@@ -71,8 +79,9 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // ── 关系 ──
-  getRelations(): Promise<ProjectRelation[]> {
-    return fetchJson<ProjectRelation[]>(`${API_BASE}/relations`);
+  getRelations(username?: string): Promise<ProjectRelation[]> {
+    const qs = username ? `?username=${encodeURIComponent(username)}` : '';
+    return fetchJson<ProjectRelation[]>(`${API_BASE}/relations${qs}`);
   }
 
   // ── 任务语义上下文 ──
@@ -81,10 +90,11 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // ── Spec ──
-  getSpecs(scope?: SpecScope, projectId?: string): Promise<SpecResult> {
+  getSpecs(scope?: SpecScope, projectId?: string, username?: string): Promise<SpecResult> {
     const params = new URLSearchParams();
     if (scope) params.set('scope', scope);
     if (projectId) params.set('projectId', projectId);
+    if (username) params.set('username', username);
     const qs = params.toString();
     return fetchJson<SpecResult>(`${API_BASE}/specs${qs ? `?${qs}` : ''}`);
   }

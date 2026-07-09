@@ -27,6 +27,7 @@ import {
   getTaskPrd,
   readText,
   getSmartContext,
+  listAllUsernames,
 } from '@qcqx/lattice-core';
 
 const execAsync = promisify(exec);
@@ -57,10 +58,18 @@ async function isPathSafe(path: string, username: string): Promise<boolean> {
 
 /** 注册所有 API 路由 */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  // ── 用户列表 ──
+
+  app.get('/api/users', async () => {
+    const currentUser = await getUsername();
+    const users = await listAllUsernames();
+    return { users, currentUser };
+  });
+
   // ── 项目 ──
 
-  app.get('/api/projects', async () => {
-    const username = await getUsername();
+  app.get<{ Querystring: { username?: string } }>('/api/projects', async (req) => {
+    const username = req.query.username || (await getUsername());
     return listVirtualProjectMetas(username);
   });
 
@@ -115,17 +124,16 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // ── 任务 ──
 
-  app.get<{ Querystring: { status?: string; projectId?: string; allUser?: string } }>(
-    '/api/tasks',
-    async (req) => {
-      const username = await getUsername();
-      const opts: Record<string, unknown> = {};
-      if (req.query.status) opts.status = req.query.status;
-      if (req.query.projectId) opts.projectId = req.query.projectId;
-      if (req.query.allUser === 'true') opts.allUser = true;
-      return listTasks(username, opts);
-    },
-  );
+  app.get<{
+    Querystring: { status?: string; projectId?: string; allUser?: string; username?: string };
+  }>('/api/tasks', async (req) => {
+    const username = req.query.username || (await getUsername());
+    const opts: Record<string, unknown> = {};
+    if (req.query.status) opts.status = req.query.status;
+    if (req.query.projectId) opts.projectId = req.query.projectId;
+    if (req.query.allUser === 'true') opts.allUser = true;
+    return listTasks(username, opts);
+  });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (req) => {
     const username = await getUsername();
@@ -166,8 +174,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // ── 项目关系 ──
 
-  app.get('/api/relations', async () => {
-    const username = await getUsername();
+  app.get('/api/relations', async (req) => {
+    const query = req.query as { username?: string };
+    const username = query.username || (await getUsername());
     return listRelations(username);
   });
 
@@ -187,24 +196,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // ── Spec ──
 
-  app.get<{ Querystring: { scope?: string; projectId?: string } }>('/api/specs', async (req) => {
-    const username = await getUsername();
-    const scope = req.query.scope;
-    if (scope === 'global') return getGlobalSpecs();
-    if (scope === 'user') return getUserSpecs(username);
-    if (scope === 'project' && req.query.projectId) {
-      return getProjectSpecs(username, req.query.projectId);
-    }
-    // 默认返回全部
-    const projectSpecs = req.query.projectId
-      ? await getProjectSpecs(username, req.query.projectId)
-      : await getAllProjectSpecs(username);
-    return {
-      global: await getGlobalSpecs(),
-      user: await getUserSpecs(username),
-      project: projectSpecs,
-    };
-  });
+  app.get<{ Querystring: { scope?: string; projectId?: string; username?: string } }>(
+    '/api/specs',
+    async (req) => {
+      const username = req.query.username || (await getUsername());
+      const scope = req.query.scope;
+      if (scope === 'global') return getGlobalSpecs();
+      if (scope === 'user') return getUserSpecs(username);
+      if (scope === 'project' && req.query.projectId) {
+        return getProjectSpecs(username, req.query.projectId);
+      }
+      // 默认返回全部
+      const projectSpecs = req.query.projectId
+        ? await getProjectSpecs(username, req.query.projectId)
+        : await getAllProjectSpecs(username);
+      return {
+        global: await getGlobalSpecs(),
+        user: await getUserSpecs(username),
+        project: projectSpecs,
+      };
+    },
+  );
 
   // ── 搜索 ──
 

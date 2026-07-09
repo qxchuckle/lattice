@@ -12,7 +12,7 @@ import {
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
 import { canvasStore, sidebarStore, getViewPath, setSidebarWidth } from '../../store';
-import { useSearch } from '../../hooks';
+import { useSearch, useUsers } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
 import {
@@ -490,11 +490,14 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     specScopeFilter,
     projectFilter,
     canvasKeyword,
+    userFilter,
   } = useSnapshot(canvasStore);
   const { tree } = useTreeData();
+  const usersQuery = useUsers();
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['spec', 'project']));
   const [projectCollapsed, setProjectCollapsed] = useState(false);
   const [projectSearchKeyword, setProjectSearchKeyword] = useState('');
+  const [userCollapsed, setUserCollapsed] = useState(false);
 
   const projects = useMemo(() => {
     const projectRoot = tree.find((n) => n.type === 'project-root');
@@ -531,6 +534,7 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     canvasStore.specScopeFilter = [];
     canvasStore.projectFilter = [];
     canvasStore.canvasKeyword = '';
+    canvasStore.userFilter = [];
   };
 
   return (
@@ -546,6 +550,123 @@ const FilterTreeTab = memo(function FilterTreeTab() {
         allowClear
         style={{ marginBottom: 8 }}
       />
+
+      {/* 用户筛选 */}
+      {usersQuery.data && usersQuery.data.users.length > 1 && (
+        <>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}>
+            <span
+              style={{
+                cursor: 'pointer',
+                fontSize: 10,
+                width: 16,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => setUserCollapsed(!userCollapsed)}>
+              {userCollapsed ? '▸' : '▾'}
+            </span>
+            用户
+            {userFilter.length > 0 && (
+              <span style={{ fontSize: 9, color: 'var(--brand-color)' }}>
+                ({userFilter.length} 选)
+              </span>
+            )}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+              <Button
+                size='small'
+                type='text'
+                onClick={() => {
+                  canvasStore.userFilter = [];
+                  canvasStore.projectFilter = [];
+                  canvasStore.canvasKeyword = '';
+                }}
+                style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+                仅当前
+              </Button>
+              {userFilter.length < usersQuery.data.users.length && (
+                <Button
+                  size='small'
+                  type='text'
+                  onClick={() => {
+                    canvasStore.userFilter = [...usersQuery.data!.users];
+                    canvasStore.projectFilter = [];
+                  }}
+                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+                  全选
+                </Button>
+              )}
+              {userFilter.length > 0 && (
+                <Button
+                  size='small'
+                  type='text'
+                  onClick={() => {
+                    canvasStore.userFilter = [];
+                    canvasStore.projectFilter = [];
+                  }}
+                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+                  清空
+                </Button>
+              )}
+            </div>
+          </div>
+          {!userCollapsed && (
+            <div style={{ maxHeight: 100, overflow: 'auto', marginBottom: 8 }}>
+              {usersQuery.data.users.map((u) => {
+                const isCurrent = u === usersQuery.data!.currentUser;
+                const isChecked = userFilter.includes(u);
+                return (
+                  <Checkbox
+                    key={u}
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        canvasStore.userFilter = [...userFilter, u];
+                      } else {
+                        canvasStore.userFilter = userFilter.filter((x) => x !== u);
+                      }
+                      // 切换用户时清空项目筛选（跨用户 projectId 可能不匹配）
+                      canvasStore.projectFilter = [];
+                    }}
+                    style={{
+                      fontSize: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      margin: '1px 0',
+                    }}>
+                    <span style={{ fontWeight: isCurrent ? 600 : 400 }}>
+                      {u}
+                      {isCurrent && (
+                        <Tag
+                          color='blue'
+                          style={{
+                            fontSize: 9,
+                            margin: '0 0 0 4px',
+                            lineHeight: '14px',
+                            padding: '0 3px',
+                            flexShrink: 0,
+                          }}>
+                          当前
+                        </Tag>
+                      )}
+                    </span>
+                  </Checkbox>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
 
       {/* 节点类型 - 横向 */}
       <div

@@ -13,8 +13,11 @@ import type { GitStatus } from '@qcqx/lattice-core';
  * 浏览器场景实现 HttpAdapter，未来 VSCode 场景实现 WebviewAdapter。
  */
 export interface LatticeDataAdapter {
+  // 用户
+  getUsers(): Promise<UsersResult>;
+
   // 项目
-  getProjects(): Promise<ProjectMeta[]>;
+  getProjects(username?: string): Promise<ProjectMeta[]>;
   getProject(id: string): Promise<ProjectMeta | null>;
   getProjectGitStatus(id: string): Promise<GitStatus | null>;
   getProjectSpecs(id: string): Promise<ParsedSpec[]>;
@@ -29,13 +32,13 @@ export interface LatticeDataAdapter {
   getTaskLineage(id: string): Promise<unknown>;
 
   // 关系
-  getRelations(): Promise<ProjectRelation[]>;
+  getRelations(username?: string): Promise<ProjectRelation[]>;
 
   // 任务语义上下文
   getTaskContext(id: string): Promise<TaskContextResult>;
 
   // Spec
-  getSpecs(scope?: SpecScope, projectId?: string): Promise<SpecResult>;
+  getSpecs(scope?: SpecScope, projectId?: string, username?: string): Promise<SpecResult>;
 
   // 搜索
   search(query: string, opts?: SearchOpts): Promise<SearchResult[]>;
@@ -54,6 +57,7 @@ export interface TaskQueryOpts {
   status?: string;
   projectId?: string;
   allUser?: boolean;
+  username?: string;
 }
 
 export type SpecScope = 'global' | 'user' | 'project';
@@ -83,4 +87,9 @@ export interface TaskContextResult {
   directSpecs: ParsedSpec[];
   relatedSpecs: ParsedSpec[];
   semanticSpecs: ParsedSpec[];
+}
+
+export interface UsersResult {
+  users: string[];
+  currentUser: string;
 }
