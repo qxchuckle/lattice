@@ -73,10 +73,12 @@
 - `--type <type>`：限制类型为 `spec` / `task` / `project` / `checkpoint` / `relation`
 - `--project <id>`：限制到指定项目
 - `--users <names>`：限制到指定用户，逗号分隔
-- `--all-user`：搜索所有用户内容
+- `--current-user`：只搜索当前用户内容
 - `--limit <n>`：返回结果数量，默认 `10`
 - `--no-rerank`：关闭轻量 rerank
 - `--json`：以 JSON 输出；AI / Agent 调用时优先带上，便于读取完整元数据后再推理
+
+> **多用户搜索**：默认搜索所有用户内容，结果中始终显示来源用户名。用 `--current-user` 限制为当前用户，或用 `--users` 指定用户。
 
 > **搜索结果增强**：当结果类型为 `checkpoint` 时，`meta` 中会包含 `taskId`、`checkpointId`；当结果类型为 `relation` 时，`meta` 中会包含 `projectA`、`projectB`。
 

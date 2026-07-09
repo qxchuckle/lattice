@@ -87,7 +87,7 @@ export function registerSearchCommand(program: Command): void {
     .option('--type <type>', '限制搜索类型（spec / task / project / checkpoint / relation）')
     .option('--project <id>', '限制在指定项目范围内')
     .option('--users <names>', '只搜索指定用户内容，逗号分隔')
-    .option('--all-user', '搜索所有用户内容')
+    .option('--current-user', '只搜索当前用户内容')
     .option('--limit <n>', '返回结果数量', '10')
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
@@ -99,16 +99,16 @@ export function registerSearchCommand(program: Command): void {
         const currentUser = await getUsername();
         await initDb();
 
-        if (opts.allUser && opts.users) {
-          throw new Error('--users 与 --all-user 不能同时使用');
+        if (opts.currentUser && opts.users) {
+          throw new Error('--users 与 --current-user 不能同时使用');
         }
 
         const specifiedUsers = parseUsersOption(opts.users as string | undefined);
-        const usernames = opts.allUser
-          ? undefined
+        const usernames = opts.currentUser
+          ? [currentUser]
           : specifiedUsers.length > 0
             ? specifiedUsers
-            : [currentUser];
+            : undefined; // 默认搜索所有用户
 
         const modelLoaded = isModelLoaded();
         logger.spin(
@@ -126,7 +126,6 @@ export function registerSearchCommand(program: Command): void {
           useLightweightRerank: opts.rerank,
         });
         const ragStatus = await getRAGStatus();
-        const showUsername = Boolean(opts.allUser || opts.users);
         const showDuplicates = Boolean(opts.showDuplicates);
 
         if (isModelLoaded()) {
@@ -201,7 +200,7 @@ export function registerSearchCommand(program: Command): void {
             logger.raw(`    ${truncated}`);
           }
 
-          if (showUsername && username) {
+          if (username) {
             logger.raw(`    ${chalk.dim(`用户：${username}`)}`);
           }
           if (taskId) {
@@ -241,7 +240,7 @@ function outputRagRefreshHint(lastUpdated: string | null): void {
   const updatedLabel = formatRagTimestamp(lastUpdated);
   logger.raw(chalk.dim(`RAG 上次构建时间：${updatedLabel}`));
   logger.raw(
-    chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag rebuild`。'),
+    chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag update`。'),
   );
   logger.raw('');
 }

@@ -84,11 +84,15 @@ ltc project relation add <a> <b> --type <type> \
 
 ## 跨用户聚合
 
-> 何时读：同一项目被多个本机用户同时使用 / 需要看到其他用户的 spec / 跨用户任务聚合时 → 下一步：按需加 `--user` / `--all-user` / `--current-user` 参数。
+> 何时读：同一项目被多个本机用户同时使用 / 需要看到其他用户的 spec / 跨用户任务聚合时 → 下一步：按需加 `--user` / `--current-user` 参数。
 
-`ltc context` 默认聚合所有用户为同一项目定义的 spec 和关系。需要精确控制时：
+`ltc context` 默认聚合所有用户为同一项目定义的 spec 和关系。`ltc search` 默认搜索所有用户内容。需要精确控制时：
 
 ```bash
+# 搜索：默认搜索所有用户
+ltc search "关键词" --current-user             # 仅当前用户
+ltc search "关键词" --users user1,user2         # 指定用户
+
 # 关系：默认聚合所有用户
 ltc project relation list <id> --user <users>    # 仅指定用户
 ltc project relation list <id> --current-user    # 仅当前用户

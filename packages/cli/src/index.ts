@@ -84,14 +84,24 @@ async function main(): Promise<void> {
   // 进程退出时确保 DB 正确关闭（WAL checkpoint）
   process.on('exit', () => closeDb());
 
-  try {
-    const checkResult = await runStartupSelfCheck();
-    if (checkResult.ragRebuildNeeded) {
-      console.warn('⚠ DB schema 已升级，建议运行 `lattice rag rebuild` 重建搜索索引');
+  // rag rebuild / rag update 本身会处理索引重建，跳过 startup-self-check 的提示
+  // 使用 commander 的 preAction hook：在 action 执行前、命令解析后触发
+  program.hook('preAction', async (_thisCommand, actionCommand) => {
+    const name = actionCommand.name();
+    const parentName = actionCommand.parent?.name();
+    const isRagIndexCmd = parentName === 'rag' && (name === 'rebuild' || name === 'update');
+
+    if (!isRagIndexCmd) {
+      try {
+        const checkResult = await runStartupSelfCheck();
+        if (checkResult.ragRebuildNeeded) {
+          console.warn('⚠ DB schema 已升级，建议运行 `lattice rag rebuild` 重建搜索索引');
+        }
+      } catch {
+        // 启动自检失败不阻断主命令执行
+      }
     }
-  } catch {
-    // 启动自检失败不阻断主命令执行
-  }
+  });
 
   await program.parseAsync(process.argv);
 }
