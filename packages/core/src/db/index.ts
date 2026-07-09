@@ -257,11 +257,12 @@ function ensureSpecSearchMetaSchema(db: Database.Database): void {
 
 /**
  * 检测数据库 schema 版本，如果是旧版本则删除数据库文件以触发重建。
- * 返回 true 表示发生了重建（需要上层重新填充数据）。
+ * 返回 true 表示需要回填数据（全新 DB 或 schema 升级）。
  */
 function checkAndMigrateDbSchema(): boolean {
   const dbPath = getDbPath();
-  if (!existsSync(dbPath)) return false;
+  // 全新 DB：需要回填数据
+  if (!existsSync(dbPath)) return true;
 
   let tempDb: Database.Database | null = null;
   try {
