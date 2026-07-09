@@ -5,13 +5,12 @@ import {
   getUsername,
   readLocalConfig,
   writeLocalConfig,
-  getUsersDir,
   getUserDir,
   getUserSpecDir,
   getUserProjectsDir,
   getUserTasksDir,
   ensureDir,
-  listDir,
+  listUserDirs,
   dirExists,
   removeDir,
 } from '@qcqx/lattice-core';
@@ -29,7 +28,7 @@ export function registerUserCommand(program: Command): void {
     .action(async () => {
       try {
         const currentUser = await getUsername();
-        const users = await listDir(getUsersDir());
+        const users = await listUserDirs();
 
         if (users.length === 0) {
           logger.raw(chalk.dim('暂无用户'));

@@ -1,5 +1,5 @@
 import type { SearchDocumentType } from '../types';
-import { getUsersDir, listDir } from '../paths';
+import { listUserDirs } from '../paths';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from '../spec';
 import { listTasks, getTaskPrd } from '../task';
 import { readProgress } from '../task/checkpoint';
@@ -33,7 +33,7 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
     });
   }
 
-  const usernames = await listDir(getUsersDir());
+  const usernames = await listUserDirs();
   for (const username of usernames) {
     // 用户级 spec
     const userSpecs = await getUserSpecs(username);

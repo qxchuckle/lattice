@@ -285,16 +285,15 @@ export async function findUsernameAndDirName(
   }
 
   // DB 没有则扫描文件系统
-  const { getUsersDir } = await import('../paths');
+  const { listUserDirs } = await import('../paths');
   let usernames: string[];
   try {
-    usernames = await listDir(getUsersDir());
+    usernames = await listUserDirs();
   } catch {
     return null;
   }
 
   for (const username of usernames) {
-    if (username.startsWith('.')) continue;
     let projectDirs: string[];
     try {
       projectDirs = await listDir(getUserProjectsDir(username));

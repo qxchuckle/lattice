@@ -1,5 +1,5 @@
 import { listAllProjects, listProjectRowsById } from '../db';
-import { getUsersDir, listDir } from '../paths';
+import { listUserDirs } from '../paths';
 import { getRelatedProjectIds } from './lookup';
 
 /**
@@ -56,8 +56,7 @@ export async function listAllUsernames(): Promise<string[]> {
     // DB 未初始化，回退
   }
   try {
-    const entries = await listDir(getUsersDir());
-    return entries.filter((name) => !name.startsWith('.'));
+    return await listUserDirs();
   } catch {
     return [];
   }

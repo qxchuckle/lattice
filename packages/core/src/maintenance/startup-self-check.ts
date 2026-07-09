@@ -12,14 +12,7 @@ import {
   listTaskProjectLinks,
   unlinkTaskProject,
 } from '../db';
-import {
-  fileExists,
-  getTaskMetaPath,
-  getTaskPrdPath,
-  getUsersDir,
-  listDir,
-  readJSON,
-} from '../paths';
+import { fileExists, getTaskMetaPath, getTaskPrdPath, listUserDirs, readJSON } from '../paths';
 import { findProjectDirName } from '../project';
 import { removeSearchDocumentIndex } from '../rag';
 
@@ -45,7 +38,7 @@ export async function runStartupSelfCheck(): Promise<StartupSelfCheckResult> {
 
   try {
     const currentUsername = await getUsername();
-    const knownUsers = new Set([currentUsername, ...(await listDir(getUsersDir()))]);
+    const knownUsers = new Set([currentUsername, ...(await listUserDirs())]);
 
     const projects = listAllProjects();
     const removedProjectIds = new Set<string>();

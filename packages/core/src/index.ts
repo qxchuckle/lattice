@@ -75,6 +75,7 @@ export {
   removeFile,
   removeDir,
   listDir,
+  listUserDirs,
   findUpwards,
   findAllUpwards,
 } from './paths';

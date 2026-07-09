@@ -208,6 +208,19 @@ export async function listDir(dirPath: string): Promise<string[]> {
 }
 
 /**
+ * 列出 users 目录下的有效用户目录名。
+ * 过滤隐藏文件（如 .DS_Store）和非目录条目。
+ */
+export async function listUserDirs(): Promise<string[]> {
+  try {
+    const entries = await readdir(getUsersDir(), { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 从当前目录向上查找包含指定文件的目录（返回最近的一个）
  */
 export async function findUpwards(fileName: string, startDir: string): Promise<string | null> {

@@ -12,9 +12,9 @@ import {
   getDbPath,
   ensureDir,
   getCacheDir,
-  getUsersDir,
   getUserProjectsDir,
   listDir,
+  listUserDirs,
   readJSON,
 } from '../paths';
 import { selectPrimaryId, resolveProjectIds, normalizeProjectMeta } from '../project/identity';
@@ -323,13 +323,12 @@ function checkAndMigrateDbSchema(): boolean {
 async function rebuildProjectsCache(): Promise<void> {
   let usernames: string[];
   try {
-    usernames = await listDir(getUsersDir());
+    usernames = await listUserDirs();
   } catch {
     return;
   }
 
   for (const username of usernames) {
-    if (username.startsWith('.')) continue;
     let projectDirs: string[];
     try {
       projectDirs = await listDir(getUserProjectsDir(username));

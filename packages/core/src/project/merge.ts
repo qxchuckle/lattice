@@ -183,16 +183,15 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
     }
 
     // 2d. 更新 task.json 的 projects（扫描所有用户的 task.json）
-    const { getUsersDir, getTaskMetaPath } = await import('../paths');
+    const { getTaskMetaPath, listUserDirs } = await import('../paths');
     let usernames: string[];
     try {
-      usernames = await listDir(getUsersDir());
+      usernames = await listUserDirs();
     } catch {
       usernames = [toFound.username];
     }
 
     for (const username of usernames) {
-      if (username.startsWith('.')) continue;
       let taskDirs: string[];
       try {
         const { getUserTasksDir } = await import('../paths');
