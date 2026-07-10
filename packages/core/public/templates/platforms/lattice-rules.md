@@ -49,6 +49,8 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 颗粒度兜底：连续 3 轮未产生 checkpoint → 补 `note`。
 
+> **fast-start 例外**：`/lattice/task/fast-start` 模式不走上述实施期循环（不创建任务 / PRD / checkpoint）。但 spec 精读和沉淀判定仍然适用。发现复杂度升高时提示用户转入正常模式（→ [fast-start-workflows.md](fast-start-workflows.md)）。
+
 ### 为什么这 4 步不能跳（后果锚点）
 
 跳过其中任一步会触发以下可机械识别的后果，本轮未做到哪项、下一轮就会被哪项后果护栏拦住：
@@ -96,6 +98,8 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 5. spec 沉淀判定（→ [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
 6. 项目关系审查：任务中是否发现了未记录的项目间关系 → 补充 `ltc project relation add`（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
 7. 二次审阅（→ [task-workflows.md#归档后的二次审阅与-spec-沉淀判定](task-workflows.md#归档后的二次审阅与-spec-沉淀判定)）
+
+> **fast-start 归档**：fast-start 模式下未创建任务，执行归档时先创建任务（标题从对话归纳）→ start → 回填 PRD → 再按上述闭环执行（→ [fast-start-workflows.md](fast-start-workflows.md)）。
 
 ## 七、Spec 优先级与冲突
 

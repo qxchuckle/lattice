@@ -19,6 +19,8 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 | `/lattice/task/query` | 查询项目情况 / 任务进展 / 历史完成情况（**只读**） | [project-context.md](project-context.md) + [task-workflows.md](task-workflows.md) | `task/query.md` |
 | `/lattice/task/design` | 讨论方案 / 分析设计而不动代码 | [task-workflows.md](task-workflows.md)（design 模式） | `task/design.md` |
 | `/lattice/task/start` | 开始实施任务并同步上下文 | [task-workflows.md](task-workflows.md) + [spec-workflows.md](spec-workflows.md) + [project-context.md](project-context.md) | `task/start.md` |
+| `/lattice/task/fast-start` | 以轻量模式开始工作（获取上下文和 spec，不创建任务 / PRD / checkpoint） | [fast-start-workflows.md](fast-start-workflows.md) + [project-context.md](project-context.md) + [spec-workflows.md](spec-workflows.md) | `task/fast-start.md` |
+| `/lattice/task/fast-start/to-normal` | 将 fast-start 会话转入正常任务模式 | [fast-start-workflows.md](fast-start-workflows.md) + [task-workflows.md](task-workflows.md) | `task/fast-start/to-normal.md` |
 | `/lattice/task/checkpoint` | 记录任务关键进展 | [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件) | `task/checkpoint.md` |
 | `/lattice/task/archive` | 结束任务并判断是否沉淀规则 | [task-workflows.md#归档流程](task-workflows.md#归档流程) + [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) | `task/archive.md` |
 | `/lattice/task/delete` | 删除任务（自然语言匹配 / 删除当前任务 / 风险确认） | [task-workflows.md](task-workflows.md) + [command-reference.md](command-reference.md) | `task/delete.md` |

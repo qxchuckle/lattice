@@ -35,6 +35,18 @@
 - **需要用户确认**：多候选无法确定 / 对话未围绕明确任务 / AI 信心不足 → 列出候选请用户确认
 - **没有匹配候选**：明确告诉用户当前没有合适候选，可以根据当前对话先新建任务再归档
 
+### 情况三：fast-start 模式归档
+
+当前会话处于 fast-start 模式（通过 `/lattice/task/fast-start` 开始，未创建 lattice 任务）时执行归档：
+
+1. **从对话上下文归纳任务标题**
+2. `ltc task create "<标题>" --current` + `ltc task start <task-id>`
+3. **回填 PRD**：将 fast-start 阶段完成的工作写入 PRD（目标 / 最终方案 / 修改文件索引 / 任务完成总结）
+4. `ltc task associate <task-id> --current`
+5. **按情况一正常归档**：summary checkpoint → complete → archive → rag update → spec 沉淀判定
+
+> fast-start 模式下虽然没有任务记录，但对话中的实质工作和 spec 沉淀判定仍然适用。归档时创建任务是为了让工作成果可追溯。
+
 ## 归档前检查（spec 沉淀判定）
 
 完整判定标准见 skill `spec-workflows.md` 的「沉淀判定」。在归档输出中必须补充：
