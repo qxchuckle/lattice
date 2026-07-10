@@ -445,3 +445,31 @@ export interface TaskProjectRow {
   task_id: string;
   project_id: string;
 }
+
+/** fast-start 日志条目，存储在 ~/.lattice/.cache/fast-start/log-NNN.yaml */
+export interface FastStartLogEntry {
+  /** 唯一 ID，格式：fs_<8 位 hex> */
+  id: string;
+  /** ISO 8601 时间戳 */
+  time: string;
+  /** 简述：做了什么 */
+  title: string;
+  /** 详细描述 */
+  message: string;
+  /** 记录时的当前工作目录 */
+  cwd: string;
+  /** 关联项目 ID（若当前目录属于已注册项目） */
+  projectId?: string;
+  /** 关联项目名称（冗余存储，便于列表展示） */
+  projectName?: string;
+  /** 本次操作涉及的文件列表（可选） */
+  files?: string[];
+}
+
+/** fast-start 日志文件结构 */
+export interface FastStartLogFile {
+  /** 文件创建时间（ISO 8601，同时用于生成文件名） */
+  createdAt: string;
+  /** 日志条目 */
+  entries: FastStartLogEntry[];
+}

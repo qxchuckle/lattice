@@ -1,6 +1,6 @@
 # CLI 命令参数参考
 
-> **本文权威范围**：Lattice CLI 主要命令、位置参数、选项参数的字典（`init` / `status` / `context` / `search` / `link` / `unlink` / `project` / `task` / `spec` / `scan` / `sync` / `user` / `config` / `doctor` / `rag` / `trash` / `web`）+ 需要 `-f / --force` 跳过二次确认的命令清单。
+> **本文权威范围**：Lattice CLI 主要命令、位置参数、选项参数的字典（`init` / `status` / `context` / `search` / `link` / `unlink` / `project` / `task` / `spec` / `scan` / `sync` / `user` / `config` / `doctor` / `rag` / `trash` / `fast-start` / `web`）+ 需要 `-f / --force` 跳过二次确认的命令清单。
 >
 > **使用方式**：本文是 *查阅式* 参考，仅在你已经从流程文档选定要调的命令、但需要查询它的参数拼写 / 默认值 / 互斥选项时才读。**不要把本文作为从 0 起步的学习入口**。
 >
@@ -24,6 +24,7 @@
 | `ltc project relation remove <a> <b>` | 确认删除项目关系 |
 | `ltc task delete <id>` | 确认彻底删除任务 |
 | `ltc user remove <name>` | 确认删除用户 |
+| `ltc fast-start log clear` | 确认清空所有 fast-start 日志 |
 
 ## `ltc init`
 
@@ -521,3 +522,58 @@ RAG 索引管理。
 
 - `-p, --port <port>`：端口号，默认 3000
 - `--no-open`：不自动打开浏览器
+
+## `ltc fast-start`
+
+fast-start 轻量模式日志管理。
+
+### `ltc fast-start log add <title>`
+
+> 语义与触发条件：见 [fast-start-workflows.md#轻量日志](fast-start-workflows.md#轻量日志)。
+
+添加一条 fast-start 日志（自动检测当前目录对应的项目）。
+
+- `<title>`：日志标题（简述做了什么）
+- `-m, --message <message>`：日志内容，必填
+- `--files <files...>`：涉及的文件列表
+- `--cwd <dir>`：工作目录（默认当前目录）
+- `--project <id>`：手动指定项目 ID（默认自动检测）
+- `--json`：以 JSON 输出
+
+### `ltc fast-start log list`
+
+列出 fast-start 日志（跨所有分片文件，按时间排序）。
+
+- `--last <n>`：只显示最近 N 条
+- `--project <id>`：按项目 ID 过滤
+- `--current`：自动识别当前目录对应的项目并过滤
+- `--json`：以 JSON 输出
+
+### `ltc fast-start log search <query>`
+
+关键词搜索 fast-start 日志（搜索范围：标题 / 内容 / 文件 / 目录，不区分大小写）。按时间倒序返回（新→旧）。
+
+- `<query>`：搜索关键词
+- `--last <n>`：只返回最近 N 条
+- `--project <id>`：按项目 ID 过滤
+- `--current`：自动识别当前目录对应的项目并过滤
+- `--json`：以 JSON 输出
+
+### `ltc fast-start log show <id>`
+
+查看单条 fast-start 日志。
+
+- `<id>`：日志 ID（格式 `fs_<8hex>`）
+- `--json`：以 JSON 输出
+
+### `ltc fast-start log stats`
+
+查看日志统计（总条目数、文件数、当前文件容量）。
+
+- `--json`：以 JSON 输出
+
+### `ltc fast-start log clear`
+
+清空所有 fast-start 日志（不可恢复）。
+
+- `-f, --force`：跳过确认

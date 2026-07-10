@@ -1,6 +1,6 @@
 # Fast-start 工作流
 
-> **本文权威范围**：fast-start 模式的完整工作流（启动 / 工作中约束 / 复杂度检测 / 转正常模式 / 归档）。正常任务工作流见 [task-workflows.md](task-workflows.md)；spec 沉淀判定见 [spec-workflows.md](spec-workflows.md)。
+> **本文权威范围**：fast-start 模式的完整工作流（启动 / 工作中约束 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档）。正常任务工作流见 [task-workflows.md](task-workflows.md)；spec 沉淀判定见 [spec-workflows.md](spec-workflows.md)。
 
 ## 定义与适用场景
 
@@ -37,6 +37,7 @@ fast-start 是 `task/start` 的轻量变体：获取项目上下文和精读 spe
 | 精读相关 spec | ✓ | ✓ |
 | 创建任务 / PRD / checkpoint | ✗ | ✓ |
 | 实施期 4 步循环（PRD 同步 → spec → code → checkpoint） | ✗ | ✓ |
+| 轻量日志 (`ltc fast-start log`) | ✓ | — |
 | spec 沉淀提醒 | ✓ | ✓ |
 | 复杂时转正常模式 | ✓ | — |
 | 项目关联同步 | ✗ | ✓ |
@@ -53,6 +54,57 @@ fast-start 是 `task/start` 的轻量变体：获取项目上下文和精读 spe
 - **spec 沉淀仍然适用**——发现可复用内容（行为约束 / 项目认知 / 试错经验）→ 按 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) 主动询问用户是否沉淀
 - 用户可随时使用 `/lattice/spec/update/{project|user|global}` 命令沉淀
 - 当前目录不是已注册项目时，提示无法获取项目上下文，用户可选择继续裸跑或先注册项目
+
+## 轻量日志
+
+> 何时读：fast-start 模式下完成一项工作后，或需要查看历史 fast-start 活动记录时 → 下一步：执行 `ltc fast-start log add` 记录，或 `ltc fast-start log list` 查看。
+
+fast-start 模式不创建任务和 checkpoint，但提供轻量日志记录做了什么。日志存储在 `~/.lattice/users/<username>/fast-tasks/` 下的 YAML 文件中，文件名使用创建时间戳（`log-2026-07-10T06-45-06.976Z.yaml`），单文件上限 1000 条，超出自动创建新文件。
+
+### 记录时机
+
+- 完成一项工作（修了一个 bug、加了一个功能、改了配置）后
+- 会话结束前补充本次 fast-start 的摘要
+- 不强制每轮都记——fast-start 的核心仍然是轻量，日志是可选的追溯手段
+
+### 命令
+
+```bash
+# 添加日志（自动检测当前项目）
+ltc fast-start log add "修复 CLI 参数解析" -m "修改了 task.ts 中的参数解析逻辑"
+
+# 带文件列表
+ltc fast-start log add "重构路径模块" -m "拆分 paths/index.ts" --files packages/core/src/paths/index.ts
+
+# 列出日志
+ltc fast-start log list [--last N] [--project <id>] [--current] [--json]
+
+# 关键词搜索（标题 / 内容 / 文件 / 目录）
+ltc fast-start log search <关键词> [--last N] [--project <id>] [--current] [--json]
+
+# 查看单条
+ltc fast-start log show <id>
+
+# 统计
+ltc fast-start log stats
+
+# 清空
+ltc fast-start log clear [--force]
+```
+
+### 与 checkpoint 的区别
+
+| | fast-start log | checkpoint |
+|---|---|---|
+| 依赖任务 | 不依赖（无任务也能记） | 依赖（需先 `task create`） |
+| 类型分类 | 无类型，纯时间线 | 11 类语义分类 |
+| PRD 联动 | 无 | 有（PRD 同步硬触发） |
+| 存储位置 | `~/.lattice/users/<u>/fast-tasks/` | `~/.lattice/users/<u>/tasks/<id>/progress.yaml` |
+| 颗粒度 | 粗粒度（做完一件事记一条） | 细粒度（每轮决策/纠错/约束） |
+
+### 转正常模式时
+
+fast-start 阶段记录的日志不会自动迁移到任务的 progress.yaml。转入正常模式后，可在回填 PRD 时参考 fast-start 日志内容。
 
 ## 复杂度检测
 

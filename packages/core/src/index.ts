@@ -37,6 +37,8 @@ export type {
   RelationsFile,
   TaskProjectRow,
   AncestorProjectInfo,
+  FastStartLogEntry,
+  FastStartLogFile,
 } from './types';
 
 // 路径与文件工具
@@ -64,6 +66,9 @@ export {
   getTaskPrdPath,
   getTaskProgressPath,
   getTaskDesignPath,
+  getFastStartLogDir,
+  getFastStartLogFileName,
+  getFastStartLogFilePath,
   toKebabCase,
   ensureDir,
   fileExists,
@@ -381,3 +386,21 @@ export type { StartupSelfCheckResult } from './maintenance/startup-self-check';
 
 // 工具
 export { nowISO, todayDateForId } from './utils/time';
+
+// fast-start 日志
+export {
+  MAX_ENTRIES_PER_FILE,
+  addLogEntry,
+  listLogEntries,
+  searchLogEntries,
+  getLogEntry,
+  clearAllLogs,
+  getLogStats,
+  getWritableFileCreatedAt,
+} from './fast-start-log';
+export type {
+  AddLogOptions,
+  ListLogOptions,
+  SearchLogOptions,
+  FastStartLogStats,
+} from './fast-start-log';

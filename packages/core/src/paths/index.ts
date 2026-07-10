@@ -21,6 +21,22 @@ export function getDbPath(): string {
   return pathJoin(getCacheDir(), 'lattice.db');
 }
 
+// ─── fast-start 日志 ───
+
+export function getFastStartLogDir(username: string): string {
+  return pathJoin(getUserDir(username), 'fast-tasks');
+}
+
+/** fast-start 日志文件名：log-<创建时间戳>.yaml（冒号替换为 - 保证文件系统安全） */
+export function getFastStartLogFileName(createdAt: string): string {
+  const safe = createdAt.replace(/:/g, '-');
+  return `log-${safe}.yaml`;
+}
+
+export function getFastStartLogFilePath(username: string, createdAt: string): string {
+  return pathJoin(getFastStartLogDir(username), getFastStartLogFileName(createdAt));
+}
+
 // ─── 配置 ───
 
 export function getConfigDir(): string {

@@ -53,7 +53,7 @@ Lattice 是本机的跨项目上下文层，围绕 `projects`、`tasks`、`specs
 |---|---|---|
 | 项目识别、多路径绑定、ID 匹配、AI 推断与记录项目关系 | **身份与关系认知**：当前目录是不是已注册项目 / 应该绑哪个项目 / 项目间关系判定与记录 | [project-discovery.md](project-discovery.md) |
 | 触发或解析 `/lattice/...` agent command | **命令索引**：从 agent command 跳到底层 skill 子文档的依赖矩阵 | [agent-commands.md](agent-commands.md) |
-| 收到 `/lattice/task/fast-start` 或 `/lattice/task/fast-start/to-normal` | **轻量任务模式**：fast-start 启动 / 复杂度检测 / 转正常模式 / 归档 | [fast-start-workflows.md](fast-start-workflows.md) |
+| 收到 `/lattice/task/fast-start` 或 `/lattice/task/fast-start/to-normal` | **轻量任务模式**：fast-start 启动 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档 | [fast-start-workflows.md](fast-start-workflows.md) |
 | 多命令并行 / 大输出场景下的 subagent 委派 | **委派判定**：什么时候该把工作拆给 subagent 而不是自己一把梭 | [subagent-delegation.md](subagent-delegation.md) |
 | 查 CLI 参数 / 子命令语法 | **字典**：所有 lattice CLI 参数与功能详细参考 | [command-reference.md](command-reference.md) |
 | Lattice 异常（命令报错、数据缺失、搜索无结果） | **排查流程**：doctor 诊断项速查、典型问题场景、AI 决策树 | [troubleshooting.md](troubleshooting.md) |

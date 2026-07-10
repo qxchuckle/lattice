@@ -5,9 +5,9 @@
 > **[依赖 skill 子文档]**（本命令期间按需 read）：
 > - `project-context.md`：项目上下文报告
 > - `spec-workflows.md`：按任务主题精读相关 spec / 沉淀判定
-> - `fast-start-workflows.md`：fast-start 完整工作流（启动 / 复杂度检测 / 转正常模式 / 归档）
+> - `fast-start-workflows.md`：fast-start 完整工作流（启动 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档）
 
-**目标**：以轻量模式开始工作——获取项目上下文和 spec，但不创建任务、不写 PRD、不打 checkpoint。
+**目标**：以轻量模式开始工作——获取项目上下文和 spec，但不创建任务、不写 PRD、不打 checkpoint。可选记录轻量日志。
 
 ## 与 task/start 的区别
 
@@ -17,6 +17,7 @@
 | 精读相关 spec | ✓ | ✓ |
 | 创建任务 / PRD / checkpoint | ✗ | ✓ |
 | 实施期 4 步循环 | ✗ | ✓ |
+| 轻量日志 (`ltc fast-start log`) | ✓ | — |
 | spec 沉淀提醒 | ✓ | ✓ |
 | 复杂时转正常模式 | ✓ | — |
 
@@ -42,6 +43,27 @@
 用户确认后执行 `/lattice/task/fast-start/to-normal` 流程（详见对应命令文档）。
 
 用户选择继续 fast-start → 不再重复提示同一信号，但新信号出现时再次提示。
+
+## 轻量日志
+
+fast-start 模式可选记录轻量日志，让工作有迹可循。日志存储在 `~/.lattice/users/<username>/fast-tasks/` 下，文件名使用创建时间戳，单文件上限 1000 条，超出自动创建新文件。
+
+完成一项工作后记录：
+
+```bash
+ltc fast-start log add "修复了参数解析" -m "修改了 task.ts" --files packages/cli/src/commands/task.ts
+```
+
+查看历史记录：
+
+```bash
+ltc fast-start log list [--last N] [--current]
+ltc fast-start log search <关键词>
+ltc fast-start log show <id>
+ltc fast-start log stats
+```
+
+不强制每轮都记——日志是可选的追溯手段。详见 `fast-start-workflows.md` 的「轻量日志」。
 
 ## spec 沉淀
 

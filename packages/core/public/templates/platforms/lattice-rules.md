@@ -49,7 +49,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 颗粒度兜底：连续 3 轮未产生 checkpoint → 补 `note`。
 
-> **fast-start 例外**：`/lattice/task/fast-start` 模式不走上述实施期循环（不创建任务 / PRD / checkpoint）。但 spec 精读和沉淀判定仍然适用。发现复杂度升高时提示用户转入正常模式（→ [fast-start-workflows.md](fast-start-workflows.md)）。
+> **fast-start 例外**：`/lattice/task/fast-start` 模式不走上述实施期循环（不创建任务 / PRD / checkpoint）。但 spec 精读和沉淀判定仍然适用。轻量日志（`ltc fast-start log`）可选记录做了什么。发现复杂度升高时提示用户转入正常模式（→ [fast-start-workflows.md](fast-start-workflows.md)）。
 
 ### 为什么这 4 步不能跳（后果锚点）
 
