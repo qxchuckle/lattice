@@ -23,6 +23,10 @@ ltc status
 - 是否处于嵌套项目中（自动从祖先继承 spec）
 
 > ⚠️ **spec 列表 ≠ spec 内容**：`ltc context` 输出只是标题 + 路径 + 摘要（摘要常缺失）。必须按当前主题精读相关 spec——详见 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)。
+>
+> ⚠️ **宁多勿少**：不确定某条 spec 是否相关时，读而非跳过。漏读代价远高于多读。
+>
+> ⚠️ **持续补读**：spec 精读不是起手一次性动作。任务推进中涉及新模块 / 新概念时，回看 spec 列表补读相关项。
 
 如果当前目录不是 Lattice 项目，明确告诉用户，提示先 `ltc link`（详见 [project-discovery.md](project-discovery.md)）。
 

@@ -9,7 +9,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 ## 一、起手契约（每个新会话第一件事）
 
 1. `ltc context` —— 拿当前项目聚合上下文（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
-2. 按当前主题精读相关 spec（`ltc context` 输出只是标题列表，看到标题不等于了解内容；→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
+2. 按当前主题精读相关 spec（`ltc context` 输出只是标题列表，看到标题不等于了解内容；宁多勿少，不确定是否相关的 spec 读而非跳过；→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
 3. 有活跃任务 → `ltc task info <id>` + `ltc task progress <id>` + read_file design.md（如存在；→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 用户提到"规范/之前/类似/历史/跨项目" → 先 `ltc search <query> --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)）
 5. 需求横跨多仓库 → `ltc project list --with-relations` 查看现有关系；发现未记录的依赖 / 协作关系 → 用 `ltc project relation add --ai-inferred --from-task <task-id>` 记录（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
@@ -39,7 +39,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 1. PRD 硬触发清单命中 → 先改 PRD 再改代码（→ [task-workflows.md#prd-同步硬触发清单t1t8](task-workflows.md#prd-同步硬触发清单t1t8)）
 2. 写代码前 / 打 checkpoint 前 / complete 前 / 用户推翻方案后，各有必做动作（→ [task-workflows.md#写代码前的动作锚点](task-workflows.md#写代码前的动作锚点) / [task-workflows.md#打-checkpoint-前的-prd-自检](task-workflows.md#打-checkpoint-前的-prd-自检)）
-3. 新主题先精读相关 spec（→ [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件)）
+3. 持续精读相关 spec——每轮检查触发条件，非起手一次性；宁多勿少（→ [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件)）
 4. 代码改完必须打 checkpoint（→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）
 5. 用户推翻方案 = pivot checkpoint（→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）
 6. 发现可复用内容 → 立即询问用户是否沉淀为 spec（→ [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
@@ -58,7 +58,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 | 跳的是 | 后果 |
 |---|---|
 | PRD 同步 | PRD 落后于代码 → 下一轮上下文压缩后读 PRD 出现认知偏差 → 改错代码 |
-| spec 精读 | 本轮决策缺项目级 / 用户级规则 → 产出与项目约定冲突 → 返工 |
+| spec 精读 | 起手读一批就停 → 后续涉及新模块时缺项目级 / 用户级规则 → 产出与项目约定冲突 → 返工 |
 | 打 checkpoint | progress.yaml 丢实施轨迹 → 连续 3 轮未打点触发 note 兜底 → 仍然丢关键决策 |
 | 项目关联同步 | task.json 的 projects/scopePaths 与实际修改范围不一致 → 后续 `task list --current` / `ltc context` 误判 |
 
