@@ -122,6 +122,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 - design 模式下改业务代码
 - 忽视上下文压缩信号
 - 编辑 spec 正文后不刷新 frontmatter（应运行 `ltc spec migrate`，→ [spec-workflows.md#写入流程](spec-workflows.md#写入流程)）
+- 对 Lattice 管理的文档（spec、PRD、design.md、progress.yaml、skill 文档）使用部分读取（指定行范围、head/tail 截断、grep 抽取）——必须全量读取完整文件（→ [SKILL.md#终端输出读取原则](SKILL.md#终端输出读取原则)）
 
 **[归档]**
 

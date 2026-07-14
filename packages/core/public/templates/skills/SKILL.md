@@ -139,6 +139,7 @@ ltc rag status    # 查看索引状态
 
 ### 何时禁止过滤 / 必须全量
 
+- **Lattice 管理的文档（spec、PRD、design.md、progress.yaml、skill 文档）** → 始终全量读取，禁止指定行范围、head/tail/grep 截取。这些文档每一段都可能包含关键约束或经验，部分读取 = 遗漏信息 = 返工风险
 - **第一次跑某条 lattice 命令** / 不熟悉输出结构 → 先全量看再决定
 - **从 `ltc search` / `ltc context` 判断"是否有相关 spec / 相似案例"** → 需看到所有候选才能下结论
 - **排查错误、构建 / 测试 / `ltc doctor` 失败** → 错误可能在任意位置
