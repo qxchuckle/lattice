@@ -6,6 +6,8 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 >
 > 本文**不复述**子文档里的流程、判定表、输出格式。
 
+**审慕原则**：行动前先确认是否有 Lattice 提供的更佳路径。不要因为某个路径“类似可行”就直接执行——先查规则和上下文，再动手。具体表现：需要看依赖/包的源码时先查 Lattice 有无已注册的源码仓库；需要了解项目约定时先读 spec；遇到不确定的操作时先查历史任务。
+
 ## 一、起手契约（每个新会话第一件事）
 
 1. `ltc context` —— 拿当前项目聚合上下文（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
@@ -13,7 +15,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 3. 有活跃任务 → `ltc task info <id>` + `ltc task progress <id>` + read_file design.md（如存在；→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 用户提到"规范/之前/类似/历史/跨项目" → 先 `ltc search <query> --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)）
 5. 需求横跨多仓库 → `ltc project list --with-relations` 查看现有关系；发现未记录的依赖 / 协作关系 → 用 `ltc project relation add --ai-inferred --from-task <task-id>` 记录（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
-6. 查找本地项目 → 优先 `ltc project list --search <keyword>`（按名称/ID/路径/Git/包名/分组/标签做大小写不敏感匹配）；不确定路径归属时用 `ltc project where <path>`（→ [project-discovery.md#进入未知目录时](project-discovery.md#进入未知目录时)）
+6. 查找本地项目 / **查看依赖包·模块·组件的源码** → 优先 `ltc project list --search <包名/模块名/关键词>` 定位源码仓库，找到则直接读源码；未找到或源码可能不是最新时，可补充查看 `node_modules`/`dist` 作为参考。不确定路径归属时用 `ltc project where <path>`（→ [project-discovery.md#进入未知目录时](project-discovery.md#进入未知目录时)）
 
 ## 二、Design 模式约束
 

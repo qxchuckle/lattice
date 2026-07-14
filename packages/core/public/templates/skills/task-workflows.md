@@ -69,8 +69,8 @@ ltc task start <task-id>
 ltc context --task <task-id>
 ```
 
-1. 按主题选读相关 spec（→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
-2. `ltc search "<关键词>" --type task --json` 参考近似任务
+1. 按主题选读相关 spec（→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）——分两步：先从 context 列表按标题/描述选读，再 `ltc search "<任务关键词>" --json` 语义搜索补漏
+2. 从搜索结果中参考近似历史任务 PRD（提供“之前怎么做的”参考）
 3. 完善 PRD（目标、约束、方案、文件索引）
 4. 如有 design.md 先 read_file
 5. 给用户输出整体确认（任务 ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
@@ -117,9 +117,11 @@ ltc context --task <task-id>
 满足任一即触发：
 
 - 本轮主题词第一次出现（之前对话未涉及）
-- 用户提到"规范 / 约定 / 历史 / 类似 / 跨项目"
+- 用户提到“规范 / 约定 / 历史 / 类似 / 跨项目”
 - 涉及项目级 / 用户级 / 全局级规则的层级判定（→ [spec-workflows.md#层级](spec-workflows.md#层级)）
 - 涉及之前未涉及的项目模块边界 / 跨包调用
+
+触发后的动作不仅是读已知 spec，还应**活用 `ltc search`** 搜索本轮新出现的关键词，发现起手时未识别的相关 spec 或历史任务经验。
 
 ### 写代码前的动作锚点
 

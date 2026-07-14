@@ -27,6 +27,8 @@ ltc status
 > ⚠️ **宁多勿少**：不确定某条 spec 是否相关时，读而非跳过。漏读代价远高于多读。
 >
 > ⚠️ **持续补读**：spec 精读不是起手一次性动作。任务推进中涉及新模块 / 新概念时，回看 spec 列表补读相关项。
+>
+> ⚠️ **源码查找优先级**：需要查看某个依赖包/模块/组件的源码时，优先 `ltc project list --search <包名>` 定位本地源码仓库，而不是直接翻 `node_modules`/`dist`。源码找不到或需要确认构建产物差异时，再看产物作为补充。
 
 如果当前目录不是 Lattice 项目，明确告诉用户，提示先 `ltc link`（详见 [project-discovery.md](project-discovery.md)）。
 

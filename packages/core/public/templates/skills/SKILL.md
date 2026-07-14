@@ -96,6 +96,7 @@ AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何
 | 搜索结果不准 / 索引过旧 | 索引状态 | `ltc rag status` → `ltc rag update` / `ltc rag rebuild` |
 | 配置项不确定 / 需要确认默认值 | 当前配置 | `ltc config show` / `ltc config get <key>` |
 | 跨用户协作 / 需要看其他用户的 spec | 其他用户数据 | `ltc search "<关键词>" --json`（默认搜全部用户）/ `ltc spec show <name> --user <username>` / `ltc task list --current --all-user` |
+| 需要查看某个包/依赖/模块的源码实现 | 源码仓库 | `ltc project list --search <包名/模块名>` → 找到则 read 源码；未找到时才看 `node_modules`/`dist` 作为补充 |
 
 > 各场景的具体触发条件与流程见对应子文档（[spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec) / [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索) / [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件)）。本节仅声明"可以随时自主获取"的原则。
 
