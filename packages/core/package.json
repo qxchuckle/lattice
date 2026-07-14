@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-core",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Lattice 共享核心库",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
