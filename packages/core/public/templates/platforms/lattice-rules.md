@@ -13,6 +13,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 3. 有活跃任务 → `ltc task info <id>` + `ltc task progress <id>` + read_file design.md（如存在；→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 用户提到"规范/之前/类似/历史/跨项目" → 先 `ltc search <query> --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)）
 5. 需求横跨多仓库 → `ltc project list --with-relations` 查看现有关系；发现未记录的依赖 / 协作关系 → 用 `ltc project relation add --ai-inferred --from-task <task-id>` 记录（→ [project-discovery.md#项目关系含-ai-推断](project-discovery.md#项目关系含-ai-推断)）
+6. 查找本地项目 → 优先 `ltc project list --search <keyword>`（按名称/ID/路径/Git/包名/分组/标签做大小写不敏感匹配）；不确定路径归属时用 `ltc project where <path>`（→ [project-discovery.md#进入未知目录时](project-discovery.md#进入未知目录时)）
 
 ## 二、Design 模式约束
 

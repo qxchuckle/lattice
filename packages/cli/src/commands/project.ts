@@ -59,6 +59,7 @@ export function registerProjectCommand(program: Command): void {
     .description('列出所有已注册项目')
     .option('--group <group>', '按分组过滤')
     .option('--tag <tag>', '按标签过滤')
+    .option('--search <keyword>', '按关键词搜索（名称/ID/路径/Git/包名/分组/标签）')
     .option('--has-git', '只显示含 git remote 的项目')
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
@@ -72,6 +73,7 @@ export function registerProjectCommand(program: Command): void {
         let projects = listProjects(username, {
           group: opts.group,
           tag: opts.tag,
+          search: opts.search,
         });
 
         // --has-git 过滤
@@ -394,7 +396,6 @@ export function registerProjectCommand(program: Command): void {
             }
           }
         }
-
 
         if (smart) {
           logger.raw(chalk.cyan(`\n路径匹配：`));

@@ -81,7 +81,7 @@ AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何
 | 用户说"之前做过类似的" | 相似需求的方案 | `ltc search "<需求描述>" --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)） |
 | 不确定当前项目约定 | 项目规范 | `ltc context` / `ltc spec list` |
 | 需要参考已完成任务的经验 | 任务 PRD + progress | `ltc task progress <id>` → read_file PRD |
-| 不确定本地有哪些项目 | 已注册项目清单 | `ltc project list` / `ltc project list --with-relations` |
+| 不确定本地有哪些项目 | 已注册项目清单 | `ltc project list --search <keyword>` / `ltc project list --with-relations` |
 | 当前目录属于哪个项目 | 项目身份 | `ltc project where .` / `ltc status` |
 | 不确定项目间依赖 / 关系 | 项目关系 | `ltc project relation list` / `ltc project list --with-relations` |
 | 任务关联了哪些项目 | 任务的项目集合 | `ltc task info <id>` |

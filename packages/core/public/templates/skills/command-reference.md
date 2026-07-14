@@ -113,10 +113,14 @@
 
 - `--group <group>`：按分组过滤
 - `--tag <tag>`：按标签过滤
+- `--search <keyword>`：按关键词搜索（大小写不敏感，匹配名称/ID/路径/Git/包名/分组/标签）
 - `--has-git`：只显示含 git remote 的项目
 - `--orphaned`：只显示所有 localPaths 都已失效的项目
 - `--with-relations`：附带显示项目关系
 - `--json`：以 JSON 输出
+- `--json-format`：JSON 输出时使用格式化（默认压缩）
+
+> **查找本地项目优先使用 `ltc project list --search <keyword>`**，支持按名称、ID、路径、Git remote、包名、分组、标签做大小写不敏感匹配。
 
 ### `ltc project where <path>`
 

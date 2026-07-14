@@ -67,7 +67,8 @@ ltc context --task <id>
 工作涉及多个项目、共享组件或跨仓库依赖时：
 
 ```bash
-ltc project list --with-relations
+ltc project list --search <keyword>   # 按关键词查找已注册项目
+ltc project list --with-relations    # 列出全部项目并附带关系
 ltc project relation list <id>
 ```
 

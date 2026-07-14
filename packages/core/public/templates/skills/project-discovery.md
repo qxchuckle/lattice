@@ -39,6 +39,7 @@
 
 ```bash
 ltc project where <path>          # 默认 .  支持精确匹配 + 父目录前缀 + ID 匹配
+ltc project list --search <keyword> # 按关键词搜索已注册项目（名称/ID/路径/Git/包名/分组/标签）
 ```
 
 输出包含三层：
@@ -190,7 +191,7 @@ ltc init scan --auto     # 使用配置中的 scanDirs
 
 > 何时读：本文涉及的命令执行后给用户输出时 → 下一步：以下原则决定输出形式。
 
-- 在多项目场景下回答前，先用 `project where` / `project list --with-relations` 把上下文摸清
+- 在多项目场景下回答前，先用 `project where` / `project list --search` / `project list --with-relations` 把上下文摸清
 - 推断关系时给出"证据来源"，不要凭名字相似就 add
 - 凡是 AI 主动建立的关系都加 `--ai-inferred` 与 `--from-task`，让用户回头能审计
 - 如果 ID 匹配无结果，优先建议用户 `--force-new`，不要随意复用别人的项目 id

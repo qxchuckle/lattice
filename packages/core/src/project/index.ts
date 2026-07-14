@@ -227,7 +227,7 @@ export async function updateProjectMeta(
 
 export function listProjects(
   username: string,
-  filter?: { group?: string; tag?: string },
+  filter?: { group?: string; tag?: string; search?: string },
 ): ProjectRow[] {
   let projects = dbListAllProjects(username);
   if (filter?.group) {
@@ -240,6 +240,25 @@ export function listProjects(
     projects = projects.filter((p) => {
       const tags: string[] = p.tags ? JSON.parse(p.tags) : [];
       return tags.includes(filter.tag!);
+    });
+  }
+  if (filter?.search) {
+    const kw = filter.search.toLowerCase();
+    projects = projects.filter((p) => {
+      const haystack = [
+        p.name,
+        p.id,
+        p.local_path,
+        p.description ?? '',
+        p.git_remote ?? '',
+        p.package_names ?? '',
+        p.monorepo_packages ?? '',
+        p.groups ?? '',
+        p.tags ?? '',
+      ]
+        .join('\n')
+        .toLowerCase();
+      return haystack.includes(kw);
     });
   }
   return projects;
