@@ -77,8 +77,8 @@ const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
   documentPrefix: '',
   distanceThreshold: 1.2,
   excerptLength: 1200,
-  batchSize: 32,
-  minChunkSize: 50,
+  batchSize: 64,
+  minChunkSize: 100,
 };
 
 function normalizeHost(url: string): string {
@@ -210,12 +210,37 @@ export async function generateEmbedding(text: string): Promise<Float32Array | nu
   }
 }
 
-/** 批量生成 embedding（使用 pipeline 批量输入，加速索引） */
-const DEFAULT_BATCH_SIZE = 32;
+/** 批量生成 embedding（使用 pipeline 批量输入，加速索引）
+ *  自适应降级：batch 推理失败时自动拆小重试，直到成功或降为 1，避免静默丢向量
+ */
+const MIN_BATCH_SIZE = 1;
+
+/** 对单个 batch 尝试推理，失败时自适应拆半重试 */
+async function embedBatchWithFallback(texts: string[]): Promise<(Float32Array | null)[]> {
+  if (texts.length === 0) return [];
+  if (!pipeline) return texts.map(() => null);
+
+  try {
+    const result = await pipeline(texts);
+    const vectors = result.tolist();
+    return vectors.map((v) => new Float32Array(v));
+  } catch {
+    // batch 大小为 1 仍失败 → 真正无法生成，返回 null
+    if (texts.length <= MIN_BATCH_SIZE) {
+      return texts.map(() => null);
+    }
+    // 拆半重试
+    const mid = Math.floor(texts.length / 2);
+    const left = await embedBatchWithFallback(texts.slice(0, mid));
+    const right = await embedBatchWithFallback(texts.slice(mid));
+    return [...left, ...right];
+  }
+}
+
 export async function generateEmbeddings(
   texts: string[],
   onBatchProgress?: (processed: number, total: number) => void,
-  batchSize: number = DEFAULT_BATCH_SIZE,
+  batchSize: number = DEFAULT_EMBEDDING_CONFIG.batchSize,
 ): Promise<(Float32Array | null)[]> {
   await ensureModel();
   if (!pipeline) return texts.map(() => null);
@@ -223,15 +248,8 @@ export async function generateEmbeddings(
   const results: (Float32Array | null)[] = [];
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize);
-    try {
-      const result = await pipeline(batch);
-      const vectors = result.tolist();
-      for (const v of vectors) {
-        results.push(new Float32Array(v));
-      }
-    } catch {
-      results.push(...batch.map(() => null));
-    }
+    const batchResults = await embedBatchWithFallback(batch);
+    results.push(...batchResults);
     if (onBatchProgress) {
       onBatchProgress(Math.min(i + batchSize, texts.length), texts.length);
     }
