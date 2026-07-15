@@ -169,6 +169,24 @@ export interface RAGEmbeddingConfig {
   allowRemoteModels?: boolean;
   allowLocalModels?: boolean;
   proxy?: string;
+  /** 模型输出维度，未设置时按 modelId 自动推断（bge-small-zh=512, all-MiniLM-L6-v2=384） */
+  dimension?: number;
+  /** 模型精度（默认 q8，CPU 上最快且 Xenova 模型一定有量化版） */
+  dtype?: 'fp32' | 'fp16' | 'q8' | 'int8';
+  /** pooling 策略（默认 mean） */
+  pooling?: 'mean' | 'cls';
+  /** 查询侧前缀（BGE/E5 需要） */
+  queryPrefix?: string;
+  /** 文档侧前缀（E5 需要） */
+  documentPrefix?: string;
+  /** 语义距离阈值（默认 1.2） */
+  distanceThreshold?: number;
+  /** embedding 输入 excerpt 长度（默认 1200） */
+  excerptLength?: number;
+  /** embedding 批量大小（默认 32，纯性能参数，不影响进度频率） */
+  batchSize?: number;
+  /** chunk 最小字符数，小于此值的分片合并到父级（默认 50） */
+  minChunkSize?: number;
 }
 
 export interface RAGConfig {
@@ -345,6 +363,13 @@ export interface SearchDocumentMeta {
 export type SpecSearchMeta = SearchDocumentMeta;
 
 /** 语义搜索结果 */
+export interface SemanticMatchedSection {
+  headingPath: string;
+  headingLevel: number;
+  distance: number;
+  snippet: string;
+}
+
 export interface SemanticSearchResult {
   id: string;
   filePath: string;
@@ -354,6 +379,7 @@ export interface SemanticSearchResult {
   projectId?: string;
   projectIds?: string[];
   distance: number;
+  matchedSections?: SemanticMatchedSection[];
 }
 
 /** RAG 索引状态 */
@@ -362,12 +388,23 @@ export interface RAGStatus {
   indexedDocuments: number;
   totalEmbeddings: number;
   vectorStoreReady: boolean;
+  vectorDimension: number;
   modelInstalled: boolean;
-  modelLoaded: boolean;
   modelId: string;
+  dtype: string;
+  pooling: string;
+  batchSize: number;
+  minChunkSize: number;
+  distanceThreshold: number;
+  ftsIndexVersion: number;
+  expectedFtsVersion: number;
   remoteHost: string | null;
   proxy: string | null;
   lastUpdated: string | null;
+  /** 配置的模型与已索引模型是否不一致 */
+  modelChanged: boolean;
+  /** 上次索引时使用的模型 ID */
+  lastModelId: string | null;
 }
 
 /** Embedding 记录 */

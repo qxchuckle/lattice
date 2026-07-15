@@ -145,6 +145,10 @@ export {
   upsertVecEmbedding,
   searchVec,
   countEmbeddings,
+  ensureVecStoreDimension,
+  getEmbeddingsByFilePath,
+  deleteEmbeddingsByFilePath,
+  updateEmbeddingMetadataByFilePath,
   // FTS 索引版本与通用 KV
   FTS_INDEX_VERSION,
   DB_SCHEMA_VERSION,
@@ -349,12 +353,18 @@ export {
 // RAG
 export {
   indexSpec,
+  indexFtsAndMeta,
+  checkEmbeddingFreshness,
+  storeEmbedding,
   removeSpecIndex,
   removeSearchDocumentIndex,
   semanticSearch,
   rebuildIndex,
   incrementalIndex,
   getRAGStatus,
+  checkModelMigration,
+  forceRebuildIndex,
+  updateRagIndex,
   generateEmbedding,
   contentHash,
   isModelInstalled,
@@ -365,7 +375,12 @@ export {
   removeInstalledModel,
   collectAllSearchDocuments,
 } from './rag';
-export type { IncrementalIndexResult, IndexProgressCallback, SearchDocumentInput } from './rag';
+export type {
+  IncrementalIndexResult,
+  IndexProgressCallback,
+  SearchDocumentInput,
+  RagUpdateResult,
+} from './rag';
 
 // 垃圾桶
 export type { TrashMeta } from './trash';

@@ -10,11 +10,15 @@ import {
   fileExists,
 } from '../paths';
 
+/**
+ * 全局配置默认值——仅路径/网络字段。
+ * model 相关默认值（modelId, dimension, dtype, pooling 等）由 rag/embeddings.ts 的
+ * DEFAULT_EMBEDDING_CONFIG 统一管理，避免两套默认值不一致。
+ */
 const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   version: '0.1.0',
   rag: {
     embedding: {
-      modelId: 'Xenova/all-MiniLM-L6-v2',
       remoteHost: 'https://huggingface.co/',
       remotePathTemplate: '{model}/resolve/{revision}/',
       localModelPath: join(getLatticeRoot(), 'models'),

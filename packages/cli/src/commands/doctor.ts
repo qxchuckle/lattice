@@ -230,22 +230,21 @@ export function registerDoctorCommand(program: Command): void {
 
         // 6. RAG
         const ragStatus = await getRAGStatus();
+        // 分片后 totalEmbeddings（向量数）≥ indexedDocuments（文档数）为正常
+        const ragHealthy =
+          ragStatus.indexedDocuments > 0 &&
+          ragStatus.vectorStoreReady &&
+          ragStatus.totalEmbeddings >= ragStatus.indexedDocuments;
         entries.push({
           item: 'RAG 索引',
-          status:
-            ragStatus.indexedDocuments === 0
-              ? 'stale'
-              : ragStatus.vectorStoreReady &&
-                  ragStatus.totalEmbeddings === ragStatus.indexedDocuments
-                ? 'healthy'
-                : 'stale',
-          message: `${ragStatus.totalEmbeddings}/${ragStatus.indexedDocuments} 条向量已生成`,
+          status: ragStatus.indexedDocuments === 0 ? 'stale' : ragHealthy ? 'healthy' : 'stale',
+          message: `${ragStatus.indexedDocuments} 文档 / ${ragStatus.totalEmbeddings} 向量`,
           fix:
             ragStatus.indexedDocuments === 0
               ? '运行 lattice rag rebuild 重建索引'
               : !ragStatus.vectorStoreReady
                 ? '检查 sqlite-vec 扩展是否可用'
-                : ragStatus.totalEmbeddings < ragStatus.indexedDocuments
+                : ragStatus.totalEmbeddings === 0
                   ? '重新运行 lattice rag rebuild 生成缺失向量'
                   : undefined,
         });

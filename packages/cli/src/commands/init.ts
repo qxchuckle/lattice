@@ -28,11 +28,7 @@ import {
   writeLocalConfig,
   initDb,
   rebuildProjectsCache,
-  collectAllSearchDocuments,
-  incrementalIndex,
-  FTS_INDEX_VERSION,
-  getFtsIndexVersion,
-  setFtsIndexVersion,
+  updateRagIndex,
   closeDb,
   scanForProjects,
   type ScanProgress,
@@ -304,25 +300,34 @@ export function registerInitCommand(program: Command): void {
         if (shouldDownloadModel || (await isModelInstalled())) {
           try {
             logger.spin('正在更新搜索索引...');
-            const allDocs = await collectAllSearchDocuments();
-            logger.spinSuccess(`找到 ${allDocs.length} 个文档，正在索引...`);
-            const result = await incrementalIndex(allDocs, (p) => {
+            const result = await updateRagIndex((p) => {
               const pct = Math.round((p.current / p.total) * 100);
+              const chunkInfo =
+                p.chunksProcessed > 0 ? chalk.cyan(`${p.chunksProcessed}chunks`) : '';
               process.stdout.write(
-                `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${chalk.yellow('~' + p.updated)} ${pct}%`.slice(
+                `\r${chalk.dim('索引')} ${String(p.current).padStart(4)}/${p.total} ${chalk.green('+' + p.added)} ${chalk.yellow('~' + p.updated)} ${chunkInfo} ${pct}%`.slice(
                   0,
-                  80,
+                  120,
                 ) + '\r',
               );
             });
-            process.stdout.write('\r' + ' '.repeat(80) + '\r');
-            setFtsIndexVersion(FTS_INDEX_VERSION);
-            const parts: string[] = [];
-            if (result.added > 0) parts.push(`新增 ${result.added}`);
-            if (result.updated > 0) parts.push(`更新 ${result.updated}`);
-            logger.spinSuccess(
-              `搜索索引更新完成${parts.length > 0 ? `（${parts.join('，')}）` : '，无变更'}`,
-            );
+            process.stdout.write('\r' + ' '.repeat(120) + '\r');
+            if (result.mode === 'rebuild') {
+              logger.spinSuccess(
+                result.reason === 'model_changed'
+                  ? '检测到模型变更，已自动全量重建搜索索引'
+                  : result.reason === 'fts_version_expired'
+                    ? '检测到索引版本过期，已自动全量重建搜索索引'
+                    : '搜索索引全量重建完成',
+              );
+            } else {
+              const parts: string[] = [];
+              if (result.added > 0) parts.push(`新增 ${result.added}`);
+              if (result.updated > 0) parts.push(`更新 ${result.updated}`);
+              if (result.removed > 0) parts.push(`删除 ${result.removed}`);
+              parts.push(`跳过 ${result.skipped}`);
+              logger.spinSuccess(`搜索索引更新完成（${parts.join('，')}）`);
+            }
           } catch {
             logger.spinWarn('搜索索引更新失败，可稍后运行 `ltc rag update`');
           }

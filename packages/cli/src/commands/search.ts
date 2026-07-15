@@ -12,6 +12,40 @@ import {
   getRAGStatus,
 } from '@qcqx/lattice-core';
 import { formatRagTimestamp, logger, outputJson } from '../utils';
+import type { SearchResult } from '@qcqx/lattice-core';
+
+/** 精简 JSON 输出：只保留对调用方有用的字段 */
+const META_FIELDS_KEEP = new Set([
+  'filePath',
+  'username',
+  'projectIds',
+  'semanticRank',
+  'semanticDistance',
+  'matchedSections',
+  'normalizedScore',
+  'weakMatch',
+  'duplicates',
+  'taskId',
+]);
+
+function cleanResultsForJson(results: SearchResult[]): unknown[] {
+  return results.map((r) => {
+    const meta = r.meta as Record<string, unknown>;
+    const cleanMeta: Record<string, unknown> = {};
+    for (const key of Object.keys(meta)) {
+      if (META_FIELDS_KEEP.has(key) && meta[key] !== null && meta[key] !== undefined) {
+        cleanMeta[key] = meta[key];
+      }
+    }
+    return {
+      type: r.type,
+      title: r.title,
+      snippet: r.snippet,
+      score: r.score,
+      meta: cleanMeta,
+    };
+  });
+}
 
 function parseUsersOption(input?: string): string[] {
   return Array.from(
@@ -92,6 +126,7 @@ export function registerSearchCommand(program: Command): void {
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
+    .option('--json-full', 'JSON 输出完整 meta（含内部调试字段）')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (query: string, opts) => {
       let spinnerActive = false;
@@ -139,7 +174,7 @@ export function registerSearchCommand(program: Command): void {
         spinnerActive = false;
 
         if (opts.json) {
-          outputJson(results, opts.jsonFormat);
+          outputJson(opts.jsonFull ? results : cleanResultsForJson(results), opts.jsonFormat);
           return;
         }
 

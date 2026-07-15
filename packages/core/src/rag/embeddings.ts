@@ -50,8 +50,19 @@ export function formatModelNetworkHint(): string {
   ].join('\n');
 }
 
+/** 已知模型的输出维度（未显式配置 dimension 时自动推断） */
+const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
+  'Xenova/all-MiniLM-L6-v2': 384,
+  'Xenova/bge-small-zh-v1.5': 512,
+  'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2': 384,
+  'Xenova/paraphrase-multilingual-MiniLM-L12-v2': 384,
+  'Xenova/multilingual-e5-small': 384,
+  'BAAI/bge-small-zh-v1.5': 512,
+  'BAAI/bge-base-zh-v1.5': 768,
+};
+
 const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
-  modelId: 'Xenova/all-MiniLM-L6-v2',
+  modelId: 'Xenova/bge-small-zh-v1.5',
   remoteHost: 'https://huggingface.co/',
   remotePathTemplate: '{model}/resolve/{revision}/',
   localModelPath: '',
@@ -59,6 +70,15 @@ const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
   allowRemoteModels: true,
   allowLocalModels: true,
   proxy: '',
+  dimension: 512,
+  dtype: 'q8',
+  pooling: 'mean',
+  queryPrefix: '为这个句子生成表示以用于检索相关文章：',
+  documentPrefix: '',
+  distanceThreshold: 1.2,
+  excerptLength: 1200,
+  batchSize: 32,
+  minChunkSize: 50,
 };
 
 function normalizeHost(url: string): string {
@@ -105,7 +125,7 @@ export async function getEmbeddingConfig(): Promise<Required<RAGEmbeddingConfig>
   const embedding = config.rag?.embedding ?? {};
   const explicit = await readExplicitEmbeddingConfig();
 
-  return {
+  const merged = {
     ...DEFAULT_EMBEDDING_CONFIG,
     ...embedding,
     // 优先级：lattice config 显式配置 > HF_ENDPOINT 环境变量 > 默认值
@@ -113,6 +133,17 @@ export async function getEmbeddingConfig(): Promise<Required<RAGEmbeddingConfig>
       explicit.remoteHost ?? process.env.HF_ENDPOINT ?? DEFAULT_EMBEDDING_CONFIG.remoteHost,
     ),
   };
+
+  // dimension 自动推断：显式配置 > 已知模型映射 > 默认值
+  if (!embedding.dimension && explicit.dimension === undefined) {
+    const modelId = merged.modelId;
+    const knownDim = KNOWN_MODEL_DIMENSIONS[modelId];
+    if (knownDim) {
+      merged.dimension = knownDim;
+    }
+  }
+
+  return merged;
 }
 
 /** 加载 embedding 模型（懒加载，首次调用时加载） */
@@ -145,10 +176,11 @@ async function ensureModel(): Promise<void> {
       env.remotePathTemplate = config.remotePathTemplate;
 
       const extractor = await createPipeline('feature-extraction', config.modelId, {
-        dtype: 'fp32',
+        dtype: config.dtype,
       });
+      const poolingStrategy = config.pooling;
       pipeline = async (text: string | string[]) => {
-        const result = await extractor(text, { pooling: 'mean', normalize: true });
+        const result = await extractor(text, { pooling: poolingStrategy, normalize: true });
         return result;
       };
     } catch (err) {
@@ -178,11 +210,31 @@ export async function generateEmbedding(text: string): Promise<Float32Array | nu
   }
 }
 
-/** 批量生成 embedding */
-export async function generateEmbeddings(texts: string[]): Promise<(Float32Array | null)[]> {
+/** 批量生成 embedding（使用 pipeline 批量输入，加速索引） */
+const DEFAULT_BATCH_SIZE = 32;
+export async function generateEmbeddings(
+  texts: string[],
+  onBatchProgress?: (processed: number, total: number) => void,
+  batchSize: number = DEFAULT_BATCH_SIZE,
+): Promise<(Float32Array | null)[]> {
+  await ensureModel();
+  if (!pipeline) return texts.map(() => null);
+
   const results: (Float32Array | null)[] = [];
-  for (const text of texts) {
-    results.push(await generateEmbedding(text));
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
+    try {
+      const result = await pipeline(batch);
+      const vectors = result.tolist();
+      for (const v of vectors) {
+        results.push(new Float32Array(v));
+      }
+    } catch {
+      results.push(...batch.map(() => null));
+    }
+    if (onBatchProgress) {
+      onBatchProgress(Math.min(i + batchSize, texts.length), texts.length);
+    }
   }
   return results;
 }

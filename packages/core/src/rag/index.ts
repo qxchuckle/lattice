@@ -1,18 +1,21 @@
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type {
+  RAGEmbeddingConfig,
   RAGStatus,
   SearchDocKind,
   SearchDocumentMeta,
   SearchDocumentType,
   SemanticSearchResult,
+  SemanticMatchedSection,
 } from '../types';
 import { getDbPath } from '../paths';
 import {
   upsertEmbedding,
   getEmbeddingByPath,
+  deleteEmbeddingsByFilePath,
+  updateEmbeddingMetadataByFilePath,
   getEmbeddingRowsByIds,
-  deleteEmbedding,
   deleteVecEmbedding,
   upsertVecEmbedding,
   searchVec,
@@ -24,11 +27,20 @@ import {
   countVectorEmbeddings,
   getLatestEmbeddingUpdate,
   isVecStoreReady,
+  ensureVecStoreDimension,
+  getLatticeMeta,
+  setLatticeMeta,
+  getChunkStats,
+  deleteSearchDocumentsByPrefixes,
+  FTS_INDEX_VERSION,
+  getFtsIndexVersion,
+  setFtsIndexVersion,
 } from '../db';
 import { normalizeProjectId } from '../project';
 import { CONCURRENCY } from '../utils/constants';
 import {
   generateEmbedding,
+  generateEmbeddings,
   contentHash,
   getEmbeddingConfig,
   isModelInstalled,
@@ -39,9 +51,12 @@ import {
   removeInstalledModel,
   resolveEmbeddingProxy,
 } from './embeddings';
+import { chunkMarkdown } from './chunker';
+import type { MarkdownChunk } from './chunker';
 
 export {
   generateEmbedding,
+  generateEmbeddings,
   contentHash,
   getEmbeddingConfig,
   isModelInstalled,
@@ -53,8 +68,11 @@ export {
   resolveEmbeddingProxy,
 } from './embeddings';
 
-export { collectAllSearchDocuments } from './collector';
+import { collectAllSearchDocuments } from './collector';
+export { collectAllSearchDocuments };
 export type { SearchDocumentInput } from './collector';
+export { chunkMarkdown } from './chunker';
+export type { MarkdownChunk } from './chunker';
 
 function extractHeadings(content: string, limit = 6): string[] {
   return content
@@ -192,29 +210,8 @@ function buildSearchMeta(
   };
 }
 
-function buildEmbeddingInput(
-  sourceType: SearchDocumentType,
-  title: string,
-  content: string,
-  tags?: string[],
-): string {
-  const headings = extractHeadings(content);
-  const excerpt = content.replace(/\s+/g, ' ').trim().slice(0, 1200);
-
-  return [
-    `kind: ${sourceType}`,
-    `title: ${title}`,
-    tags && tags.length > 0 ? `tags: ${tags.join(', ')}` : '',
-    headings.length > 0 ? `headings: ${headings.join(' | ')}` : '',
-    `body: ${excerpt}`,
-  ]
-    .filter(Boolean)
-    .join('\n')
-    .slice(0, 1800);
-}
-
-/** 索引单个搜索文档（embedding + FTS） */
-export async function indexSearchDocument(
+/** FTS + search meta 索引（同步，快） */
+export function indexFtsAndMeta(
   filePath: string,
   content: string,
   meta: {
@@ -225,7 +222,7 @@ export async function indexSearchDocument(
     projectId?: string;
     projectIds?: string[];
   },
-): Promise<void> {
+): { hash: string; encodedProjectIds: string } {
   const hash = contentHash(content);
   const projectIds = meta.projectIds ?? (meta.projectId ? [meta.projectId] : []);
   const encodedProjectIds = encodeProjectIds(projectIds);
@@ -242,24 +239,40 @@ export async function indexSearchDocument(
   });
   upsertSpecSearchMeta(searchMeta);
 
-  const existing = getEmbeddingByPath(filePath);
-  const id = existing?.id ?? randomBytes(8).toString('hex');
-  if (existing?.content_hash === hash && existing.vector_indexed === 1) {
-    upsertEmbedding({
-      id,
-      file_path: filePath,
-      content_hash: hash,
-      source_type: meta.sourceType,
-      title: meta.title,
-      username: meta.username,
-      project_id: encodedProjectIds,
-      vector_indexed: 1,
-    });
-    return;
-  }
+  return { hash, encodedProjectIds };
+}
 
-  const embeddingInput = buildEmbeddingInput(meta.sourceType, meta.title, content, meta.tags);
-  const embedding = await generateEmbedding(embeddingInput);
+/** 检查是否需要重新生成 embedding */
+export function checkEmbeddingFreshness(
+  filePath: string,
+  hash: string,
+): { needsReembedding: boolean; existingId: string | null } {
+  const existing = getEmbeddingByPath(filePath);
+  if (existing?.content_hash === hash && existing.vector_indexed === 1) {
+    return { needsReembedding: false, existingId: existing.id };
+  }
+  return { needsReembedding: true, existingId: existing?.id ?? null };
+}
+
+/** 存储 embedding 记录和向量（同步，快） */
+export function storeEmbedding(
+  filePath: string,
+  hash: string,
+  embedding: Float32Array | null,
+  meta: {
+    id?: string;
+    title: string;
+    username: string;
+    sourceType: SearchDocumentType;
+    encodedProjectIds: string;
+    chunkIndex?: number;
+    headingPath?: string;
+    headingLevel?: number;
+    parentId?: string | null;
+    content?: string;
+  },
+): void {
+  const id = meta.id ?? randomBytes(8).toString('hex');
   upsertEmbedding({
     id,
     file_path: filePath,
@@ -267,14 +280,106 @@ export async function indexSearchDocument(
     source_type: meta.sourceType,
     title: meta.title,
     username: meta.username,
-    project_id: encodedProjectIds,
+    project_id: meta.encodedProjectIds,
     vector_indexed: embedding ? 1 : 0,
+    chunk_index: meta.chunkIndex ?? 0,
+    heading_path: meta.headingPath ?? '',
+    heading_level: meta.headingLevel ?? 0,
+    parent_id: meta.parentId ?? null,
+    content: meta.content ?? '',
   });
 
   if (embedding) {
     upsertVecEmbedding(id, embedding);
   } else {
     deleteVecEmbedding(id);
+  }
+}
+
+/** 构建 chunk 级别的 embedding 输入 */
+function buildChunkEmbeddingInput(
+  sourceType: SearchDocumentType,
+  docTitle: string,
+  headingPath: string,
+  chunkContent: string,
+  tags?: string[],
+  documentPrefix?: string,
+): string {
+  const input = [
+    `kind: ${sourceType}`,
+    `doc: ${docTitle}`,
+    `section: ${headingPath}`,
+    tags && tags.length > 0 ? `tags: ${tags.join(', ')}` : '',
+    `body: ${chunkContent}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return documentPrefix ? `${documentPrefix}\n${input}` : input;
+}
+
+/** 索引单个搜索文档（分片 embedding + FTS） */
+export async function indexSearchDocument(
+  filePath: string,
+  content: string,
+  meta: {
+    title: string;
+    tags?: string[];
+    username: string;
+    sourceType: SearchDocumentType;
+    projectId?: string;
+    projectIds?: string[];
+  },
+): Promise<void> {
+  const { hash, encodedProjectIds } = indexFtsAndMeta(filePath, content, meta);
+  const { needsReembedding } = checkEmbeddingFreshness(filePath, hash);
+
+  if (!needsReembedding) {
+    // 内容未变，但仍刷新 chunk 元数据（title/username/project_id 可能变了）
+    updateEmbeddingMetadataByFilePath(filePath, meta.title, meta.username, encodedProjectIds);
+    return;
+  }
+
+  // 删除旧 chunks
+  deleteEmbeddingsByFilePath(filePath);
+
+  // 解析分片
+  const config = await getEmbeddingConfig();
+  const chunks = chunkMarkdown(content, meta.title, config.minChunkSize);
+
+  // 为每个 chunk 生成 embedding（批量）
+  // 先生成所有 chunk 的 id，用于 parent_id 关联
+  const chunkIds = chunks.map(() => randomBytes(8).toString('hex'));
+
+  // 收集所有 embedding 输入，一次性批量生成
+  const embeddingInputs = chunks.map((chunk) =>
+    buildChunkEmbeddingInput(
+      meta.sourceType,
+      meta.title,
+      chunk.headingPath,
+      chunk.content,
+      meta.tags,
+      config.documentPrefix || undefined,
+    ),
+  );
+  const embeddings = await generateEmbeddings(embeddingInputs);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const parentId =
+      chunk.parentChunkIndex !== null ? (chunkIds[chunk.parentChunkIndex] ?? null) : null;
+
+    storeEmbedding(filePath, hash, embeddings[i], {
+      id: chunkIds[i],
+      title: meta.title,
+      username: meta.username,
+      sourceType: meta.sourceType,
+      encodedProjectIds,
+      chunkIndex: chunk.chunkIndex,
+      headingPath: chunk.headingPath,
+      headingLevel: chunk.headingLevel,
+      parentId,
+      content: chunk.content,
+    });
   }
 }
 
@@ -301,10 +406,7 @@ export async function indexSpec(
 
 /** 移除搜索文档索引 */
 export function removeSearchDocumentIndex(filePath: string): void {
-  const existing = getEmbeddingByPath(filePath);
-  if (existing) {
-    deleteEmbedding(existing.id);
-  }
+  deleteEmbeddingsByFilePath(filePath);
   deleteFtsEntry(filePath);
   deleteSpecSearchMeta(filePath);
 }
@@ -314,7 +416,7 @@ export function removeSpecIndex(filePath: string): void {
   removeSearchDocumentIndex(filePath);
 }
 
-/** 语义搜索 */
+/** 语义搜索（chunk 级返回 → 文档级聚合） */
 export async function semanticSearch(
   query: string,
   limit = 10,
@@ -322,21 +424,36 @@ export async function semanticSearch(
     type?: SearchDocumentType;
     projectId?: string;
     usernames?: string[];
-    /**
-     * 丢弃距离 > distanceThreshold 的候选（cosine distance，0=完全相同）。
-     * 未传时不过滤，保持向后兼容。
-     */
     distanceThreshold?: number;
   },
 ): Promise<SemanticSearchResult[]> {
-  const embedding = await generateEmbedding(query);
+  const config = await getEmbeddingConfig();
+  const queryText = config.queryPrefix ? `${config.queryPrefix}${query}` : query;
+  const embedding = await generateEmbedding(queryText);
   if (!embedding) return [];
 
-  const candidateLimit = Math.max(limit * 8, 32);
+  // 动态计算候选量：按实际 chunk/doc 比率调整，确保聚合后有足够文档
+  const stats = getChunkStats();
+  const avgChunksPerDoc = stats.totalDocs > 0 ? stats.totalChunks / stats.totalDocs : 1;
+  const candidateLimit = Math.max(Math.ceil(limit * avgChunksPerDoc * 2), limit * 8, 64);
   const results = searchVec(embedding, candidateLimit);
   const rows = getEmbeddingRowsByIds(results.map((result) => result.id));
   const rowMap = new Map(rows.map((row) => [row.id, row]));
-  const semanticResults: SemanticSearchResult[] = [];
+
+  // 按 file_path 聚合 chunk 结果到文档级
+  const docMap = new Map<
+    string,
+    {
+      id: string;
+      filePath: string;
+      type: SearchDocumentType;
+      title: string;
+      username: string;
+      projectIds: string[];
+      bestDistance: number;
+      matchedSections: SemanticMatchedSection[];
+    }
+  >();
 
   for (const result of results) {
     const row = rowMap.get(result.id);
@@ -353,24 +470,56 @@ export async function semanticSearch(
 
     const projectIds = decodeProjectIds(row.project_id);
     if (opts?.projectId) {
-      // 双边归一化比较：存储侧可能有无前缀的老 ID
       const normalizedFilterId = normalizeProjectId(opts.projectId);
       if (!projectIds.some((id) => normalizeProjectId(id) === normalizedFilterId)) continue;
     }
 
-    semanticResults.push({
-      id: result.id,
-      filePath: row.file_path,
-      type: row.source_type,
-      title: row.title,
-      username: row.username || undefined,
-      projectId: projectIds[0],
-      projectIds,
+    const snippet = row.content.slice(0, 200);
+    const section: SemanticMatchedSection = {
+      headingPath: row.heading_path,
+      headingLevel: row.heading_level,
       distance: result.distance,
-    });
+      snippet,
+    };
+
+    const existing = docMap.get(row.file_path);
+    if (existing) {
+      existing.matchedSections.push(section);
+      if (result.distance < existing.bestDistance) {
+        existing.bestDistance = result.distance;
+        existing.id = result.id;
+      }
+    } else {
+      docMap.set(row.file_path, {
+        id: result.id,
+        filePath: row.file_path,
+        type: row.source_type,
+        title: row.title,
+        username: row.username,
+        projectIds,
+        bestDistance: result.distance,
+        matchedSections: [section],
+      });
+    }
   }
 
-  return semanticResults.slice(0, limit);
+  // 按最佳距离排序，取 top limit
+  const sorted = Array.from(docMap.values())
+    .sort((a, b) => a.bestDistance - b.bestDistance)
+    .slice(0, limit);
+
+  return sorted.map((doc) => ({
+    id: doc.id,
+    filePath: doc.filePath,
+    type: doc.type,
+    title: doc.title,
+    username: doc.username || undefined,
+    projectId: doc.projectIds[0],
+    projectIds: doc.projectIds,
+    distance: doc.bestDistance,
+    // 只保留距离最近的 3 个匹配段，避免输出臃肿
+    matchedSections: doc.matchedSections.sort((a, b) => a.distance - b.distance).slice(0, 3),
+  }));
 }
 
 /** 重建全部索引 */
@@ -380,50 +529,161 @@ export type IndexProgressCallback = (progress: {
   added: number;
   updated: number;
   skipped: number;
+  chunksProcessed: number;
+  currentFile?: string;
 }) => void;
 
 /** 批处理并发数 */
 const EMBEDDING_CONCURRENCY = CONCURRENCY;
 
-export async function rebuildIndex(
-  docs: {
-    filePath: string;
-    content: string;
-    title: string;
-    tags?: string[];
-    username: string;
-    sourceType?: SearchDocumentType;
-    projectId?: string;
-    projectIds?: string[];
-  }[],
-  onProgress?: IndexProgressCallback,
-): Promise<number> {
-  let indexed = 0;
-  let added = 0;
-  const total = docs.length;
+/** 搜索文档类型（批量索引公共入参） */
+type SearchDoc = {
+  filePath: string;
+  content: string;
+  title: string;
+  tags?: string[];
+  username: string;
+  sourceType?: SearchDocumentType;
+  projectId?: string;
+  projectIds?: string[];
+};
 
-  // 分批并发处理：每批 EMBEDDING_CONCURRENCY 个文档
+/** 跨文档批量索引（rebuild / incremental 复用） */
+const PROGRESS_INTERVAL_MS = 100;
+async function batchIndexDocuments(
+  docs: SearchDoc[],
+  config: Required<RAGEmbeddingConfig>,
+  onProgress?: IndexProgressCallback,
+  progressBase?: { current: number; total: number; skipped: number },
+): Promise<{ added: number; updated: number; chunksProcessed: number }> {
+  let added = 0;
+  let updated = 0;
+  let chunksProcessed = 0;
+  let lastProgressTime = 0;
+  let currentFile = '';
+
+  /** 时间节流进度报告：最多每 PROGRESS_INTERVAL_MS 毫秒触发一次，force=true 时强制触发 */
+  const reportProgress = (force = false, extraChunks = 0) => {
+    if (!onProgress) return;
+    const now = Date.now();
+    if (!force && now - lastProgressTime < PROGRESS_INTERVAL_MS) return;
+    lastProgressTime = now;
+    const base = progressBase ?? { current: 0, total: docs.length, skipped: 0 };
+    onProgress({
+      current: base.current + added + updated,
+      total: base.total,
+      added,
+      updated,
+      skipped: base.skipped,
+      chunksProcessed: chunksProcessed + extraChunks,
+      currentFile,
+    });
+  };
+
   for (let i = 0; i < docs.length; i += EMBEDDING_CONCURRENCY) {
     const batch = docs.slice(i, i + EMBEDDING_CONCURRENCY);
-    await Promise.all(
-      batch.map(async (doc) => {
-        await indexSearchDocument(doc.filePath, doc.content, {
-          title: doc.title,
-          tags: doc.tags,
-          username: doc.username,
-          sourceType: doc.sourceType ?? 'spec',
-          projectId: doc.projectId,
-          projectIds: doc.projectIds,
-        });
-        indexed++;
-        added++;
-      }),
-    );
-    if (onProgress) {
-      onProgress({ current: indexed, total, added, updated: 0, skipped: 0 });
+
+    // Phase 1：FTS/meta + 解析分片 + 收集 embedding 输入
+    const batchChunks: {
+      doc: SearchDoc;
+      hash: string;
+      encodedProjectIds: string;
+      chunks: MarkdownChunk[];
+      chunkIds: string[];
+      isUpdate: boolean;
+    }[] = [];
+    const allEmbeddingInputs: string[] = [];
+
+    for (const doc of batch) {
+      currentFile = doc.filePath;
+      reportProgress();
+      const meta = {
+        title: doc.title,
+        tags: doc.tags,
+        username: doc.username,
+        sourceType: doc.sourceType ?? ('spec' as SearchDocumentType),
+        projectId: doc.projectId,
+        projectIds: doc.projectIds,
+      };
+      const { hash, encodedProjectIds } = indexFtsAndMeta(doc.filePath, doc.content, meta);
+      const existing = getEmbeddingByPath(doc.filePath);
+      deleteEmbeddingsByFilePath(doc.filePath);
+      const chunks = chunkMarkdown(doc.content, doc.title, config.minChunkSize);
+      const chunkIds = chunks.map(() => randomBytes(8).toString('hex'));
+
+      for (const chunk of chunks) {
+        allEmbeddingInputs.push(
+          buildChunkEmbeddingInput(
+            meta.sourceType,
+            doc.title,
+            chunk.headingPath,
+            chunk.content,
+            doc.tags,
+            config.documentPrefix || undefined,
+          ),
+        );
+      }
+
+      batchChunks.push({ doc, hash, encodedProjectIds, chunks, chunkIds, isUpdate: !!existing });
     }
+
+    // Phase 2：一次性批量生成所有 chunk 的 embedding（时间节流进度）
+    const allEmbeddings =
+      allEmbeddingInputs.length > 0
+        ? await generateEmbeddings(
+            allEmbeddingInputs,
+            (processed) => reportProgress(false, processed),
+            config.batchSize,
+          )
+        : [];
+
+    // Phase 3：存储 embedding（每个文档存完后触发节流进度）
+    let embeddingOffset = 0;
+    for (const item of batchChunks) {
+      for (let j = 0; j < item.chunks.length; j++) {
+        const chunk = item.chunks[j];
+        const parentId =
+          chunk.parentChunkIndex !== null ? (item.chunkIds[chunk.parentChunkIndex] ?? null) : null;
+        storeEmbedding(item.doc.filePath, item.hash, allEmbeddings[embeddingOffset + j], {
+          id: item.chunkIds[j],
+          title: item.doc.title,
+          username: item.doc.username,
+          sourceType: item.doc.sourceType ?? 'spec',
+          encodedProjectIds: item.encodedProjectIds,
+          chunkIndex: chunk.chunkIndex,
+          headingPath: chunk.headingPath,
+          headingLevel: chunk.headingLevel,
+          parentId,
+          content: chunk.content,
+        });
+      }
+      embeddingOffset += item.chunks.length;
+      if (item.isUpdate) {
+        updated++;
+      } else {
+        added++;
+      }
+      chunksProcessed += item.chunks.length;
+      reportProgress();
+    }
+
+    // 每批结束强制报告一次
+    reportProgress(true);
   }
-  return indexed;
+
+  return { added, updated, chunksProcessed };
+}
+
+/** 重建全部索引 */
+export async function rebuildIndex(
+  docs: SearchDoc[],
+  onProgress?: IndexProgressCallback,
+): Promise<number> {
+  const config = await getEmbeddingConfig();
+  ensureVecStoreDimension(config.dimension);
+  const { added } = await batchIndexDocuments(docs, config, onProgress);
+  setLatticeMeta('last_model_id', config.modelId);
+  return added;
 }
 
 /** 增量更新索引结果 */
@@ -436,19 +696,14 @@ export interface IncrementalIndexResult {
 
 /** 增量更新索引：跳过未变文档，清理已删除文档 */
 export async function incrementalIndex(
-  docs: {
-    filePath: string;
-    content: string;
-    title: string;
-    tags?: string[];
-    username: string;
-    sourceType?: SearchDocumentType;
-    projectId?: string;
-    projectIds?: string[];
-  }[],
+  docs: SearchDoc[],
   onProgress?: IndexProgressCallback,
 ): Promise<IncrementalIndexResult> {
   const result: IncrementalIndexResult = { added: 0, updated: 0, skipped: 0, removed: 0 };
+
+  // 确保向量表维度与配置一致
+  const config = await getEmbeddingConfig();
+  ensureVecStoreDimension(config.dimension);
 
   // 收集当前文档路径集合
   const currentPaths = new Set(docs.map((d) => d.filePath));
@@ -457,12 +712,12 @@ export async function incrementalIndex(
   const { listIndexedDocumentPaths } = await import('../db');
   const indexedPaths = listIndexedDocumentPaths();
 
-  // 先分区：跳过的立即处理，需要索引的分批并发
-  const toIndex: typeof docs = [];
+  // 先分区：跳过未变文档，需要索引的进入批量处理
+  const toIndex: SearchDoc[] = [];
   for (const doc of docs) {
     const hash = contentHash(doc.content);
-    const existing = getEmbeddingByPath(doc.filePath);
-    if (existing?.content_hash === hash && existing.vector_indexed === 1) {
+    const { needsReembedding } = checkEmbeddingFreshness(doc.filePath, hash);
+    if (!needsReembedding) {
       result.skipped++;
     } else {
       toIndex.push(doc);
@@ -477,39 +732,19 @@ export async function incrementalIndex(
       added: 0,
       updated: 0,
       skipped: result.skipped,
+      chunksProcessed: 0,
     });
   }
 
-  // 分批并发处理需要索引的文档
-  for (let i = 0; i < toIndex.length; i += EMBEDDING_CONCURRENCY) {
-    const batch = toIndex.slice(i, i + EMBEDDING_CONCURRENCY);
-    await Promise.all(
-      batch.map(async (doc) => {
-        const existing = getEmbeddingByPath(doc.filePath);
-        await indexSearchDocument(doc.filePath, doc.content, {
-          title: doc.title,
-          tags: doc.tags,
-          username: doc.username,
-          sourceType: doc.sourceType ?? 'spec',
-          projectId: doc.projectId,
-          projectIds: doc.projectIds,
-        });
-        if (existing) {
-          result.updated++;
-        } else {
-          result.added++;
-        }
-      }),
-    );
-    if (onProgress) {
-      onProgress({
-        current: result.added + result.updated + result.skipped,
-        total: docs.length,
-        added: result.added,
-        updated: result.updated,
-        skipped: result.skipped,
-      });
-    }
+  // 跨文档批量索引（与 rebuildIndex 共用同一逻辑）
+  if (toIndex.length > 0) {
+    const batchResult = await batchIndexDocuments(toIndex, config, onProgress, {
+      current: result.skipped,
+      total: docs.length,
+      skipped: result.skipped,
+    });
+    result.added = batchResult.added;
+    result.updated = batchResult.updated;
   }
 
   // 清理已不存在的文档索引
@@ -520,22 +755,125 @@ export async function incrementalIndex(
     }
   }
 
+  setLatticeMeta('last_model_id', config.modelId);
   return result;
+}
+
+/** 检查模型迁移状态 */
+export async function checkModelMigration(): Promise<{
+  modelChanged: boolean;
+  lastModelId: string | null;
+  currentModelId: string;
+}> {
+  const config = await getEmbeddingConfig();
+  const lastModelId = getLatticeMeta('last_model_id');
+  return {
+    modelChanged: lastModelId !== null && lastModelId !== config.modelId,
+    lastModelId,
+    currentModelId: config.modelId,
+  };
+}
+
+/** RAG 更新结果 */
+export interface RagUpdateResult {
+  mode: 'rebuild' | 'incremental';
+  added: number;
+  updated: number;
+  skipped: number;
+  removed: number;
+  total: number;
+  reason?: 'fts_version_expired' | 'model_changed';
+}
+
+/** 强制全量重建（rag rebuild 命令专用） */
+export async function forceRebuildIndex(onProgress?: IndexProgressCallback): Promise<number> {
+  const config = await getEmbeddingConfig();
+  ensureVecStoreDimension(config.dimension);
+  const result = await doRebuild(onProgress, undefined);
+  return result.added;
+}
+
+/** 内部全量重建公共逻辑 */
+async function doRebuild(
+  onProgress: IndexProgressCallback | undefined,
+  reason: RagUpdateResult['reason'],
+): Promise<RagUpdateResult> {
+  deleteSearchDocumentsByPrefixes(['task/', 'project/', 'user/', 'spec/']);
+  const allDocs = await collectAllSearchDocuments();
+  const indexed = await rebuildIndex(allDocs, onProgress);
+  setFtsIndexVersion(FTS_INDEX_VERSION);
+  setLatticeMeta('rag_rebuild_needed', 'false');
+  return {
+    mode: 'rebuild',
+    added: indexed,
+    updated: 0,
+    skipped: 0,
+    removed: 0,
+    total: indexed,
+    reason,
+  };
+}
+
+/** 智能更新：检测 FTS 版本 + 维度变更 + 模型迁移，自动选择全量重建或增量更新（rag update / init 复用） */
+export async function updateRagIndex(onProgress?: IndexProgressCallback): Promise<RagUpdateResult> {
+  const config = await getEmbeddingConfig();
+  const dimChanged = ensureVecStoreDimension(config.dimension);
+
+  // 维度变更 = 模型换了或手动改了 dimension，旧向量已丢失，必须全量重建
+  if (dimChanged) {
+    return doRebuild(onProgress, 'model_changed');
+  }
+
+  // 检测 FTS 索引版本
+  const currentFtsVersion = getFtsIndexVersion();
+  if (currentFtsVersion < FTS_INDEX_VERSION) {
+    return doRebuild(onProgress, 'fts_version_expired');
+  }
+
+  // 检测模型迁移
+  const migration = await checkModelMigration();
+  if (migration.modelChanged) {
+    return doRebuild(onProgress, 'model_changed');
+  }
+
+  // 增量更新
+  const allDocs = await collectAllSearchDocuments();
+  const result = await incrementalIndex(allDocs, onProgress);
+  setLatticeMeta('rag_rebuild_needed', 'false');
+  return {
+    mode: 'incremental',
+    added: result.added,
+    updated: result.updated,
+    skipped: result.skipped,
+    removed: result.removed,
+    total: allDocs.length,
+  };
 }
 
 /** 获取 RAG 索引状态 */
 export async function getRAGStatus(): Promise<RAGStatus> {
   const embeddingConfig = await getEmbeddingConfig();
+  const lastModelId = getLatticeMeta('last_model_id');
+  const currentFtsVersion = getFtsIndexVersion();
   return {
     dbPath: getDbPath(),
     indexedDocuments: countEmbeddings(),
     totalEmbeddings: countVectorEmbeddings(),
     vectorStoreReady: isVecStoreReady(),
+    vectorDimension: embeddingConfig.dimension,
     modelInstalled: await isModelInstalled(),
-    modelLoaded: isModelLoaded(),
     modelId: embeddingConfig.modelId,
+    dtype: embeddingConfig.dtype,
+    pooling: embeddingConfig.pooling,
+    batchSize: embeddingConfig.batchSize,
+    minChunkSize: embeddingConfig.minChunkSize,
+    distanceThreshold: embeddingConfig.distanceThreshold,
+    ftsIndexVersion: currentFtsVersion,
+    expectedFtsVersion: FTS_INDEX_VERSION,
     remoteHost: embeddingConfig.allowRemoteModels ? embeddingConfig.remoteHost : null,
     proxy: resolveEmbeddingProxy(embeddingConfig),
     lastUpdated: getLatestEmbeddingUpdate(),
+    modelChanged: lastModelId !== null && lastModelId !== embeddingConfig.modelId,
+    lastModelId,
   };
 }

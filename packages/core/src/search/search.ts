@@ -1,6 +1,11 @@
-import type { SearchDocumentMeta, SearchDocumentType, SearchResult } from '../types';
+import type {
+  SearchDocumentMeta,
+  SearchDocumentType,
+  SearchResult,
+  SemanticMatchedSection,
+} from '../types';
 import { getSpecSearchMeta, searchFts, searchSpecsFallback } from '../db';
-import { semanticSearch } from '../rag';
+import { semanticSearch, getEmbeddingConfig } from '../rag';
 import { normalizeProjectId } from '../project';
 
 const RRF_K = 60;
@@ -17,9 +22,11 @@ const RERANK_HEADING_BOOST = 0.012;
 const RERANK_TAG_BOOST = 0.015;
 const RERANK_MULTI_FACET_BOOST = 0.008;
 
-// semantic 候选距离阈值（all-MiniLM-L6-v2 cosine distance 越小越近）
-// > 1.5 认为几乎不相关，避免噪音 query 也被划拉到 10 条。
-const SEMANTIC_DISTANCE_THRESHOLD = 1.5;
+// semantic 距离加权：直接用 cosine similarity 而非纯 RRF rank
+// similarity = 1 - distance/2（distance 范围 [0, 2]，0=完全相同）
+const SEMANTIC_WEIGHT = 0.03;
+// 标题层级加权：H1/H2 命中比 H3+ 更重要
+const HEADING_LEVEL_BONUS = 0.01;
 
 // 最终分下限：低于该分认为信号太弱，丢弃（防误举）。
 // 0.04 → 0.06：过滤更激进，避免低分纯噪音随机命中（如纯数字/英文乱码）。
@@ -66,6 +73,7 @@ type SearchAccumulator = {
   fallbackRank?: number;
   semanticRank?: number;
   semanticDistance?: number;
+  matchedSections?: SemanticMatchedSection[];
   fusionScore: number;
   titleBoost: number;
   sources: Set<'fts' | 'fallback' | 'semantic'>;
@@ -564,35 +572,47 @@ export async function hybridSearch(
   }
 
   try {
+    const config = await getEmbeddingConfig();
+    const distanceThreshold = config.distanceThreshold;
     const vecResults = await semanticSearch(query, lexicalLimit, {
       type: opts?.type,
       projectId: opts?.projectId,
       usernames: opts?.usernames,
-      distanceThreshold: SEMANTIC_DISTANCE_THRESHOLD,
+      distanceThreshold,
     });
     for (const [rank, r] of vecResults.entries()) {
       const existing = candidates.get(r.filePath);
-      const semanticScore = 1 / (RRF_K + rank + 1);
+      // 语义距离加权评分（#8）+ 标题层级加权（#7）
+      const similarity = 1 - r.distance / 2;
+      const minHeadingLevel =
+        r.matchedSections?.reduce((min, s) => Math.min(min, s.headingLevel), 99) ?? 3;
+      const levelWeight = 1 + Math.max(0, 3 - minHeadingLevel) * HEADING_LEVEL_BONUS;
+      const semanticScore = similarity * SEMANTIC_WEIGHT * levelWeight;
+      // semantic snippet：用最佳匹配段的内容
+      const semanticSnippet = r.matchedSections?.[0]?.snippet ?? '';
       if (existing) {
         existing.semanticRank = rank + 1;
         existing.semanticDistance = r.distance;
+        existing.matchedSections = r.matchedSections;
         if (existing.projectIds.length === 0)
           existing.projectIds = r.projectIds ?? (r.projectId ? [r.projectId] : []);
         if (!existing.username && r.username) {
           existing.username = r.username;
         }
+        if (!existing.snippet && semanticSnippet) existing.snippet = semanticSnippet;
         existing.fusionScore += semanticScore;
         existing.sources.add('semantic');
       } else {
         candidates.set(r.filePath, {
           type: r.type,
           title: r.title || (r.filePath.split('/').pop() ?? r.filePath),
-          snippet: '',
+          snippet: semanticSnippet,
           filePath: r.filePath,
           username: r.username ?? '',
           projectIds: r.projectIds ?? (r.projectId ? [r.projectId] : []),
           semanticRank: rank + 1,
           semanticDistance: r.distance,
+          matchedSections: r.matchedSections,
           fusionScore: semanticScore,
           titleBoost: 0,
           sources: new Set(['semantic']),
@@ -659,6 +679,7 @@ export async function hybridSearch(
           fallbackRank: candidate.fallbackRank ?? null,
           semanticRank: candidate.semanticRank ?? null,
           semanticDistance: candidate.semanticDistance ?? null,
+          matchedSections: candidate.matchedSections ?? null,
           fusionScore: candidate.fusionScore,
           titleBoost,
           rerankEnabled: useLightweightRerank,

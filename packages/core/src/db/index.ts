@@ -79,10 +79,15 @@ CREATE TABLE IF NOT EXISTS project_dirs (
   PRIMARY KEY (project_id, username, dir_name)
 );
 
--- Embedding 存储表
+-- Embedding 存储表（支持标题分片，一个文件可对应多个 chunk）
 CREATE TABLE IF NOT EXISTS embeddings (
   id TEXT PRIMARY KEY,
   file_path TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL DEFAULT 0,
+  heading_path TEXT NOT NULL DEFAULT '',
+  heading_level INTEGER NOT NULL DEFAULT 0,
+  parent_id TEXT,
+  content TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL,
   source_type TEXT NOT NULL DEFAULT 'spec',
   title TEXT,
@@ -197,6 +202,23 @@ function ensureEmbeddingsSchema(db: Database.Database): void {
 
   if (!columnNames.has('updated')) {
     db.exec('ALTER TABLE embeddings ADD COLUMN updated TEXT');
+  }
+
+  // 标题分片相关列
+  if (!columnNames.has('chunk_index')) {
+    db.exec('ALTER TABLE embeddings ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnNames.has('heading_path')) {
+    db.exec("ALTER TABLE embeddings ADD COLUMN heading_path TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has('heading_level')) {
+    db.exec('ALTER TABLE embeddings ADD COLUMN heading_level INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!columnNames.has('parent_id')) {
+    db.exec('ALTER TABLE embeddings ADD COLUMN parent_id TEXT');
+  }
+  if (!columnNames.has('content')) {
+    db.exec("ALTER TABLE embeddings ADD COLUMN content TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -463,6 +485,10 @@ export async function initDb(): Promise<Database.Database> {
         embedding float[384]
       );
     `);
+    // 记录初始维度（首次创建）
+    if (!getLatticeMeta('vec_dimension')) {
+      setLatticeMeta('vec_dimension', '384');
+    }
   } catch {
     // vec0 不可用时跳过
   }
@@ -487,6 +513,34 @@ export function closeDb(): void {
     }
     _db.close();
     _db = null;
+  }
+}
+
+/**
+ * 确保向量表维度与配置一致。维度不匹配时 DROP + CREATE。
+ * 返回 true 表示维度发生了变化（调用方需 rag rebuild）。
+ */
+export function ensureVecStoreDimension(dimension: number): boolean {
+  const stored = getLatticeMeta('vec_dimension');
+  const currentDim = stored ? parseInt(stored, 10) : 384;
+  if (currentDim === dimension) return false;
+
+  try {
+    const db = getDb();
+    db.exec('DROP TABLE IF EXISTS vec_embeddings');
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
+        id TEXT PRIMARY KEY,
+        embedding float[${dimension}]
+      );
+    `);
+    // 维度变更后旧向量已丢失，重置 vector_indexed 标记，确保 checkEmbeddingFreshness 触发重新生成
+    db.prepare('UPDATE embeddings SET vector_indexed = 0').run();
+    setLatticeMeta('vec_dimension', String(dimension));
+    return true;
+  } catch {
+    // vec0 不可用或 DROP/CREATE 失败
+    return false;
   }
 }
 
@@ -1006,14 +1060,23 @@ export function upsertEmbedding(entry: {
   username: string;
   project_id: string;
   vector_indexed: number;
+  chunk_index?: number;
+  heading_path?: string;
+  heading_level?: number;
+  parent_id?: string | null;
+  content?: string;
 }): void {
   getDb()
     .prepare(
       `INSERT INTO embeddings (
-         id, file_path, content_hash, source_type, title, username, project_id, vector_indexed, created, updated
+         id, file_path, content_hash, source_type, title, username, project_id, vector_indexed,
+         chunk_index, heading_path, heading_level, parent_id, content,
+         created, updated
        )
        VALUES (
-         @id, @file_path, @content_hash, @source_type, @title, @username, @project_id, @vector_indexed, datetime('now'), datetime('now')
+         @id, @file_path, @content_hash, @source_type, @title, @username, @project_id, @vector_indexed,
+         @chunk_index, @heading_path, @heading_level, @parent_id, @content,
+         datetime('now'), datetime('now')
        )
        ON CONFLICT(id) DO UPDATE SET
          file_path = @file_path,
@@ -1023,17 +1086,80 @@ export function upsertEmbedding(entry: {
          username = @username,
          project_id = @project_id,
          vector_indexed = @vector_indexed,
+         chunk_index = @chunk_index,
+         heading_path = @heading_path,
+         heading_level = @heading_level,
+         parent_id = @parent_id,
+         content = @content,
          updated = datetime('now')`,
     )
-    .run(entry);
+    .run({
+      chunk_index: 0,
+      heading_path: '',
+      heading_level: 0,
+      parent_id: null,
+      content: '',
+      ...entry,
+    });
 }
 
 export function getEmbeddingByPath(
   filePath: string,
 ): { id: string; content_hash: string; vector_indexed: number } | undefined {
   return getDb()
-    .prepare('SELECT id, content_hash, vector_indexed FROM embeddings WHERE file_path = ?')
+    .prepare('SELECT id, content_hash, vector_indexed FROM embeddings WHERE file_path = ? LIMIT 1')
     .get(filePath) as { id: string; content_hash: string; vector_indexed: number } | undefined;
+}
+
+/** 获取文件的所有 chunk embedding 记录 */
+export function getEmbeddingsByFilePath(filePath: string): {
+  id: string;
+  chunk_index: number;
+  content_hash: string;
+  vector_indexed: number;
+  heading_path: string;
+  heading_level: number;
+  content: string;
+}[] {
+  return getDb()
+    .prepare(
+      'SELECT id, chunk_index, content_hash, vector_indexed, heading_path, heading_level, content FROM embeddings WHERE file_path = ? ORDER BY chunk_index',
+    )
+    .all(filePath) as {
+    id: string;
+    chunk_index: number;
+    content_hash: string;
+    vector_indexed: number;
+    heading_path: string;
+    heading_level: number;
+    content: string;
+  }[];
+}
+
+/** 删除文件的所有 chunk embedding */
+export function deleteEmbeddingsByFilePath(filePath: string): void {
+  const db = getDb();
+  const rows = db.prepare('SELECT id FROM embeddings WHERE file_path = ?').all(filePath) as {
+    id: string;
+  }[];
+  for (const row of rows) {
+    deleteVecEmbedding(row.id);
+  }
+  db.prepare('DELETE FROM embeddings WHERE file_path = ?').run(filePath);
+}
+
+/** 更新文件所有 chunk 的元数据（title/username/project_id），不重新生成向量 */
+export function updateEmbeddingMetadataByFilePath(
+  filePath: string,
+  title: string,
+  username: string,
+  projectId: string,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE embeddings SET title = ?, username = ?, project_id = ?, updated = datetime('now') WHERE file_path = ?`,
+    )
+    .run(title, username, projectId, filePath);
 }
 
 export function getEmbeddingRowsByIds(ids: string[]): {
@@ -1043,12 +1169,17 @@ export function getEmbeddingRowsByIds(ids: string[]): {
   title: string;
   username: string;
   project_id: string;
+  chunk_index: number;
+  heading_path: string;
+  heading_level: number;
+  content: string;
 }[] {
   if (ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(', ');
   return getDb()
     .prepare(
-      `SELECT id, file_path, source_type, title, username, project_id
+      `SELECT id, file_path, source_type, title, username, project_id,
+              chunk_index, heading_path, heading_level, content
        FROM embeddings
        WHERE id IN (${placeholders})`,
     )
@@ -1059,6 +1190,10 @@ export function getEmbeddingRowsByIds(ids: string[]): {
     title: string;
     username: string;
     project_id: string;
+    chunk_index: number;
+    heading_path: string;
+    heading_level: number;
+    content: string;
   }[];
 }
 
@@ -1158,9 +1293,23 @@ export function searchVec(embedding: Float32Array, limit = 10): { id: string; di
   }
 }
 
+/** 获取 chunk/doc 统计，用于动态调整搜索候选量 */
+export function getChunkStats(): { totalChunks: number; totalDocs: number } {
+  try {
+    const row = getDb()
+      .prepare('SELECT COUNT(*) as chunks, COUNT(DISTINCT file_path) as docs FROM embeddings')
+      .get() as { chunks: number; docs: number };
+    return { totalChunks: row.chunks, totalDocs: row.docs };
+  } catch {
+    return { totalChunks: 0, totalDocs: 0 };
+  }
+}
+
 export function countEmbeddings(): number {
   try {
-    const row = getDb().prepare('SELECT COUNT(*) as count FROM embeddings').get() as {
+    const row = getDb()
+      .prepare('SELECT COUNT(DISTINCT file_path) as count FROM embeddings')
+      .get() as {
       count: number;
     };
     return row.count;
