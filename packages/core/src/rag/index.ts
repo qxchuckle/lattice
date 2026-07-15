@@ -31,7 +31,6 @@ import {
   getLatticeMeta,
   setLatticeMeta,
   getChunkStats,
-  deleteSearchDocumentsByPrefixes,
   FTS_INDEX_VERSION,
   getFtsIndexVersion,
   setFtsIndexVersion,
@@ -562,13 +561,16 @@ async function batchIndexDocuments(
   let lastProgressTime = 0;
   let currentFile = '';
 
+  // 按内容长度升序排序：小文档 chunk 少、处理快，优先处理让进度条前期跑得快
+  const sortedDocs = [...docs].sort((a, b) => a.content.length - b.content.length);
+
   /** 时间节流进度报告：最多每 PROGRESS_INTERVAL_MS 毫秒触发一次，force=true 时强制触发 */
   const reportProgress = (force = false, extraChunks = 0) => {
     if (!onProgress) return;
     const now = Date.now();
     if (!force && now - lastProgressTime < PROGRESS_INTERVAL_MS) return;
     lastProgressTime = now;
-    const base = progressBase ?? { current: 0, total: docs.length, skipped: 0 };
+    const base = progressBase ?? { current: 0, total: sortedDocs.length, skipped: 0 };
     onProgress({
       current: base.current + added + updated,
       total: base.total,
@@ -580,14 +582,22 @@ async function batchIndexDocuments(
     });
   };
 
-  for (let i = 0; i < docs.length; i += EMBEDDING_CONCURRENCY) {
-    const batch = docs.slice(i, i + EMBEDDING_CONCURRENCY);
+  for (let i = 0; i < sortedDocs.length; i += EMBEDDING_CONCURRENCY) {
+    const batch = sortedDocs.slice(i, i + EMBEDDING_CONCURRENCY);
 
-    // Phase 1：FTS/meta + 解析分片 + 收集 embedding 输入
+    // Phase 1：解析分片 + 收集 embedding 输入（纯内存，不写 DB）
+    //    DB 写入（FTS/meta + delete 旧向量）推迟到 Phase 3，
+    //    这样 embedding 生成失败时旧数据完全不动
     const batchChunks: {
       doc: SearchDoc;
-      hash: string;
-      encodedProjectIds: string;
+      meta: {
+        title: string;
+        tags?: string[];
+        username: string;
+        sourceType: SearchDocumentType;
+        projectId?: string;
+        projectIds?: string[];
+      };
       chunks: MarkdownChunk[];
       chunkIds: string[];
       isUpdate: boolean;
@@ -605,9 +615,7 @@ async function batchIndexDocuments(
         projectId: doc.projectId,
         projectIds: doc.projectIds,
       };
-      const { hash, encodedProjectIds } = indexFtsAndMeta(doc.filePath, doc.content, meta);
       const existing = getEmbeddingByPath(doc.filePath);
-      deleteEmbeddingsByFilePath(doc.filePath);
       const chunks = chunkMarkdown(doc.content, doc.title, config.minChunkSize);
       const chunkIds = chunks.map(() => randomBytes(8).toString('hex'));
 
@@ -624,10 +632,11 @@ async function batchIndexDocuments(
         );
       }
 
-      batchChunks.push({ doc, hash, encodedProjectIds, chunks, chunkIds, isUpdate: !!existing });
+      batchChunks.push({ doc, meta, chunks, chunkIds, isUpdate: !!existing });
     }
 
     // Phase 2：一次性批量生成所有 chunk 的 embedding（时间节流进度）
+    //    失败时直接抛出，Phase 1 没有写 DB，旧数据完全不受影响
     const allEmbeddings =
       allEmbeddingInputs.length > 0
         ? await generateEmbeddings(
@@ -637,19 +646,26 @@ async function batchIndexDocuments(
           )
         : [];
 
-    // Phase 3：存储 embedding（每个文档存完后触发节流进度）
+    // Phase 3：写入 DB（embedding 已在手，DB 操作极快）
+    //    逐文档：upsert FTS/meta → delete 旧向量 → store 新向量
     let embeddingOffset = 0;
     for (const item of batchChunks) {
+      const { hash, encodedProjectIds } = indexFtsAndMeta(
+        item.doc.filePath,
+        item.doc.content,
+        item.meta,
+      );
+      deleteEmbeddingsByFilePath(item.doc.filePath);
       for (let j = 0; j < item.chunks.length; j++) {
         const chunk = item.chunks[j];
         const parentId =
           chunk.parentChunkIndex !== null ? (item.chunkIds[chunk.parentChunkIndex] ?? null) : null;
-        storeEmbedding(item.doc.filePath, item.hash, allEmbeddings[embeddingOffset + j], {
+        storeEmbedding(item.doc.filePath, hash, allEmbeddings[embeddingOffset + j], {
           id: item.chunkIds[j],
           title: item.doc.title,
           username: item.doc.username,
           sourceType: item.doc.sourceType ?? 'spec',
-          encodedProjectIds: item.encodedProjectIds,
+          encodedProjectIds,
           chunkIndex: chunk.chunkIndex,
           headingPath: chunk.headingPath,
           headingLevel: chunk.headingLevel,
@@ -681,9 +697,9 @@ export async function rebuildIndex(
 ): Promise<number> {
   const config = await getEmbeddingConfig();
   ensureVecStoreDimension(config.dimension);
-  const { added } = await batchIndexDocuments(docs, config, onProgress);
+  const { added, updated } = await batchIndexDocuments(docs, config, onProgress);
   setLatticeMeta('last_model_id', config.modelId);
-  return added;
+  return added + updated;
 }
 
 /** 增量更新索引结果 */
@@ -793,14 +809,30 @@ export async function forceRebuildIndex(onProgress?: IndexProgressCallback): Pro
   return result.added;
 }
 
-/** 内部全量重建公共逻辑 */
+/** 内部全量重建公共逻辑（安全重建：先 upsert 覆盖写入，成功后清理过期条目） */
 async function doRebuild(
   onProgress: IndexProgressCallback | undefined,
   reason: RagUpdateResult['reason'],
 ): Promise<RagUpdateResult> {
-  deleteSearchDocumentsByPrefixes(['task/', 'project/', 'user/', 'spec/']);
+  // 1. 收集先行（在任何删除操作之前）——收集失败时旧数据完全不受影响
   const allDocs = await collectAllSearchDocuments();
+  const currentPaths = new Set(allDocs.map((d) => d.filePath));
+
+  // 2. upsert 重建——batchIndexDocuments 内部逐文档 delete+insert，
+  //    重建中途失败时仅当前批次数据部分丢失，其余旧数据保留
   const indexed = await rebuildIndex(allDocs, onProgress);
+
+  // 3. 事后清理——重建成功后，仅删除不在当前文档集合中的过期条目
+  const { listIndexedDocumentPaths } = await import('../db');
+  const indexedPaths = listIndexedDocumentPaths();
+  let removed = 0;
+  for (const indexPath of indexedPaths) {
+    if (!currentPaths.has(indexPath)) {
+      removeSearchDocumentIndex(indexPath);
+      removed++;
+    }
+  }
+
   setFtsIndexVersion(FTS_INDEX_VERSION);
   setLatticeMeta('rag_rebuild_needed', 'false');
   return {
@@ -808,7 +840,7 @@ async function doRebuild(
     added: indexed,
     updated: 0,
     skipped: 0,
-    removed: 0,
+    removed,
     total: indexed,
     reason,
   };
