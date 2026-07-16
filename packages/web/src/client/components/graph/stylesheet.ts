@@ -2,9 +2,9 @@ import type cytoscape from 'cytoscape';
 
 /** Cytoscape 样式表：节点/边/Focus+Context/脉冲动效 */
 export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
-  const bg = isDark ? '#25252E' : '#FFFFFF';
-  const txt = isDark ? '#E8E8E8' : '#1D1D26';
-  const ec = isDark ? '#3D3D48' : '#C8C8C8';
+  const bg = isDark ? '#32323C' : '#F7F7F5';
+  const txt = isDark ? '#EAEAF0' : '#2A2A32';
+  const ec = isDark ? '#44444F' : '#D8D8D6';
 
   return [
     {
@@ -75,7 +75,7 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
         'background-color': '#13C2C2',
       } as unknown as cytoscape.Css.Node,
     },
-    { selector: '.dimmed', style: { 'opacity': 0.1 } as unknown as cytoscape.Css.Node },
+    { selector: '.dimmed', style: { 'opacity': 0.15 } as unknown as cytoscape.Css.Node },
     {
       selector: '.search-match',
       style: {
@@ -126,7 +126,7 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
         'font-weight': 600,
         'font-family': '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         'color': isDark ? '#A0A0B0' : '#555',
-        'text-background-color': isDark ? '#1D1D26' : '#FFF',
+        'text-background-color': isDark ? '#282830' : '#F7F7F5',
         'text-background-opacity': 1,
         'text-background-padding': '2px 6px',
         'text-background-shape': 'roundrectangle',
@@ -137,7 +137,7 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
         'edge-distances': 'node-position',
       } as unknown as cytoscape.Css.Edge,
     },
-    { selector: 'edge.dimmed', style: { 'opacity': 0.03 } as unknown as cytoscape.Css.Edge },
+    { selector: 'edge.dimmed', style: { 'opacity': 0.08 } as unknown as cytoscape.Css.Edge },
     {
       selector: 'edge.highlighted',
       style: {

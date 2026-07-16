@@ -9,24 +9,24 @@ export const tokens = {
 
   // 画布背景
   canvasBgLight: '#FEF9E7',
-  canvasBgDark: '#25252E',
+  canvasBgDark: '#32323C',
 
-  // 中性色阶 - 浅色
+  // 中性色阶 - 浅色（偏柔和，不过于亮）
   light: {
-    bg: '#FFFFFF',
-    bgSecondary: '#FAFAFA',
-    bgTertiary: '#F0F0F0',
-    text: '#1D1D26',
-    border: '#E8E8E8',
+    bg: '#F7F7F5',
+    bgSecondary: '#F0F0EE',
+    bgTertiary: '#E6E6E4',
+    text: '#2A2A32',
+    border: '#D8D8D6',
   },
 
-  // 中性色阶 - 深色
+  // 中性色阶 - 深色（偏柔和，不过于暗）
   dark: {
-    bg: '#1D1D26',
-    bgSecondary: '#25252E',
-    bgTertiary: '#2D2D38',
-    text: '#E8E8E8',
-    border: '#3D3D48',
+    bg: '#282830',
+    bgSecondary: '#32323C',
+    bgTertiary: '#3C3C48',
+    text: '#EAEAF0',
+    border: '#44444F',
   },
 
   // 实体配色
@@ -86,6 +86,14 @@ export function getAntdThemeConfig(mode: 'light' | 'dark'): ThemeConfig {
       },
       Menu: {
         itemBg: 'transparent',
+      },
+      Modal: {
+        contentBg: t.bg,
+        headerBg: t.bg,
+        titleColor: t.text,
+      },
+      Drawer: {
+        colorBgElevated: t.bg,
       },
     },
   };

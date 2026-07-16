@@ -63,6 +63,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   const hoveredElesRef = useRef<cytoscape.Collection | null>(null);
   const hoveredEdgesRef = useRef<cytoscape.EdgeCollection | null>(null);
   const wasPanningRef = useRef(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 初始化（仅一次）
   useEffect(() => {
@@ -113,8 +114,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       }
     });
 
-    cy.on('mouseover', 'node', (evt) => {
-      const node = evt.target as cytoscape.NodeSingular;
+    const applyHover = (node: cytoscape.NodeSingular) => {
       // 恢复上次被移除 dimmed 的元素
       if (hoveredElesRef.current) {
         hoveredElesRef.current.addClass('dimmed');
@@ -132,9 +132,20 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       const edges = neighborhood.edges();
       edges.addClass('hovered');
       hoveredEdgesRef.current = edges as cytoscape.EdgeCollection;
+    };
+
+    cy.on('mouseover', 'node', (evt) => {
+      const node = evt.target as cytoscape.NodeSingular;
+      // 100ms 延迟，避免快速划过时闪烁
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = setTimeout(() => applyHover(node), 100);
     });
 
     cy.on('mouseout', 'node', () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
       if (hoveredElesRef.current) {
         hoveredElesRef.current.addClass('dimmed');
         hoveredElesRef.current = null;
@@ -290,13 +301,31 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       panState = 'idle';
     };
 
+    // 鼠标离开画布时清理 hover 状态
+    const handleMouseLeave = () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+      if (hoveredElesRef.current) {
+        hoveredElesRef.current.addClass('dimmed');
+        hoveredElesRef.current = null;
+      }
+      if (hoveredEdgesRef.current) {
+        hoveredEdgesRef.current.removeClass('hovered');
+        hoveredEdgesRef.current = null;
+      }
+    };
+
     container.addEventListener('mousedown', handlePanMouseDown);
     container.addEventListener('mousemove', handlePanMouseMove);
+    container.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('mouseup', handlePanMouseUp);
 
     return () => {
       container.removeEventListener('mousedown', handlePanMouseDown);
       container.removeEventListener('mousemove', handlePanMouseMove);
+      container.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('mouseup', handlePanMouseUp);
       container.removeEventListener('wheel', handleWheel);
       cy.destroy();

@@ -12,14 +12,14 @@ import {
   type OpenMode,
   type EditorApp,
 } from '@qcqx/lattice-core';
-import { isPathSafe } from './shared';
+import { resolveFilePath } from './shared';
 
 export function registerContentRoutes(app: FastifyInstance): void {
-  app.post<{ Body: { path: string; content: string } }>('/api/content/save', async (req) => {
-    const { path, content } = req.body;
-    if (!(await isPathSafe(path, await getUsername()))) {
-      return { error: 'forbidden', message: '路径不在允许范围内' };
-    }
+  app.post<{ Body: { type: string; entityId: string; content: string } }>('/api/content/save', async (req) => {
+    const username = await getUsername();
+    const { type, entityId, content } = req.body;
+    const path = await resolveFilePath(type, entityId, username);
+    if (!path) return { error: 'not_found', message: '文件不存在' };
     await writeText(path, content);
     try {
       await updateRagIndex();
@@ -67,12 +67,11 @@ export function registerStatsRoutes(app: FastifyInstance): void {
 
   // ── 用编辑器打开路径 ──
 
-  app.post<{ Body: { path: string; app: string } }>('/api/open-with-editor', async (req) => {
+  app.post<{ Body: { type: string; entityId: string; app: string } }>('/api/open-with-editor', async (req) => {
     const username = await getUsername();
-    const { path, app } = req.body;
-    if (!(await isPathSafe(path, username))) {
-      return { error: 'forbidden', message: '路径不在允许范围内' };
-    }
+    const { type, entityId, app } = req.body;
+    const path = await resolveFilePath(type, entityId, username);
+    if (!path) return { error: 'not_found', message: '文件不存在' };
     const result = await openWithEditor(path, app as EditorApp);
     if (result.success) {
       return { success: true, message: result.message };

@@ -41,6 +41,9 @@ export function createSseStream(reply: FastifyReply) {
   reply.raw.on('close', () => {
     closed = true;
   });
+  reply.raw.on('error', () => {
+    closed = true;
+  });
 
   return {
     /** 发送进度事件 */

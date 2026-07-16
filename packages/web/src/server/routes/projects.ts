@@ -18,7 +18,7 @@ import {
   openWithEditor,
   type EditorApp,
 } from '@qcqx/lattice-core';
-import { isPathSafe } from './shared';
+import { isPathSafe, resolveFilePath } from './shared';
 
 export function registerProjectRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { username?: string } }>('/api/projects', async (req) => {
@@ -95,10 +95,6 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         case 'design':
           path = getTaskDesignPath(username, id);
           break;
-        case 'spec':
-          // spec 的 id 就是 filePath
-          path = id;
-          break;
         default:
           return { error: 'bad_request', message: `未知路径类型: ${type}` };
       }
@@ -119,21 +115,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         if (content !== null) return { content };
         return { error: 'not_found', message: 'PRD 文件不存在或为空' };
       }
-      let filePath: string | null = null;
-      switch (type) {
-        case 'design':
-          filePath = getTaskDesignPath(username, id);
-          break;
-        case 'progress':
-          filePath = getTaskProgressPath(username, id);
-          break;
-        case 'spec':
-          // spec 的 id 就是 filePath
-          filePath = id;
-          break;
-        default:
-          return { error: 'bad_request', message: `未知内容类型: ${type}` };
-      }
+      const filePath = await resolveFilePath(type, id, username);
       if (filePath) {
         const content = await readText(filePath);
         if (content !== null) return { content };
@@ -145,9 +127,40 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     }
   });
 
+  // ── Spec 内容读取（POST，传 specId 而非路径）──
+
+  app.post<{ Body: { specId: string } }>('/api/spec/content', async (req) => {
+    const username = await getUsername();
+    const specId = req.body?.specId;
+    if (!specId) return { error: 'bad_request', message: 'specId is required' };
+    const filePath = await resolveFilePath('spec', specId, username);
+    if (!filePath) return { error: 'not_found', message: 'Spec 不存在' };
+    try {
+      const content = await readText(filePath);
+      if (content !== null) return { content };
+      return { error: 'not_found', message: '文件不存在' };
+    } catch {
+      return { error: 'not_found', message: '内容不存在' };
+    }
+  });
+
   // ── 打开文件/目录 ──
 
-  app.post<{ Body: { path: string; app: string } }>('/api/open', async (req) => {
+  app.post<{ Body: { type: string; entityId: string; app: string } }>('/api/open', async (req) => {
+    const username = await getUsername();
+    const { type, entityId, app } = req.body;
+    const path = await resolveFilePath(type, entityId, username);
+    if (!path) return { error: 'not_found', message: '文件不存在' };
+    const result = await openWithEditor(path, app as EditorApp);
+    if (result.success) {
+      return { success: true };
+    }
+    return { error: 'exec_failed', message: result.message };
+  });
+
+  // ── 打开已知安全路径（项目目录等，后端校验 isPathSafe）──
+
+  app.post<{ Body: { path: string; app: string } }>('/api/open-path', async (req) => {
     const username = await getUsername();
     const { path, app } = req.body;
     if (!(await isPathSafe(path, username))) {

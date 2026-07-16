@@ -37,27 +37,27 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   const [content, setContent] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('edit');
   const [saving, setSaving] = useState(false);
-  const [loaded, setLoaded] = useState(false);
 
-  // 每次打开时重置状态并重新加载
+  // 每次打开时重置状态
   useEffect(() => {
     if (open) {
-      setLoaded(false);
       setContent('');
+      setLoadKey(k => k + 1);
     }
   }, [open, entityId, contentType]);
 
-  // 加载文档内容
+  // 加载文档内容 — 用 loadKey 强制每次打开都重新请求
+  const [loadKey, setLoadKey] = useState(0);
   const { isLoading } = useQuery({
-    queryKey: ['content', contentType, entityId, open],
+    queryKey: ['content', contentType, entityId, loadKey],
     queryFn: async () => {
       const adapter = getAdapter();
       const data = await adapter.getContent(contentType, entityId);
       setContent(data ?? '');
-      setLoaded(true);
       return data;
     },
-    enabled: open && !loaded,
+    enabled: open,
+    staleTime: 0,
   });
 
   const extensions = useMemo(
@@ -68,16 +68,8 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // 获取文件路径
-      const pathRes = await fetch(`/api/paths/${contentType}/${encodeURIComponent(entityId)}`);
-      const pathData = (await pathRes.json()) as { path?: string };
-      if (!pathData.path) {
-        message.error('无法获取文件路径');
-        return;
-      }
-
       const adapter = getAdapter();
-      await adapter.saveContent(pathData.path, content);
+      await adapter.saveContent(contentType, entityId, content);
       message.success('已保存，RAG 索引已自动更新');
       queryClient.invalidateQueries({ queryKey: ['content', contentType, entityId] });
       queryClient.invalidateQueries({ queryKey: ['rag-status'] });

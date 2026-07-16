@@ -30,7 +30,7 @@ export const AdminDrawer = memo(function AdminDrawer() {
       open={open}
       onClose={closeAdmin}
       width={720}
-      styles={{ body: { padding: 0 } }}>
+      styles={{ body: { padding: 0, height: '100%', overflow: 'hidden' } }}>
       <Tabs
         activeKey={activeTab}
         onChange={(key) => {
@@ -39,8 +39,8 @@ export const AdminDrawer = memo(function AdminDrawer() {
         items={tabItems}
         size='small'
         tabPosition='left'
+        className='admin-drawer-tabs'
         style={{ height: '100%' }}
-        tabBarStyle={{ position: 'sticky', top: 0, overflow: 'visible' }}
       />
     </Drawer>
   );

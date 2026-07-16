@@ -158,6 +158,7 @@ export const GitSyncTab = memo(function GitSyncTab() {
       }
     } catch (err) {
       message.error(`添加失败: ${(err as Error).message}`);
+      throw err;
     }
   }, [addForm, message, refresh]);
 
@@ -187,6 +188,7 @@ export const GitSyncTab = memo(function GitSyncTab() {
       }
     } catch (err) {
       message.error(`修改失败: ${(err as Error).message}`);
+      throw err;
     }
   }, [editRemote, editForm, message, refresh]);
 

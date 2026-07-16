@@ -28,6 +28,7 @@ import type { ReferencedSpec, ScopePath } from '@qcqx/lattice-core';
 import {
   useState,
   useRef as useReactRef,
+  useEffect,
   useMemo,
   memo,
   isValidElement,
@@ -129,8 +130,25 @@ for (let level = 1; level <= 6; level++) {
 
 const MarkdownWithToc = memo(function MarkdownWithToc({ content }: { content: string }) {
   const containerRef = useReactRef<HTMLDivElement>(null);
+  const tocRef = useReactRef<HTMLDivElement>(null);
   const headings = useMemo(() => extractTocHeadings(content), [content]);
   const [tocOpen, setTocOpen] = useState(false);
+
+  // 点击目录外部时关闭
+  useEffect(() => {
+    if (!tocOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (tocRef.current && !tocRef.current.contains(e.target as Node)) {
+        setTocOpen(false);
+      }
+    };
+    // 延迟绑定，避免触发目录按钮的 click 再次关闭
+    const timer = setTimeout(() => document.addEventListener('click', handler), 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handler);
+    };
+  }, [tocOpen]);
 
   const scrollToHeading = (id: string) => {
     const el = containerRef.current?.querySelector(`[data-toc-id="${id}"]`);
@@ -149,7 +167,7 @@ const MarkdownWithToc = memo(function MarkdownWithToc({ content }: { content: st
         </ReactMarkdown>
       </div>
       {headings.length >= 2 && (
-        <div className='markdown-toc-float'>
+        <div className='markdown-toc-float' ref={tocRef}>
           {tocOpen && (
             <div className='markdown-toc-float__panel'>
               <div className='markdown-toc-float__header'>
@@ -220,7 +238,7 @@ function FilePathBar({
 
   const handleOpen = async (app: EditorApp) => {
     const adapter = getAdapter();
-    const success = await adapter.openPath(finalPath, app);
+    const success = await adapter.openPathByPath(finalPath, app);
     if (!success) {
       message.warning(`无法用 ${app} 打开`);
     }
@@ -466,13 +484,13 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                       icon={<DownOutlined />}
                       onClick={async () => {
                         const adapter = getAdapter();
-                        await adapter.openPath(sp.path, 'finder');
+                        await adapter.openPathByPath(sp.path, 'finder');
                       }}
                       menu={{
                         items: editorMenuItems,
                         onClick: async ({ key }) => {
                           const adapter = getAdapter();
-                          await adapter.openPath(sp.path, key as EditorApp);
+                          await adapter.openPathByPath(sp.path, key as EditorApp);
                         },
                       }}>
                       <FolderOpenOutlined />
@@ -893,7 +911,7 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
       {/* Spec 内容 */}
       <div className='detail-component__scroll'>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <EditButton contentType='spec' entityId={finalFilePath || specId} title={title} />
+          <EditButton contentType='spec' entityId={specId} title={title} />
         </div>
         {spec?.content && <MarkdownWithToc content={spec.content} />}
       </div>
@@ -930,7 +948,7 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
   // 多路径：显示摘要 + 弹窗选择
   const handleOpen = async (path: string, app: EditorApp) => {
     const adapter = getAdapter();
-    const success = await adapter.openPath(path, app);
+    const success = await adapter.openPathByPath(path, app);
     if (!success) {
       message.warning(`无法用 ${app} 打开`);
     }

@@ -129,17 +129,21 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // ── 打开文件/目录 ──
-  async openPath(path: string, app: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/open`, { path, app });
+  async openPath(type: string, entityId: string, app: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/open`, { type, entityId, app });
     return json.success === true;
   }
 
   // ── 文件内容 ──
   async getContent(type: string, id: string): Promise<string | null> {
+    // spec 类型用 POST 避免 URL 过长
+    if (type === 'spec') {
+      const json = await postJson(`${API_BASE}/spec/content`, { specId: id });
+      return (json as { content?: string }).content ?? null;
+    }
     const res = await fetchJson<{ content?: string; error?: string }>(
       `${API_BASE}/content/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
     );
-    // 服务端成功时返回 { content: string }，失败时返回 { error: string, message: string }
     return res.content ?? null;
   }
 
@@ -235,8 +239,14 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // 文档保存
-  async saveContent(path: string, content: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/content/save`, { path, content });
+  async saveContent(type: string, entityId: string, content: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/content/save`, { type, entityId, content });
+    return json.success === true;
+}
+
+  // 打开已知安全路径（后端校验 isPathSafe）
+  async openPathByPath(path: string, app: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/open-path`, { path, app });
     return json.success === true;
   }
 }

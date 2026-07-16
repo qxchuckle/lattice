@@ -44,8 +44,10 @@ export interface LatticeDataAdapter {
   // 搜索
   search(query: string, opts?: SearchOpts): Promise<SearchResult[]>;
 
-  // 打开文件/目录
-  openPath(path: string, app: string): Promise<boolean>;
+  // 打开文件/目录（通过 type + entityId 解析路径）
+  openPath(type: string, entityId: string, app: string): Promise<boolean>;
+  // 打开已知安全路径（项目目录等，后端仍会校验 isPathSafe）
+  openPathByPath(path: string, app: string): Promise<boolean>;
 
   // 文件内容读取（成功返回 string，文件不存在返回 null）
   getContent(type: string, id: string): Promise<string | null>;
@@ -81,7 +83,7 @@ export interface LatticeDataAdapter {
   unsetConfig(key: string, scope: string): Promise<boolean>;
 
   // 文档保存
-  saveContent(path: string, content: string): Promise<boolean>;
+  saveContent(type: string, entityId: string, content: string): Promise<boolean>;
 }
 
 export interface TaskQueryOpts {

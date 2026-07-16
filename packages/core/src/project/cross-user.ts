@@ -70,8 +70,8 @@ export async function listAllUsernames(): Promise<string[]> {
  *
  * 操作步骤：
  * 1. 校验旧用户目录存在、新用户名不冲突
- * 2. 更新 DB 中 projects / project_dirs / embeddings 表的 username
- * 3. 重命名文件系统目录
+ * 2. 先重命名文件系统目录（可逆，失败时 DB 未改）
+ * 3. 更新 DB 中 projects / project_dirs / embeddings / specs_fts 表的 username
  * 4. 如果是当前用户，更新 config-local.json
  *
  * 调用方负责 initDb/closeDb。
@@ -86,26 +86,31 @@ export async function renameUser(oldName: string, newName: string): Promise<void
   if (!(await dirExists(oldDir))) {
     throw new Error(`用户 ${oldName} 不存在`);
   }
-  if (await dirExists(newDir)) {
+  // 大小写仅变更时跳过冲突检查（macOS 大小写不敏感文件系统）
+  const isCaseOnlyChange = oldName.toLowerCase() === newName.toLowerCase();
+  if (!isCaseOnlyChange && (await dirExists(newDir))) {
     throw new Error(`用户 ${newName} 已存在`);
   }
 
-  // 1. 更新 DB 中的 username 字段
+  // 1. 先重命名文件系统目录（失败时 DB 未改，无副作用）
+  await fsRename(oldDir, newDir);
+
+  // 2. 更新 DB 中的 username 字段（失败时回滚文件系统）
   try {
     const db = getDb();
     const tx = db.transaction(() => {
       db.prepare('UPDATE projects SET username = ? WHERE username = ?').run(newName, oldName);
       db.prepare('UPDATE project_dirs SET username = ? WHERE username = ?').run(newName, oldName);
       db.prepare('UPDATE embeddings SET username = ? WHERE username = ?').run(newName, oldName);
+      db.prepare('UPDATE specs_fts SET username = ? WHERE username = ?').run(newName, oldName);
     });
     tx();
     db.pragma('wal_checkpoint(TRUNCATE)');
   } catch (err) {
+    // DB 失败：回滚文件系统
+    await fsRename(newDir, oldDir).catch(() => {});
     throw new Error(`数据库更新失败: ${(err as Error).message}`, { cause: err });
   }
-
-  // 2. 重命名文件系统目录
-  await fsRename(oldDir, newDir);
 
   // 3. 如果是当前用户，更新 config-local.json
   const config = await readLocalConfig();

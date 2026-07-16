@@ -276,6 +276,10 @@ export const ConfigModal = memo(function ConfigModal({
     const isModified =
       diffMode && config ? JSON.stringify(value) !== JSON.stringify(editValue) : false;
 
+    // Use current config value as placeholder when field is empty
+    const placeholder =
+      field.placeholder ?? (value !== undefined && value !== '' ? String(value) : undefined);
+
     return (
       <div key={field.key} style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -297,7 +301,7 @@ export const ConfigModal = memo(function ConfigModal({
             onChange={(v) => handleFieldChange(field.key, v)}
             style={{ width: '100%' }}
             size='small'
-            placeholder={field.placeholder}
+            placeholder={placeholder}
           />
         ) : field.type === 'select' ? (
           <Select
@@ -316,14 +320,14 @@ export const ConfigModal = memo(function ConfigModal({
             }
             rows={3}
             size='small'
-            placeholder={field.placeholder ?? '每行一个'}
+            placeholder={placeholder ?? '每行一个'}
           />
         ) : (
           <Input
             value={editValue as string}
             onChange={(e) => handleFieldChange(field.key, e.target.value)}
             size='small'
-            placeholder={field.placeholder}
+            placeholder={placeholder}
           />
         )}
         {field.warning && (
@@ -348,7 +352,7 @@ export const ConfigModal = memo(function ConfigModal({
       open={open}
       onCancel={onClose}
       width={640}
-      styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' } }}
+      styles={{ body: { maxHeight: 'calc(80vh - 100px)', overflowY: 'auto' } }}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>

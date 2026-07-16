@@ -61,8 +61,13 @@ export const UserTab = memo(function UserTab() {
   };
 
   const handleRename = async () => {
+    let values;
     try {
-      const values = await renameForm.validateFields();
+      values = await renameForm.validateFields();
+    } catch {
+      return; // 校验错误，表单自行展示
+    }
+    try {
       const res = await fetch('/api/users/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,12 +81,11 @@ export const UserTab = memo(function UserTab() {
         renameForm.resetFields();
         queryClient.invalidateQueries({ queryKey: ['users'] });
       } else {
-        message.error(data.message ?? '重命名失败');
+        throw new Error(data.message ?? '重命名失败');
       }
     } catch (err) {
-      if ((err as Error).message) {
-        message.error(`重命名失败: ${(err as Error).message}`);
-      }
+      message.error(`重命名失败: ${(err as Error).message}`);
+      throw err;
     }
   };
 

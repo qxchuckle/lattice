@@ -1,15 +1,15 @@
 // ── CSS 变量：浅色模式（默认） ──
 :root {
   --brand-color: #1677ff;
-  --canvas-bg: #fef9e7;
-  --bg: #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-tertiary: #f0f0f0;
-  --text: #1d1d26;
-  --text-secondary: #8c8c8c;
-  --border: #e8e8e8;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --canvas-bg: #f5f5f0;
+  --bg: #f7f7f5;
+  --bg-secondary: #f0f0ee;
+  --bg-tertiary: #e6e6e4;
+  --text: #2a2a32;
+  --text-secondary: #6a6a72;
+  --border: #d8d8d6;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s ease;
   --transition-slow: 0.4s ease;
@@ -18,15 +18,15 @@
 // ── CSS 变量：深色模式 ──
 [data-theme='dark'] {
   --brand-color: #4096ff;
-  --canvas-bg: #25252e;
-  --bg: #1d1d26;
-  --bg-secondary: #25252e;
-  --bg-tertiary: #2d2d38;
-  --text: #e8e8e8;
-  --text-secondary: #8c8c8c;
-  --border: #3d3d48;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --canvas-bg: #32323c;
+  --bg: #282830;
+  --bg-secondary: #32323c;
+  --bg-tertiary: #3c3c48;
+  --text: #eaeaf0;
+  --text-secondary: #9a9aa6;
+  --border: #44444f;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.28);
 }
 
 // ── 全局重置 ──
@@ -300,4 +300,43 @@ body {
   span {
     color: #fff !important;
   }
+}
+
+// ── Admin Drawer Tabs：左侧导航固定，右侧内容独立滚动 ──
+.admin-drawer-tabs {
+  height: 100% !important;
+
+  .ant-tabs-nav {
+    height: 100%;
+    overflow: visible !important;
+  }
+
+  .ant-tabs-content-holder {
+    overflow-y: auto;
+    height: 100%;
+  }
+
+  .ant-tabs-content {
+    height: 100%;
+  }
+}
+
+// ── Admin Drawer Tabs：左侧导航固定，右侧内容独立滚动 ──
+
+
+
+// ── Modal / Drawer 遮罩配色 ──
+:root {
+  --modal-mask: rgba(0, 0, 0, 0.25);
+  --drawer-mask: rgba(0, 0, 0, 0.25);
+}
+[data-theme='dark'] {
+  --modal-mask: rgba(0, 0, 0, 0.45);
+  --drawer-mask: rgba(0, 0, 0, 0.45);
+}
+.ant-modal-mask {
+  background: var(--modal-mask) !important;
+}
+.ant-drawer-mask {
+  background: var(--drawer-mask) !important;
 }

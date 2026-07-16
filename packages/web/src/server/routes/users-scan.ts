@@ -18,7 +18,8 @@ import {
 import { createSseStream } from '../sse';
 
 /** 校验用户名合法性（防止路径穿越） */
-function isValidUsername(name: string): boolean {
+function isValidUsername(name: unknown): boolean {
+  if (!name || typeof name !== 'string') return false;
   return /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes('..');
 }
 
