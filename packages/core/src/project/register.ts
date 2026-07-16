@@ -34,6 +34,7 @@ import {
   findAllProjectsByAnyId,
   getProjectMetaById,
   findProjectsOnDisk,
+  findUsernameAndDirName,
 } from './lookup';
 import { collectFingerprint, normalizeLocalPath } from './fingerprint';
 import { detectAndLinkNestedIn } from './nested-in';
@@ -196,7 +197,6 @@ export async function updateProjectPaths(
   let actualUsername = username;
   let actualDirName = dirName;
   if (!(await fileExists(metaPath))) {
-    const { findUsernameAndDirName } = await import('./lookup');
     const found = await findUsernameAndDirName(projectId);
     if (!found) return;
     actualUsername = found.username;

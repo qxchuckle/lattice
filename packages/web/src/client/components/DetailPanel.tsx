@@ -57,8 +57,10 @@ import type {
   GitStatus,
   ParsedSpec,
 } from '@qcqx/lattice-core';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
+import { EditButton } from './editor/DocumentEditorModal';
+import { CheckpointModal } from './modals/CheckpointModal';
 import './DetailPanel.less';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -293,6 +295,55 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   });
   const lineage = (lineageQuery.data as TaskMeta[] | null) || [];
 
+  const [checkpointOpen, setCheckpointOpen] = useState(false);
+
+  // ── 任务管理操作 ──
+  const queryClient = useQueryClient();
+  const { message, modal } = AntdApp.useApp();
+  const handleStatusChange = async (status: string) => {
+    try {
+      await adapter.updateTaskStatus(task.id, status);
+      message.success(`状态已更新为 ${status}`);
+      queryClient.invalidateQueries();
+    } catch (err) {
+      message.error(`更新失败: ${(err as Error).message}`);
+    }
+  };
+  const handleArchive = () => {
+    modal.confirm({
+      title: '归档任务',
+      content: `确认归档「${task.title}」？`,
+      onOk: async () => {
+        try {
+          await adapter.archiveTask(task.id);
+          message.success('已归档');
+          queryClient.invalidateQueries();
+        } catch (err) {
+          message.error(`归档失败: ${(err as Error).message}`);
+          throw err;
+        }
+      },
+    });
+  };
+  const handleDelete = () => {
+    modal.confirm({
+      title: '删除任务',
+      content: `确认删除「${task.title}」？任务将移入垃圾桶，可恢复。`,
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await adapter.deleteTask(task.id);
+          message.success('已删除');
+          closeDetail();
+          queryClient.invalidateQueries();
+        } catch (err) {
+          message.error(`删除失败: ${(err as Error).message}`);
+          throw err;
+        }
+      },
+    });
+  };
+
   // 构建文档 tab 列表
   // 服务端成功返回 { content: string }，文件不存在返回 { error: 'not_found' }
   // adapter 已将成功映射为 string、失败映射为 null
@@ -455,6 +506,14 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               label: tab.label,
               children: (
                 <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                    <EditButton
+                      contentType={tab.key}
+                      entityId={task.id}
+                      title={tab.label}
+                      isYaml={tab.key === 'progress'}
+                    />
+                  </div>
                   {tab.loading ? (
                     <div className='markdown-body detail-markdown'>
                       <Skeleton active paragraph={{ rows: 4 }} />
@@ -499,40 +558,90 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   }, [task, progress, docTabs, projectsQuery.data, navigate]);
 
   return (
-    <div className='detail-component'>
-      {/* 固定头部 */}
-      <h3 className='detail-component__title'>{task.title}</h3>
-      <div className='detail-component__tags'>
-        <Tag color={statusColor}>{task.status}</Tag>
-      </div>
-      <FilePathBar pathType='task-dir' entityId={task.id} />
-      {/* 祖先路径 */}
-      {lineage.length > 1 && (
-        <div className='detail-ancestor'>
-          <span className='detail-ancestor__label'>祖先路径: </span>
-          {lineage.slice(0, -1).map((ancestor: TaskMeta, i: number) => (
-            <span key={ancestor.id}>
-              <span
-                className='detail-ancestor__link'
-                onClick={() => navigate(getViewPath('task', ancestor.id))}>
-                {truncate(ancestor.title, 20)}
-              </span>
-              {i < lineage.length - 2 && <span className='detail-ancestor__sep'>›</span>}
-            </span>
-          ))}
+    <>
+      <div className='detail-component'>
+        {/* 固定头部 */}
+        <h3 className='detail-component__title'>{task.title}</h3>
+        <div className='detail-component__tags'>
+          <Tag color={statusColor}>{task.status}</Tag>
+          <Dropdown.Button
+            size='small'
+            type='text'
+            trigger={['click']}
+            menu={{
+              items: [
+                {
+                  key: 'status-planning',
+                  label: 'planning',
+                  onClick: () => handleStatusChange('planning'),
+                },
+                {
+                  key: 'status-in_progress',
+                  label: 'in_progress',
+                  onClick: () => handleStatusChange('in_progress'),
+                },
+                {
+                  key: 'status-completed',
+                  label: 'completed',
+                  onClick: () => handleStatusChange('completed'),
+                },
+                { type: 'divider' as const },
+                {
+                  key: 'checkpoint',
+                  label: '添加 Checkpoint',
+                  onClick: () => setCheckpointOpen(true),
+                },
+                { type: 'divider' as const },
+                {
+                  key: 'archive',
+                  label: '归档',
+                  onClick: handleArchive,
+                },
+                {
+                  key: 'delete',
+                  label: '删除',
+                  danger: true,
+                  onClick: handleDelete,
+                },
+              ],
+            }}>
+            <DownOutlined />
+          </Dropdown.Button>
         </div>
-      )}
-      <div className='detail-component__meta'>
-        <div className='mono detail-component__meta-id'>ID: {task.id}</div>
-        <div>创建: {formatDate(task.created)}</div>
-        {task.updated && <div>更新: {formatDate(task.updated)}</div>}
-      </div>
+        <FilePathBar pathType='task-dir' entityId={task.id} />
+        {/* 祖先路径 */}
+        {lineage.length > 1 && (
+          <div className='detail-ancestor'>
+            <span className='detail-ancestor__label'>祖先路径: </span>
+            {lineage.slice(0, -1).map((ancestor: TaskMeta, i: number) => (
+              <span key={ancestor.id}>
+                <span
+                  className='detail-ancestor__link'
+                  onClick={() => navigate(getViewPath('task', ancestor.id))}>
+                  {truncate(ancestor.title, 20)}
+                </span>
+                {i < lineage.length - 2 && <span className='detail-ancestor__sep'>›</span>}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className='detail-component__meta'>
+          <div className='mono detail-component__meta-id'>ID: {task.id}</div>
+          <div>创建: {formatDate(task.created)}</div>
+          {task.updated && <div>更新: {formatDate(task.updated)}</div>}
+        </div>
 
-      {/* 板块 Tab 切换 */}
-      <div className='detail-component__scroll'>
-        <Tabs size='small' className='detail-component__tabs' items={detailTabs} />
+        {/* 板块 Tab 切换 */}
+        <div className='detail-component__scroll'>
+          <Tabs size='small' className='detail-component__tabs' items={detailTabs} />
+        </div>
       </div>
-    </div>
+      <CheckpointModal
+        open={checkpointOpen}
+        onClose={() => setCheckpointOpen(false)}
+        taskId={task.id}
+      />
+    </>
   );
 }
 
@@ -783,6 +892,9 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
       </div>
       {/* Spec 内容 */}
       <div className='detail-component__scroll'>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <EditButton contentType='spec' entityId={finalFilePath || specId} title={title} />
+        </div>
         {spec?.content && <MarkdownWithToc content={spec.content} />}
       </div>
     </div>

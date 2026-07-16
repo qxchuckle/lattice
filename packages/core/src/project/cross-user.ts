@@ -1,6 +1,9 @@
 import { listAllProjects, listProjectRowsById } from '../db';
-import { listUserDirs } from '../paths';
+import { getDb } from '../db';
+import { listUserDirs, getUserDir, dirExists } from '../paths';
 import { getRelatedProjectIds } from './virtual-merge';
+import { rename as fsRename } from 'node:fs/promises';
+import { readLocalConfig, writeLocalConfig } from '../config';
 
 /**
  * 查找其他用户下与指定 projectId 匹配的项目。
@@ -59,5 +62,54 @@ export async function listAllUsernames(): Promise<string[]> {
     return await listUserDirs();
   } catch {
     return [];
+  }
+}
+
+/**
+ * 重命名用户：安全地更新用户目录名和数据库中的 username 字段。
+ *
+ * 操作步骤：
+ * 1. 校验旧用户目录存在、新用户名不冲突
+ * 2. 更新 DB 中 projects / project_dirs / embeddings 表的 username
+ * 3. 重命名文件系统目录
+ * 4. 如果是当前用户，更新 config-local.json
+ *
+ * 调用方负责 initDb/closeDb。
+ */
+export async function renameUser(oldName: string, newName: string): Promise<void> {
+  if (!oldName || !newName) throw new Error('用户名不能为空');
+  if (oldName === newName) return;
+
+  const oldDir = getUserDir(oldName);
+  const newDir = getUserDir(newName);
+
+  if (!(await dirExists(oldDir))) {
+    throw new Error(`用户 ${oldName} 不存在`);
+  }
+  if (await dirExists(newDir)) {
+    throw new Error(`用户 ${newName} 已存在`);
+  }
+
+  // 1. 更新 DB 中的 username 字段
+  try {
+    const db = getDb();
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE projects SET username = ? WHERE username = ?').run(newName, oldName);
+      db.prepare('UPDATE project_dirs SET username = ? WHERE username = ?').run(newName, oldName);
+      db.prepare('UPDATE embeddings SET username = ? WHERE username = ?').run(newName, oldName);
+    });
+    tx();
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  } catch (err) {
+    throw new Error(`数据库更新失败: ${(err as Error).message}`, { cause: err });
+  }
+
+  // 2. 重命名文件系统目录
+  await fsRename(oldDir, newDir);
+
+  // 3. 如果是当前用户，更新 config-local.json
+  const config = await readLocalConfig();
+  if (config?.username === oldName) {
+    await writeLocalConfig({ ...config, username: newName });
   }
 }

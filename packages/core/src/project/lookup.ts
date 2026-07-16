@@ -17,7 +17,7 @@ import {
   ID_PREFIX,
 } from './identity';
 import type { ProjectMeta } from '../types';
-import { readJSON, fileExists } from '../paths';
+import { readJSON, fileExists, listUserDirs } from '../paths';
 import { getProjectMetaPath, getUserProjectsDir } from '../paths';
 import { listDir } from '../paths';
 
@@ -226,14 +226,12 @@ export async function findUsernameAndDirName(
     const dirName = row.id;
     // 验证文件存在
     const metaPath = getProjectMetaPath(username, dirName);
-    const { fileExists } = await import('../paths');
     if (await fileExists(metaPath)) {
       return { username, dirName };
     }
   }
 
   // DB 没有则扫描文件系统
-  const { listUserDirs } = await import('../paths');
   let usernames: string[];
   try {
     usernames = await listUserDirs();
@@ -251,7 +249,6 @@ export async function findUsernameAndDirName(
     for (const dirName of projectDirs) {
       if (dirName.startsWith('.')) continue;
       const metaPath = getProjectMetaPath(username, dirName);
-      const { fileExists } = await import('../paths');
       if (await fileExists(metaPath)) {
         const rawMeta = await readJSON<ProjectMeta>(metaPath);
         if (rawMeta) {

@@ -6,6 +6,7 @@ import {
   getTaskMetaPath,
   getTaskPrdPath,
   readJSON,
+  readText,
   writeJSON,
   writeText,
   ensureDir,
@@ -17,6 +18,7 @@ import { linkTaskProject, deleteTaskLinks } from '../db';
 import { moveToTrash } from '../trash';
 import { nowISO, todayDateForId } from '../utils/time';
 import { normalizeLegacyId } from '../project/identity';
+import { listAllUsernames } from '../project/cross-user';
 
 /**
  * 归一化 task 元数据中的项目 ID：无前缀的自动补 legacy: 前缀
@@ -227,7 +229,6 @@ export async function listTasksCrossUser(
   projectId: string,
   filter?: { status?: TaskStatus; usernames?: string[] },
 ): Promise<TaskMetaWithSource[]> {
-  const { listAllUsernames } = await import('../project/cross-user');
   const normalizedProjectId = projectId.includes(':') ? projectId : normalizeLegacyId(projectId);
 
   const filterUsernames = filter?.usernames;
@@ -360,7 +361,6 @@ export async function purgeTask(username: string, taskId: string): Promise<void>
 
 /** 读取任务的 PRD 内容 */
 export async function getTaskPrd(username: string, taskId: string): Promise<string | null> {
-  const { readText } = await import('../paths');
   return readText(getTaskPrdPath(username, taskId));
 }
 

@@ -19,9 +19,12 @@ import {
   ensureDir,
   fileExists,
   listDir,
+  listUserDirs,
   removeDir,
   join,
   getCacheDir,
+  getTaskMetaPath,
+  getUserTasksDir,
 } from '../paths';
 import {
   upsertProject,
@@ -183,7 +186,6 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
     }
 
     // 2d. 更新 task.json 的 projects（扫描所有用户的 task.json）
-    const { getTaskMetaPath, listUserDirs } = await import('../paths');
     let usernames: string[];
     try {
       usernames = await listUserDirs();
@@ -194,7 +196,6 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
     for (const username of usernames) {
       let taskDirs: string[];
       try {
-        const { getUserTasksDir } = await import('../paths');
         taskDirs = await listDir(getUserTasksDir(username));
       } catch {
         continue;

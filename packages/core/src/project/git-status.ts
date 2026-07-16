@@ -1,8 +1,5 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import simpleGit from 'simple-git';
 import type { ProjectMeta } from '../types';
-
-const execFileAsync = promisify(execFile);
 
 /** 项目 git 状态信息 */
 export interface GitStatus {
@@ -24,48 +21,28 @@ export interface GitStatus {
 
 /**
  * 查询项目的实时 git 状态。
- * 使用异步 execFile 不阻塞事件循环。
- * 适用于 web server 场景（多请求并发）。
+ * 使用 simple-git，不走 shell。
  */
 export async function getProjectGitStatus(project: ProjectMeta): Promise<GitStatus | null> {
   const cwd = project.localPaths?.[0];
   if (!cwd) return null;
 
   try {
-    const [branchResult, statusResult, aheadBehindResult, lastCommitResult] = await Promise.all([
-      execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd }),
-      execFileAsync('git', ['status', '--porcelain'], { cwd }),
-      execFileAsync('git', ['rev-list', '--left-right', '--count', '@{u}...HEAD'], { cwd }).catch(
-        () => null,
-      ),
-      execFileAsync('git', ['log', '-1', '--format=%s|%cI'], { cwd }),
+    const git = simpleGit(cwd);
+    const [status, log] = await Promise.all([
+      git.status(),
+      git.log({ maxCount: 1 }).catch(() => null),
     ]);
 
-    const branch = branchResult.stdout.trim() || null;
-    const statusOutput = statusResult.stdout.trim();
-    const uncommittedCount = statusOutput ? statusOutput.split('\n').length : 0;
-    const dirty = uncommittedCount > 0;
-
-    let ahead = 0;
-    let behind = 0;
-    if (aheadBehindResult) {
-      const parts = aheadBehindResult.stdout.trim().split(/\s+/);
-      behind = parseInt(parts[0], 10) || 0;
-      ahead = parseInt(parts[1], 10) || 0;
-    }
-
-    const commitParts = lastCommitResult.stdout.trim().split('|');
-    const lastCommitMessage = commitParts[0] || null;
-    const lastCommitTime = commitParts[1] || null;
-
+    const lastCommit = log?.latest;
     return {
-      branch,
-      dirty,
-      uncommittedCount,
-      ahead,
-      behind,
-      lastCommitMessage,
-      lastCommitTime,
+      branch: status.current || null,
+      dirty: status.files.length > 0,
+      uncommittedCount: status.files.length,
+      ahead: status.ahead || 0,
+      behind: status.behind || 0,
+      lastCommitMessage: lastCommit?.message || null,
+      lastCommitTime: lastCommit?.date || null,
     };
   } catch {
     return null;

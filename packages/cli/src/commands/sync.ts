@@ -1,8 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { execSync } from 'node:child_process';
-import { getLatticeRoot, readResolvedConfig, dirExists } from '@qcqx/lattice-core';
-import { join } from 'node:path';
+import { syncAll, pullRebase, pushGit } from '@qcqx/lattice-core';
 import { logger } from '../utils';
 
 export function registerSyncCommand(program: Command): void {
@@ -13,54 +11,60 @@ export function registerSyncCommand(program: Command): void {
     .option('--push', '仅推送')
     .action(async (opts) => {
       try {
-        const root = getLatticeRoot();
-
-        if (!(await dirExists(join(root, '.git')))) {
-          logger.raw(chalk.yellow('~/.lattice 未启用 Git 管理'));
+        if (opts.pull && opts.push) {
+          logger.raw(chalk.yellow('--pull 和 --push 不能同时使用'));
           return;
         }
 
-        const config = await readResolvedConfig();
-        if (!config?.gitRemote) {
-          logger.raw(chalk.yellow('未配置 Git 远程仓库。请运行 lattice init --git-remote <url>'));
-          return;
-        }
-
-        const execOpts = { cwd: root, stdio: 'pipe' as const, encoding: 'utf-8' as const };
-
-        // 先 commit 所有变更
-        try {
-          execSync('git add -A', execOpts);
-          const status = execSync('git status --porcelain', execOpts).trim();
-          if (status) {
-            execSync('git commit -m "chore: 自动同步"', execOpts);
-            logger.raw(chalk.dim('已提交本地变更'));
-          }
-        } catch {
-          // 无变更也不报错
-        }
-
-        if (!opts.push) {
-          // Pull
+        if (opts.pull) {
           logger.raw(chalk.blue('正在拉取远程变更...'));
-          try {
-            execSync('git pull --rebase', execOpts);
-            logger.raw(chalk.green('✓ 拉取完成'));
-          } catch (err) {
-            logger.raw(chalk.yellow('拉取失败：'), (err as Error).message);
+          const result = await pullRebase();
+          if (result.success) {
+            logger.raw(chalk.green(`✓ ${result.message}`));
+            if (result.output) logger.raw(chalk.dim(`  ${result.output}`));
+          } else {
+            logger.raw(chalk.yellow(result.message));
           }
+          return;
         }
 
-        if (!opts.pull) {
-          // Push
+        if (opts.push) {
           logger.raw(chalk.blue('正在推送本地变更...'));
-          try {
-            execSync('git push', execOpts);
-            logger.raw(chalk.green('✓ 推送完成'));
-          } catch (err) {
-            logger.raw(chalk.yellow('推送失败：'), (err as Error).message);
+          const result = await pushGit();
+          if (result.success) {
+            logger.raw(chalk.green(`✓ ${result.message}`));
+            if (result.output) logger.raw(chalk.dim(`  ${result.output}`));
+          } else {
+            logger.raw(chalk.yellow(result.message));
           }
+          return;
         }
+
+        // 默认完整同步
+        logger.raw(chalk.blue('正在同步...'));
+        const results = await syncAll();
+
+        if (results.commit.success) {
+          logger.raw(chalk.dim(`  ${results.commit.message}`));
+        } else {
+          logger.raw(chalk.yellow(`  ${results.commit.message}`));
+        }
+
+        if (results.pull.success) {
+          logger.raw(chalk.green(`  ✓ ${results.pull.message}`));
+          if (results.pull.output) logger.raw(chalk.dim(`    ${results.pull.output}`));
+        } else {
+          logger.raw(chalk.yellow(`  ${results.pull.message}`));
+        }
+
+        if (results.push.success) {
+          logger.raw(chalk.green(`  ✓ ${results.push.message}`));
+          if (results.push.output) logger.raw(chalk.dim(`    ${results.push.output}`));
+        } else {
+          logger.raw(chalk.yellow(`  ${results.push.message}`));
+        }
+
+        logger.raw(chalk.green('\n✓ 同步完成'));
       } catch (err) {
         console.error(chalk.red('同步失败：'), (err as Error).message);
         process.exitCode = 1;

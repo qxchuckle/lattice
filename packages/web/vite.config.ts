@@ -14,7 +14,16 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': {
+        target: 'http://localhost:14527',
+        changeOrigin: true,
+        // SSE 支持：阻止后端返回压缩响应，避免流被压缩后无法分段推送
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Accept-Encoding', 'identity');
+          });
+        },
+      },
     },
   },
   build: {

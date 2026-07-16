@@ -1,6 +1,6 @@
 import matter from 'gray-matter';
 import type { SpecFrontmatter, ParsedSpec } from '../types';
-import { readText, writeText, fileExists, basename } from '../paths';
+import { readText, writeText, fileExists, removeFile, basename } from '../paths';
 import { generateSpecId, isValidSpecId } from './id';
 import { nowISO } from '../utils/time';
 
@@ -73,7 +73,6 @@ export async function writeSpecRaw(filePath: string, content: string): Promise<v
 
 /** 删除 spec 文件 */
 export async function deleteSpec(filePath: string): Promise<void> {
-  const { removeFile } = await import('../paths');
   await removeFile(filePath);
 }
 

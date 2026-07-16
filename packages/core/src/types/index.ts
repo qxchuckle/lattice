@@ -230,6 +230,14 @@ export interface DoctorEntry {
   fix?: string;
 }
 
+/** doctor 检查选项 */
+export interface DoctorOptions {
+  fix?: boolean;
+  migrate?: boolean;
+  rebuildFingerprints?: boolean;
+  recheckScopePaths?: boolean;
+}
+
 /** Spec 冲突信息 */
 export interface SpecConflict {
   fileName: string;

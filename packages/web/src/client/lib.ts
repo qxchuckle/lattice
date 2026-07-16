@@ -97,7 +97,8 @@ export const queryKeys = {
   taskTree: (id: string) => ['tasks', id, 'tree'] as const,
   relations: ['relations'] as const,
   specs: (scope?: string) => ['specs', scope] as const,
-  search: (query: string, type?: string) => ['search', query, type ?? 'all'] as const,
+  search: (query: string, type?: string, filters?: unknown) =>
+    ['search', query, type ?? 'all', filters] as const,
   stats: ['stats'] as const,
 };
 

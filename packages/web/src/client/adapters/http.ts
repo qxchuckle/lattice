@@ -4,10 +4,12 @@ import type {
   SpecScope,
   SpecResult,
   SearchOpts,
-  EditorApp,
   DashboardStats,
   TaskContextResult,
   UsersResult,
+  DoctorOptions,
+  ModelStatus,
+  TrashItem,
 } from './types';
 import type {
   ProjectMeta,
@@ -18,6 +20,7 @@ import type {
   SearchResult,
   GitStatus,
 } from '@qcqx/lattice-core';
+import type { DoctorReport, RAGStatus } from '@qcqx/lattice-core';
 
 const API_BASE = '/api';
 
@@ -25,6 +28,23 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
   return res.json() as Promise<T>;
+}
+
+/** POST 请求辅助：检查 res.ok，返回 { success } JSON */
+async function postJson(
+  url: string,
+  body?: unknown,
+): Promise<{ success?: boolean; [key: string]: unknown }> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new Error(errBody?.message ?? `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 /** 浏览器环境 adapter：通过 fetch 调 Fastify API */
@@ -109,10 +129,8 @@ export class HttpAdapter implements LatticeDataAdapter {
   }
 
   // ── 打开文件/目录 ──
-  async openPath(path: string, app: EditorApp): Promise<boolean> {
-    const params = new URLSearchParams({ path, app });
-    const res = await fetch(`${API_BASE}/open?${params.toString()}`);
-    const json = (await res.json()) as { success?: boolean };
+  async openPath(path: string, app: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/open`, { path, app });
     return json.success === true;
   }
 
@@ -128,5 +146,97 @@ export class HttpAdapter implements LatticeDataAdapter {
   // ── 统计 ──
   getStats(): Promise<DashboardStats> {
     return fetchJson<DashboardStats>(`${API_BASE}/stats`);
+  }
+
+  // ── 管理操作 ──
+
+  // 任务管理
+  async updateTaskStatus(id: string, status: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/status`, { status });
+    return json.success === true;
+  }
+
+  async archiveTask(id: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/archive`);
+    return json.success === true;
+  }
+
+  async deleteTask(id: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/delete`);
+    return json.success === true;
+  }
+
+  async addCheckpoint(id: string, type: string, title: string, message: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/checkpoint`, {
+      type,
+      title,
+      message,
+    });
+    return json.success === true;
+  }
+
+  // RAG
+  getRagStatus(): Promise<RAGStatus> {
+    return fetchJson<RAGStatus>(`${API_BASE}/rag/status`);
+  }
+
+  async getModelStatus(): Promise<ModelStatus> {
+    return fetchJson<ModelStatus>(`${API_BASE}/rag/model/status`);
+  }
+
+  async removeModel(): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/rag/model/remove`);
+    return json.success === true;
+  }
+
+  // Doctor
+  async runDoctor(options?: DoctorOptions): Promise<DoctorReport> {
+    const json = await postJson(`${API_BASE}/doctor/run`, options ?? {});
+    return json as unknown as DoctorReport;
+  }
+
+  // 垃圾桶
+  getTrash(type?: string): Promise<TrashItem[]> {
+    const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+    return fetchJson<TrashItem[]>(`${API_BASE}/trash${qs}`);
+  }
+
+  async restoreTrash(id: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/trash/restore/${encodeURIComponent(id)}`);
+    return json.success === true;
+  }
+
+  async purgeTrash(id: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/trash/purge/${encodeURIComponent(id)}`);
+    return json.success === true;
+  }
+
+  async emptyTrash(): Promise<{ count: number }> {
+    const json = await postJson(`${API_BASE}/trash/empty`);
+    return json as unknown as { count: number };
+  }
+
+  // 配置
+  async getConfig(scope: string, diffDefaults?: boolean): Promise<Record<string, unknown>> {
+    const params = new URLSearchParams();
+    if (scope) params.set('scope', scope);
+    if (diffDefaults) params.set('diffDefaults', 'true');
+    return fetchJson<Record<string, unknown>>(`${API_BASE}/config?${params.toString()}`);
+  }
+
+  async setConfig(key: string, value: unknown, scope: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/config/set`, { key, value, scope });
+    return json.success === true;
+  }
+
+  async unsetConfig(key: string, scope: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/config/unset`, { key, scope });
+    return json.success === true;
+  }
+
+  // 文档保存
+  async saveContent(path: string, content: string): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/content/save`, { path, content });
+    return json.success === true;
   }
 }

@@ -157,6 +157,28 @@ export const themeStore = proxy({
   mode: (localStorage.getItem('lattice-web-theme') as ThemeMode) || 'light',
 });
 
+// ── 管理面板状态 ──
+
+export type AdminTab = 'overview' | 'rag' | 'doctor' | 'trash' | 'scan' | 'user' | 'git';
+
+export const adminStore = proxy({
+  /** 管理面板是否打开 */
+  open: false,
+  /** 当前 Tab */
+  activeTab: 'overview' as AdminTab,
+});
+
+/** 打开管理面板 */
+export function openAdmin(tab?: AdminTab): void {
+  adminStore.open = true;
+  if (tab) adminStore.activeTab = tab;
+}
+
+/** 关闭管理面板 */
+export function closeAdmin(): void {
+  adminStore.open = false;
+}
+
 // ── 显示模式 ──
 
 export type DisplayMode = 'canvas' | 'table';

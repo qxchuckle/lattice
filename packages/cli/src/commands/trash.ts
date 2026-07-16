@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { confirm } from '@inquirer/prompts';
+import { stat } from 'node:fs/promises';
 import {
   getUsername,
   listTrashItems,
@@ -89,7 +90,6 @@ export function registerTrashCommand(program: Command): void {
           let primary: string | null = null;
           for (const p of localPaths) {
             try {
-              const { stat } = await import('node:fs/promises');
               await stat(p);
               primary = p;
               break;

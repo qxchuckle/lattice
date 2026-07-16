@@ -1,7 +1,7 @@
 import { useEffect, useDeferredValue, useMemo, type CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 import { useQuery, useQueries } from '@tanstack/react-query';
-import { getAdapter } from './adapters';
+import { getAdapter } from '../adapters';
 import {
   queryKeys,
   layoutGraph,
@@ -11,7 +11,7 @@ import {
   deduplicateProjects,
   getProjectId,
   hasIdIntersection,
-} from './lib';
+} from '../lib';
 import {
   canvasStore,
   canvasSearchStore,
@@ -22,8 +22,8 @@ import {
   openCanvasSearch,
   closeCanvasSearch,
   type ViewMode,
-} from './store';
-import type { LatticeNode, LatticeEdge } from './types/graph';
+} from '../store';
+import type { LatticeNode, LatticeEdge } from '../types/graph';
 import type {
   ProjectMeta,
   ProjectRelation,
@@ -1549,155 +1549,4 @@ export function useSpecGraph(_specId: string | null) {
       tasksQuery.isLoading ||
       relationsQuery.isLoading,
   };
-}
-
-// ── 实体详情 ──
-
-export function useEntityDetail(entityId: string | null, entityType: string | null) {
-  const adapter = getAdapter();
-
-  return useQuery({
-    queryKey: ['detail', entityType, entityId],
-    queryFn: async () => {
-      if (!entityId || !entityType) return null;
-      if (entityType === 'task') {
-        const [task, progress] = await Promise.all([
-          adapter.getTask(entityId),
-          adapter.getTaskProgress(entityId),
-        ]);
-        return { type: 'task' as const, task, progress };
-      }
-      if (entityType === 'project') {
-        const [project, gitStatus, specs, tasks, relations] = await Promise.all([
-          adapter.getProject(entityId),
-          adapter.getProjectGitStatus(entityId),
-          adapter.getProjectSpecs(entityId),
-          adapter.getProjectTasks(entityId),
-          adapter.getProjectRelations(entityId),
-        ]);
-        return { type: 'project' as const, project, gitStatus, specs, tasks, relations };
-      }
-      return null;
-    },
-    enabled: !!entityId && !!entityType,
-  });
-}
-
-// ── 项目 git 状态 ──
-
-export function useProjectGitStatus(projectId: string | null) {
-  const adapter = getAdapter();
-  return useQuery({
-    queryKey: queryKeys.projectGitStatus(projectId || ''),
-    queryFn: () => adapter.getProjectGitStatus(projectId!),
-    enabled: !!projectId,
-    staleTime: 30_000,
-  });
-}
-
-// ── 主题 hook ──
-
-export function useTheme() {
-  const { mode } = useSnapshot(themeStore);
-  return { mode, toggle: toggleTheme };
-}
-
-// ── 键盘快捷键 hook ──
-
-export function useKeyboard() {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInputFocused =
-        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-
-      // Cmd/Ctrl + F → 打开画布搜索（阻止浏览器原生查找）
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault();
-        if (canvasSearchStore.open) {
-          document.querySelector<HTMLInputElement>('#canvas-search-input')?.focus();
-        } else {
-          openCanvasSearch();
-        }
-        return;
-      }
-
-      // Cmd/Ctrl + K → 聚焦搜索
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        const input = document.querySelector<HTMLInputElement>('#sidebar-search-input');
-        input?.focus();
-        return;
-      }
-
-      // 输入框聚焦时不触发以下非修饰键快捷键
-      if (isInputFocused) return;
-
-      // 数字键 1-4 → 切换视角
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[1-4]$/.test(e.key)) {
-        const modes: ViewMode[] = ['global', 'task', 'project', 'spec'];
-        const idx = parseInt(e.key, 10) - 1;
-        if (idx < modes.length) {
-          canvasStore.viewMode = modes[idx];
-        }
-      }
-      // Esc → 关闭画布搜索或详情面板
-      if (e.key === 'Escape') {
-        if (canvasSearchStore.open) {
-          closeCanvasSearch();
-        } else {
-          closeDetail();
-        }
-      }
-      // F → 重置画布视口
-      if (e.key === 'f' && !e.metaKey && !e.ctrlKey) {
-        canvasStore.selectedNodeId = null;
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-}
-
-// ── 搜索 hook（带防抖 + 筛选）──
-
-export function useSearch() {
-  const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
-  const debouncedKeyword = useDeferredValue(searchKeyword);
-  const adapter = getAdapter();
-  const hasStatusOrScopeFilter =
-    searchFilters.taskStatus.length > 0 || searchFilters.specScope.length > 0;
-  const searchType = searchFilters.type === 'all' ? undefined : searchFilters.type;
-  return useQuery({
-    queryKey: queryKeys.search(debouncedKeyword, searchFilters.type),
-    queryFn: () =>
-      adapter.search(debouncedKeyword, {
-        type: searchType,
-        limit: hasStatusOrScopeFilter ? 50 : 20,
-      }),
-    enabled: debouncedKeyword.length > 0,
-    staleTime: 30_000,
-  });
-}
-
-// ── 统计数据 hook ──
-
-export function useStats() {
-  const adapter = getAdapter();
-  return useQuery({
-    queryKey: queryKeys.stats,
-    queryFn: () => adapter.getStats(),
-    staleTime: 60_000,
-  });
-}
-
-// ── 用户列表 hook ──
-
-export function useUsers() {
-  const adapter = getAdapter();
-  return useQuery({
-    queryKey: ['users'],
-    queryFn: () => adapter.getUsers(),
-    staleTime: 60_000,
-  });
 }

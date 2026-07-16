@@ -27,6 +27,7 @@ import {
   isPathPrefixOf,
   dirExists,
   mergeProjects,
+  searchProjects,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource } from '@qcqx/lattice-core';
 import { logger, outputJson, shouldSkipConfirm } from '../utils';
@@ -59,7 +60,11 @@ export function registerProjectCommand(program: Command): void {
     .description('列出所有已注册项目')
     .option('--group <group>', '按分组过滤')
     .option('--tag <tag>', '按标签过滤')
-    .option('--search <keyword>', '按关键词搜索（名称/ID/路径/Git/包名/分组/标签）')
+    .option(
+      '--search <keyword>',
+      '按关键词搜索（名称/ID/路径/Git/包名/分组/标签），默认附带语义搜索',
+    )
+    .option('--keyword-only', '仅使用关键词匹配，跳过语义搜索')
     .option('--has-git', '只显示含 git remote 的项目')
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
@@ -70,11 +75,23 @@ export function registerProjectCommand(program: Command): void {
         const username = await getUsername();
         await initDb();
 
-        let projects = listProjects(username, {
-          group: opts.group,
-          tag: opts.tag,
-          search: opts.search,
-        });
+        let projects: ProjectRow[];
+        let semanticFallback = false;
+
+        if (opts.search) {
+          const searchResult = await searchProjects(username, opts.search, {
+            group: opts.group,
+            tag: opts.tag,
+            keywordOnly: opts.keywordOnly,
+          });
+          projects = searchResult.projects;
+          semanticFallback = searchResult.semanticFallback;
+        } else {
+          projects = listProjects(username, {
+            group: opts.group,
+            tag: opts.tag,
+          });
+        }
 
         // --has-git 过滤
         if (opts.hasGit) {
@@ -131,9 +148,15 @@ export function registerProjectCommand(program: Command): void {
 
         if (projects.length === 0) {
           logger.raw(chalk.dim('暂无符合条件的项目。使用 lattice link 注册项目。'));
+          if (opts.search && opts.keywordOnly) {
+            logger.raw(chalk.dim('  提示：尝试去掉 --keyword-only 以启用语义搜索。'));
+          }
           return;
         }
 
+        if (semanticFallback) {
+          logger.raw(chalk.yellow('关键词未匹配，以下为语义搜索结果：\n'));
+        }
         logger.raw(chalk.blue(`共 ${projects.length} 个项目：\n`));
         for (const p of projects) {
           const { parsedGroups: groups, parsedTags: tags } = parseProjectRow(p);

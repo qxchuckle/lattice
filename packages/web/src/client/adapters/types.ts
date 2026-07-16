@@ -7,6 +7,7 @@ import type {
   SearchResult,
 } from '@qcqx/lattice-core';
 import type { GitStatus } from '@qcqx/lattice-core';
+import type { DoctorReport, RAGStatus } from '@qcqx/lattice-core';
 
 /**
  * 数据 adapter 接口 — 前端通过此接口获取数据，不直接调 fetch。
@@ -44,13 +45,43 @@ export interface LatticeDataAdapter {
   search(query: string, opts?: SearchOpts): Promise<SearchResult[]>;
 
   // 打开文件/目录
-  openPath(path: string, app: EditorApp): Promise<boolean>;
+  openPath(path: string, app: string): Promise<boolean>;
 
   // 文件内容读取（成功返回 string，文件不存在返回 null）
   getContent(type: string, id: string): Promise<string | null>;
 
   // 统计
   getStats(): Promise<DashboardStats>;
+
+  // ── 管理操作 ──
+
+  // 任务管理
+  updateTaskStatus(id: string, status: string): Promise<boolean>;
+  archiveTask(id: string): Promise<boolean>;
+  deleteTask(id: string): Promise<boolean>;
+  addCheckpoint(id: string, type: string, title: string, message: string): Promise<boolean>;
+
+  // RAG
+  getRagStatus(): Promise<RAGStatus>;
+  getModelStatus(): Promise<ModelStatus>;
+  removeModel(): Promise<boolean>;
+
+  // Doctor
+  runDoctor(options?: DoctorOptions): Promise<DoctorReport>;
+
+  // 垃圾桶
+  getTrash(type?: string): Promise<TrashItem[]>;
+  restoreTrash(id: string): Promise<boolean>;
+  purgeTrash(id: string): Promise<boolean>;
+  emptyTrash(): Promise<{ count: number }>;
+
+  // 配置
+  getConfig(scope: string, diffDefaults?: boolean): Promise<Record<string, unknown>>;
+  setConfig(key: string, value: unknown, scope: string): Promise<boolean>;
+  unsetConfig(key: string, scope: string): Promise<boolean>;
+
+  // 文档保存
+  saveContent(path: string, content: string): Promise<boolean>;
 }
 
 export interface TaskQueryOpts {
@@ -92,4 +123,31 @@ export interface TaskContextResult {
 export interface UsersResult {
   users: string[];
   currentUser: string;
+}
+
+// ── 管理操作相关类型 ──
+
+export interface DoctorOptions {
+  fix?: boolean;
+  migrate?: boolean;
+  rebuildFingerprints?: boolean;
+  recheckScopePaths?: boolean;
+}
+
+export interface ModelStatus {
+  installed: boolean;
+  loaded: boolean;
+  loadError: string | null;
+  isNetworkError: boolean;
+  networkHint: string | null;
+}
+
+export interface TrashItem {
+  id: string;
+  type: string;
+  title: string;
+  trashedAt: string;
+  originalPath: string;
+  username: string;
+  entityId: string;
 }

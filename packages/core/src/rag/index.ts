@@ -31,6 +31,7 @@ import {
   getLatticeMeta,
   setLatticeMeta,
   getChunkStats,
+  listIndexedDocumentPaths,
   FTS_INDEX_VERSION,
   getFtsIndexVersion,
   setFtsIndexVersion,
@@ -725,7 +726,6 @@ export async function incrementalIndex(
   const currentPaths = new Set(docs.map((d) => d.filePath));
 
   // 获取已索引的文档路径
-  const { listIndexedDocumentPaths } = await import('../db');
   const indexedPaths = listIndexedDocumentPaths();
 
   // 先分区：跳过未变文档，需要索引的进入批量处理
@@ -823,7 +823,6 @@ async function doRebuild(
   const indexed = await rebuildIndex(allDocs, onProgress);
 
   // 3. 事后清理——重建成功后，仅删除不在当前文档集合中的过期条目
-  const { listIndexedDocumentPaths } = await import('../db');
   const indexedPaths = listIndexedDocumentPaths();
   let removed = 0;
   for (const indexPath of indexedPaths) {

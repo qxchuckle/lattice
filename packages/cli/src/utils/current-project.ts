@@ -13,6 +13,7 @@ import {
   autoRegisterProject,
   getProjectMetaById,
   resolveProjectIds,
+  getUsername,
   type ProjectMeta,
 } from '@qcqx/lattice-core';
 
@@ -197,11 +198,4 @@ export async function resolveProjectAtDirectory(
 export function clearCurrentProjectCache(): void {
   _cachedCurrent = undefined;
   _cachedAncestors = undefined;
-}
-
-// ─── 辅助 ───
-
-async function getUsername(): Promise<string> {
-  const { getUsername: coreGetUsername } = await import('@qcqx/lattice-core');
-  return coreGetUsername();
 }

@@ -19,7 +19,7 @@ export async function createServer() {
     logger: { level: 'warn' },
   }).withTypeProvider<TypeBoxTypeProvider>();
 
-  // CORS（开发时前端 :5173 与 API :3000 分端口）
+  // CORS（开发时前端 :5173 与 API :14527 分端口）
   await app.register(fastifyCors, { origin: true });
 
   // API 路由

@@ -26,9 +26,9 @@ pnpm dev:web
 | 进程 | 端口 | 说明 |
 |---|---|---|
 | Vite Dev Server | 5173 | 前端 HMR 热重载，提供 React SPA |
-| Fastify API Server | 3000 | 后端 API，直接调用 `@qcqx/lattice-core` |
+| Fastify API Server | 14527 | 后端 API，直接调用 `@qcqx/lattice-core` |
 
-浏览器访问 `http://localhost:5173`。Vite 会自动将 `/api` 请求代理到 `:3000`。
+浏览器访问 `http://localhost:5173`。Vite 会自动将 `/api` 请求代理到 `:14527`。
 
 ## 单独启动
 
@@ -36,7 +36,7 @@ pnpm dev:web
 
 ```bash
 pnpm --filter @qcqx/lattice-web run dev:client   # 仅前端 :5173
-pnpm --filter @qcqx/lattice-web run dev:server   # 仅后端 :3000
+pnpm --filter @qcqx/lattice-web run dev:server   # 仅后端 :14527
 ```
 
 ## 生产模式启动
@@ -145,4 +145,4 @@ node packages/cli/dist/index.js web --no-open
 
 ### Q: 端口被占用
 
-无 `--port` 时默认 3000，被占用则自动递增到 3001、3002。指定 `--port` 时不递增，冲突直接报错。
+无 `--port` 时默认 14527，被占用则自动递增到 17418、17419。指定 `--port` 时不递增，冲突直接报错。

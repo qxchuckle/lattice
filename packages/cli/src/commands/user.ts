@@ -13,8 +13,10 @@ import {
   listUserDirs,
   dirExists,
   removeDir,
+  renameUser,
+  initDb,
+  closeDb,
 } from '@qcqx/lattice-core';
-import { rename } from 'node:fs/promises';
 import { logger, shouldSkipConfirm } from '../utils';
 
 export function registerUserCommand(program: Command): void {
@@ -110,32 +112,32 @@ export function registerUserCommand(program: Command): void {
   // rename
   cmd
     .command('rename <oldName> <newName>')
-    .description('重命名用户')
-    .action(async (oldName: string, newName: string) => {
+    .description('重命名用户（含数据库和文件系统）')
+    .option('-f, --force', '跳过确认')
+    .action(async (oldName: string, newName: string, opts) => {
       try {
-        const oldDir = getUserDir(oldName);
-        if (!(await dirExists(oldDir))) {
-          logger.raw(chalk.yellow(`用户 ${oldName} 不存在`));
-          return;
+        if (!shouldSkipConfirm(opts)) {
+          const confirmed = await confirm({
+            message: `确认将用户 ${oldName} 重命名为 ${newName}？将更新数据库和文件系统。`,
+            default: false,
+          });
+          if (!confirmed) {
+            logger.raw(chalk.dim('已取消'));
+            return;
+          }
         }
 
-        if (await dirExists(getUserDir(newName))) {
-          logger.raw(chalk.yellow(`用户 ${newName} 已存在`));
-          return;
-        }
-
-        await rename(oldDir, getUserDir(newName));
-
-        // 如果当前用户就是被重命名的用户，更新配置
-        const config = await readLocalConfig();
-        if (config?.username === oldName) {
-          await writeLocalConfig({ ...config, username: newName });
-        }
+        await initDb();
+        await renameUser(oldName, newName);
+        closeDb();
 
         logger.raw(chalk.green(`✓ 用户 ${oldName} 已重命名为 ${newName}`));
+        logger.raw(chalk.dim('数据库中的 username 字段已同步更新'));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
+      } finally {
+        closeDb();
       }
     });
 

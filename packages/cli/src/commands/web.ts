@@ -10,7 +10,7 @@ export function registerWebCommand(program: Command): void {
   program
     .command('web')
     .description('启动 Lattice 可视化 Web 服务')
-    .option('-p, --port <port>', '端口号，默认 3000')
+    .option('-p, --port <port>', '端口号，默认 14527')
     .option('--no-open', '不自动打开浏览器')
     .action(async (opts: { port?: string; open: boolean }) => {
       try {

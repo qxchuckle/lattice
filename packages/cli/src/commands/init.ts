@@ -2,7 +2,6 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { checkbox, confirm, input } from '@inquirer/prompts';
 import ignore from 'ignore';
-import { execSync } from 'node:child_process';
 import { cp, readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -47,6 +46,7 @@ import {
   renderClaudeCode,
   renderWindsurfRules,
   renderKiroSteering,
+  initLatticeGit,
 } from '@qcqx/lattice-core';
 import { logger } from '../utils';
 import {
@@ -206,12 +206,7 @@ export function registerInitCommand(program: Command): void {
         if (gitEnabled && !(await dirExists(join(root, '.git')))) {
           logger.raw(chalk.blue('正在初始化 Git 仓库...'));
           try {
-            execSync('git init', { cwd: root, stdio: 'pipe' });
-            execSync('git add .', { cwd: root, stdio: 'pipe' });
-            execSync('git commit -m "chore: 初始化 lattice"', { cwd: root, stdio: 'pipe' });
-            if (opts.gitRemote) {
-              execSync(`git remote add origin ${opts.gitRemote}`, { cwd: root, stdio: 'pipe' });
-            }
+            await initLatticeGit(root, opts.gitRemote);
           } catch {
             logger.raw(chalk.yellow('Git 初始化时出现警告（可能已存在仓库）'));
           }

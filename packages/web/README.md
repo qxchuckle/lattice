@@ -23,13 +23,13 @@ npm i -g @qcqx/lattice-web
 ```bash
 # 通过 lattice CLI 启动
 ltc web
-# 指定端口，默认 3000
+# 指定端口，默认 14527
 ltc web --port 8080
 # 不自动打开浏览器
 ltc web --no-open
 ```
 
-启动后访问 `http://localhost:3000`。重复启动会检测已有服务并提示。
+启动后访问 `http://localhost:14527`。重复启动会检测已有服务并提示。
 
 ## 路由
 
@@ -53,7 +53,7 @@ React 19 · Vite 8 · antd v6 · Cytoscape · Valtio · TanStack Query · Fastif
 详见 [docs/development.md](docs/development.md)。
 
 ```bash
-# 开发模式（Vite :5173 + Fastify :3000）
+# 开发模式（Vite :5173 + Fastify :14527）
 pnpm dev:web
 
 # 构建

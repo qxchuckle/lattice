@@ -1,5 +1,5 @@
 import matter from 'gray-matter';
-import { execSync } from 'node:child_process';
+import simpleGit from 'simple-git';
 import { existsSync, readFileSync } from 'node:fs';
 import { cp, mkdir, rm, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
@@ -369,13 +369,12 @@ export async function syncSpecTemplateRegistry(repoUrl: string): Promise<SyncedT
 
   try {
     await stat(join(registryDir, '.git'));
-    execSync('git pull --rebase', { cwd: registryDir, stdio: 'pipe' });
+    // 已存在，pull 更新
+    await simpleGit(registryDir).pull(['--rebase']);
   } catch {
+    // 不存在，clone
     await rm(registryDir, { recursive: true, force: true });
-    execSync(`git clone ${JSON.stringify(repoUrl)} ${JSON.stringify(registryDir)}`, {
-      cwd: registriesDir,
-      stdio: 'pipe',
-    });
+    await simpleGit(registriesDir).clone(repoUrl, registryDir);
   }
 
   const templateSourceDir = await resolveTemplateSourceDir(registryDir);

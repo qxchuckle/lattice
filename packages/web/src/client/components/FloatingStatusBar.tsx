@@ -9,6 +9,7 @@ import {
   ExpandOutlined,
   LoadingOutlined,
   SearchOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
@@ -21,6 +22,7 @@ import {
   openCanvasSearch,
   closeCanvasSearch,
   canvasSearchStore,
+  openAdmin,
 } from '../store';
 import { fitToElements } from './graph/layout';
 import { useStats } from '../hooks';
@@ -170,6 +172,15 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
           onClick={toggleTheme}
           style={{ borderRadius: '50%' }}
         />
+        <Tooltip title='管理'>
+          <Button
+            size='small'
+            type='text'
+            icon={<SettingOutlined />}
+            onClick={() => openAdmin()}
+            style={{ borderRadius: '50%' }}
+          />
+        </Tooltip>
       </div>
       <CanvasSearchBar />
     </>

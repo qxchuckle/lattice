@@ -7,3 +7,4 @@ export {
 } from './context';
 
 export { hybridSearch } from './search';
+export { searchProjects } from './project-search';

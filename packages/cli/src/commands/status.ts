@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { statSync } from 'node:fs';
 import {
   getUsername,
   initDb,
@@ -12,12 +11,15 @@ import {
   getProjectMeta,
   getProjectSpecs,
   getDbPath,
+  getLatticeRoot,
   getTasksForProject,
   getTaskMeta,
   findProjectById,
   dirExists,
   findAllUpwards,
   readJSON,
+  getGlobalStatus,
+  openLatticeRoot,
 } from '@qcqx/lattice-core';
 import { logger, outputJson, resolveCurrentProject } from '../utils';
 
@@ -53,31 +55,15 @@ export function registerStatusCommand(program: Command): void {
 }
 
 async function showGlobalStatus(
-  username: string,
+  _username: string,
   json: boolean,
   jsonFormat?: boolean,
 ): Promise<void> {
-  const config = await readResolvedConfig();
-  const projects = listProjects(username);
-  const tasks = await listTasks(username);
-  const activeTasks = tasks.filter((t) => t.status === 'in_progress' || t.status === 'planning');
-
-  let dbSize = 0;
-  try {
-    dbSize = statSync(getDbPath()).size;
-  } catch {
-    // 数据库文件可能不存在
+  const status = await getGlobalStatus();
+  if (!status) {
+    logger.raw(chalk.yellow('Lattice 未初始化'));
+    return;
   }
-
-  const status = {
-    username,
-    projects: projects.length,
-    tasks: tasks.length,
-    activeTasks: activeTasks.length,
-    dbSizeKB: Math.round(dbSize / 1024),
-    scanDirs: config?.scanDirs ?? [],
-    gitEnabled: config?.gitEnabled ?? false,
-  };
 
   if (json) {
     outputJson(status, jsonFormat);
@@ -85,9 +71,10 @@ async function showGlobalStatus(
   }
 
   logger.raw(chalk.bold('\nLattice 全局状态\n'));
-  logger.raw(`  用户名：${chalk.cyan(username)}`);
-  logger.raw(`  项目数：${projects.length}`);
-  logger.raw(`  任务数：${tasks.length}（活跃 ${activeTasks.length}）`);
+  logger.raw(`  根目录：${chalk.cyan(status.latticeRoot)}`);
+  logger.raw(`  用户名：${chalk.cyan(status.username)}`);
+  logger.raw(`  项目数：${status.projectCount}`);
+  logger.raw(`  任务数：${status.taskCount}（活跃 ${status.activeTaskCount}）`);
   logger.raw(`  数据库：${status.dbSizeKB} KB`);
   logger.raw(`  Git：${status.gitEnabled ? '已启用' : '未启用'}`);
   if (status.scanDirs.length) {
@@ -96,6 +83,23 @@ async function showGlobalStatus(
   logger.raw('');
 }
 
+/** 打开 Lattice 根目录 */
+export function registerOpenCommand(program: Command): void {
+  program
+    .command('open')
+    .description('打开 Lattice 根目录')
+    .option('-t, --terminal', '在终端中打开（而非文件管理器）')
+    .action(async (opts) => {
+      const mode = opts.terminal ? 'terminal' : 'finder';
+      const result = await openLatticeRoot(mode);
+      if (result.success) {
+        logger.raw(chalk.green(result.message));
+      } else {
+        logger.raw(chalk.red(result.message));
+        process.exitCode = 1;
+      }
+    });
+}
 async function showProjectStatus(
   username: string,
   json: boolean,

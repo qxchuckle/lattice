@@ -14,6 +14,7 @@ import { CytoscapeGraph } from './components/CytoscapeGraph';
 import { DetailPanel } from './components/DetailPanel';
 import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
 import { FloatingStatusBar } from './components/FloatingStatusBar';
+import { AdminDrawer } from './components/admin/AdminDrawer';
 import './components/DetailPanel.less';
 
 // ── 路由同步 ──
@@ -135,6 +136,7 @@ export default function App() {
       <TreeBrowserSidebar />
       <FloatingStatusBar />
       <DetailPanelContainer />
+      <AdminDrawer />
     </div>
   );
 }

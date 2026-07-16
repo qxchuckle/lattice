@@ -18,6 +18,7 @@ export type {
   ResolvedConfig,
   DoctorReport,
   DoctorEntry,
+  DoctorOptions,
   SpecConflict,
   ProjectContext,
   CrossUserProjectData,
@@ -239,7 +240,7 @@ export {
 } from './project/relation';
 
 // 跨用户项目发现
-export { findSameProjectInOtherUsers, listAllUsernames } from './project/cross-user';
+export { findSameProjectInOtherUsers, listAllUsernames, renameUser } from './project/cross-user';
 
 // 项目指纹
 export { collectFingerprint, normalizeGitRemote, normalizeLocalPath } from './project/fingerprint';
@@ -347,6 +348,7 @@ export {
   formatContextAsMarkdown,
   resolveSpecScope,
   hybridSearch,
+  searchProjects,
   type ContextOptions,
 } from './search';
 
@@ -398,6 +400,25 @@ export {
 // 维护
 export { runStartupSelfCheck } from './maintenance/startup-self-check';
 export type { StartupSelfCheckResult } from './maintenance/startup-self-check';
+export { runDoctorCheck } from './maintenance/doctor-check';
+export { getGlobalStatus } from './maintenance/status';
+export type { GlobalStatus } from './maintenance/status';
+export { openDirectory, openWithEditor, openLatticeRoot } from './maintenance/open';
+export type { OpenMode, EditorApp } from './maintenance/open';
+export {
+  isGitInitialized,
+  getGitStatus,
+  commitAll,
+  pullRebase,
+  push as pushGit,
+  syncAll,
+  initLatticeGit,
+  listRemotes,
+  addRemote,
+  setRemoteUrl,
+  removeRemote,
+} from './maintenance/git-ops';
+export type { GitOpResult, LatticeGitStatus, GitRemoteInfo } from './maintenance/git-ops';
 
 // 工具
 export { nowISO, todayDateForId } from './utils/time';
