@@ -161,24 +161,83 @@ export function runLayout(
     }
   }
 
-  // force 模式（或回退）：fCoSE → layoutstop → 同步防重叠 → fit（可选）
+  // force 模式（或回退）：fCoSE → layoutstop → 同步防重叠 → preset 动画过渡 → fit（可选）
   const restoreRandom = seedMathRandom(LAYOUT_SEED);
+
+  // 非首次加载时保存当前位置，用于过渡动画
+  const savedPositions = new Map<string, { x: number; y: number }>();
+  if (!skipAnimation) {
+    cy.nodes().forEach((node) => {
+      savedPositions.set(node.id(), { x: node.position().x, y: node.position().y });
+    });
+  }
+
+  // fCoSE 始终用 animate: false（skipAnimation=true 传入），避免模拟阻塞主线程时动画丢失
   const layout = cy.layout(
-    buildLayoutConfig(nodeCount, 'force', skipAnimation, preserveViewport, incremental),
+    buildLayoutConfig(nodeCount, 'force', true, preserveViewport, incremental),
   );
 
   layout.one('layoutstop', () => {
     restoreRandom();
-    // 同步防重叠（fCoSE 不知实际节点尺寸，需后处理消除残余重叠）
     resolveOverlaps(cy);
-    if (shouldFit) {
-      if (skipAnimation) {
+
+    if (!skipAnimation && savedPositions.size > 0) {
+      // 捕获最终位置（fCoSE + 防重叠后）
+      const finalPositions: Record<string, { x: number; y: number }> = {};
+      cy.nodes().forEach((node) => {
+        finalPositions[node.id()] = { x: node.position().x, y: node.position().y };
+      });
+
+      // 重置到切换前的位置
+      cy.batch(() => {
+        cy.nodes().forEach((node) => {
+          const saved = savedPositions.get(node.id());
+          if (saved) node.position(saved);
+        });
+      });
+
+      // 手动 tweening 动画：每帧用单个 cy.batch() 统一更新所有节点
+      // 避免 preset 布局为每个节点创建独立动画导致帧间不同步/抖动
+      const animDuration = 500;
+      const animStart = performance.now();
+
+      const tween = () => {
+        const elapsed = performance.now() - animStart;
+        const t = Math.min(1, elapsed / animDuration);
+        // ease-out-cubic：开始快、结束慢，适合布局过渡
+        const eased = 1 - Math.pow(1 - t, 3);
+
+        cy.batch(() => {
+          cy.nodes().forEach((node) => {
+            const saved = savedPositions.get(node.id());
+            const final = finalPositions[node.id()];
+            if (saved && final) {
+              node.position({
+                x: saved.x + (final.x - saved.x) * eased,
+                y: saved.y + (final.y - saved.y) * eased,
+              });
+            }
+          });
+        });
+
+        if (t < 1) {
+          requestAnimationFrame(tween);
+        } else {
+          if (shouldFit) {
+            cy.fit(cy.elements(), 60);
+          }
+          onComplete?.();
+        }
+      };
+
+      requestAnimationFrame(tween);
+    } else {
+      // 首次加载：无过渡动画
+      if (shouldFit) {
         cy.fit(cy.elements(), 60);
-      } else {
-        cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
       }
+      onComplete?.();
     }
-    onComplete?.();
   });
 
   try {
