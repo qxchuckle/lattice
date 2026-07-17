@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
+import fastifyWebsocket from '@fastify/websocket';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,9 @@ export async function createServer() {
 
   // CORS（开发时前端 :5173 与 API :14527 分端口）
   await app.register(fastifyCors, { origin: true });
+
+  // WebSocket（内置终端组件）
+  await app.register(fastifyWebsocket);
 
   // API 路由
   await registerRoutes(app);

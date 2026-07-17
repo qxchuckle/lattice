@@ -1039,7 +1039,7 @@ export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
           position: 'absolute',
           top: 12,
           left: 12,
-          bottom: 12,
+          bottom: 'calc(12px + var(--terminal-offset, 0px))',
           width: width,
           zIndex: 20,
           background: 'var(--bg-secondary)',
@@ -1051,7 +1051,7 @@ export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
           overflow: 'hidden',
           boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
         }}
-        className={`sidebar-transition${collapsed ? ' sidebar-transition--hidden' : ''}`}>
+        className={`tree-browser-sidebar sidebar-transition${collapsed ? ' sidebar-transition--hidden' : ''}`}>
         {/* 右侧 resize handle */}
         <div className='sidebar-resize-handle' onMouseDown={handleSidebarResizeStart} />
         <Button

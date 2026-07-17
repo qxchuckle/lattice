@@ -20,6 +20,7 @@ import {
   CheckCircleOutlined,
   WarningOutlined,
   CopyOutlined,
+  CodeOutlined,
   AimOutlined,
   MenuFoldOutlined,
   MenuOutlined,
@@ -38,7 +39,14 @@ import {
 } from 'react';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
-import { detailStore, closeDetail, getViewPath, locateNode, toggleDetailCollapse } from '../store';
+import {
+  detailStore,
+  closeDetail,
+  getViewPath,
+  locateNode,
+  toggleDetailCollapse,
+  openTerminal,
+} from '../store';
 import { useEntityDetail } from '../hooks';
 import { getAdapter } from '../adapters';
 import {
@@ -267,6 +275,14 @@ function FilePathBar({
         }}>
         <FolderOpenOutlined />
       </Dropdown.Button>
+      <Tooltip title='在内置终端打开'>
+        <Button
+          size='small'
+          type='text'
+          icon={<CodeOutlined />}
+          onClick={() => openTerminal(finalPath)}
+        />
+      </Tooltip>
     </div>
   );
 }
@@ -495,6 +511,14 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                       }}>
                       <FolderOpenOutlined />
                     </Dropdown.Button>
+                    <Tooltip title='在内置终端打开'>
+                      <Button
+                        size='small'
+                        type='text'
+                        icon={<CodeOutlined />}
+                        onClick={() => openTerminal(sp.path)}
+                      />
+                    </Tooltip>
                     {sp.projectId && (
                       <Tag
                         color={getEntityColor('project')}

@@ -17,6 +17,8 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:14527',
         changeOrigin: true,
+        // WebSocket 支持（内置终端组件）
+        ws: true,
         // SSE 支持：阻止后端返回压缩响应，避免流被压缩后无法分段推送
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {

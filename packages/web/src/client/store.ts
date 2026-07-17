@@ -363,3 +363,131 @@ export function getBreadcrumb(): string[] {
   }
   return crumbs;
 }
+
+// ── 终端面板状态 ──
+
+export interface TerminalSession {
+  /** 会话 ID（前端生成） */
+  id: string;
+  /** 初始工作目录 */
+  cwd: string;
+  /** shell 名称（用于显示，后端实际启动用 getDefaultShell） */
+  shell: string;
+  /** 显示标题 */
+  title: string;
+}
+
+export const terminalStore = proxy({
+  /** 面板是否打开 */
+  open: false,
+  /** 收起状态（不销毁会话） */
+  collapsed: false,
+  /** 全屏状态 */
+  fullscreen: false,
+  /** 面板高度（px，持久化到 localStorage） */
+  height: parseInt(localStorage.getItem('lattice-terminal-height') || '300', 10),
+  /** 所有终端会话 */
+  sessions: [] as TerminalSession[],
+  /** 当前活动会话 ID */
+  activeSessionId: null as string | null,
+  /** 后端 PTY 模式 */
+  ptyMode: 'unknown' as 'pty' | 'spawn' | 'unknown',
+  /** 拖拽中（禁用 transition 避免不跟手） */
+  dragging: false,
+});
+
+let sessionCounter = 0;
+
+/** 生成会话 ID */
+function generateSessionId(): string {
+  sessionCounter++;
+  return `term-${Date.now()}-${sessionCounter}`;
+}
+
+/** 新建终端会话并打开面板（cwd 来自详情面板路径） */
+export function openTerminal(cwd: string, shell = 'zsh', title?: string): string {
+  const id = generateSessionId();
+  terminalStore.sessions.push({
+    id,
+    cwd,
+    shell,
+    title: title || `${shell} #${sessionCounter}`,
+  });
+  terminalStore.activeSessionId = id;
+  terminalStore.open = true;
+  terminalStore.collapsed = false;
+  return id;
+}
+
+/** 新建会话（用于 + 按钮，cwd 默认取上一会话或 /） */
+export function addTerminalSession(cwd?: string): string {
+  const defaultCwd = cwd || terminalStore.sessions[terminalStore.sessions.length - 1]?.cwd || '';
+  return openTerminal(defaultCwd);
+}
+
+/** 关闭指定会话 */
+export function closeTerminalSession(id: string): void {
+  const idx = terminalStore.sessions.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  terminalStore.sessions.splice(idx, 1);
+  // 切换活动会话到相邻
+  if (terminalStore.activeSessionId === id) {
+    if (terminalStore.sessions.length > 0) {
+      const newIdx = Math.min(idx, terminalStore.sessions.length - 1);
+      terminalStore.activeSessionId = terminalStore.sessions[newIdx].id;
+    } else {
+      terminalStore.activeSessionId = null;
+    }
+  }
+  // 无会话时关闭面板
+  if (terminalStore.sessions.length === 0) {
+    terminalStore.open = false;
+  }
+}
+
+/** 切换活动会话 */
+export function setActiveTerminal(id: string): void {
+  terminalStore.activeSessionId = id;
+}
+
+/** 关闭终端面板 */
+export function closeTerminalPanel(): void {
+  terminalStore.open = false;
+}
+
+/** 从灵动岛唤出/收起终端面板（无会话时新建默认 ~ 终端） */
+export function toggleTerminalPanel(): void {
+  if (terminalStore.open && !terminalStore.collapsed) {
+    // 面板已展开 → 收起
+    terminalStore.collapsed = true;
+  } else if (terminalStore.sessions.length > 0) {
+    // 有会话 → 展开面板，恢复上次活动会话
+    terminalStore.open = true;
+    terminalStore.collapsed = false;
+  } else {
+    // 无会话 → 新建默认 ~ 终端（cwd 空，后端用 HOME）
+    openTerminal('', 'zsh', '~');
+  }
+}
+
+/** 收起/展开终端面板（不销毁会话） */
+export function toggleTerminalCollapse(): void {
+  terminalStore.collapsed = !terminalStore.collapsed;
+}
+
+/** 全屏切换 */
+export function toggleTerminalFullscreen(): void {
+  terminalStore.fullscreen = !terminalStore.fullscreen;
+}
+
+/** 设置终端面板高度（含 clamping + 持久化） */
+export function setTerminalHeight(height: number): void {
+  const clamped = Math.max(120, Math.min(800, Math.round(height)));
+  terminalStore.height = clamped;
+  localStorage.setItem('lattice-terminal-height', String(clamped));
+}
+
+/** 设置 PTY 模式 */
+export function setTerminalPtyMode(mode: 'pty' | 'spawn'): void {
+  terminalStore.ptyMode = mode;
+}

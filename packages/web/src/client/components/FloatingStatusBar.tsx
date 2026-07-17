@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Button, Segmented, Tooltip } from 'antd';
+import { Button, Badge, Segmented, Tooltip } from 'antd';
 import {
   ReloadOutlined,
   BulbOutlined,
@@ -11,6 +11,7 @@ import {
   SearchOutlined,
   FileSearchOutlined,
   SettingOutlined,
+  CodeOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
@@ -27,6 +28,8 @@ import {
   closeGlobalSearch,
   globalSearchStore,
   openAdmin,
+  toggleTerminalPanel,
+  terminalStore,
 } from '../store';
 import { fitToElements } from './graph/layout';
 import { useStats } from '../hooks';
@@ -42,6 +45,11 @@ const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] =
 export const FloatingStatusBar = memo(function FloatingStatusBar() {
   const { mode } = useSnapshot(themeStore);
   const { layoutMode, selectedNodeId, layoutRunning } = useSnapshot(canvasStore);
+  const {
+    open: terminalOpen,
+    collapsed: terminalCollapsed,
+    sessions: terminalSessions,
+  } = useSnapshot(terminalStore);
   const queryClient = useQueryClient();
   const isFetching = useIsFetching() > 0;
   const stats = useStats();
@@ -191,6 +199,20 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
           onClick={toggleTheme}
           style={{ borderRadius: '50%' }}
         />
+        <Tooltip title={terminalOpen && !terminalCollapsed ? '收起终端' : '打开终端'}>
+          <Badge count={terminalSessions.length} size='small' offset={[-2, 2]}>
+            <Button
+              size='small'
+              type='text'
+              icon={<CodeOutlined />}
+              onClick={toggleTerminalPanel}
+              style={{
+                borderRadius: '50%',
+                color: terminalOpen && !terminalCollapsed ? '#1677FF' : undefined,
+              }}
+            />
+          </Badge>
+        </Tooltip>
         <Tooltip title='管理'>
           <Button
             size='small'

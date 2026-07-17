@@ -1,0 +1,193 @@
+// ── 终端面板（VS Code 底栏风格）──
+
+.terminal-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e28;
+  border-top: 1px solid #3c3c48;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+
+  &--fullscreen {
+    top: 40px;
+    z-index: 200;
+  }
+}
+
+// 拖拽 resize handle
+.terminal-panel__resize-handle {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 1;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 2px;
+    background: #444;
+    border-radius: 1px;
+    transition:
+      background 0.2s,
+      height 0.2s,
+      width 0.2s;
+  }
+
+  &:hover::after {
+    background: #4096ff;
+    height: 3px;
+    width: 60px;
+  }
+}
+
+// 标题栏
+.terminal-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  background: #25252e;
+  border-bottom: 1px solid #3c3c48;
+  flex-shrink: 0;
+}
+
+.terminal-panel__header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-panel__icon {
+  font-size: 14px;
+  color: #4096ff;
+}
+
+.terminal-panel__title {
+  font-size: 12px;
+  color: #eaeaf0;
+  font-weight: 500;
+}
+
+.terminal-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  .ant-btn {
+    color: #999;
+
+    &:hover {
+      color: #4096ff;
+    }
+  }
+}
+
+// 降级模式提示条
+.terminal-panel__fallback-notice {
+  padding: 4px 12px;
+  background: rgba(250, 140, 22, 0.12);
+  color: #fa8c16;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(250, 140, 22, 0.2);
+}
+
+// 主体
+.terminal-panel__body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.terminal-panel__main {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  padding: 4px 8px;
+}
+
+.terminal-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #666;
+  font-size: 13px;
+}
+
+// 右侧会话列表
+.terminal-panel__sidebar {
+  width: 160px;
+  border-left: 1px solid #3c3c48;
+  background: #25252e;
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 4px 0;
+}
+
+.terminal-session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #2d2d38;
+  }
+
+  &--active {
+    background: #2a2a35;
+    border-left: 2px solid #4096ff;
+  }
+
+  &__name {
+    font-size: 12px;
+    color: #ccc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__close {
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    color: #666;
+
+    &:hover {
+      color: #ff5454;
+    }
+  }
+
+  &:hover &__close {
+    opacity: 1;
+  }
+}
+
+// 单个终端会话视图
+.terminal-session-view {
+  width: 100%;
+  height: 100%;
+
+  .xterm {
+    height: 100%;
+  }
+}

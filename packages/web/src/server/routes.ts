@@ -11,6 +11,7 @@ import { registerConfigRoutes } from './routes/config';
 import { registerScanRoutes, registerUserRoutes } from './routes/users-scan';
 import { registerGitRoutes } from './routes/git';
 import { registerContentRoutes, registerStatsRoutes } from './routes/content-stats';
+import { registerTerminalRoutes } from './routes/terminal';
 
 /** 注册所有 API 路由 */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -32,4 +33,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   registerUserRoutes(app);
   registerGitRoutes(app);
   registerContentRoutes(app);
+
+  // 内置终端（WebSocket）
+  registerTerminalRoutes(app);
 }

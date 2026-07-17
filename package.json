@@ -24,6 +24,7 @@
   ],
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@homebridge/node-pty-prebuilt-multiarch",
       "esbuild",
       "better-sqlite3",
       "onnxruntime-node",
@@ -32,6 +33,7 @@
     ]
   },
   "scripts": {
+    "postinstall": "node packages/web/ensure-node-pty.mjs",
     "build": "pnpm -r run build",
     "build:core": "pnpm --filter @qcqx/lattice-core run build",
     "build:cli": "pnpm --filter @qcqx/lattice-cli run build",

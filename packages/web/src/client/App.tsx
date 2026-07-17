@@ -16,6 +16,7 @@ import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
 import { FloatingStatusBar } from './components/FloatingStatusBar';
 import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import { AdminDrawer } from './components/admin/AdminDrawer';
+import { TerminalPanel } from './components/terminal/TerminalPanel';
 import './components/DetailPanel.less';
 
 // ── 路由同步 ──
@@ -139,6 +140,7 @@ export default function App() {
       <GlobalSearchPanel />
       <DetailPanelContainer />
       <AdminDrawer />
+      <TerminalPanel />
     </div>
   );
 }
