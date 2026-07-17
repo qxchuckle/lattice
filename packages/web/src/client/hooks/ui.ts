@@ -7,11 +7,14 @@ import {
   canvasStore,
   canvasSearchStore,
   sidebarStore,
+  globalSearchStore,
   toggleTheme,
   themeStore,
   closeDetail,
   openCanvasSearch,
   closeCanvasSearch,
+  openGlobalSearch,
+  closeGlobalSearch,
   type ViewMode,
 } from '../store';
 
@@ -46,6 +49,17 @@ export function useKeyboard() {
         return;
       }
 
+      // Cmd/Ctrl + P → 全局搜索面板
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        if (globalSearchStore.open) {
+          closeGlobalSearch();
+        } else {
+          openGlobalSearch();
+        }
+        return;
+      }
+
       // 输入框聚焦时不触发以下非修饰键快捷键
       if (isInputFocused) return;
 
@@ -57,9 +71,11 @@ export function useKeyboard() {
           canvasStore.viewMode = modes[idx];
         }
       }
-      // Esc → 关闭画布搜索或详情面板
+      // Esc → 关闭全局搜索/画布搜索或详情面板
       if (e.key === 'Escape') {
-        if (canvasSearchStore.open) {
+        if (globalSearchStore.open) {
+          closeGlobalSearch();
+        } else if (canvasSearchStore.open) {
           closeCanvasSearch();
         } else {
           closeDetail();
@@ -93,6 +109,19 @@ export function useSearch() {
         limit: hasStatusOrScopeFilter ? 50 : 20,
       }),
     enabled: debouncedKeyword.length > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function useGlobalSearch(query: string) {
+  const debouncedQuery = useDeferredValue(query);
+  const adapter = getAdapter();
+  const { searchType } = useSnapshot(globalSearchStore);
+  const searchTypeParam = searchType === 'all' ? undefined : searchType;
+  return useQuery({
+    queryKey: ['global-search', debouncedQuery, searchType],
+    queryFn: () => adapter.search(debouncedQuery, { type: searchTypeParam, limit: 30 }),
+    enabled: debouncedQuery.length > 0,
     staleTime: 30_000,
   });
 }

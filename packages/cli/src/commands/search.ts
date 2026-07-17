@@ -5,10 +5,7 @@ import {
   getUsername,
   initDb,
   closeDb,
-  hybridSearch,
-  searchProjects,
-  projectSearchResultsToSearchResults,
-  listAllUsernames,
+  unifiedSearch,
   isModelLoaded,
   isModelLoadNetworkError,
   formatModelNetworkHint,
@@ -127,7 +124,7 @@ export function registerSearchCommand(program: Command): void {
     .option('--project <id>', '限制在指定项目范围内')
     .option('--users <names>', '只搜索指定用户内容，逗号分隔')
     .option('--current-user', '只搜索当前用户内容')
-    .option('--limit <n>', '返回结果数量', '10')
+    .option('--limit <n>', '返回结果数量', '15')
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
@@ -158,32 +155,13 @@ export function registerSearchCommand(program: Command): void {
         );
         spinnerActive = true;
 
-        let results: SearchResult[];
-        if (opts.type === 'project') {
-          // --type=project 走 searchProjects 反查（项目元数据 + 任务文档 projectIds 反查）
-          // 多用户遍历/合并去重/包装逻辑已下沉 core（projectSearchResultsToSearchResults）
-          const targetUsers = opts.currentUser
-            ? [currentUser]
-            : specifiedUsers.length > 0
-              ? specifiedUsers
-              : await listAllUsernames();
-          const spResult = await searchProjects(targetUsers, query, {
-            keywordOnly: false,
-            limit: parseInt(opts.limit, 10),
-          });
-          results = projectSearchResultsToSearchResults(spResult).slice(
-            0,
-            parseInt(opts.limit, 10),
-          );
-        } else {
-          results = await hybridSearch(query, {
-            type: opts.type,
-            projectId: opts.project,
-            usernames,
-            limit: parseInt(opts.limit, 10),
-            useLightweightRerank: opts.rerank,
-          });
-        }
+        const results: SearchResult[] = await unifiedSearch(query, {
+          type: opts.type,
+          projectId: opts.project,
+          usernames,
+          limit: parseInt(opts.limit, 10),
+          useLightweightRerank: opts.rerank,
+        });
         const ragStatus = await getRAGStatus();
         const showDuplicates = Boolean(opts.showDuplicates);
 

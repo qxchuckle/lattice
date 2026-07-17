@@ -100,6 +100,26 @@ export function closeCanvasSearch(): void {
   canvasSearchStore.open = false;
 }
 
+// ── 全局搜索面板状态 ──
+
+export const globalSearchStore = proxy({
+  /** 面板是否打开 */
+  open: false,
+  /** 搜索类型筛选：all = 不限 */
+  searchType: 'all' as 'all' | 'task' | 'project' | 'spec',
+});
+
+/** 打开全局搜索面板 */
+export function openGlobalSearch(): void {
+  globalSearchStore.open = true;
+  globalSearchStore.searchType = 'all';
+}
+
+/** 关闭全局搜索面板 */
+export function closeGlobalSearch(): void {
+  globalSearchStore.open = false;
+}
+
 // ── 侧栏状态 ──
 
 export type FilterType = 'all' | 'task' | 'project' | 'spec';

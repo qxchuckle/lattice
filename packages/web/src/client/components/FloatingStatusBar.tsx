@@ -9,6 +9,7 @@ import {
   ExpandOutlined,
   LoadingOutlined,
   SearchOutlined,
+  FileSearchOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
@@ -22,6 +23,9 @@ import {
   openCanvasSearch,
   closeCanvasSearch,
   canvasSearchStore,
+  openGlobalSearch,
+  closeGlobalSearch,
+  globalSearchStore,
   openAdmin,
 } from '../store';
 import { fitToElements } from './graph/layout';
@@ -143,7 +147,22 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
             {stats.data.activeTaskCount} 进行中
           </span>
         )}
-        <Tooltip title='搜索 (⌘F)'>
+        <Tooltip title='全局搜索 (⌘P)'>
+          <Button
+            size='small'
+            type='text'
+            icon={<FileSearchOutlined />}
+            onClick={() => {
+              if (globalSearchStore.open) {
+                closeGlobalSearch();
+              } else {
+                openGlobalSearch();
+              }
+            }}
+            style={{ borderRadius: '50%' }}
+          />
+        </Tooltip>
+        <Tooltip title='画布搜索 (⌘F)'>
           <Button
             size='small'
             type='text'

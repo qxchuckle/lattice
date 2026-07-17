@@ -351,6 +351,7 @@ export {
   hybridSearch,
   searchProjects,
   projectSearchResultsToSearchResults,
+  unifiedSearch,
   type ContextOptions,
   type ProjectMatchProvenance,
   type ProjectSearchResult,

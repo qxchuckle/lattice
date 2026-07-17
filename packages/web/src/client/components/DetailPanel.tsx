@@ -1002,10 +1002,23 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
 
 // ── 详情面板头部 ──
 
-function DetailHeader({ entityId }: { entityId?: string | null }) {
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  task: '任务',
+  project: '项目',
+  spec: 'Spec',
+};
+
+function DetailHeader({
+  entityId,
+  entityType,
+}: {
+  entityId?: string | null;
+  entityType?: string | null;
+}) {
+  const typeLabel = entityType ? ENTITY_TYPE_LABELS[entityType] || entityType : '';
   return (
     <div className='detail-header'>
-      <span className='detail-header__title'>详情</span>
+      <span className='detail-header__title'>{typeLabel ? `详情-${typeLabel}` : '详情'}</span>
       <div className='detail-header__actions'>
         {entityId && (
           <Tooltip title='在图中定位'>
@@ -1046,7 +1059,7 @@ export const DetailPanel = memo(function DetailPanel() {
   if (entityType === 'spec' && entityData) {
     return (
       <div className='detail-panel-root'>
-        <DetailHeader entityId={entityId} />
+        <DetailHeader entityId={entityId} entityType={entityType} />
         <div className='detail-panel-content'>
           <SpecDetail data={entityData as Record<string, unknown>} />
         </div>
@@ -1085,7 +1098,7 @@ export const DetailPanel = memo(function DetailPanel() {
 
   return (
     <div className='detail-panel-root'>
-      <DetailHeader entityId={entityId} />
+      <DetailHeader entityId={entityId} entityType={entityType} />
 
       {/* 内容 */}
       <div className='detail-panel-content'>

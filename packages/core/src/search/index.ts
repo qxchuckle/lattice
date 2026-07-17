@@ -8,4 +8,5 @@ export {
 
 export { hybridSearch } from './search';
 export { searchProjects, projectSearchResultsToSearchResults } from './project-search';
+export { unifiedSearch } from './unified-search';
 export type { ProjectMatchProvenance, ProjectSearchResult } from './project-search';
