@@ -123,35 +123,31 @@ export function runLayout(
   // 首次加载跳过入场动画和 fit 动画，直接到位
   // preserveViewport=true 时保留用户当前 zoom/pan，不自动 fit（首次加载 skipAnimation 优先级更高，始终 fit）
   const shouldFit = !preserveViewport;
-  const fitDuration = skipAnimation ? 0 : 300;
+  const fitDuration = skipAnimation ? 0 : 200;
 
-  // 径向：preset 动画 → layoutstop → 同步防重叠 → fit（可选）
+  // 径向：手动 tweening → 同步防重叠 → fit
   if (layoutMode === 'radial') {
     runRadialLayout(cy, nodeCount, () => {
       resolveOverlaps(cy);
-      if (shouldFit) {
-        if (skipAnimation) {
-          cy.fit(cy.elements(), 60);
-        } else {
-          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
-        }
+      if (skipAnimation) {
+        cy.fit(cy.elements(), 60);
+      } else {
+        cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
       }
       onComplete?.();
     });
     return;
   }
 
-  // 顺序：preset 动画 → layoutstop → 同步防重叠 → fit（可选）
+  // 顺序：手动 tweening → 同步防重叠 → fit
   if (layoutMode === 'sequential') {
     try {
       runSequentialLayout(cy, nodeCount, () => {
         resolveOverlaps(cy);
-        if (shouldFit) {
-          if (skipAnimation) {
-            cy.fit(cy.elements(), 60);
-          } else {
-            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
-          }
+        if (skipAnimation) {
+          cy.fit(cy.elements(), 60);
+        } else {
+          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
         }
         onComplete?.();
       });
@@ -223,8 +219,10 @@ export function runLayout(
         if (t < 1) {
           requestAnimationFrame(tween);
         } else {
-          if (shouldFit) {
+          if (skipAnimation) {
             cy.fit(cy.elements(), 60);
+          } else {
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
           }
           onComplete?.();
         }

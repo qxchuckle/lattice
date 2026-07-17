@@ -160,19 +160,39 @@ export function runRadialLayout(
     currentRadius = lastR + maxHeight + INTER_TYPE_GAP;
   }
 
-  // 3. 应用到 Cytoscape（保留动画，onReady 在 layoutstop 后回调）
-  const layout = cy.layout({
-    name: 'preset',
-    animate: 'end',
-    animationDuration: 500,
-    fit: true,
-    padding: 60,
-    positions: (node: cytoscape.NodeSingular) => positions[node.id()] || { x: 0, y: 0 },
-  } as unknown as cytoscape.LayoutOptions);
+  // 3. 手动 tweening 动画过渡（避免 preset 布局每节点独立动画导致的抖动）
+  const savedPositions = new Map<string, { x: number; y: number }>();
+  cy.nodes().forEach((node) => {
+    savedPositions.set(node.id(), { x: node.position().x, y: node.position().y });
+  });
 
-  if (onReady) {
-    layout.one('layoutstop', onReady);
-  }
+  const animDuration = 500;
+  const animStart = performance.now();
 
-  layout.run();
+  const tween = () => {
+    const elapsed = performance.now() - animStart;
+    const t = Math.min(1, elapsed / animDuration);
+    const eased = 1 - Math.pow(1 - t, 3);
+
+    cy.batch(() => {
+      cy.nodes().forEach((node) => {
+        const saved = savedPositions.get(node.id());
+        const target = positions[node.id()];
+        if (saved && target) {
+          node.position({
+            x: saved.x + (target.x - saved.x) * eased,
+            y: saved.y + (target.y - saved.y) * eased,
+          });
+        }
+      });
+    });
+
+    if (t < 1) {
+      requestAnimationFrame(tween);
+    } else {
+      onReady?.();
+    }
+  };
+
+  requestAnimationFrame(tween);
 }
