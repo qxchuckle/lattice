@@ -458,7 +458,13 @@ export async function semanticSearch(
   for (const result of results) {
     const row = rowMap.get(result.id);
     if (!row) continue;
-    if (opts?.type && row.source_type !== opts.type) continue;
+    // 类型过滤（task 域包含 design：design.md 是任务设计文档）
+    if (
+      opts?.type &&
+      row.source_type !== opts.type &&
+      !(opts.type === 'task' && row.source_type === 'design')
+    )
+      continue;
     if (opts?.usernames?.length && row.username && !opts.usernames.includes(row.username)) continue;
     if (
       typeof opts?.distanceThreshold === 'number' &&

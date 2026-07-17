@@ -113,7 +113,7 @@
 
 - `--group <group>`：按分组过滤
 - `--tag <tag>`：按标签过滤
-- `--search <keyword>`：按关键词搜索（大小写不敏感，匹配名称/ID/路径/Git/包名/分组/标签），默认附带 RAG 语义搜索
+- `--search <keyword>`：按关键词搜索（大小写不敏感，匹配名称/ID/路径/Git/包名/分组/标签），默认附带 RAG 语义搜索（项目元数据 + 任务文档 PRD/checkpoint/design/spec 反查）
 - `--keyword-only`：仅使用关键词匹配，跳过语义搜索
 - `--has-git`：只显示含 git remote 的项目
 - `--orphaned`：只显示所有 localPaths 都已失效的项目
@@ -121,7 +121,7 @@
 - `--json`：以 JSON 输出
 - `--json-format`：JSON 输出时使用格式化（默认压缩）
 
-> **查找本地项目优先使用 `ltc project list --search <keyword>`**，支持按名称、ID、路径、Git remote、包名、分组、标签做大小写不敏感匹配。关键词未命中时自动回退到 RAG 语义搜索（跨语言、语义等价词）；加 `--keyword-only` 可跳过语义搜索。
+> **查找本地项目优先使用 `ltc project list --search <keyword>`**，支持按名称、ID、路径、Git remote、包名、分组、标签做大小写不敏感匹配。关键词未命中时自动回退到 RAG 语义搜索（项目元数据语义 + 任务文档 PRD/checkpoint/design/spec 通过 `projectIds` 反查关联项目，跨语言、语义等价词）；加 `--keyword-only` 可跳过语义搜索。
 
 ### `ltc project where <path>`
 

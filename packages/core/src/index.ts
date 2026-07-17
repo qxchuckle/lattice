@@ -299,6 +299,7 @@ export {
   deleteTask,
   purgeTask,
   getTaskPrd,
+  getTaskDesign,
   resolveTaskById,
   getTaskGraphViews,
   getTaskLineage,
@@ -349,7 +350,10 @@ export {
   resolveSpecScope,
   hybridSearch,
   searchProjects,
+  projectSearchResultsToSearchResults,
   type ContextOptions,
+  type ProjectMatchProvenance,
+  type ProjectSearchResult,
 } from './search';
 
 // RAG

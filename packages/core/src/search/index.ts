@@ -7,4 +7,5 @@ export {
 } from './context';
 
 export { hybridSearch } from './search';
-export { searchProjects } from './project-search';
+export { searchProjects, projectSearchResultsToSearchResults } from './project-search';
+export type { ProjectMatchProvenance, ProjectSearchResult } from './project-search';

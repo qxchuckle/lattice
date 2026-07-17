@@ -343,7 +343,7 @@ export interface SpecTemplate {
 }
 
 /** 搜索结果条目 */
-export type SearchDocumentType = 'spec' | 'task' | 'project' | 'checkpoint' | 'relation';
+export type SearchDocumentType = 'spec' | 'task' | 'project' | 'checkpoint' | 'relation' | 'design';
 
 export interface SearchResult {
   type: SearchDocumentType;

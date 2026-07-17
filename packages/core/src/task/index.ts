@@ -5,6 +5,7 @@ import {
   getTaskDir,
   getTaskMetaPath,
   getTaskPrdPath,
+  getTaskDesignPath,
   readJSON,
   readText,
   writeJSON,
@@ -362,6 +363,11 @@ export async function purgeTask(username: string, taskId: string): Promise<void>
 /** 读取任务的 PRD 内容 */
 export async function getTaskPrd(username: string, taskId: string): Promise<string | null> {
   return readText(getTaskPrdPath(username, taskId));
+}
+
+/** 读取任务的设计文档（design.md）内容 */
+export async function getTaskDesign(username: string, taskId: string): Promise<string | null> {
+  return readText(getTaskDesignPath(username, taskId));
 }
 
 /** 通过精确 ID 或前缀匹配解析任务 */

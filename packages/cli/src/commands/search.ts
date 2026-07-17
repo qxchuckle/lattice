@@ -6,6 +6,9 @@ import {
   initDb,
   closeDb,
   hybridSearch,
+  searchProjects,
+  projectSearchResultsToSearchResults,
+  listAllUsernames,
   isModelLoaded,
   isModelLoadNetworkError,
   formatModelNetworkHint,
@@ -26,6 +29,7 @@ const META_FIELDS_KEEP = new Set([
   'weakMatch',
   'duplicates',
   'taskId',
+  'matchedVia',
 ]);
 
 function cleanResultsForJson(results: SearchResult[]): unknown[] {
@@ -90,7 +94,7 @@ function inferScopeLabel(filePath: string, type: string): string {
     return 'global';
   }
   if (type === 'project') return 'project';
-  if (type === 'task') return 'task';
+  if (type === 'task' || type === 'design') return 'task';
   if (type === 'checkpoint') return 'task';
   if (type === 'relation') return 'relation';
   return type || '';
@@ -109,6 +113,7 @@ function formatScorePercent(score: number | undefined, normalized: number | unde
 const TYPE_ICON: Record<string, string> = {
   spec: '📄',
   task: '📋',
+  design: '📐',
   project: '📁',
   checkpoint: '🏷️ ',
   relation: '🔗',
@@ -153,13 +158,32 @@ export function registerSearchCommand(program: Command): void {
         );
         spinnerActive = true;
 
-        const results = await hybridSearch(query, {
-          type: opts.type,
-          projectId: opts.project,
-          usernames,
-          limit: parseInt(opts.limit, 10),
-          useLightweightRerank: opts.rerank,
-        });
+        let results: SearchResult[];
+        if (opts.type === 'project') {
+          // --type=project 走 searchProjects 反查（项目元数据 + 任务文档 projectIds 反查）
+          // 多用户遍历/合并去重/包装逻辑已下沉 core（projectSearchResultsToSearchResults）
+          const targetUsers = opts.currentUser
+            ? [currentUser]
+            : specifiedUsers.length > 0
+              ? specifiedUsers
+              : await listAllUsernames();
+          const spResult = await searchProjects(targetUsers, query, {
+            keywordOnly: false,
+            limit: parseInt(opts.limit, 10),
+          });
+          results = projectSearchResultsToSearchResults(spResult).slice(
+            0,
+            parseInt(opts.limit, 10),
+          );
+        } else {
+          results = await hybridSearch(query, {
+            type: opts.type,
+            projectId: opts.project,
+            usernames,
+            limit: parseInt(opts.limit, 10),
+            useLightweightRerank: opts.rerank,
+          });
+        }
         const ragStatus = await getRAGStatus();
         const showDuplicates = Boolean(opts.showDuplicates);
 

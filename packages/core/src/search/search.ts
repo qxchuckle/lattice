@@ -701,9 +701,11 @@ export async function hybridSearch(
     })
     .sort((a, b) => b.score - a.score);
 
-  // 类型过滤
+  // 类型过滤（task 域包含 design：design.md 是任务设计文档）
   if (opts?.type) {
-    sorted = sorted.filter((r) => r.type === opts.type);
+    sorted = sorted.filter(
+      (r) => r.type === opts.type || (opts.type === 'task' && r.type === 'design'),
+    );
   }
 
   if (opts?.projectId) {

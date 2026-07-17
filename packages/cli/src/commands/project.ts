@@ -29,7 +29,7 @@ import {
   mergeProjects,
   searchProjects,
 } from '@qcqx/lattice-core';
-import type { ProjectRow, RelationWithSource } from '@qcqx/lattice-core';
+import type { ProjectRow, RelationWithSource, ProjectMatchProvenance } from '@qcqx/lattice-core';
 import { logger, outputJson, shouldSkipConfirm } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -77,15 +77,17 @@ export function registerProjectCommand(program: Command): void {
 
         let projects: ProjectRow[];
         let semanticFallback = false;
+        let matchProvenance: Record<string, ProjectMatchProvenance> = {};
 
         if (opts.search) {
-          const searchResult = await searchProjects(username, opts.search, {
+          const searchResult = await searchProjects([username], opts.search, {
             group: opts.group,
             tag: opts.tag,
             keywordOnly: opts.keywordOnly,
           });
           projects = searchResult.projects;
           semanticFallback = searchResult.semanticFallback;
+          matchProvenance = searchResult.matchProvenance;
         } else {
           projects = listProjects(username, {
             group: opts.group,
@@ -140,6 +142,7 @@ export function registerProjectCommand(program: Command): void {
             gitRemotes: rowGitRemotes(p),
             packageNames: parseJsonArray(p.package_names),
             monorepoPackages: parseJsonArray(p.monorepo_packages),
+            matchedVia: matchProvenance[p.id] ?? null,
             ...(opts.withRelations ? { relations: relationsMap.get(p.id) ?? [] } : {}),
           }));
           outputJson(result, opts.jsonFormat);
@@ -155,7 +158,14 @@ export function registerProjectCommand(program: Command): void {
         }
 
         if (semanticFallback) {
-          logger.raw(chalk.yellow('关键词未匹配，以下为语义搜索结果：\n'));
+          const hasIndirect = projects.some((p) => matchProvenance[p.id]);
+          logger.raw(
+            chalk.yellow(
+              hasIndirect
+                ? '关键词未匹配，以下为语义搜索结果（含通过任务文档反查的项目）：\n'
+                : '关键词未匹配，以下为语义搜索结果：\n',
+            ),
+          );
         }
         logger.raw(chalk.blue(`共 ${projects.length} 个项目：\n`));
         for (const p of projects) {
@@ -164,6 +174,12 @@ export function registerProjectCommand(program: Command): void {
           const gitRemotes = rowGitRemotes(p);
           const pkgNames = parseJsonArray(p.package_names);
           logger.raw(`  ${chalk.bold(p.name)} ${chalk.dim(`(${p.id})`)}`);
+          const provenance = matchProvenance[p.id];
+          if (provenance) {
+            logger.raw(
+              `    ${chalk.cyan('匹配来源：')}${provenance.docType} - ${provenance.docTitle}`,
+            );
+          }
           if (localPaths.length === 0) {
             logger.raw(`    ${chalk.dim('(无路径记录)')}`);
           } else if (localPaths.length === 1) {
