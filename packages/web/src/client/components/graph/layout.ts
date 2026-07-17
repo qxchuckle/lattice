@@ -1,13 +1,8 @@
 import type cytoscape from 'cytoscape';
-import {
-  canvasStore,
-  type LayoutMode,
-  getVisibleCanvasCenter,
-  getVisibleCanvasBounds,
-} from '../../store';
+import { type LayoutMode, getVisibleCanvasCenter, getVisibleCanvasBounds } from '../../store';
 import { runRadialLayout } from './radial-layout';
 import { runSequentialLayout } from './sequential-layout';
-import { resolveOverlaps, resolveOverlapsContinuous } from './overlap-resolution';
+import { resolveOverlaps } from './overlap-resolution';
 
 // ── 确定性渲染：seeded LCG PRNG 临时替换 Math.random ──
 
@@ -130,47 +125,35 @@ export function runLayout(
   const shouldFit = !preserveViewport;
   const fitDuration = skipAnimation ? 0 : 300;
 
-  // 径向：preset 动画 → layoutstop → 持续防重叠 → fit（可选）
+  // 径向：preset 动画 → layoutstop → 同步防重叠 → fit（可选）
   if (layoutMode === 'radial') {
     runRadialLayout(cy, nodeCount, () => {
-      canvasStore.layoutRunning = true;
-      resolveOverlapsContinuous(cy, {
-        maxDuration: skipAnimation ? 0 : 3000,
-        onDone: () => {
-          canvasStore.layoutRunning = false;
-          if (shouldFit) {
-            if (skipAnimation) {
-              cy.fit(cy.elements(), 60);
-            } else {
-              cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
-            }
-          }
-          onComplete?.();
-        },
-      });
+      resolveOverlaps(cy);
+      if (shouldFit) {
+        if (skipAnimation) {
+          cy.fit(cy.elements(), 60);
+        } else {
+          cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+        }
+      }
+      onComplete?.();
     });
     return;
   }
 
-  // 顺序：preset 动画 → layoutstop → 持续防重叠 → fit（可选）
+  // 顺序：preset 动画 → layoutstop → 同步防重叠 → fit（可选）
   if (layoutMode === 'sequential') {
     try {
       runSequentialLayout(cy, nodeCount, () => {
-        canvasStore.layoutRunning = true;
-        resolveOverlapsContinuous(cy, {
-          maxDuration: skipAnimation ? 0 : 3000,
-          onDone: () => {
-            canvasStore.layoutRunning = false;
-            if (shouldFit) {
-              if (skipAnimation) {
-                cy.fit(cy.elements(), 60);
-              } else {
-                cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
-              }
-            }
-            onComplete?.();
-          },
-        });
+        resolveOverlaps(cy);
+        if (shouldFit) {
+          if (skipAnimation) {
+            cy.fit(cy.elements(), 60);
+          } else {
+            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+          }
+        }
+        onComplete?.();
       });
       return;
     } catch (e) {
@@ -178,7 +161,7 @@ export function runLayout(
     }
   }
 
-  // force 模式（或回退）：fCoSE → layoutstop → 持续防重叠 → fit（可选）
+  // force 模式（或回退）：fCoSE → layoutstop → 同步防重叠 → fit（可选）
   const restoreRandom = seedMathRandom(LAYOUT_SEED);
   const layout = cy.layout(
     buildLayoutConfig(nodeCount, 'force', skipAnimation, preserveViewport, incremental),
@@ -188,22 +171,14 @@ export function runLayout(
     restoreRandom();
     // 同步防重叠（fCoSE 不知实际节点尺寸，需后处理消除残余重叠）
     resolveOverlaps(cy);
-    // continuous 仅处理残余 AABB 重叠（1-2 帧收敛）
-    canvasStore.layoutRunning = true;
-    resolveOverlapsContinuous(cy, {
-      maxDuration: skipAnimation ? 0 : 3000,
-      onDone: () => {
-        canvasStore.layoutRunning = false;
-        if (shouldFit) {
-          if (skipAnimation) {
-            cy.fit(cy.elements(), 60);
-          } else {
-            cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
-          }
-        }
-        onComplete?.();
-      },
-    });
+    if (shouldFit) {
+      if (skipAnimation) {
+        cy.fit(cy.elements(), 60);
+      } else {
+        cy.animate({ fit: { eles: cy.elements(), padding: 60 }, duration: fitDuration });
+      }
+    }
+    onComplete?.();
   });
 
   try {
@@ -233,7 +208,10 @@ export function applyFocus(
 
   // 同一节点重复聚焦：完全跳过，避免重复动画导致闪动
   // force=true 时豁免（用于详情面板「在图中定位」主动触发场景）
-  if (!force && nodeId === lastFocusedNodeId && lastNeighborhood) {
+  // 额外检查 node.hasClass('focused')：图数据更新（筛选切换/数据刷新）会重建元素，
+  // 新元素丢失 focused/highlighted/dimmed class，但 lastFocusedNodeId 仍指向该节点。
+  // 此时点击同节点 applyFocus 被跳过 → 无视觉响应。检查 class 确保视觉状态与追踪状态一致。
+  if (!force && nodeId === lastFocusedNodeId && lastNeighborhood && node.hasClass('focused')) {
     return;
   }
 

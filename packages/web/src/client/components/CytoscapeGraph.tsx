@@ -58,11 +58,11 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   const userFilterRef = useRef(userFilter);
   userFilterRef.current = userFilter;
   const skipAnchorRef = useRef(false);
+  const skipSelectedRef = useRef(false); // 分离标志：skipAnchorRef 给 anchorId useEffect，skipSelectedRef 给 selectedNodeId useEffect
   const visibleTypesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hoveredElesRef = useRef<cytoscape.Collection | null>(null);
   const hoveredEdgesRef = useRef<cytoscape.EdgeCollection | null>(null);
-  const wasPanningRef = useRef(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 初始化（仅一次）
@@ -78,13 +78,19 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       minZoom: 0.08,
       maxZoom: 3,
       userZoomingEnabled: false, // 禁用默认 wheel 缩放，由自定义 wheel 监听器处理触摸板缩放/平移
+      // hideEdgesOnViewport: true, // pan/zoom 时不画边，减少 canvas 重绘成本
+      // hideLabelsOnViewport: true, // pan/zoom 时不画标签，减少文本测量开销
     });
 
+    // panAtVMouseDown 在 vmousedown 时快照画布位置，tap 时比较位移判断是否为 pan
+    let panAtVMouseDown = { x: 0, y: 0 };
+
     cy.on('tap', 'node', (evt) => {
-      if (wasPanningRef.current) {
-        wasPanningRef.current = false;
-        return;
-      }
+      // 直接比较画布位移：vmousedown 时 vs 当前
+      const panDist = Math.sqrt(
+        (cy.pan().x - panAtVMouseDown.x) ** 2 + (cy.pan().y - panAtVMouseDown.y) ** 2,
+      );
+      if (panDist > 10) return; // 画布移动了 → 是 pan 不是 click
       const node = evt.target;
       // 清理 hover 状态：移除旧 hovered 边的 class + 恢复旧 dimmed 元素
       if (hoveredEdgesRef.current) {
@@ -99,16 +105,17 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       const entityType = data.entityType as string;
       const nodeId = node.id();
       // 记录是否点击的是当前已选中节点：若已选中，selectNode 不改变 selectedNodeId、
-      // navigate 不改变 URL，skipAnchorRef 不会被任何 useEffect 消费，会导致残留 true
+      // navigate 不改变 URL，skip 标志不会被任何 useEffect 消费，会导致残留 true
       const wasAlreadySelected = canvasStore.selectedNodeId === nodeId;
       selectNode(nodeId, entityType as 'task' | 'project' | 'spec', data);
       applyFocus(cy, nodeId, canvasStore.focusDepth);
       if (entityType === 'task' || entityType === 'project' || entityType === 'spec') {
         const urlId = nodeId.startsWith('spec-') ? nodeId.slice(5) : nodeId;
-        // 仅在 URL 会变化（节点非已选中）时设置 skipAnchorRef，
-        // 否则 skipAnchorRef 残留为 true 会导致下一次 anchorId 变化被错误跳过
+        // 仅在 URL 会变化（节点非已选中）时设置 skip 标志，
+        // 否则 skip 标志残留为 true 会导致下一次 anchorId/selectedNodeId 变化被错误跳过
         if (!wasAlreadySelected) {
           skipAnchorRef.current = true;
+          skipSelectedRef.current = true;
         }
         navigate(getViewPath(entityType as ViewMode, urlId));
       }
@@ -157,10 +164,10 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     });
 
     cy.on('tap', 'edge', () => {
-      if (wasPanningRef.current) {
-        wasPanningRef.current = false;
-        return;
-      }
+      const panDist = Math.sqrt(
+        (cy.pan().x - panAtVMouseDown.x) ** 2 + (cy.pan().y - panAtVMouseDown.y) ** 2,
+      );
+      if (panDist > 10) return;
       clearFocus(cy);
       if (hoveredEdgesRef.current) {
         hoveredEdgesRef.current.removeClass('hovered');
@@ -274,11 +281,13 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
 
     cy.on('vmousedown', 'node', () => {
       panState = 'mightPan';
+      panAtVMouseDown = { x: cy.pan().x, y: cy.pan().y };
     });
 
     const handlePanMouseDown = (e: MouseEvent) => {
       panLastX = e.clientX;
       panLastY = e.clientY;
+      panAtVMouseDown = { x: cy.pan().x, y: cy.pan().y };
     };
 
     const handlePanMouseMove = (e: MouseEvent) => {
@@ -297,7 +306,6 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     };
 
     const handlePanMouseUp = () => {
-      if (panState === 'panning') wasPanningRef.current = true;
       panState = 'idle';
     };
 
@@ -403,9 +411,9 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
             const node = findNodeById(cy, anchorId);
             if (node.length > 0) {
               const data = node.data() as Record<string, unknown>;
-              // 仅在 selectedNodeId 会变化时设置 skipAnchorRef（HMR 后可能已选中同一节点）
+              // 仅在 selectedNodeId 会变化时设置 skipSelectedRef（HMR 后可能已选中同一节点）
               if (canvasStore.selectedNodeId !== anchorId) {
-                skipAnchorRef.current = true;
+                skipSelectedRef.current = true;
               }
               selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
               applyFocus(cy, node.id(), canvasStore.focusDepth, true);
@@ -483,12 +491,12 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       skipAnchorRef.current = false;
       return;
     }
-    // 仅在 selectNode 会改变 selectedNodeId 时设置 skipAnchorRef，
-    // 否则 selectedNodeId useEffect 不触发，skipAnchorRef 残留为 true
+    // 仅在 selectNode 会改变 selectedNodeId 时设置 skipSelectedRef，
+    // 否则 selectedNodeId useEffect 不触发，skipSelectedRef 残留为 true
     const node = findNodeById(cy, anchorId);
     const targetNodeId = node.length > 0 ? node.id() : anchorId;
     if (canvasStore.selectedNodeId !== targetNodeId) {
-      skipAnchorRef.current = true;
+      skipSelectedRef.current = true;
     }
     if (node.length > 0) {
       const data = node.data() as Record<string, unknown>;
@@ -651,7 +659,9 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     applyFocus(cy, selectedNodeId, focusDepth, false, true);
   }, [focusDepth]);
 
-  // selectedNodeId 变化时 applyFocus（检查 skipAnchorRef 跳过重复调用）
+  // selectedNodeId 变化时 applyFocus（检查 skipSelectedRef 跳过重复调用）
+  // skipSelectedRef 与 skipAnchorRef 分离：避免 anchorId useEffect 先消费 skipAnchorRef
+  // 导致 selectedNodeId useEffect 看到 false 不跳过，产生双重 applyFocus
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
@@ -660,8 +670,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       clearFocus(cy);
       return;
     }
-    if (skipAnchorRef.current) {
-      skipAnchorRef.current = false;
+    if (skipSelectedRef.current) {
+      skipSelectedRef.current = false;
       return;
     }
     applyFocus(cy, selectedNodeId, focusDepth);

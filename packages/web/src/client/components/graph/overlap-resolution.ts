@@ -184,6 +184,20 @@ export function resolveOverlapsContinuous(
     });
   }
 
+  // 缓存节点尺寸和 id（overlap resolution 期间尺寸不变，只有位置变）
+  // node.width()/node.height() 触发 Cytoscape 标签文本测量，代价高，每帧重复调用是主要瓶颈
+  const cachedInfo: Array<{ id: string; hw: number; hh: number }> = [];
+  cyNodes.forEach((node) => {
+    cachedInfo.push({
+      id: node.id(),
+      hw: (node.width() || FALLBACK_WIDTH) / 2,
+      hh: (node.height() || FALLBACK_HEIGHT) / 2,
+    });
+  });
+
+  // 每帧在内存中做多轮迭代，最后只应用 1 次位置 → 减少 canvas 重绘次数
+  const ITERATIONS_PER_FRAME = 3;
+
   function step() {
     const elapsed = Date.now() - startTime;
     if (elapsed > maxDuration) {
@@ -191,68 +205,86 @@ export function resolveOverlapsContinuous(
       return;
     }
 
-    // 读取节点当前位置和实际尺寸
+    // 仅读取当前位置（尺寸用缓存）
+    const origPos: Array<{ x: number; y: number }> = [];
     const data: NodeData[] = [];
-    cyNodes.forEach((node) => {
-      data.push({
-        id: node.id(),
-        x: node.position().x,
-        y: node.position().y,
-        hw: (node.width() || FALLBACK_WIDTH) / 2,
-        hh: (node.height() || FALLBACK_HEIGHT) / 2,
-      });
-    });
-
-    let hasWork = false;
-    const displacements: Array<{ dx: number; dy: number }> = data.map(() => ({ dx: 0, dy: 0 }));
-
     for (let i = 0; i < n; i++) {
-      const a = data[i];
-      for (let j = i + 1; j < n; j++) {
-        const b = data[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const minDistX = a.hw + b.hw + padding;
-        const minDistY = a.hh + b.hh + padding;
-        const overlapX = minDistX - Math.abs(dx);
-        const overlapY = minDistY - Math.abs(dy);
+      const pos = cyNodes.eq(i).position();
+      origPos.push({ x: pos.x, y: pos.y });
+      data.push({
+        id: cachedInfo[i].id,
+        x: pos.x,
+        y: pos.y,
+        hw: cachedInfo[i].hw,
+        hh: cachedInfo[i].hh,
+      });
+    }
 
-        if (overlapX > 0 && overlapY > 0) {
-          // AABB 重叠——沿最小重叠轴推开
-          hasWork = true;
-          if (overlapX < overlapY) {
-            const push = overlapX / 2;
-            const sign = dx >= 0 ? 1 : -1;
-            displacements[i].dx -= sign * push;
-            displacements[j].dx += sign * push;
-          } else {
-            const push = overlapY / 2;
-            const sign = dy >= 0 ? 1 : -1;
-            displacements[i].dy -= sign * push;
-            displacements[j].dy += sign * push;
-          }
-        } else if (minSpacing > 0 && !(connectedPairs && connectedPairs.has(`${a.id}\0${b.id}`))) {
-          // 无 AABB 重叠但距离太近——密度扩展推开（仅非连接对）
-          // 各轴独立检测：水平近推水平，垂直近推垂直
-          const gapX = Math.abs(dx) - (a.hw + b.hw);
-          const gapY = Math.abs(dy) - (a.hh + b.hh);
-          if (gapX < minSpacing) {
+    // 内存中做多轮迭代，不触碰 Cytoscape
+    let hasWork = false;
+    for (let iter = 0; iter < ITERATIONS_PER_FRAME; iter++) {
+      hasWork = false;
+      const displacements: Array<{ dx: number; dy: number }> = data.map(() => ({ dx: 0, dy: 0 }));
+
+      for (let i = 0; i < n; i++) {
+        const a = data[i];
+        for (let j = i + 1; j < n; j++) {
+          const b = data[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const minDistX = a.hw + b.hw + padding;
+          const minDistY = a.hh + b.hh + padding;
+          const overlapX = minDistX - Math.abs(dx);
+          const overlapY = minDistY - Math.abs(dy);
+
+          if (overlapX > 0 && overlapY > 0) {
+            // AABB 重叠——沿最小重叠轴推开
             hasWork = true;
-            const deficit = minSpacing - gapX;
-            const push = deficit * 0.2;
-            const sign = dx >= 0 ? 1 : -1;
-            displacements[i].dx -= sign * push;
-            displacements[j].dx += sign * push;
-          }
-          if (gapY < minSpacing) {
-            hasWork = true;
-            const deficit = minSpacing - gapY;
-            const push = deficit * 0.2;
-            const sign = dy >= 0 ? 1 : -1;
-            displacements[i].dy -= sign * push;
-            displacements[j].dy += sign * push;
+            if (overlapX < overlapY) {
+              const push = overlapX / 2;
+              const sign = dx >= 0 ? 1 : -1;
+              displacements[i].dx -= sign * push;
+              displacements[j].dx += sign * push;
+            } else {
+              const push = overlapY / 2;
+              const sign = dy >= 0 ? 1 : -1;
+              displacements[i].dy -= sign * push;
+              displacements[j].dy += sign * push;
+            }
+          } else if (
+            minSpacing > 0 &&
+            !(connectedPairs && connectedPairs.has(`${a.id}\0${b.id}`))
+          ) {
+            // 无 AABB 重叠但距离太近——密度扩展推开（仅非连接对）
+            // 各轴独立检测：水平近推水平，垂直近推垂直
+            const gapX = Math.abs(dx) - (a.hw + b.hw);
+            const gapY = Math.abs(dy) - (a.hh + b.hh);
+            if (gapX < minSpacing) {
+              hasWork = true;
+              const deficit = minSpacing - gapX;
+              const push = deficit * 0.2;
+              const sign = dx >= 0 ? 1 : -1;
+              displacements[i].dx -= sign * push;
+              displacements[j].dx += sign * push;
+            }
+            if (gapY < minSpacing) {
+              hasWork = true;
+              const deficit = minSpacing - gapY;
+              const push = deficit * 0.2;
+              const sign = dy >= 0 ? 1 : -1;
+              displacements[i].dy -= sign * push;
+              displacements[j].dy += sign * push;
+            }
           }
         }
+      }
+
+      if (!hasWork) break;
+
+      // 应用位移到内存数据（不触碰 Cytoscape）
+      for (let i = 0; i < n; i++) {
+        data[i].x += displacements[i].dx;
+        data[i].y += displacements[i].dy;
       }
     }
 
@@ -261,14 +293,11 @@ export function resolveOverlapsContinuous(
       return;
     }
 
-    // 批量应用位移（Cytoscape 会自动渲染过渡）
+    // 只应用最终位置一次（单次 canvas 重绘替代 K 次重绘）
     cy.batch(() => {
       for (let i = 0; i < n; i++) {
-        if (displacements[i].dx !== 0 || displacements[i].dy !== 0) {
-          cyNodes.eq(i).position({
-            x: data[i].x + displacements[i].dx,
-            y: data[i].y + displacements[i].dy,
-          });
+        if (data[i].x !== origPos[i].x || data[i].y !== origPos[i].y) {
+          cyNodes.eq(i).position({ x: data[i].x, y: data[i].y });
         }
       }
     });
