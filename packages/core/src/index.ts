@@ -16,6 +16,7 @@ export type {
   GlobalConfig,
   LocalConfig,
   ResolvedConfig,
+  WebAuthConfig,
   DoctorReport,
   DoctorEntry,
   DoctorOptions,
@@ -97,6 +98,13 @@ export {
   readResolvedConfig,
   getUsername,
   isInitialized,
+  hashPassword,
+  verifyPassword,
+  generateJwtSecret,
+  readWebAuth,
+  writeWebAuth,
+  clearWebAuth,
+  isAuthEnabled,
 } from './config';
 
 export {

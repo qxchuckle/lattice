@@ -21,11 +21,21 @@ import type {
   GitStatus,
 } from '@qcqx/lattice-core';
 import type { DoctorReport, RAGStatus } from '@qcqx/lattice-core';
+import { authStore, clearToken } from '../store';
 
 const API_BASE = '/api';
 
+/** 获取鉴权请求头（从 authStore 读 token） */
+function getAuthHeaders(): Record<string, string> {
+  return authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (res.status === 401) {
+    clearToken();
+    throw new Error('unauthorized');
+  }
   if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
   return res.json() as Promise<T>;
 }
@@ -37,9 +47,13 @@ async function postJson(
 ): Promise<{ success?: boolean; [key: string]: unknown }> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: body ? { 'Content-Type': 'application/json', ...getAuthHeaders() } : getAuthHeaders(),
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) {
+    clearToken();
+    throw new Error('unauthorized');
+  }
   if (!res.ok) {
     const errBody = await res.json().catch(() => null);
     throw new Error(errBody?.message ?? `HTTP ${res.status}`);
@@ -242,11 +256,32 @@ export class HttpAdapter implements LatticeDataAdapter {
   async saveContent(type: string, entityId: string, content: string): Promise<boolean> {
     const json = await postJson(`${API_BASE}/content/save`, { type, entityId, content });
     return json.success === true;
-}
+  }
 
   // 打开已知安全路径（后端校验 isPathSafe）
   async openPathByPath(path: string, app: string): Promise<boolean> {
     const json = await postJson(`${API_BASE}/open-path`, { path, app });
+    return json.success === true;
+  }
+
+  // ── 鉴权 ──
+
+  async getAuthStatus(): Promise<{ enabled: boolean }> {
+    return fetchJson<{ enabled: boolean }>(`${API_BASE}/auth/status`);
+  }
+
+  async login(password: string, remember: boolean): Promise<{ token: string; expiresIn: number }> {
+    const json = await postJson(`${API_BASE}/auth/login`, { password, remember });
+    return json as unknown as { token: string; expiresIn: number };
+  }
+
+  async changePassword(oldPassword: string | null, newPassword: string | null): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/auth/password`, { oldPassword, newPassword });
+    return json.success === true;
+  }
+
+  async logout(): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/auth/logout`);
     return json.success === true;
   }
 }

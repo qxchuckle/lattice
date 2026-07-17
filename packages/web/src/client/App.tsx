@@ -2,14 +2,17 @@ import { useEffect, useCallback, memo } from 'react';
 import { Button } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
-import { useLocation, Routes, Route } from 'react-router';
+import { useLocation, useNavigate, Routes, Route } from 'react-router';
 import {
   canvasStore,
   detailStore,
   closeDetail,
   toggleDetailCollapse,
   setDetailWidth,
+  authStore,
+  loadStoredToken,
 } from './store';
+import { getAdapter } from './adapters';
 import { CytoscapeGraph } from './components/CytoscapeGraph';
 import { DetailPanel } from './components/DetailPanel';
 import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
@@ -17,6 +20,8 @@ import { FloatingStatusBar } from './components/FloatingStatusBar';
 import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import { AdminDrawer } from './components/admin/AdminDrawer';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
+import { LoginPage } from './components/LoginPage';
+import { SecurityNoticeBar } from './components/SecurityNoticeBar';
 import './components/DetailPanel.less';
 
 // ── 路由同步 ──
@@ -122,8 +127,39 @@ const DetailPanelContainer = memo(function DetailPanelContainer() {
 
 // ── 主布局 ──
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { token, authEnabled, initialized } = useSnapshot(authStore);
+
+  // 启动时加载 token + 查询鉴权状态
+  useEffect(() => {
+    loadStoredToken();
+    getAdapter()
+      .getAuthStatus()
+      .then((status) => {
+        authStore.authEnabled = status.enabled;
+        authStore.initialized = true;
+      })
+      .catch(() => {
+        authStore.initialized = true;
+      });
+  }, []);
+
+  // 鉴权拦截：启用鉴权且无 token 且非 /login → 跳登录
+  useEffect(() => {
+    if (initialized && authEnabled && !token && location.pathname !== '/login') {
+      navigate('/login', { replace: true });
+    }
+  }, [initialized, authEnabled, token, location.pathname, navigate]);
+
+  // 登录页单独渲染（不套主布局）
+  if (location.pathname === '/login') {
+    return <LoginPage />;
+  }
+
   return (
     <div className='app-root'>
+      <SecurityNoticeBar />
       <Routes>
         <Route path='/' element={<MainContent />} />
         <Route path='/task' element={<MainContent />} />

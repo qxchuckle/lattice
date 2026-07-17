@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
+import { WebPasswordSection } from './WebPasswordSection';
 
 type ConfigScope = 'global' | 'local';
 
@@ -392,7 +393,10 @@ export const ConfigModal = memo(function ConfigModal({
           }))}
         />
       ) : (
-        <div>{LOCAL_FIELDS.map(renderField)}</div>
+        <div>
+          {LOCAL_FIELDS.map(renderField)}
+          <WebPasswordSection />
+        </div>
       )}
     </Modal>
   );

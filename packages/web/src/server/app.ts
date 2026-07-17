@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { registerRoutes } from './routes';
+import { authGuard } from './auth';
 import { initDb } from '@qcqx/lattice-core';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -25,6 +26,9 @@ export async function createServer() {
 
   // WebSocket（内置终端组件）
   await app.register(fastifyWebsocket);
+
+  // 鉴权守卫（onRequest hook，必须在路由注册前添加，全局生效）
+  app.addHook('onRequest', authGuard);
 
   // API 路由
   await registerRoutes(app);

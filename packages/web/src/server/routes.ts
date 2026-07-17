@@ -12,9 +12,13 @@ import { registerScanRoutes, registerUserRoutes } from './routes/users-scan';
 import { registerGitRoutes } from './routes/git';
 import { registerContentRoutes, registerStatsRoutes } from './routes/content-stats';
 import { registerTerminalRoutes } from './routes/terminal';
+import { registerAuthRoutes } from './routes/auth';
 
 /** 注册所有 API 路由 */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  // 鉴权相关（login/status 在守卫白名单中免鉴权）
+  registerAuthRoutes(app);
+
   // 只读查询
   registerProjectRoutes(app);
   registerTaskRoutes(app);

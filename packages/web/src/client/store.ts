@@ -199,6 +199,51 @@ export function closeAdmin(): void {
   adminStore.open = false;
 }
 
+// ── 鉴权状态 ──
+
+const AUTH_TOKEN_KEY = 'lattice-web-auth-token';
+
+export const authStore = proxy({
+  /** 当前 token（null = 未登录） */
+  token: null as string | null,
+  /** 鉴权是否启用（配置了密码） */
+  authEnabled: false,
+  /** 是否已初始化（已查询过 /api/auth/status） */
+  initialized: false,
+});
+
+/** 从存储加载 token（remember→localStorage，否则 sessionStorage） */
+export function loadStoredToken(): void {
+  const local = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (local) {
+    authStore.token = local;
+    return;
+  }
+  const session = sessionStorage.getItem(AUTH_TOKEN_KEY);
+  if (session) {
+    authStore.token = session;
+  }
+}
+
+/** 保存 token（remember=true 存 localStorage，false 存 sessionStorage） */
+export function saveToken(token: string, remember: boolean): void {
+  authStore.token = token;
+  if (remember) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  } else {
+    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
+/** 清除 token（登出 / 401） */
+export function clearToken(): void {
+  authStore.token = null;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
 // ── 显示模式 ──
 
 export type DisplayMode = 'canvas' | 'table';

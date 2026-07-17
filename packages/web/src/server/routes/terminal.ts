@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { getUsername } from '@qcqx/lattice-core';
+import { getUsername, isAuthEnabled, readWebAuth } from '@qcqx/lattice-core';
+import { extractToken, verifyJwt } from '../auth';
 import { isPathSafe } from './shared';
 
 // ── 终端进程抽象（PTY / spawn 降级统一接口）──
@@ -163,7 +164,17 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
     '/api/terminal/ws',
     { websocket: true },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async (socket: any, _req: any) => {
+    async (socket: any, req: any) => {
+      // 鉴权校验（authGuard 已在握手阶段拦截，此处双保险防止绕过）
+      if (await isAuthEnabled()) {
+        const webAuth = await readWebAuth();
+        const token = extractToken(req);
+        if (!token || !webAuth || !verifyJwt(token, webAuth.jwtSecret)) {
+          socket.close(4001, 'unauthorized');
+          return;
+        }
+      }
+
       let proc: ITerminalProcess | null = null;
       let initialized = false;
 

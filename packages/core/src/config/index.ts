@@ -1,5 +1,12 @@
 import { join } from 'node:path';
-import type { GlobalConfig, LocalConfig, RAGEmbeddingConfig, ResolvedConfig } from '../types';
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import type {
+  GlobalConfig,
+  LocalConfig,
+  RAGEmbeddingConfig,
+  ResolvedConfig,
+  WebAuthConfig,
+} from '../types';
 import {
   getGlobalConfigPath,
   getLocalConfigPath,
@@ -181,4 +188,63 @@ export async function isInitialized(): Promise<boolean> {
   if (!rootExists) return false;
   const config = await readLocalConfig();
   return !!config?.username;
+}
+
+// ─── Web 面板鉴权 ───
+
+/** scrypt 输出长度 */
+const SCRYPT_KEYLEN = 64;
+/** scrypt 随机 salt 长度 */
+const SCRYPT_SALT_LEN = 16;
+
+/** 用 scrypt 哈希密码，返回 { passwordHash, salt }（base64），与 WebAuthConfig 字段对齐 */
+export function hashPassword(password: string): { passwordHash: string; salt: string } {
+  const salt = randomBytes(SCRYPT_SALT_LEN);
+  const hash = scryptSync(password, salt, SCRYPT_KEYLEN);
+  return { passwordHash: hash.toString('base64'), salt: salt.toString('base64') };
+}
+
+/** 校验密码（常量时间比较防时序攻击） */
+export function verifyPassword(
+  password: string,
+  stored: { passwordHash: string; salt: string },
+): boolean {
+  const salt = Buffer.from(stored.salt, 'base64');
+  const expectedHash = Buffer.from(stored.passwordHash, 'base64');
+  const actualHash = scryptSync(password, salt, SCRYPT_KEYLEN);
+  if (actualHash.length !== expectedHash.length) return false;
+  return timingSafeEqual(actualHash, expectedHash);
+}
+
+/** 生成随机 JWT HS256 签名密钥（base64） */
+export function generateJwtSecret(): string {
+  return randomBytes(32).toString('base64');
+}
+
+/** 读取 web 鉴权配置，未配置返回 null */
+export async function readWebAuth(): Promise<WebAuthConfig | null> {
+  const config = await readLocalConfig();
+  return config?.webAuth ?? null;
+}
+
+/** 写入 web 鉴权配置（合并到 config-local.json） */
+export async function writeWebAuth(webAuth: WebAuthConfig): Promise<void> {
+  const config = (await readLocalConfig()) ?? { username: '' };
+  config.webAuth = webAuth;
+  await writeLocalConfig(config);
+}
+
+/** 清除 web 鉴权配置（恢复无鉴权） */
+export async function clearWebAuth(): Promise<void> {
+  const config = await readLocalConfig();
+  if (config) {
+    delete config.webAuth;
+    await writeLocalConfig(config);
+  }
+}
+
+/** 是否启用了 web 鉴权（配置了密码） */
+export async function isAuthEnabled(): Promise<boolean> {
+  const webAuth = await readWebAuth();
+  return !!webAuth?.passwordHash;
 }

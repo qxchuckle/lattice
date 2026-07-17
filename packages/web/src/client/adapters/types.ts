@@ -84,6 +84,12 @@ export interface LatticeDataAdapter {
 
   // 文档保存
   saveContent(type: string, entityId: string, content: string): Promise<boolean>;
+
+  // 鉴权
+  getAuthStatus(): Promise<{ enabled: boolean }>;
+  login(password: string, remember: boolean): Promise<{ token: string; expiresIn: number }>;
+  changePassword(oldPassword: string | null, newPassword: string | null): Promise<boolean>;
+  logout(): Promise<boolean>;
 }
 
 export interface TaskQueryOpts {

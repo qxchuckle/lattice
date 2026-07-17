@@ -200,6 +200,18 @@ export interface GlobalConfig {
   [key: string]: unknown;
 }
 
+/** web 面板密码鉴权配置（存 config-local.json 的 webAuth 字段） */
+export interface WebAuthConfig {
+  /** scrypt 哈希（base64） */
+  passwordHash: string;
+  /** 随机 salt（base64） */
+  salt: string;
+  /** JWT HS256 签名密钥（base64） */
+  jwtSecret: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 本机配置 config-local.json（gitignored） */
 export interface LocalConfig {
   username: string;
@@ -207,6 +219,8 @@ export interface LocalConfig {
   gitEnabled?: boolean;
   gitRemote?: string;
   registryTemplates?: string[];
+  /** web 面板密码鉴权配置，未设置则无鉴权 */
+  webAuth?: WebAuthConfig;
   [key: string]: unknown;
 }
 

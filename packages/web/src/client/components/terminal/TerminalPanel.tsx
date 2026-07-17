@@ -27,6 +27,7 @@ import {
   toggleTerminalFullscreen,
   setTerminalHeight,
   setTerminalPtyMode,
+  authStore,
 } from '../../store';
 import './TerminalPanel.less';
 
@@ -55,10 +56,12 @@ const terminalTheme: ITheme = {
   brightWhite: '#ffffff',
 };
 
-/** 构建 WebSocket URL（开发走 Vite proxy，生产直连） */
+/** 构建 WebSocket URL（鉴权启用时带 token query，握手无法设置 Header） */
 function getWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/api/terminal/ws`;
+  const base = `${protocol}//${window.location.host}/api/terminal/ws`;
+  // 直接读 valtio proxy 属性（模块级非 React 上下文安全）
+  return authStore.token ? `${base}?token=${encodeURIComponent(authStore.token)}` : base;
 }
 
 // ── 单个终端会话视图（xterm + WebSocket）──
@@ -223,7 +226,9 @@ export const TerminalPanel = memo(function TerminalPanel() {
   // 查询 PTY 模式
   useEffect(() => {
     if (!open) return;
-    fetch('/api/terminal/mode')
+    fetch('/api/terminal/mode', {
+      headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data.mode) setTerminalPtyMode(data.mode as 'pty' | 'spawn');
