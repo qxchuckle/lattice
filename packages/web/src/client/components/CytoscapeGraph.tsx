@@ -799,8 +799,11 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     canvasStore.locateNodeId = null;
   }, [locateNodeId]);
 
+  // isolation: isolate 创建 stacking context，约束 Cytoscape canvas 合成层。
+  // 不用 transform: translateZ(0)——会让画布容器本身成为合成层，层级可能高于面板。
+  // 面板侧用 will-change: transform 保持合成层，确保面板层级高于画布。
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', isolation: 'isolate' }}>
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%', background: isDark ? '#1D1D26' : '#F5F5F5' }}

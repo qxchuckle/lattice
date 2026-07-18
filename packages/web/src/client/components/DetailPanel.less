@@ -19,7 +19,8 @@
   height: calc(100vh - var(--panel-inset) * 2 - var(--terminal-offset, 0px));
   z-index: 20;
   background: var(--bg-secondary);
-  backdrop-filter: blur(12px);
+  // backdrop-filter: blur(12px); — 临时移除测试：backdrop-filter 是 GPU 密集型操作，
+  // 浏览器在 GPU 内存压力时偶发失效/恢复，导致面板背景透明/不透明快速切换 = 闪烁
   border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -85,7 +86,6 @@
   width: 32px;
   height: 48px;
   background: var(--bg-secondary);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 8px;
   display: flex;
@@ -355,9 +355,7 @@
     position: absolute;
     bottom: calc(100% + 6px);
     left: 0;
-    background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
