@@ -15,7 +15,6 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
   const { authEnabled } = useSnapshot(authStore);
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
-  const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +26,6 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
   };
 
   const resetInputs = () => {
-    setOldPwd('');
     setNewPwd('');
     setConfirmPwd('');
   };
@@ -46,13 +44,10 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
       message.warning('两次密码不一致');
       return;
     }
-    if (authEnabled && !oldPwd) {
-      message.warning('请输入当前密码');
-      return;
-    }
     setLoading(true);
     try {
-      await getAdapter().changePassword(authEnabled ? oldPwd : null, newPwd);
+      // 已登录用户（守卫已验证 token），无需旧密码
+      await getAdapter().changePassword(newPwd);
       message.success(authEnabled ? '密码已修改' : '密码已设置');
       await refreshAuthStatus();
       queryClient.invalidateQueries({ queryKey: ['config'] });
@@ -66,10 +61,6 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
 
   // 清除密码
   const handleClear = () => {
-    if (!oldPwd) {
-      message.warning('清除密码需输入当前密码');
-      return;
-    }
     modal.confirm({
       title: '确认清除密码',
       content: '清除后 web 面板将无鉴权，frp 暴露场景下任何人可访问全部接口。',
@@ -79,7 +70,7 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
       onOk: async () => {
         setLoading(true);
         try {
-          await getAdapter().changePassword(oldPwd, null);
+          await getAdapter().changePassword(null);
           message.success('密码已清除');
           await refreshAuthStatus();
           queryClient.invalidateQueries({ queryKey: ['config'] });
@@ -101,16 +92,6 @@ export const WebPasswordSection = memo(function WebPasswordSection() {
           {authEnabled ? '● 已启用密码鉴权' : '○ 未设置密码（无鉴权）'}
         </Text>
       </div>
-      {authEnabled && (
-        <div style={{ marginBottom: 8 }}>
-          <Input.Password
-            placeholder='当前密码'
-            value={oldPwd}
-            onChange={(e) => setOldPwd(e.target.value)}
-            size='small'
-          />
-        </div>
-      )}
       <div style={{ marginBottom: 8 }}>
         <Input.Password
           placeholder={authEnabled ? '新密码（至少 4 位）' : '设置密码（至少 4 位）'}

@@ -6,7 +6,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
-import { useTheme } from '../../hooks';
+import { useTheme, useIsMobile } from '../../hooks';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -34,15 +34,16 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { mode: themeMode } = useTheme();
+  const isMobile = useIsMobile();
   const [content, setContent] = useState('');
-  const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('edit');
+  const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split');
   const [saving, setSaving] = useState(false);
 
   // 每次打开时重置状态
   useEffect(() => {
     if (open) {
       setContent('');
-      setLoadKey(k => k + 1);
+      setLoadKey((k) => k + 1);
     }
   }, [open, entityId, contentType]);
 
@@ -116,16 +117,18 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
         <div
           style={{
             display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
             gap: 8,
-            height: 'calc(100vh - 200px)',
+            height: isMobile ? 'calc(100vh - 250px)' : 'calc(100vh - 200px)',
           }}>
           {(mode === 'edit' || mode === 'split') && (
             <div
               style={{
-                flex: mode === 'split' ? '1 1 50%' : '1 1 100%',
+                flex: mode === 'split' ? (isMobile ? '1 1 50%' : '1 1 50%') : '1 1 100%',
                 overflow: 'auto',
                 border: '1px solid var(--border-color, #d9d9d9)',
                 borderRadius: 6,
+                minHeight: isMobile && mode === 'split' ? '120px' : undefined,
               }}>
               <CodeMirror
                 value={content}
@@ -155,9 +158,10 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
               style={{
                 flex: '1 1 50%',
                 overflow: 'auto',
-                padding: 16,
+                padding: isMobile ? 8 : 16,
                 border: '1px solid var(--border-color, #d9d9d9)',
                 borderRadius: 6,
+                minHeight: isMobile ? '120px' : undefined,
               }}
               className='markdown-body'>
               <MarkdownPreview content={content} isYaml={isYaml} />

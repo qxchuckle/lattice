@@ -1,5 +1,5 @@
 import { useEffect, useCallback, memo } from 'react';
-import { Button } from 'antd';
+import { Button, Drawer } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useLocation, useNavigate, Routes, Route } from 'react-router';
@@ -11,8 +11,11 @@ import {
   setDetailWidth,
   authStore,
   loadStoredToken,
+  sidebarStore,
+  closeMobileSidebar,
 } from './store';
 import { getAdapter } from './adapters';
+import { useIsMobile } from './hooks';
 import { CytoscapeGraph } from './components/CytoscapeGraph';
 import { DetailPanel } from './components/DetailPanel';
 import { TreeBrowserSidebar } from './components/sidebar/TreeBrowserSidebar';
@@ -21,7 +24,6 @@ import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import { AdminDrawer } from './components/admin/AdminDrawer';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { LoginPage } from './components/LoginPage';
-import { SecurityNoticeBar } from './components/SecurityNoticeBar';
 import './components/DetailPanel.less';
 
 // ── 路由同步 ──
@@ -125,11 +127,54 @@ const DetailPanelContainer = memo(function DetailPanelContainer() {
   );
 });
 
+// ── 移动端侧栏 Drawer ──
+const MobileSidebarDrawer = memo(function MobileSidebarDrawer() {
+  const { mobileOpen } = useSnapshot(sidebarStore);
+  return (
+    <Drawer
+      title='浏览器'
+      placement='left'
+      open={mobileOpen}
+      onClose={closeMobileSidebar}
+      width='85%'
+      styles={{
+        body: { padding: 0, display: 'flex', flexDirection: 'column', height: '100%' },
+      }}>
+      <TreeBrowserSidebar />
+    </Drawer>
+  );
+});
+
+// ── 移动端详情 Drawer ──
+const MobileDetailDrawer = memo(function MobileDetailDrawer() {
+  const { open: detailOpen, collapsed: detailCollapsed } = useSnapshot(detailStore);
+  return (
+    <Drawer
+      title='详情'
+      placement='bottom'
+      open={detailOpen && !detailCollapsed}
+      onClose={toggleDetailCollapse}
+      height='80%'
+      styles={{
+        body: {
+          padding: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        },
+      }}>
+      <DetailPanel />
+    </Drawer>
+  );
+});
+
 // ── 主布局 ──
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { token, authEnabled, initialized } = useSnapshot(authStore);
+  const isMobile = useIsMobile();
 
   // 启动时加载 token + 查询鉴权状态
   useEffect(() => {
@@ -159,7 +204,6 @@ export default function App() {
 
   return (
     <div className='app-root'>
-      <SecurityNoticeBar />
       <Routes>
         <Route path='/' element={<MainContent />} />
         <Route path='/task' element={<MainContent />} />
@@ -171,12 +215,22 @@ export default function App() {
         <Route path='*' element={<MainContent />} />
       </Routes>
 
-      <TreeBrowserSidebar />
+      {/* 桌面端组件（移动端不渲染，由 Drawer 承载）*/}
+      {!isMobile && <TreeBrowserSidebar />}
+      {/* 灵动岛：桌面+移动端均渲染 */}
       <FloatingStatusBar />
       <GlobalSearchPanel />
-      <DetailPanelContainer />
+      {!isMobile && <DetailPanelContainer />}
       <AdminDrawer />
       <TerminalPanel />
+
+      {/* 移动端组件（桌面端不渲染）*/}
+      {isMobile && (
+        <>
+          <MobileSidebarDrawer />
+          <MobileDetailDrawer />
+        </>
+      )}
     </div>
   );
 }

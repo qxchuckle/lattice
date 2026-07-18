@@ -3,6 +3,7 @@ import { Button, List, Tag, Input, App, Space, Modal, Form } from 'antd';
 import { SwapOutlined, UserAddOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
+import { apiPost } from '../../lib';
 
 export const UserTab = memo(function UserTab() {
   const queryClient = useQueryClient();
@@ -23,12 +24,7 @@ export const UserTab = memo(function UserTab() {
       content: `确认切换到用户「${username}」？所有数据视图将改变。`,
       onOk: async () => {
         try {
-          const res = await fetch('/api/users/switch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          await apiPost('/api/users/switch', { username });
           message.success(`已切换到 ${username}`);
           queryClient.invalidateQueries();
         } catch (err) {
@@ -44,13 +40,9 @@ export const UserTab = memo(function UserTab() {
       return;
     }
     try {
-      const res = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
+      const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/create', {
+        name: newName.trim(),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       if (!data.success) throw new Error(data.message ?? '创建失败');
       message.success(`用户 ${newName.trim()} 已创建`);
       setNewName('');
@@ -68,13 +60,10 @@ export const UserTab = memo(function UserTab() {
       return; // 校验错误，表单自行展示
     }
     try {
-      const res = await fetch('/api/users/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName: renameUser, newName: values.newName }),
+      const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/rename', {
+        oldName: renameUser,
+        newName: values.newName,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       if (data.success) {
         message.success(`已重命名为 ${values.newName}`);
         setRenameUser(null);
@@ -96,13 +85,9 @@ export const UserTab = memo(function UserTab() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const res = await fetch('/api/users/remove', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: username }),
+          const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/remove', {
+            name: username,
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
           if (data.success) {
             message.success(`用户 ${username} 已删除`);
             queryClient.invalidateQueries({ queryKey: ['users'] });

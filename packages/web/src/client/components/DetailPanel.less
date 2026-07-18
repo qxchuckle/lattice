@@ -13,10 +13,10 @@
 
 .detail-panel {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 420px;
-  height: calc(100vh - 24px - var(--terminal-offset, 0px));
+  top: var(--panel-inset);
+  right: var(--panel-inset);
+  width: var(--detail-width);
+  height: calc(100vh - var(--panel-inset) * 2 - var(--terminal-offset, 0px));
   z-index: 20;
   background: var(--bg-secondary);
   backdrop-filter: blur(12px);
@@ -162,6 +162,7 @@
 
   &__text {
     flex: 1;
+    min-width: 0; // 允许 flex item 缩小到内容宽度以下，使 text-overflow: ellipsis 生效
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -598,5 +599,175 @@
 
   .mono {
     font-size: 11px;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 响应式适配（移动端 / 平板）
+// ═══════════════════════════════════════════════════════════════
+
+// ── 平板适配 ──
+@media (max-width: 1023px) and (min-width: 768px) {
+  .detail-panel {
+    top: var(--panel-inset);
+    right: var(--panel-inset);
+  }
+
+  // markdown TOC 面板缩窄
+  .markdown-toc-float__panel {
+    width: 220px;
+  }
+}
+
+// ── 移动端适配（< 768px）──
+// 注：移动端 .detail-panel 本身由条件渲染控制
+// 以下样式针对 Drawer 内的 DetailPanel 内容适配
+@media (max-width: 767px) {
+  .detail-panel-root {
+    height: 100%;
+  }
+
+  .detail-panel-content {
+    padding: 8px 12px;
+  }
+
+  // ── 头部紧凑化 ──
+  .detail-header {
+    padding: 6px 8px;
+
+    &__title {
+      font-size: 13px;
+    }
+
+    &__actions {
+      gap: 2px;
+
+      .ant-btn {
+        min-width: 32px;
+        min-height: 32px;
+        padding: 2px;
+      }
+    }
+  }
+
+  // ── 任务标题 + 标签区 ──
+  .detail-component__title {
+    font-size: 14px;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  .detail-component__tags {
+    gap: 6px;
+    margin-bottom: 6px;
+    align-items: center;
+
+    .ant-tag {
+      margin: 0;
+      font-size: 10px;
+    }
+
+    .ant-btn {
+      min-width: 32px;
+      min-height: 32px;
+      padding: 2px;
+    }
+  }
+
+  // ── 元信息紧凑化 ──
+  .detail-component__meta {
+    font-size: 11px;
+    margin-bottom: 6px;
+    line-height: 1.6;
+  }
+
+  .detail-component__meta-id {
+    font-size: 10px;
+  }
+
+  // ── 导航链接间距 ──
+  .detail-component__nav {
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  // ── 板块标题 ──
+  .detail-component__section-title {
+    font-size: 11px;
+    margin-bottom: 4px;
+    margin-top: 4px;
+  }
+
+  // ── ScrollSpy 紧凑化 ──
+  .scroll-spy-bar {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+
+  // ── 文件路径栏移动端紧凑化 ──
+  .file-path-bar,
+  .project-path-bar {
+    gap: 2px;
+    padding: 3px 6px;
+    margin-bottom: 6px;
+  }
+
+  // ── scope-path 操作区换行适配 ──
+  .scope-path__actions {
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  // ── TOC 面板全宽 ──
+  .markdown-toc-float__panel {
+    width: calc(100vw - 32px);
+    max-width: calc(100vw - 32px);
+  }
+
+  // ── Markdown 内容紧凑化 ──
+  .detail-markdown {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  // ── 列表项触摸目标 ──
+  .detail-list-item {
+    padding: 6px 4px;
+  }
+
+  // ── Tabs 紧凑化 ──
+  .detail-component__tabs {
+    --tab-nav-height: 36px;
+
+    > .ant-tabs-nav {
+      padding-top: 2px;
+      margin-bottom: 4px;
+    }
+
+    .ant-tabs .ant-tabs-nav {
+      top: calc(36px + 2px);
+      padding-top: 2px;
+      margin-bottom: 2px;
+    }
+  }
+
+  // ── 祖先路径紧凑化 ──
+  .detail-ancestor {
+    font-size: 11px;
+    margin-bottom: 4px;
+    line-height: 1.6;
+  }
+
+  // ── Checkpoint 项紧凑化 ──
+  .checkpoint-item {
+    &__title {
+      font-size: 11px;
+    }
+    &__meta {
+      font-size: 10px;
+    }
+    &__message {
+      font-size: 10px;
+    }
   }
 }

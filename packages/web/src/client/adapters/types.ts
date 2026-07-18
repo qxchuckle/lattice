@@ -88,7 +88,7 @@ export interface LatticeDataAdapter {
   // 鉴权
   getAuthStatus(): Promise<{ enabled: boolean }>;
   login(password: string, remember: boolean): Promise<{ token: string; expiresIn: number }>;
-  changePassword(oldPassword: string | null, newPassword: string | null): Promise<boolean>;
+  changePassword(newPassword: string | null): Promise<boolean>;
   logout(): Promise<boolean>;
 }
 

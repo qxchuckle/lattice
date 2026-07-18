@@ -42,51 +42,38 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     },
   );
 
-  // 修改 / 设置 / 清除密码（受守卫，需已登录）
-  app.post<{ Body: { oldPassword?: string; newPassword?: string } }>(
-    '/api/auth/password',
-    async (req, reply) => {
-      const { oldPassword, newPassword } = req.body ?? {};
-      const existing = await readWebAuth();
+  // 修改 / 设置 / 清除密码（受守卫，已登录用户无需旧密码）
+  app.post<{ Body: { newPassword?: string } }>('/api/auth/password', async (req, reply) => {
+    const { newPassword } = req.body ?? {};
+    const existing = await readWebAuth();
 
-      // 清除密码：需验证旧密码
-      if (!newPassword) {
-        if (!existing) {
-          return reply.code(400).send({ error: 'auth_not_enabled', message: '未配置密码' });
-        }
-        if (!oldPassword || !verifyPassword(oldPassword, existing)) {
-          return reply.code(401).send({ error: 'invalid_password', message: '旧密码错误' });
-        }
-        await clearWebAuth();
-        return { success: true };
+    // 清除密码（已登录用户可直接清除）
+    if (!newPassword) {
+      if (!existing) {
+        return reply.code(400).send({ error: 'auth_not_enabled', message: '未配置密码' });
       }
-
-      // 设置新密码
-      if (newPassword.length < 4) {
-        return reply.code(400).send({ error: 'bad_request', message: '密码至少 4 位' });
-      }
-
-      // 已有密码时验证旧密码
-      if (existing) {
-        if (!oldPassword || !verifyPassword(oldPassword, existing)) {
-          return reply.code(401).send({ error: 'invalid_password', message: '旧密码错误' });
-        }
-      }
-
-      const { passwordHash, salt } = hashPassword(newPassword);
-      const now = new Date().toISOString();
-      const webAuth: WebAuthConfig = {
-        passwordHash,
-        salt,
-        // 首次设置生成 jwtSecret；修改密码保留已有 jwtSecret（已签发 token 不失效）
-        jwtSecret: existing?.jwtSecret ?? generateJwtSecret(),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      };
-      await writeWebAuth(webAuth);
+      await clearWebAuth();
       return { success: true };
-    },
-  );
+    }
+
+    // 设置新密码
+    if (newPassword.length < 4) {
+      return reply.code(400).send({ error: 'bad_request', message: '密码至少 4 位' });
+    }
+
+    const { passwordHash, salt } = hashPassword(newPassword);
+    const now = new Date().toISOString();
+    const webAuth: WebAuthConfig = {
+      passwordHash,
+      salt,
+      // 首次设置生成 jwtSecret；修改密码保留已有 jwtSecret（已签发 token 不失效）
+      jwtSecret: existing?.jwtSecret ?? generateJwtSecret(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    await writeWebAuth(webAuth);
+    return { success: true };
+  });
 
   // 登出（受守卫，JWT 无状态，客户端清除 token 即可）
   app.post('/api/auth/logout', async () => {

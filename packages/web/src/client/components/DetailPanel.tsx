@@ -49,6 +49,7 @@ import {
 } from '../store';
 import { useEntityDetail } from '../hooks';
 import { getAdapter } from '../adapters';
+import { apiGet } from '../lib';
 import {
   formatDate,
   getTaskStatusColor,
@@ -218,8 +219,7 @@ function useFilePath(pathType: string | null | undefined, id: string | null | un
     queryKey: ['path', pathType, id],
     queryFn: async () => {
       if (!pathType || !id) return null;
-      const res = await fetch(`/api/paths/${pathType}/${id}`);
-      const data = (await res.json()) as { path?: string; error?: string };
+      const data = await apiGet<{ path?: string; error?: string }>(`/api/paths/${pathType}/${id}`);
       return data.path || null;
     },
     enabled: !!pathType && !!id,
@@ -241,6 +241,17 @@ function FilePathBar({
   const { message } = AntdApp.useApp();
   const pathQuery = useFilePath(path ? null : pathType, path ? null : entityId);
   const finalPath = path ?? pathQuery.data ?? null;
+
+  // 查询中时显示加载占位（path 模式无需查询，直接有值）
+  if (!finalPath && pathQuery.isLoading) {
+    return (
+      <div className='file-path-bar'>
+        <span className='mono file-path-bar__text' style={{ color: 'var(--text-secondary)' }}>
+          加载路径中...
+        </span>
+      </div>
+    );
+  }
 
   if (!finalPath) return null;
 
@@ -606,9 +617,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         <h3 className='detail-component__title'>{task.title}</h3>
         <div className='detail-component__tags'>
           <Tag color={statusColor}>{task.status}</Tag>
-          <Dropdown.Button
-            size='small'
-            type='text'
+          <Dropdown
             trigger={['click']}
             menu={{
               items: [
@@ -647,8 +656,8 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                 },
               ],
             }}>
-            <DownOutlined />
-          </Dropdown.Button>
+            <Button size='small' type='text' icon={<DownOutlined />} />
+          </Dropdown>
         </div>
         <FilePathBar pathType='task-dir' entityId={task.id} />
         {/* 祖先路径 */}
@@ -953,8 +962,9 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
   const pathsQuery = useQuery({
     queryKey: ['project-local-paths', projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/local-paths`);
-      const data = (await res.json()) as { paths?: string[]; error?: string };
+      const data = await apiGet<{ paths?: string[]; error?: string }>(
+        `/api/projects/${encodeURIComponent(projectId)}/local-paths`,
+      );
       return data.paths || [];
     },
     enabled: !!projectId,

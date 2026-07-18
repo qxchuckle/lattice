@@ -273,6 +273,87 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
 
+    // ── 触摸手势：双指捏合缩放 + 单指拖拽平移 ──
+    // Cytoscape userZoomingEnabled=false 禁用了内置缩放（含触摸），需手动实现 pinch-zoom
+    let pinchInitialDist = 0;
+    let pinchInitialZoom = 1;
+    let touchPanLastX = 0;
+    let touchPanLastY = 0;
+    let isTouchPanning = false;
+
+    const getTouchDist = (t1: Touch, t2: Touch): number => {
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        // 双指 → pinch-zoom
+        e.preventDefault();
+        pinchInitialDist = getTouchDist(e.touches[0], e.touches[1]);
+        pinchInitialZoom = cy.zoom();
+        isTouchPanning = false;
+      } else if (e.touches.length === 1) {
+        // 单指 → pan（记录起点，等移动后判断是 pan 不是 tap）
+        touchPanLastX = e.touches[0].clientX;
+        touchPanLastY = e.touches[0].clientY;
+        isTouchPanning = false;
+        panAtVMouseDown = { x: cy.pan().x, y: cy.pan().y };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchInitialDist > 0) {
+        // pinch-zoom
+        e.preventDefault();
+        const dist = getTouchDist(e.touches[0], e.touches[1]);
+        const scale = dist / pinchInitialDist;
+        const newZoom = Math.max(cy.minZoom(), Math.min(cy.maxZoom(), pinchInitialZoom * scale));
+        // 以双指中点为缩放中心
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy_ = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = container.getBoundingClientRect();
+        const renderedX = cx - rect.left;
+        const renderedY = cy_ - rect.top;
+        const pan = cy.pan();
+        cy.zoom({
+          level: newZoom,
+          position: {
+            x: (renderedX - pan.x) / pinchInitialZoom,
+            y: (renderedY - pan.y) / pinchInitialZoom,
+          },
+        });
+      } else if (e.touches.length === 1) {
+        // 单指 pan
+        const dx = e.touches[0].clientX - touchPanLastX;
+        const dy = e.touches[0].clientY - touchPanLastY;
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+          isTouchPanning = true;
+        }
+        if (isTouchPanning) {
+          e.preventDefault();
+          cy.panBy({ x: dx, y: dy });
+          touchPanLastX = e.touches[0].clientX;
+          touchPanLastY = e.touches[0].clientY;
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchInitialDist = 0;
+      }
+      if (e.touches.length === 0) {
+        isTouchPanning = false;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
     // 从节点拖拽平移画布：ungrabify 的节点不触发 Cytoscape pan，手动实现
     let panState: 'idle' | 'mightPan' | 'panning' = 'idle';
     let panLastX = 0;
@@ -336,6 +417,10 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       container.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('mouseup', handlePanMouseUp);
       container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
       cy.destroy();
       cyRef.current = null;
     };

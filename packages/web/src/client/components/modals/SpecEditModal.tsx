@@ -2,6 +2,7 @@ import { memo, useState, useCallback } from 'react';
 import { Modal, Form, Input, Select, App, Tag, List, Empty } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SpecLintReport } from '@qcqx/lattice-core';
+import { apiPost } from '../../lib';
 
 /** Spec 创建 Modal */
 export const SpecCreateModal = memo(function SpecCreateModal({
@@ -20,12 +21,10 @@ export const SpecCreateModal = memo(function SpecCreateModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const res = await fetch('/api/specs/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
-      const data = await res.json();
+      const data = await apiPost<{ success?: boolean; message?: string }>(
+        '/api/specs/init',
+        values,
+      );
       if (data.success) {
         message.success('Spec 已创建');
         queryClient.invalidateQueries({ queryKey: ['specs'] });
@@ -107,16 +106,14 @@ export const SpecFrontmatterModal = memo(function SpecFrontmatterModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const res = await fetch(`/api/specs/${encodeURIComponent(specId)}/frontmatter`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await apiPost<{ success?: boolean; message?: string }>(
+        `/api/specs/${encodeURIComponent(specId)}/frontmatter`,
+        {
           title: values.title,
           description: values.description,
           tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
-        }),
-      });
-      const data = await res.json();
+        },
+      );
       if (data.success) {
         message.success('Frontmatter 已更新，RAG 索引已自动更新');
         queryClient.invalidateQueries({ queryKey: ['specs'] });
@@ -168,8 +165,7 @@ export const SpecLintModal = memo(function SpecLintModal({
   const { data: lintResult, isLoading } = useQuery({
     queryKey: ['spec-lint'],
     queryFn: async () => {
-      const res = await fetch('/api/specs/lint', { method: 'POST' });
-      return (await res.json()) as SpecLintReport[];
+      return await apiPost<SpecLintReport[]>('/api/specs/lint');
     },
     enabled: open,
   });
@@ -217,11 +213,9 @@ export const SpecConflictsModal = memo(function SpecConflictsModal({
   const { data: conflicts, isLoading } = useQuery({
     queryKey: ['spec-conflicts'],
     queryFn: async () => {
-      const res = await fetch('/api/specs/conflicts', { method: 'POST' });
-      return (await res.json()) as {
-        fileName: string;
-        levels: { scope: string; filePath: string }[];
-      }[];
+      return await apiPost<{ fileName: string; levels: { scope: string; filePath: string }[] }[]>(
+        '/api/specs/conflicts',
+      );
     },
     enabled: open,
   });

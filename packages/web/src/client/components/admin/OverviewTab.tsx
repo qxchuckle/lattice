@@ -3,6 +3,7 @@ import { Card, Descriptions, Tag, Button, App, Space, Tooltip } from 'antd';
 import { SettingOutlined, FolderOpenOutlined, CodeOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
+import { apiGet, apiPost } from '../../lib';
 import { useStats } from '../../hooks';
 import { ConfigModal } from './ConfigModal';
 
@@ -31,22 +32,18 @@ export const OverviewTab = memo(function OverviewTab() {
   const { data: globalStatus } = useQuery({
     queryKey: ['global-status'],
     queryFn: async (): Promise<GlobalStatus | null> => {
-      const res = await fetch('/api/global-status');
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.error ? null : (data as GlobalStatus);
+      const data = await apiGet<GlobalStatus & { error?: string }>('/api/global-status');
+      return data.error ? null : data;
     },
     staleTime: 30_000,
   });
 
   const handleOpenRoot = async (mode: 'finder' | 'terminal') => {
     try {
-      const res = await fetch('/api/open-lattice-root', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode }),
-      });
-      const data = await res.json();
+      const data = await apiPost<{ success?: boolean; message?: string }>(
+        '/api/open-lattice-root',
+        { mode },
+      );
       if (data.success) {
         message.success(data.message ?? '已打开');
       } else {

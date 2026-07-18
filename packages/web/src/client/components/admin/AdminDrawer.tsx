@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Drawer, Tabs } from 'antd';
 import { useSnapshot } from 'valtio';
 import { adminStore, closeAdmin, type AdminTab } from '../../store';
+import { useIsMobile } from '../../hooks';
 import { OverviewTab } from './OverviewTab';
 import { RagModelTab } from './RagModelTab';
 import { DoctorTab } from './DoctorTab';
@@ -22,6 +23,7 @@ const tabItems: { key: AdminTab; label: string; children: React.ReactNode }[] = 
 
 export const AdminDrawer = memo(function AdminDrawer() {
   const { open, activeTab } = useSnapshot(adminStore);
+  const isMobile = useIsMobile();
 
   return (
     <Drawer
@@ -29,8 +31,16 @@ export const AdminDrawer = memo(function AdminDrawer() {
       placement='right'
       open={open}
       onClose={closeAdmin}
-      width={720}
-      styles={{ body: { padding: 0, height: '100%', overflow: 'hidden' } }}>
+      width={isMobile ? '100%' : 720}
+      styles={{
+        body: {
+          padding: 0,
+          height: '100%',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}>
       <Tabs
         activeKey={activeTab}
         onChange={(key) => {
@@ -38,8 +48,8 @@ export const AdminDrawer = memo(function AdminDrawer() {
         }}
         items={tabItems}
         size='small'
-        tabPosition='left'
-        className='admin-drawer-tabs'
+        tabPosition={isMobile ? 'top' : 'left'}
+        className={`admin-drawer-tabs${isMobile ? ' admin-drawer-tabs--top' : ''}`}
         style={{ height: '100%' }}
       />
     </Drawer>

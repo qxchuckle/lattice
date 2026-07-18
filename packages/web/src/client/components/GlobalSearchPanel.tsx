@@ -6,6 +6,7 @@ import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
 import type cytoscape from 'cytoscape';
 import type { SearchResult } from '@qcqx/lattice-core';
+import { useIsMobile } from '../hooks';
 import {
   globalSearchStore,
   closeGlobalSearch,
@@ -208,6 +209,7 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const { mode } = useSnapshot(themeStore);
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile();
   const searchResult = useGlobalSearch(query);
   const inputRef = useRef<InputRef>(null);
   const isComposingRef = useRef(false);
@@ -297,11 +299,11 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
     <div
       style={{
         position: 'absolute',
-        top: 80,
+        top: isMobile ? 56 : 80,
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 30,
-        width: 480,
+        width: isMobile ? 'calc(100vw - 24px)' : 480,
         maxWidth: '90vw',
         background: isDark ? 'rgba(29, 29, 38, 0.95)' : 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(16px)',

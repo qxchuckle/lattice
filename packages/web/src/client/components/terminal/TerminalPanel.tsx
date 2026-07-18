@@ -14,6 +14,7 @@ import {
   DownOutlined,
   CodeOutlined,
   WarningOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import {
@@ -28,7 +29,10 @@ import {
   setTerminalHeight,
   setTerminalPtyMode,
   authStore,
+  toggleTerminalSidebar,
 } from '../../store';
+import { apiGet } from '../../lib';
+import { useIsMobile } from '../../hooks';
 import './TerminalPanel.less';
 
 // ── xterm 主题（深色，匹配 web 深色风格）──
@@ -198,8 +202,18 @@ const TerminalSessionView = memo(function TerminalSessionView({
 // ── 终端面板主组件（VS Code 底栏风格）──
 
 export const TerminalPanel = memo(function TerminalPanel() {
-  const { open, collapsed, fullscreen, height, sessions, activeSessionId, ptyMode, dragging } =
-    useSnapshot(terminalStore);
+  const {
+    open,
+    collapsed,
+    fullscreen,
+    height,
+    sessions,
+    activeSessionId,
+    ptyMode,
+    dragging,
+    sidebarCollapsed,
+  } = useSnapshot(terminalStore);
+  const isMobile = useIsMobile();
 
   // 设置 CSS 变量 --terminal-offset：终端面板打开时让出 sidebar/detail panel 底部空间（最多 50vh）
   useEffect(() => {
@@ -226,10 +240,7 @@ export const TerminalPanel = memo(function TerminalPanel() {
   // 查询 PTY 模式
   useEffect(() => {
     if (!open) return;
-    fetch('/api/terminal/mode', {
-      headers: authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {},
-    })
-      .then((res) => res.json())
+    apiGet<{ mode?: string }>('/api/terminal/mode')
       .then((data) => {
         if (data.mode) setTerminalPtyMode(data.mode as 'pty' | 'spawn');
       })
@@ -285,6 +296,19 @@ export const TerminalPanel = memo(function TerminalPanel() {
           )}
         </div>
         <div className='terminal-panel__actions' onDoubleClick={(e) => e.stopPropagation()}>
+          {isMobile && (
+            <Tooltip title={sidebarCollapsed ? '显示会话列表' : '隐藏会话列表'}>
+              <Button
+                size='small'
+                type='text'
+                icon={<UnorderedListOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTerminalSidebar();
+                }}
+              />
+            </Tooltip>
+          )}
           <Tooltip title='新建终端'>
             <Button
               size='small'
@@ -345,35 +369,41 @@ export const TerminalPanel = memo(function TerminalPanel() {
               ))
             )}
           </div>
+        </div>
+      )}
 
-          {/* 右侧会话列表 */}
-          {sessions.length > 0 && (
-            <div className='terminal-panel__sidebar'>
-              {sessions.map((s) => {
-                const displayName = s.cwd ? s.cwd.split('/').pop() || s.cwd : '~';
-                return (
-                  <div
-                    key={s.id}
-                    className={`terminal-session-item${s.id === activeSessionId ? ' terminal-session-item--active' : ''}`}
-                    onClick={() => setActiveTerminal(s.id)}>
-                    <Tooltip title={s.cwd || '~'} placement='left'>
-                      <span className='terminal-session-item__name'>{displayName}</span>
-                    </Tooltip>
-                    <Button
-                      size='small'
-                      type='text'
-                      icon={<CloseOutlined />}
-                      className='terminal-session-item__close'
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTerminalSession(s.id);
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
+      {/* 右侧会话列表（移到 body 外，避免 overflow:hidden 裁剪） */}
+      {!collapsed && sessions.length > 0 && (
+        <div
+          className='terminal-panel__sidebar'
+          style={
+            isMobile
+              ? { transform: sidebarCollapsed ? 'translateX(100%)' : 'translateX(0)' }
+              : undefined
+          }>
+          {sessions.map((s) => {
+            const displayName = s.cwd ? s.cwd.split('/').pop() || s.cwd : '~';
+            return (
+              <div
+                key={s.id}
+                className={`terminal-session-item${s.id === activeSessionId ? ' terminal-session-item--active' : ''}`}
+                onClick={() => setActiveTerminal(s.id)}>
+                <Tooltip title={s.cwd || '~'} placement='left'>
+                  <span className='terminal-session-item__name'>{displayName}</span>
+                </Tooltip>
+                <Button
+                  size='small'
+                  type='text'
+                  icon={<CloseOutlined />}
+                  className='terminal-session-item__close'
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTerminalSession(s.id);
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

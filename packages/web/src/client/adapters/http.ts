@@ -275,8 +275,8 @@ export class HttpAdapter implements LatticeDataAdapter {
     return json as unknown as { token: string; expiresIn: number };
   }
 
-  async changePassword(oldPassword: string | null, newPassword: string | null): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/auth/password`, { oldPassword, newPassword });
+  async changePassword(newPassword: string | null): Promise<boolean> {
+    const json = await postJson(`${API_BASE}/auth/password`, { newPassword });
     return json.success === true;
   }
 

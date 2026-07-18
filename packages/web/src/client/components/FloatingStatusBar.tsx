@@ -4,6 +4,7 @@ import {
   ReloadOutlined,
   BulbOutlined,
   MenuFoldOutlined,
+  MenuOutlined,
   AimOutlined,
   CompressOutlined,
   ExpandOutlined,
@@ -12,6 +13,7 @@ import {
   FileSearchOutlined,
   SettingOutlined,
   CodeOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
@@ -30,9 +32,11 @@ import {
   openAdmin,
   toggleTerminalPanel,
   terminalStore,
+  authStore,
+  toggleMobileSidebar,
 } from '../store';
 import { fitToElements } from './graph/layout';
-import { useStats } from '../hooks';
+import { useStats, useIsMobile } from '../hooks';
 import { CanvasSearchBar } from './CanvasSearchBar';
 
 const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] = [
@@ -51,9 +55,11 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
     sessions: terminalSessions,
   } = useSnapshot(terminalStore);
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const isFetching = useIsFetching() > 0;
   const stats = useStats();
   const isDark = mode === 'dark';
+  const { authEnabled, initialized } = useSnapshot(authStore);
 
   const handleFitAll = () => {
     const cy = cyRef.current;
@@ -91,23 +97,37 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
   return (
     <>
       <div
+        className='floating-status-bar'
         style={{
           position: 'absolute',
           top: 12,
           left: '50%',
           transform: 'translateX(-50%)',
-          zIndex: 20,
+          zIndex: 15, // 低于侧栏(20)和详情面板(20)，灵动岛在面板之下
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '5px 12px',
+          flexWrap: isMobile ? 'wrap' : 'nowrap',
+          justifyContent: isMobile ? 'center' : 'flex-start',
+          maxWidth: isMobile ? 'calc(100vw - 16px)' : undefined,
+          gap: isMobile ? 2 : 6,
+          rowGap: isMobile ? 2 : undefined,
+          padding: isMobile ? '2px 6px' : '5px 12px',
           background: isDark ? 'rgba(29, 29, 38, 0.88)' : 'rgba(255, 255, 255, 0.88)',
           backdropFilter: 'blur(12px)',
           border: `1px solid ${isDark ? '#3D3D48' : '#E0E0E0'}`,
-          borderRadius: 24,
+          borderRadius: isMobile ? 16 : 24,
           boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
           fontSize: 12,
         }}>
+        {isMobile && (
+          <Button
+            size='small'
+            type='text'
+            icon={<MenuOutlined />}
+            onClick={toggleMobileSidebar}
+            style={{ borderRadius: '50%' }}
+          />
+        )}
         <Segmented
           size='small'
           options={layoutOptions.map((opt) => ({
@@ -150,7 +170,9 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
           </Tooltip>
         )}
         {stats.data && (
-          <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: 11 }}>
+          <span
+            className='floating-status-bar__stats'
+            style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: 11 }}>
             {stats.data.projectCount} 项目 · {stats.data.taskCount} 任务 ·{' '}
             {stats.data.activeTaskCount} 进行中
           </span>
@@ -213,6 +235,17 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
             />
           </Badge>
         </Tooltip>
+        {initialized && !authEnabled && (
+          <Tooltip title='未设置访问密码，存在安全风险。点击去设置'>
+            <Button
+              size='small'
+              type='text'
+              icon={<WarningOutlined style={{ color: '#FAAD14' }} />}
+              onClick={() => openAdmin()}
+              style={{ borderRadius: '50%' }}
+            />
+          </Tooltip>
+        )}
         <Tooltip title='管理'>
           <Button
             size='small'

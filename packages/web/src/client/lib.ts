@@ -4,6 +4,46 @@ import { tokens } from './theme';
 import type { LatticeNode, LatticeEdge } from './types/graph';
 import type { ProjectMeta } from '@qcqx/lattice-core';
 import { selectPrimaryId } from '@qcqx/lattice-core';
+import { authStore, clearToken } from './store';
+
+// ── 通用请求函数（自动携带 auth token）──
+
+/** 获取鉴权请求头 */
+export function getAuthHeaders(): Record<string, string> {
+  return authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
+}
+
+/** GET 请求（自动携带 token，401 自动清除） */
+export async function apiGet<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (res.status === 401) {
+    clearToken();
+    throw new Error('unauthorized');
+  }
+  if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
+  return res.json() as Promise<T>;
+}
+
+/** POST 请求（自动携带 token + Content-Type，401 自动清除） */
+export async function apiPost<T = { success?: boolean; [key: string]: unknown }>(
+  url: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json', ...getAuthHeaders() } : getAuthHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) {
+    clearToken();
+    throw new Error('unauthorized');
+  }
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => null);
+    throw new Error(errBody?.message ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
 
 // ── 实体配色 ──
 

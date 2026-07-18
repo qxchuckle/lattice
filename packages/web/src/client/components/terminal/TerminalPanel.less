@@ -11,6 +11,8 @@
   background: #1e1e28;
   border-top: 1px solid #3c3c48;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  // 移动端安全区域
+  padding-bottom: var(--safe-bottom, 0px);
 
   &--fullscreen {
     top: 40px;
@@ -120,6 +122,11 @@
   position: relative;
   overflow: hidden;
   padding: 4px 8px;
+
+  // 桌面端留出侧栏空间
+  @media (min-width: 768px) {
+    padding-right: 168px; // 160px sidebar + 8px gap
+  }
 }
 
 .terminal-panel__empty {
@@ -133,12 +140,20 @@
 
 // 右侧会话列表
 .terminal-panel__sidebar {
-  width: 160px;
   border-left: 1px solid #3c3c48;
   background: #25252e;
   overflow-y: auto;
-  flex-shrink: 0;
   padding: 4px 0;
+
+  // 桌面端：绝对定位在右侧
+  @media (min-width: 768px) {
+    position: absolute;
+    right: 0;
+    top: 32px; // 标题栏高度
+    bottom: 0;
+    width: 160px;
+    z-index: 5;
+  }
 }
 
 .terminal-session-item {
@@ -189,5 +204,81 @@
 
   .xterm {
     height: 100%;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 响应式适配（移动端 / 平板竖屏 / 平板横屏）
+// ═══════════════════════════════════════════════════════════════
+
+// ── 平板竖屏适配（768px ~ 1023px）──
+@media (max-width: 1023px) and (min-width: 768px) {
+  .terminal-panel {
+    max-height: 45vh;
+  }
+}
+
+// ── 平板横屏适配（1024px ~ 1365px）──
+@media (max-width: 1365px) and (min-width: 1024px) {
+  .terminal-panel {
+    max-height: 50vh;
+  }
+}
+
+// ── 移动端适配（< 768px）──
+@media (max-width: 767px) {
+  .terminal-panel {
+    // 移动端展开时半屏高（!important 覆盖 inline style）
+    max-height: 60vh !important;
+  }
+
+  .terminal-panel__header {
+    height: 36px;
+    padding: 0 8px;
+  }
+
+  .terminal-panel__title {
+    font-size: 11px;
+  }
+
+  .terminal-panel__actions {
+    gap: 4px;
+
+    .ant-btn {
+      min-width: 36px;
+      min-height: 36px;
+    }
+  }
+
+  .terminal-panel__body {
+    // 移动端最小高度保证可读性
+    min-height: 120px;
+  }
+
+  .terminal-panel__main {
+    padding: 2px 4px;
+  }
+
+  .terminal-panel__fallback-notice {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  // ── 会话列表侧栏：覆盖式滑出 ──
+  .terminal-panel__sidebar {
+    position: absolute;
+    right: 0;
+    top: 36px; // 标题栏高度
+    bottom: 0;
+    width: 140px;
+    z-index: 10;
+    transform: translateX(100%); // 默认隐藏在右侧
+    transition: transform 0.25s ease;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.4);
+  }
+
+  // 展开时滑入
+  .terminal-panel--sidebar-open .terminal-panel__sidebar {
+    transform: translateX(0);
   }
 }

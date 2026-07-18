@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
+import { getAuthHeaders } from '../../lib';
 
 interface RagProgress {
   current: number;
@@ -43,7 +44,7 @@ export const RagModelTab = memo(function RagModelTab() {
       setProgress({ current: 0, total: 0 });
       const url = `/api/rag/${operation}`;
       try {
-        const res = await fetch(url, { method: 'POST' });
+        const res = await fetch(url, { method: 'POST', headers: getAuthHeaders() });
         if (!res.ok) {
           const errBody = await res.json().catch(() => null);
           throw new Error(errBody?.message ?? `HTTP ${res.status}`);
@@ -91,7 +92,10 @@ export const RagModelTab = memo(function RagModelTab() {
     setRunning(true);
     setProgress({ current: 0, total: 1 });
     try {
-      const res = await fetch('/api/rag/model/download', { method: 'POST' });
+      const res = await fetch('/api/rag/model/download', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         const errBody = await res.json().catch(() => null);
         throw new Error(errBody?.message ?? `HTTP ${res.status}`);

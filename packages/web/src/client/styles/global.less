@@ -13,6 +13,17 @@
   --transition-fast: 0.2s ease;
   --transition-normal: 0.3s ease;
   --transition-slow: 0.4s ease;
+
+  // ── 响应式变量（桌面端默认值）──
+  --sidebar-width: 260px;
+  --detail-width: 420px;
+  --panel-inset: 12px;
+  --terminal-height: 300px;
+  --touch-target: 32px; // 触摸目标最小尺寸（桌面端不强制放大）
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 // ── CSS 变量：深色模式 ──
@@ -42,6 +53,11 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden;
+  // 移动端安全区域填充
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 
 body {
@@ -52,6 +68,9 @@ body {
   transition:
     background var(--transition-normal),
     color var(--transition-normal);
+  // 防止移动端 overscroll
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 // 等宽字体
@@ -323,6 +342,24 @@ body {
 
 // ── Admin Drawer Tabs：左侧导航固定，右侧内容独立滚动 ──
 
+// ── Admin Drawer Tabs 顶部模式（移动端）──
+.admin-drawer-tabs--top {
+  display: flex !important;
+  flex-direction: column !important;
+
+  .ant-tabs-nav {
+    height: auto !important;
+    flex-shrink: 0;
+    overflow-x: auto !important;
+  }
+
+  .ant-tabs-content-holder {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
 // ── Modal / Drawer 遮罩配色 ──
 :root {
   --modal-mask: rgba(0, 0, 0, 0.25);
@@ -337,4 +374,216 @@ body {
 }
 .ant-drawer-mask {
   background: var(--drawer-mask) !important;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 响应式适配（移动端 / 平板 / 平板横屏）
+// ═══════════════════════════════════════════════════════════════
+
+// ── 工具类：响应式显示控制 ──
+.desktop-only {
+  @media (max-width: 1023px) {
+    display: none !important;
+  }
+}
+
+.mobile-tablet-only {
+  display: none;
+  @media (max-width: 1023px) {
+    display: flex !important;
+  }
+}
+
+.mobile-only {
+  display: none;
+  @media (max-width: 767px) {
+    display: flex !important;
+  }
+}
+
+// ── 触摸设备全局适配（hover:none 覆盖所有触屏设备，含平板横屏）──
+@media (hover: none) and (pointer: coarse) {
+  // resize handle 在触摸设备上一律隐藏
+  .sidebar-resize-handle,
+  .detail-panel__resize-handle,
+  .terminal-panel__resize-handle {
+    display: none !important;
+  }
+
+  // 触摸目标增大
+  .ant-btn-sm {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+// ── 平板竖屏适配（768px ~ 1023px）──
+@media (max-width: 1023px) and (min-width: 768px) {
+  :root {
+    --sidebar-width: 200px;
+    --detail-width: 320px;
+    --panel-inset: 8px;
+    --touch-target: 40px;
+  }
+
+  // FloatingStatusBar 紧凑化：隐藏统计文字
+  .floating-status-bar__stats {
+    display: none !important;
+  }
+
+  // Segmented 只显示图标
+  .floating-status-bar .ant-segmented .ant-segmented-item-label span:last-child {
+    display: none;
+  }
+}
+
+// ── 平板横屏适配（1024px ~ 1365px）──
+// iPad Pro 11" 横屏 1194px / iPad Air 横屏 1180px / iPad 10th 横屏 1080px
+@media (max-width: 1365px) and (min-width: 1024px) {
+  :root {
+    --touch-target: 36px;
+  }
+
+  // FloatingStatusBar 紧凑化：隐藏统计文字
+  .floating-status-bar__stats {
+    display: none !important;
+  }
+}
+
+// ── 移动端适配（< 768px）──
+@media (max-width: 767px) {
+  :root {
+    --sidebar-width: 100vw;
+    --detail-width: 100vw;
+    --panel-inset: 0px;
+    --terminal-height: 45vh;
+    --touch-target: 44px; // Apple HIG 最小触摸目标
+  }
+
+  // ── 桌面端面板已由条件渲染控制（!isMobile），无需 CSS display:none ──
+  // ── Drawer 内侧栏定位覆盖（TreeBrowserSidebar 有 inline position:absolute）──
+  .ant-drawer-body .tree-browser-sidebar {
+    position: relative !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: auto !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    background: var(--bg) !important;
+    flex: 1;
+    min-height: 0;
+  }
+
+  // Drawer 内侧栏折叠按钮隐藏
+  .ant-drawer-body .sidebar-collapsed-btn {
+    display: none !important;
+  }
+
+  // Drawer 内侧栏 resize handle 隐藏
+  .ant-drawer-body .sidebar-resize-handle,
+  .ant-drawer-body .sidebar-collapse-btn {
+    display: none !important;
+  }
+
+  // Drawer 内详情面板全屏
+  .ant-drawer-body .detail-panel-root {
+    height: 100% !important;
+  }
+
+  // Drawer 内侧栏过渡状态覆盖（确保内容可见）
+  .ant-drawer-body .sidebar-transition--hidden {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
+  // ── antd 组件移动端全屏化 ──
+  .ant-modal {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px auto !important;
+  }
+
+  .ant-modal .ant-modal-content {
+    max-height: calc(100vh - 16px) !important;
+    overflow-y: auto;
+  }
+
+  .ant-drawer-content-wrapper {
+    max-width: 100vw !important;
+  }
+
+  // ── Segmented 组件移动端紧凑化 ──
+  .ant-segmented {
+    .ant-segmented-item {
+      padding: 4px 8px;
+      .anticon {
+        margin-right: 2px;
+      }
+      span:last-child {
+        display: none; // 只显示图标
+      }
+    }
+  }
+
+  // ── 触摸目标增大 ──
+  .ant-btn-sm {
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+  }
+
+  // ── 灵动岛内按钮不受触摸目标增大影响（紧凑优先）──
+  .floating-status-bar .ant-btn-sm {
+    min-width: 28px !important;
+    min-height: 28px !important;
+    padding: 2px !important;
+  }
+
+  // ── 灵动岛内 Segmented 紧凑化 ──
+  .floating-status-bar .ant-segmented {
+    .ant-segmented-item {
+      padding: 1px 4px !important;
+    }
+    .ant-segmented-thumb {
+      border-radius: 4px !important;
+    }
+  }
+
+  // ── Markdown 内容移动端字体缩小 ──
+  .markdown-body {
+    h1 {
+      font-size: 15px;
+    }
+    h2 {
+      font-size: 14px;
+    }
+    h3 {
+      font-size: 13px;
+    }
+    p {
+      font-size: 12px;
+    }
+    code {
+      font-size: 10px;
+    }
+    pre {
+      font-size: 10px;
+    }
+    table th,
+    table td {
+      font-size: 10px;
+      padding: 2px 4px;
+    }
+  }
+}
+
+// ── 移动端底部安全区域 ──
+@media (max-width: 767px) {
+  .terminal-panel {
+    padding-bottom: var(--safe-bottom);
+  }
 }

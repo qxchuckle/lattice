@@ -4,6 +4,7 @@ import { ScanOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
+import { getAuthHeaders } from '../../lib';
 
 interface ScanProgress {
   current: number;
@@ -55,7 +56,7 @@ export const ScanTab = memo(function ScanTab() {
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ dirs: dirList }),
       });
       if (!res.ok) {

@@ -137,8 +137,10 @@ export interface SearchFilters {
 export const sidebarStore = proxy({
   /** 搜索关键词 */
   searchKeyword: '',
-  /** 侧栏是否折叠 */
+  /** 侧栏是否折叠（桌面端） */
   collapsed: false,
+  /** 移动端侧栏 Drawer 是否打开 */
+  mobileOpen: false,
   /** 树形展开状态：key = nodeKey, value = true/false */
   expandedKeys: {} as Record<string, boolean>,
   /** 侧栏宽度（px），持久化到 localStorage */
@@ -244,6 +246,11 @@ export function clearToken(): void {
   sessionStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+// 模块加载时同步从存储恢复 token（在 App 首次 render 之前，避免鉴权 useEffect 误跳登录）
+if (typeof window !== 'undefined') {
+  loadStoredToken();
+}
+
 // ── 显示模式 ──
 
 export type DisplayMode = 'canvas' | 'table';
@@ -291,6 +298,7 @@ export function selectNode(
 ): void {
   canvasStore.selectedNodeId = nodeId;
   detailStore.open = true;
+  detailStore.collapsed = false; // 选中新节点时展开面板（移动端 Drawer 也重新展开）
   detailStore.entityId = nodeId;
   detailStore.entityType = entityType;
   detailStore.entityData = data || null;
@@ -341,6 +349,20 @@ export function toggleNodeExpand(nodeId: string): void {
   canvasStore.expandedNodes[nodeId] = !canvasStore.expandedNodes[nodeId];
 }
 
+/** 切换移动端侧栏 Drawer 开关 */
+export function toggleMobileSidebar(): void {
+  if (!sidebarStore.mobileOpen) {
+    // 打开时确保侧栏展开（非折叠状态）
+    sidebarStore.collapsed = false;
+  }
+  sidebarStore.mobileOpen = !sidebarStore.mobileOpen;
+}
+
+/** 关闭移动端侧栏 Drawer */
+export function closeMobileSidebar(): void {
+  sidebarStore.mobileOpen = false;
+}
+
 // ── 可视区域计算（面板遮蔽适配）──
 
 /** 面板遮蔽后的可视画布区域边界 */
@@ -355,11 +377,23 @@ export interface VisibleCanvasBounds {
 
 /** 计算面板遮蔽后的可视区域边界。
  *  左侧栏展开时占据左侧（12px 边距 + width + 12px 间隔），
- *  详情面板展开时占据右侧（同理）。面板折叠或未打开时遮蔽可忽略。 */
+ *  详情面板展开时占据右侧（同理）。面板折叠或未打开时遮蔽可忽略。
+ *  移动端面板由 Drawer 承载，不遮蔽画布，偏移为 0。 */
 export function getVisibleCanvasBounds(
   containerWidth: number,
   containerHeight: number,
 ): VisibleCanvasBounds {
+  // 移动端面板由 Drawer 承载，不遮蔽画布
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    return {
+      left: 0,
+      right: containerWidth,
+      top: 0,
+      bottom: containerHeight,
+      width: containerWidth,
+      height: containerHeight,
+    };
+  }
   const leftOffset = sidebarStore.collapsed ? 0 : sidebarStore.width + 24;
   const rightOffset = detailStore.collapsed || !detailStore.open ? 0 : detailStore.width + 24;
   const width = Math.max(containerWidth - leftOffset - rightOffset, 200);
@@ -429,6 +463,8 @@ export const terminalStore = proxy({
   collapsed: false,
   /** 全屏状态 */
   fullscreen: false,
+  /** 移动端会话列表侧栏是否收起 */
+  sidebarCollapsed: true,
   /** 面板高度（px，持久化到 localStorage） */
   height: parseInt(localStorage.getItem('lattice-terminal-height') || '300', 10),
   /** 所有终端会话 */
@@ -523,6 +559,10 @@ export function toggleTerminalCollapse(): void {
 /** 全屏切换 */
 export function toggleTerminalFullscreen(): void {
   terminalStore.fullscreen = !terminalStore.fullscreen;
+}
+
+export function toggleTerminalSidebar(): void {
+  terminalStore.sidebarCollapsed = !terminalStore.sidebarCollapsed;
 }
 
 /** 设置终端面板高度（含 clamping + 持久化） */

@@ -24,6 +24,7 @@ import {
   LinkOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost } from '../../lib';
 
 interface GitStatus {
   initialized: boolean;
@@ -64,9 +65,7 @@ export const GitSyncTab = memo(function GitSyncTab() {
   const { data: gitStatus, isLoading } = useQuery({
     queryKey: ['git-status'],
     queryFn: async (): Promise<GitStatus> => {
-      const res = await fetch('/api/git/status');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return await apiGet<GitStatus>('/api/git/status');
     },
     staleTime: 10_000,
   });
@@ -74,9 +73,7 @@ export const GitSyncTab = memo(function GitSyncTab() {
   const { data: remotes } = useQuery({
     queryKey: ['git-remotes'],
     queryFn: async (): Promise<GitRemoteInfo[]> => {
-      const res = await fetch('/api/git/remotes');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return await apiGet<GitRemoteInfo[]>('/api/git/remotes');
     },
     staleTime: 10_000,
   });
@@ -92,17 +89,9 @@ export const GitSyncTab = memo(function GitSyncTab() {
       setLog('');
       try {
         const body = op === 'commit' ? { message: commitMsg || undefined } : undefined;
-        const res = await fetch(`/api/git/${op}`, {
-          method: 'POST',
-          headers: body ? { 'Content-Type': 'application/json' } : undefined,
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as
-          | GitOpResult
-          | { commit: GitOpResult; pull: GitOpResult; push: GitOpResult };
+        const data = await apiPost<
+          GitOpResult | { commit: GitOpResult; pull: GitOpResult; push: GitOpResult }
+        >(`/api/git/${op}`, body);
 
         if ('commit' in data) {
           const lines = [
@@ -141,13 +130,10 @@ export const GitSyncTab = memo(function GitSyncTab() {
       return; // 校验错误，表单自身已展示
     }
     try {
-      const res = await fetch('/api/git/remotes/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: values.name, url: values.url }),
+      const data = await apiPost<GitOpResult>('/api/git/remotes/add', {
+        name: values.name,
+        url: values.url,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as GitOpResult;
       if (data.success) {
         message.success(data.message);
         setAddOpen(false);
@@ -171,13 +157,10 @@ export const GitSyncTab = memo(function GitSyncTab() {
       return; // 校验错误，表单自身已展示
     }
     try {
-      const res = await fetch('/api/git/remotes/set-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editRemote.name, url: values.url }),
+      const data = await apiPost<GitOpResult>('/api/git/remotes/set-url', {
+        name: editRemote.name,
+        url: values.url,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as GitOpResult;
       if (data.success) {
         message.success(data.message);
         setEditRemote(null);
@@ -200,13 +183,7 @@ export const GitSyncTab = memo(function GitSyncTab() {
         okType: 'danger',
         onOk: async () => {
           try {
-            const res = await fetch('/api/git/remotes/remove', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name }),
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = (await res.json()) as GitOpResult;
+            const data = await apiPost<GitOpResult>('/api/git/remotes/remove', { name });
             if (data.success) {
               message.success(data.message);
               refresh();

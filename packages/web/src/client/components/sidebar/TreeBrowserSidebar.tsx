@@ -11,7 +11,13 @@ import {
 } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
-import { canvasStore, sidebarStore, getViewPath, setSidebarWidth } from '../../store';
+import {
+  canvasStore,
+  sidebarStore,
+  getViewPath,
+  setSidebarWidth,
+  closeMobileSidebar,
+} from '../../store';
 import { useSearch, useUsers } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
@@ -1055,11 +1061,13 @@ export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
         {/* 右侧 resize handle */}
         <div className='sidebar-resize-handle' onMouseDown={handleSidebarResizeStart} />
         <Button
+          className='sidebar-collapse-btn'
           size='small'
           type='text'
           icon={<MenuFoldOutlined />}
           onClick={() => {
             sidebarStore.collapsed = true;
+            closeMobileSidebar(); // 移动端同时关闭 Drawer（桌面端 no-op）
           }}
           style={{
             position: 'absolute',

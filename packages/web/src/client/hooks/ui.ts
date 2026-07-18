@@ -1,4 +1,4 @@
-import { useEffect, useDeferredValue } from 'react';
+import { useEffect, useState, useDeferredValue } from 'react';
 import { useSnapshot } from 'valtio';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
@@ -17,6 +17,48 @@ import {
   closeGlobalSearch,
   type ViewMode,
 } from '../store';
+
+// ── 响应式断点检测 ──
+
+export type Breakpoint = 'mobile' | 'tablet' | 'desktop';
+
+/** 检测当前视口断点。mobile <768 / tablet 768~1023 / desktop >=1024 */
+export function useBreakpoint(): Breakpoint {
+  const getBreakpoint = (): Breakpoint => {
+    const w = window.innerWidth;
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    return 'desktop';
+  };
+  const [bp, setBp] = useState<Breakpoint>(getBreakpoint);
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 1023px)');
+    const handler = () => setBp(getBreakpoint());
+    mql.addEventListener('change', handler);
+    window.addEventListener('resize', handler);
+    return () => {
+      mql.removeEventListener('change', handler);
+      window.removeEventListener('resize', handler);
+    };
+  }, []);
+  return bp;
+}
+
+/** 快捷布尔值：是否为移动端 */
+export function useIsMobile(): boolean {
+  return useBreakpoint() === 'mobile';
+}
+
+/** 快捷布尔值：是否为平板 */
+export function useIsTablet(): boolean {
+  return useBreakpoint() === 'tablet';
+}
+
+/** 快捷布尔值：是否为移动端或平板（非桌面） */
+export function useIsMobileOrTablet(): boolean {
+  const bp = useBreakpoint();
+  return bp === 'mobile' || bp === 'tablet';
+}
 
 export function useTheme() {
   const { mode } = useSnapshot(themeStore);
