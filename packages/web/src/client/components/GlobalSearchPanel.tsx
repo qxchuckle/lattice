@@ -1,11 +1,12 @@
-import { memo, useRef, useEffect, useCallback, useState } from 'react';
+import { memo, useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { Input, Skeleton, Empty } from 'antd';
 import type { InputRef } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import type cytoscape from 'cytoscape';
-import type { SearchResult } from '@qcqx/lattice-core';
+import type { SearchResult, ParsedSpec } from '@qcqx/lattice-core';
 import { useIsMobile } from '../hooks';
 import {
   globalSearchStore,
@@ -17,7 +18,8 @@ import {
   themeStore,
 } from '../store';
 import { useGlobalSearch } from '../hooks';
-import { getEntityColor } from '../lib';
+import { getAdapter } from '../adapters';
+import { getEntityColor, queryKeys } from '../lib';
 import { applyFocus } from './graph/layout';
 import { extractSearchResultInfo, searchTypeOptions } from './sidebar/treeUtils';
 
@@ -80,18 +82,23 @@ function findNodeOnCanvas(
 }
 
 /** 点击搜索结果：定位画布节点或导航切换视角 */
-function handleResultClick(item: SearchResult, navigate: (path: string) => void): void {
-  const { id, mode } = extractSearchResultInfo(item);
+function handleResultClick(
+  item: SearchResult,
+  navigate: (path: string) => void,
+  specIdByPath?: Map<string, string>,
+): void {
+  const { id, mode } = extractSearchResultInfo(item, specIdByPath);
   const cy = cyRef.current;
 
   if (cy) {
     const node = findNodeOnCanvas(cy, id, item.type);
     if (node) {
-      // 节点在画布上 → 直接定位（不关闭面板，支持多次切换）
+      // 节点在画布上 → 直接定位（不关闭面板，支持多次切换）+ 更新 URL
       const data = node.data() as Record<string, unknown>;
       const entityType = data.entityType as 'task' | 'project' | 'spec';
       selectNode(node.id(), entityType, data);
       applyFocus(cy, node.id(), canvasStore.focusDepth, false, true);
+      navigate(getViewPath(mode, id));
       return;
     }
   }
@@ -211,6 +218,24 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
   const isDark = mode === 'dark';
   const isMobile = useIsMobile();
   const searchResult = useGlobalSearch(query);
+  const specsQuery = useQuery({
+    queryKey: queryKeys.specs(),
+    queryFn: () => getAdapter().getSpecs(),
+  });
+  const specIdByPath = useMemo(() => {
+    const map = new Map<string, string>();
+    const s = specsQuery.data;
+    if (s) {
+      for (const spec of [
+        ...(s.global || []),
+        ...(s.user || []),
+        ...(s.project || []),
+      ] as ParsedSpec[]) {
+        map.set(spec.filePath, spec.frontmatter.id || spec.fileName);
+      }
+    }
+    return map;
+  }, [specsQuery.data]);
   const inputRef = useRef<InputRef>(null);
   const isComposingRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -241,9 +266,12 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
     setSelectedIndex(results.length > 0 ? 0 : -1);
   }, [results]);
 
-  const handleClick = useCallback((item: SearchResult) => {
-    handleResultClick(item, navigateRef.current);
-  }, []);
+  const handleClick = useCallback(
+    (item: SearchResult) => {
+      handleResultClick(item, navigateRef.current, specIdByPath);
+    },
+    [specIdByPath],
+  );
 
   const handleHover = useCallback((index: number) => {
     setSelectedIndex(index);

@@ -382,7 +382,7 @@ const SearchTreeTab = memo(function SearchTreeTab() {
   navigateRef.current = navigate;
   const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
   const searchResult = useSearch();
-  const { tree, loading, tasks } = useTreeData();
+  const { tree, loading, tasks, specs } = useTreeData();
 
   const handleNavigate = useCallback((node: TreeNode) => {
     if (node.entityId && node.viewMode)
@@ -397,9 +397,9 @@ const SearchTreeTab = memo(function SearchTreeTab() {
   const searchItems = useMemo(
     () =>
       isSearching && searchResult.data
-        ? flattenSearch(searchResult.data, searchFilters, tasks)
+        ? flattenSearch(searchResult.data, searchFilters, tasks, specs)
         : [],
-    [isSearching, searchResult.data, searchFilters, tasks],
+    [isSearching, searchResult.data, searchFilters, tasks, specs],
   );
   const filteredTree = useMemo(
     () =>

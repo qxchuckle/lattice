@@ -6,6 +6,8 @@ import {
   Timeline,
   List,
   Dropdown,
+  Input,
+  Spin,
   App as AntdApp,
   Tooltip,
   Modal,
@@ -24,6 +26,7 @@ import {
   AimOutlined,
   MenuFoldOutlined,
   MenuOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import type { ReferencedSpec, ScopePath } from '@qcqx/lattice-core';
 import {
@@ -47,7 +50,7 @@ import {
   toggleDetailCollapse,
   openTerminal,
 } from '../store';
-import { useEntityDetail } from '../hooks';
+import { useEntityDetail, useProjectTaskSearch } from '../hooks';
 import { getAdapter } from '../adapters';
 import { apiGet } from '../lib';
 import {
@@ -66,6 +69,7 @@ import type {
   CheckpointEntry,
   GitStatus,
   ParsedSpec,
+  SearchResult,
 } from '@qcqx/lattice-core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
@@ -332,6 +336,21 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
     queryKey: queryKeys.projects,
     queryFn: () => adapter.getProjects(),
   });
+  // 获取所有 specs 以查找引用 spec 的标题
+  const specsQuery = useQuery({
+    queryKey: queryKeys.specs(),
+    queryFn: () => adapter.getSpecs(),
+  });
+  const specTitleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const s = specsQuery.data;
+    if (s) {
+      for (const spec of [...(s.global || []), ...(s.user || []), ...(s.project || [])]) {
+        map.set(spec.frontmatter.id || spec.fileName, spec.frontmatter.title || spec.fileName);
+      }
+    }
+    return map;
+  }, [specsQuery.data]);
   // 祖先路径
   const lineageQuery = useQuery({
     queryKey: ['lineage', task.id],
@@ -435,31 +454,47 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         key: 'projects',
         label: `关联项目 (${task.projects.length})`,
         children: (
-          <List
-            size='small'
-            dataSource={task.projects}
-            renderItem={(pid: string) => {
+          <SearchFilterBar
+            items={task.projects}
+            placeholder='搜索关联项目...'
+            getSearchText={(pid: string) => {
               const project = projectsQuery.data?.find(
                 (p) => p.ids?.includes(pid) || getProjectId(p) === pid,
               );
-              const resolvedPid = project ? getProjectId(project) : pid;
-              return (
-                <List.Item
-                  className='detail-list-item'
-                  onClick={() => navigate(getViewPath('project', resolvedPid))}>
-                  <div>
-                    <div className='detail-list-item__name'>
-                      {project?.name || resolvedPid.slice(0, 12)}
-                    </div>
-                    <div className='mono detail-list-item__id'>{resolvedPid}</div>
-                    {project?.description && (
-                      <div className='detail-list-item__desc'>{project.description}</div>
-                    )}
-                  </div>
-                </List.Item>
-              );
-            }}
-          />
+              return project?.name || pid;
+            }}>
+            {(filtered) =>
+              filtered.length > 0 ? (
+                <List
+                  size='small'
+                  dataSource={filtered}
+                  renderItem={(pid: string) => {
+                    const project = projectsQuery.data?.find(
+                      (p) => p.ids?.includes(pid) || getProjectId(p) === pid,
+                    );
+                    const resolvedPid = project ? getProjectId(project) : pid;
+                    return (
+                      <List.Item
+                        className='detail-list-item'
+                        onClick={() => navigate(getViewPath('project', resolvedPid))}>
+                        <div>
+                          <div className='detail-list-item__name'>
+                            {project?.name || resolvedPid.slice(0, 12)}
+                          </div>
+                          <div className='mono detail-list-item__id'>{resolvedPid}</div>
+                          {project?.description && (
+                            <div className='detail-list-item__desc'>{project.description}</div>
+                          )}
+                        </div>
+                      </List.Item>
+                    );
+                  }}
+                />
+              ) : (
+                <Empty description='无匹配项目' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )
+            }
+          </SearchFilterBar>
         ),
       });
     }
@@ -468,23 +503,43 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         key: 'specs',
         label: `引用 Spec (${task.referencedSpecs.length})`,
         children: (
-          <List
-            size='small'
-            dataSource={task.referencedSpecs}
-            renderItem={(ref: ReferencedSpec) => (
-              <List.Item
-                className='detail-list-item'
-                onClick={() => navigate(getViewPath('spec', ref.id))}>
-                <div className='detail-list-item__row'>
-                  <Tag color={getEntityColor('spec')} style={{ fontSize: 10, margin: 0 }}>
-                    spec
-                  </Tag>
-                  <span className='mono detail-list-item__id-mono'>{ref.id}</span>
-                  <span className='detail-list-item__scope'>{ref.scope}</span>
-                </div>
-              </List.Item>
-            )}
-          />
+          <SearchFilterBar
+            items={task.referencedSpecs}
+            placeholder='搜索引用 Spec...'
+            getSearchText={(ref: ReferencedSpec) => ref.id}
+            filterOptions={[...new Set(task.referencedSpecs.map((r) => r.scope))].map((scope) => ({
+              value: scope,
+              label: scope,
+            }))}
+            getFilterValue={(ref: ReferencedSpec) => ref.scope}>
+            {(filtered) =>
+              filtered.length > 0 ? (
+                <List
+                  size='small'
+                  dataSource={filtered}
+                  renderItem={(ref: ReferencedSpec) => (
+                    <List.Item
+                      className='detail-list-item'
+                      onClick={() => navigate(getViewPath('spec', ref.id))}>
+                      <div className='detail-list-item__relation'>
+                        <div className='detail-list-item__row'>
+                          <Tag color={getEntityColor('spec')} style={{ fontSize: 10, margin: 0 }}>
+                            spec
+                          </Tag>
+                          <span>{specTitleMap.get(ref.id) || ref.id}</span>
+                        </div>
+                        <span className='detail-list-item__relation-id mono'>
+                          {ref.id} <span className='detail-list-item__scope'>{ref.scope}</span>
+                        </span>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty description='无匹配 Spec' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )
+            }
+          </SearchFilterBar>
         ),
       });
     }
@@ -493,57 +548,68 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         key: 'scopePaths',
         label: `范围路径 (${task.scopePaths.length})`,
         children: (
-          <List
-            size='small'
-            dataSource={task.scopePaths}
-            renderItem={(sp: ScopePath) => (
-              <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
-                <div style={{ width: '100%' }}>
-                  <div className='scope-path__path-row'>
-                    <span className='mono scope-path__path' title={sp.path}>
-                      {sp.path}
-                    </span>
-                  </div>
-                  <div className='scope-path__actions'>
-                    <Dropdown.Button
-                      size='small'
-                      type='text'
-                      icon={<DownOutlined />}
-                      onClick={async () => {
-                        const adapter = getAdapter();
-                        await adapter.openPathByPath(sp.path, 'finder');
-                      }}
-                      menu={{
-                        items: editorMenuItems,
-                        onClick: async ({ key }) => {
-                          const adapter = getAdapter();
-                          await adapter.openPathByPath(sp.path, key as EditorApp);
-                        },
-                      }}>
-                      <FolderOpenOutlined />
-                    </Dropdown.Button>
-                    <Tooltip title='在内置终端打开'>
-                      <Button
-                        size='small'
-                        type='text'
-                        icon={<CodeOutlined />}
-                        onClick={() => openTerminal(sp.path)}
-                      />
-                    </Tooltip>
-                    {sp.projectId && (
-                      <Tag
-                        color={getEntityColor('project')}
-                        style={{ fontSize: 10, margin: 0, cursor: 'pointer' }}
-                        onClick={() => navigate(getViewPath('project', sp.projectId))}>
-                        {truncate(sp.projectId, 16)}
-                      </Tag>
-                    )}
-                    {sp.note && <Tag style={{ fontSize: 10, margin: 0 }}>{sp.note}</Tag>}
-                  </div>
-                </div>
-              </List.Item>
-            )}
-          />
+          <SearchFilterBar
+            items={task.scopePaths}
+            placeholder='搜索范围路径...'
+            getSearchText={(sp: ScopePath) => `${sp.path} ${sp.projectId || ''} ${sp.note || ''}`}>
+            {(filtered) =>
+              filtered.length > 0 ? (
+                <List
+                  size='small'
+                  dataSource={filtered}
+                  renderItem={(sp: ScopePath) => (
+                    <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
+                      <div style={{ width: '100%' }}>
+                        <div className='scope-path__path-row'>
+                          <span className='mono scope-path__path' title={sp.path}>
+                            {sp.path}
+                          </span>
+                        </div>
+                        <div className='scope-path__actions'>
+                          <Dropdown.Button
+                            size='small'
+                            type='text'
+                            icon={<DownOutlined />}
+                            onClick={async () => {
+                              const adapter = getAdapter();
+                              await adapter.openPathByPath(sp.path, 'finder');
+                            }}
+                            menu={{
+                              items: editorMenuItems,
+                              onClick: async ({ key }) => {
+                                const adapter = getAdapter();
+                                await adapter.openPathByPath(sp.path, key as EditorApp);
+                              },
+                            }}>
+                            <FolderOpenOutlined />
+                          </Dropdown.Button>
+                          <Tooltip title='在内置终端打开'>
+                            <Button
+                              size='small'
+                              type='text'
+                              icon={<CodeOutlined />}
+                              onClick={() => openTerminal(sp.path)}
+                            />
+                          </Tooltip>
+                          {sp.projectId && (
+                            <Tag
+                              color={getEntityColor('project')}
+                              style={{ fontSize: 10, margin: 0, cursor: 'pointer' }}
+                              onClick={() => navigate(getViewPath('project', sp.projectId))}>
+                              {truncate(sp.projectId, 16)}
+                            </Tag>
+                          )}
+                          {sp.note && <Tag style={{ fontSize: 10, margin: 0 }}>{sp.note}</Tag>}
+                        </div>
+                      </div>
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty description='无匹配路径' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )
+            }
+          </SearchFilterBar>
         ),
       });
     }
@@ -588,27 +654,45 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
         key: 'checkpoints',
         label: `Checkpoint (${progress.length})`,
         children: (
-          <Timeline
-            items={progress.map((cp: CheckpointEntry) => ({
-              color: getCheckpointTimelineColor(cp.type),
-              children: (
-                <div>
-                  <div className='checkpoint-item__title'>{cp.title}</div>
-                  <div className='checkpoint-item__meta'>
-                    <Tag style={{ fontSize: 10, margin: 0 }}>{cp.type}</Tag> {formatDate(cp.time)}
-                  </div>
-                  {cp.message && (
-                    <div className='checkpoint-item__message'>{truncate(cp.message, 200)}</div>
-                  )}
-                </div>
-              ),
-            }))}
-          />
+          <SearchFilterBar
+            items={progress}
+            placeholder='搜索 Checkpoint...'
+            getSearchText={(cp: CheckpointEntry) => `${cp.title} ${cp.message || ''}`}
+            filterOptions={CHECKPOINT_TYPE_LABELS.filter((opt) =>
+              progress.some((cp) => cp.type === opt.value),
+            )}
+            getFilterValue={(cp: CheckpointEntry) => cp.type}>
+            {(filtered) =>
+              filtered.length > 0 ? (
+                <Timeline
+                  items={filtered.map((cp: CheckpointEntry) => ({
+                    color: getCheckpointTimelineColor(cp.type),
+                    children: (
+                      <div>
+                        <div className='checkpoint-item__title'>{cp.title}</div>
+                        <div className='checkpoint-item__meta'>
+                          <Tag style={{ fontSize: 10, margin: 0 }}>{cp.type}</Tag>{' '}
+                          {formatDate(cp.time)}
+                        </div>
+                        {cp.message && (
+                          <div className='checkpoint-item__message'>
+                            {truncate(cp.message, 200)}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                />
+              ) : (
+                <Empty description='无匹配 Checkpoint' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )
+            }
+          </SearchFilterBar>
         ),
       });
     }
     return items;
-  }, [task, progress, docTabs, projectsQuery.data, navigate]);
+  }, [task, progress, docTabs, projectsQuery.data, specTitleMap, navigate]);
 
   return (
     <>
@@ -729,6 +813,18 @@ function ProjectDetail({
   relations: ProjectRelation[];
 }) {
   const navigate = useNavigate();
+  const projectsQuery = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => getAdapter().getProjects(),
+    staleTime: 60_000,
+  });
+  const projectNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of projectsQuery.data || []) {
+      map.set(getProjectId(p), p.name);
+    }
+    return map;
+  }, [projectsQuery.data]);
   if (!project) {
     return <Empty description='项目不存在' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -817,23 +913,10 @@ function ProjectDetail({
                     key: 'tasks',
                     label: `关联任务 (${tasks.length})`,
                     children: (
-                      <List
-                        size='small'
-                        dataSource={tasks}
-                        renderItem={(t: TaskMeta) => (
-                          <List.Item
-                            className='detail-list-item'
-                            onClick={() => navigate(getViewPath('task', t.id))}>
-                            <div className='detail-list-item__row'>
-                              <Tag
-                                color={getTaskStatusColor(t.status)}
-                                style={{ fontSize: 10, margin: 0 }}>
-                                {t.status}
-                              </Tag>
-                              <span>{truncate(t.title, 30)}</span>
-                            </div>
-                          </List.Item>
-                        )}
+                      <RelatedTasksTab
+                        tasks={tasks}
+                        projectId={getProjectId(project)}
+                        navigate={navigate}
                       />
                     ),
                   },
@@ -845,27 +928,11 @@ function ProjectDetail({
                     key: 'relations',
                     label: `项目关系 (${relations.length})`,
                     children: (
-                      <List
-                        size='small'
-                        dataSource={relations}
-                        renderItem={(r: ProjectRelation) => {
-                          const pid = getProjectId(project);
-                          const otherId = r.projectA === pid ? r.projectB : r.projectA;
-                          return (
-                            <List.Item
-                              className='detail-list-item'
-                              onClick={() => navigate(getViewPath('project', otherId))}>
-                              <div className='detail-list-item__row'>
-                                <Tag
-                                  color={getEntityColor('project')}
-                                  style={{ fontSize: 10, margin: 0 }}>
-                                  {r.type}
-                                </Tag>
-                                <span className='mono'>{truncate(otherId, 16)}</span>
-                              </div>
-                            </List.Item>
-                          );
-                        }}
+                      <ProjectRelationsTab
+                        relations={relations}
+                        currentProjectId={getProjectId(project)}
+                        projectNameMap={projectNameMap}
+                        navigate={navigate}
                       />
                     ),
                   },
@@ -877,28 +944,39 @@ function ProjectDetail({
                     key: 'specs',
                     label: `Spec (${specs.length})`,
                     children: (
-                      <List
-                        size='small'
-                        dataSource={specs}
-                        renderItem={(s: ParsedSpec) => (
-                          <List.Item
-                            className='detail-list-item'
-                            onClick={() =>
-                              navigate(getViewPath('spec', s.frontmatter.id || s.fileName))
-                            }>
-                            <div>
-                              <span>{truncate(s.frontmatter.title || s.fileName, 30)}</span>
-                              {s.frontmatter.tags && s.frontmatter.tags.length > 0 && (
-                                <div className='spec-tags'>
-                                  {s.frontmatter.tags.slice(0, 3).map((tag: string) => (
-                                    <Tag key={tag}>{tag}</Tag>
-                                  ))}
-                                </div>
+                      <SearchFilterBar
+                        items={specs}
+                        placeholder='搜索 Spec...'
+                        getSearchText={(s: ParsedSpec) => s.frontmatter.title || s.fileName}>
+                        {(filtered) =>
+                          filtered.length > 0 ? (
+                            <List
+                              size='small'
+                              dataSource={filtered}
+                              renderItem={(s: ParsedSpec) => (
+                                <List.Item
+                                  className='detail-list-item'
+                                  onClick={() =>
+                                    navigate(getViewPath('spec', s.frontmatter.id || s.fileName))
+                                  }>
+                                  <div>
+                                    <span>{truncate(s.frontmatter.title || s.fileName, 30)}</span>
+                                    {s.frontmatter.tags && s.frontmatter.tags.length > 0 && (
+                                      <div className='spec-tags'>
+                                        {s.frontmatter.tags.slice(0, 3).map((tag: string) => (
+                                          <Tag key={tag}>{tag}</Tag>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </List.Item>
                               )}
-                            </div>
-                          </List.Item>
-                        )}
-                      />
+                            />
+                          ) : (
+                            <Empty description='无匹配 Spec' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                          )
+                        }
+                      </SearchFilterBar>
                     ),
                   },
                 ]
@@ -910,10 +988,320 @@ function ProjectDetail({
   );
 }
 
+// ── 关联任务 Tab：RAG 搜索 + 状态筛选 ──
+
+const TASK_STATUS_OPTIONS = [
+  { value: 'in_progress', label: '进行中' },
+  { value: 'completed', label: '已完成' },
+  { value: 'archived', label: '已归档' },
+];
+
+interface SearchItem {
+  id: string;
+  title: string;
+  snippet?: string;
+  status?: string;
+}
+
+/** Checkpoint 11 类型的中文 label 映射 */
+const CHECKPOINT_TYPE_LABELS: { value: string; label: string }[] = [
+  { value: 'context', label: '背景' },
+  { value: 'correction', label: '纠错' },
+  { value: 'constraint', label: '约束' },
+  { value: 'assumption', label: '假设' },
+  { value: 'followup', label: '待办' },
+  { value: 'note', label: '记录' },
+  { value: 'decision', label: '决策' },
+  { value: 'pivot', label: '转折' },
+  { value: 'milestone', label: '里程碑' },
+  { value: 'issue', label: '问题' },
+  { value: 'summary', label: '总结' },
+];
+
+/** 通用搜索 + 筛选容器（render props，调用方用 filtered 渲染 List/Timeline） */
+function SearchFilterBar<T>({
+  items,
+  placeholder,
+  getSearchText,
+  filterOptions,
+  getFilterValue,
+  children,
+}: {
+  items: T[];
+  placeholder: string;
+  getSearchText: (item: T) => string;
+  filterOptions?: { value: string; label: string }[];
+  getFilterValue?: (item: T) => string;
+  children: (filtered: T[]) => ReactNode;
+}) {
+  const [keyword, setKeyword] = useState('');
+  const [filter, setFilter] = useState<string[]>([]);
+  const filtered = useMemo(() => {
+    let result = items;
+    if (filter.length > 0 && getFilterValue) {
+      result = result.filter((item) => filter.includes(getFilterValue(item)));
+    }
+    if (keyword) {
+      const lower = keyword.toLowerCase();
+      result = result.filter((item) => getSearchText(item).toLowerCase().includes(lower));
+    }
+    return result;
+  }, [items, keyword, filter, getSearchText, getFilterValue]);
+
+  return (
+    <div className='search-filter-bar'>
+      <Input
+        placeholder={placeholder}
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        allowClear
+        size='small'
+        prefix={<SearchOutlined />}
+        style={{ marginBottom: 8 }}
+      />
+      {filterOptions && filterOptions.length > 1 && (
+        <div className='search-filter-bar__filters' style={{ marginBottom: 8 }}>
+          {filterOptions.map((opt) => (
+            <Tag.CheckableTag
+              key={opt.value}
+              checked={filter.includes(opt.value)}
+              onChange={(checked) => {
+                setFilter((prev) =>
+                  checked ? [...prev, opt.value] : prev.filter((v) => v !== opt.value),
+                );
+              }}>
+              {opt.label}
+            </Tag.CheckableTag>
+          ))}
+        </div>
+      )}
+      {children(filtered)}
+    </div>
+  );
+}
+
+/** 从 task 类型搜索结果提取 taskId（filePath 格式 user/<u>/task/<taskId>/prd.md） */
+function extractTaskIdFromSearchResult(r: SearchResult): string | null {
+  const meta = r.meta as Record<string, unknown>;
+  const directId = (meta.id as string) || (meta.taskId as string);
+  if (directId) return directId;
+  const filePath = (meta.filePath as string) || '';
+  const match = filePath.match(/\/task\/([^/]+)\//);
+  return match ? match[1] : null;
+}
+
+function RelatedTasksTab({
+  tasks,
+  projectId,
+  navigate,
+}: {
+  tasks: TaskMeta[];
+  projectId: string;
+  navigate: (path: string) => void;
+}) {
+  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const searchQuery = useProjectTaskSearch(projectId, keyword);
+
+  // taskId → TaskMeta 映射，用于搜索结果补全 status
+  const taskMap = useMemo(() => {
+    const map = new Map<string, TaskMeta>();
+    for (const t of tasks) map.set(t.id, t);
+    return map;
+  }, [tasks]);
+
+  const isSearching = keyword.length > 0;
+
+  // 搜索结果项（补全 status）
+  const searchItems = useMemo((): SearchItem[] | null => {
+    if (!searchQuery.data || !isSearching) return null;
+    return searchQuery.data
+      .map((r): SearchItem | null => {
+        const taskId = extractTaskIdFromSearchResult(r);
+        if (!taskId) return null;
+        const task = taskMap.get(taskId);
+        return {
+          id: taskId,
+          title: r.title || task?.title || taskId,
+          snippet: r.snippet,
+          status: task?.status,
+        };
+      })
+      .filter((x): x is SearchItem => x !== null);
+  }, [searchQuery.data, isSearching, taskMap]);
+
+  // 状态筛选
+  const filteredSearchItems = useMemo(() => {
+    if (!searchItems) return null;
+    if (statusFilter.length === 0) return searchItems;
+    return searchItems.filter((s) => s.status && statusFilter.includes(s.status));
+  }, [searchItems, statusFilter]);
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter.length === 0) return tasks;
+    return tasks.filter((t) => statusFilter.includes(t.status));
+  }, [tasks, statusFilter]);
+
+  return (
+    <div className='related-tasks-tab'>
+      <Input
+        placeholder='RAG 搜索关联任务...'
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        allowClear
+        size='small'
+        prefix={<SearchOutlined />}
+        style={{ marginBottom: 8 }}
+      />
+      <div className='related-tasks-tab__filters' style={{ marginBottom: 8 }}>
+        {TASK_STATUS_OPTIONS.map((opt) => (
+          <Tag.CheckableTag
+            key={opt.value}
+            checked={statusFilter.includes(opt.value)}
+            onChange={(checked) => {
+              setStatusFilter((prev) =>
+                checked ? [...prev, opt.value] : prev.filter((v) => v !== opt.value),
+              );
+            }}>
+            {opt.label}
+          </Tag.CheckableTag>
+        ))}
+      </div>
+      {isSearching && searchQuery.isLoading ? (
+        <div style={{ textAlign: 'center', padding: 12 }}>
+          <Spin size='small' />
+        </div>
+      ) : isSearching ? (
+        filteredSearchItems && filteredSearchItems.length > 0 ? (
+          <List
+            size='small'
+            dataSource={filteredSearchItems}
+            renderItem={(item) => (
+              <List.Item
+                className='detail-list-item'
+                onClick={() => navigate(getViewPath('task', item.id))}>
+                <div className='detail-list-item__relation'>
+                  <div className='detail-list-item__row'>
+                    {item.status && (
+                      <Tag
+                        color={getTaskStatusColor(item.status)}
+                        style={{ fontSize: 10, margin: 0 }}>
+                        {item.status}
+                      </Tag>
+                    )}
+                    <span>{truncate(item.title, 30)}</span>
+                  </div>
+                  {item.snippet && (
+                    <span className='detail-list-item__snippet'>{truncate(item.snippet, 80)}</span>
+                  )}
+                </div>
+              </List.Item>
+            )}
+          />
+        ) : (
+          <Empty description='未找到匹配的关联任务' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )
+      ) : filteredTasks.length > 0 ? (
+        <List
+          size='small'
+          dataSource={filteredTasks}
+          renderItem={(t: TaskMeta) => (
+            <List.Item
+              className='detail-list-item'
+              onClick={() => navigate(getViewPath('task', t.id))}>
+              <div className='detail-list-item__row'>
+                <Tag color={getTaskStatusColor(t.status)} style={{ fontSize: 10, margin: 0 }}>
+                  {t.status}
+                </Tag>
+                <span>{truncate(t.title, 30)}</span>
+              </div>
+            </List.Item>
+          )}
+        />
+      ) : (
+        <Empty description='无符合条件的关联任务' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      )}
+    </div>
+  );
+}
+
+// ── 项目关系 Tab：项目名称显示 + 搜索 ──
+
+function ProjectRelationsTab({
+  relations,
+  currentProjectId,
+  projectNameMap,
+  navigate,
+}: {
+  relations: ProjectRelation[];
+  currentProjectId: string;
+  projectNameMap: Map<string, string>;
+  navigate: (path: string) => void;
+}) {
+  const [keyword, setKeyword] = useState('');
+
+  const items = useMemo(() => {
+    return relations.map((r) => {
+      const otherId = r.projectA === currentProjectId ? r.projectB : r.projectA;
+      const name = projectNameMap.get(otherId);
+      return { r, otherId, name };
+    });
+  }, [relations, currentProjectId, projectNameMap]);
+
+  const filtered = useMemo(() => {
+    if (!keyword) return items;
+    const lower = keyword.toLowerCase();
+    return items.filter(
+      ({ r, otherId, name }) =>
+        r.type.toLowerCase().includes(lower) ||
+        otherId.toLowerCase().includes(lower) ||
+        (name && name.toLowerCase().includes(lower)),
+    );
+  }, [items, keyword]);
+
+  return (
+    <div className='project-relations-tab'>
+      <Input
+        placeholder='搜索项目关系...'
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        allowClear
+        size='small'
+        prefix={<SearchOutlined />}
+        style={{ marginBottom: 8 }}
+      />
+      {filtered.length > 0 ? (
+        <List
+          size='small'
+          dataSource={filtered}
+          renderItem={({ r, otherId, name }) => (
+            <List.Item
+              className='detail-list-item'
+              onClick={() => navigate(getViewPath('project', otherId))}>
+              <div className='detail-list-item__relation'>
+                <div className='detail-list-item__row'>
+                  <Tag color={getEntityColor('project')} style={{ fontSize: 10, margin: 0 }}>
+                    {r.type}
+                  </Tag>
+                  <span>{name || truncate(otherId, 16)}</span>
+                </div>
+                <span className='detail-list-item__relation-id mono'>{truncate(otherId, 24)}</span>
+              </div>
+            </List.Item>
+          )}
+        />
+      ) : (
+        <Empty description='无匹配的项目关系' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      )}
+    </div>
+  );
+}
+
 // ── Spec 详情（直接从节点 data 渲染，不走 API）──
 
 function SpecDetail({ data }: { data: Record<string, unknown> }) {
   const adapter = getAdapter();
+  const navigate = useNavigate();
   const title = (data.title as string) || '未知';
   const specId = (data.specId as string) || '';
   const scope = (data.scope as string) || 'project';
@@ -924,6 +1312,14 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
     queryKey: queryKeys.specs(),
     queryFn: () => adapter.getSpecs(),
   });
+  const tasksQuery = useQuery({
+    queryKey: queryKeys.tasks(),
+    queryFn: () => adapter.getTasks(),
+  });
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: () => adapter.getProjects(),
+  });
   const allSpecs = [
     ...(specsQuery.data?.project || []),
     ...(specsQuery.data?.user || []),
@@ -931,6 +1327,33 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
   ];
   const spec = allSpecs.find((s) => s.fileName === specId || s.frontmatter.id === specId);
   const finalFilePath = filePath || spec?.filePath || null;
+  const tasks = (tasksQuery.data as TaskMeta[] | undefined) ?? [];
+
+  // 关联任务：referencedSpecs 匹配 specId
+  const relatedTasks = useMemo(
+    () => tasks.filter((t) => (t.referencedSpecs || []).some((r) => r.id === specId)),
+    [tasks, specId],
+  );
+
+  // 关联项目：关联任务的 projects 聚合 + 项目级 spec 的所属项目（filePath 提取）
+  const relatedProjectIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of relatedTasks) {
+      for (const pid of t.projects || []) ids.add(pid);
+    }
+    if (scope === 'project' && finalFilePath) {
+      const match = finalFilePath.match(/\/projects\/([^/]+)\//);
+      if (match) ids.add(match[1]);
+    }
+    return Array.from(ids);
+  }, [relatedTasks, scope, finalFilePath]);
+
+  const projectNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of projectsQuery.data || []) map.set(getProjectId(p), p.name);
+    return map;
+  }, [projectsQuery.data]);
+
   return (
     <div className='detail-component'>
       <h3 className='detail-component__title'>{title}</h3>
@@ -941,12 +1364,110 @@ function SpecDetail({ data }: { data: Record<string, unknown> }) {
       <div className='detail-component__meta'>
         <div className='mono detail-component__meta-id'>文件: {specId}</div>
       </div>
-      {/* Spec 内容 */}
       <div className='detail-component__scroll'>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <EditButton contentType='spec' entityId={specId} title={title} />
-        </div>
-        {spec?.content && <MarkdownWithToc content={spec.content} />}
+        <Tabs
+          size='small'
+          className='detail-component__tabs'
+          items={[
+            {
+              key: 'content',
+              label: 'Spec 内容',
+              children: (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                    <EditButton contentType='spec' entityId={specId} title={title} />
+                  </div>
+                  {spec?.content && <MarkdownWithToc content={spec.content} />}
+                </>
+              ),
+            },
+            ...(relatedProjectIds.length > 0
+              ? [
+                  {
+                    key: 'projects',
+                    label: `关联项目 (${relatedProjectIds.length})`,
+                    children: (
+                      <SearchFilterBar
+                        items={relatedProjectIds}
+                        placeholder='搜索关联项目...'
+                        getSearchText={(pid: string) => projectNameMap.get(pid) || pid}>
+                        {(filtered) =>
+                          filtered.length > 0 ? (
+                            <List
+                              size='small'
+                              dataSource={filtered}
+                              renderItem={(pid: string) => (
+                                <List.Item
+                                  className='detail-list-item'
+                                  onClick={() => navigate(getViewPath('project', pid))}>
+                                  <div className='detail-list-item__relation'>
+                                    <div className='detail-list-item__row'>
+                                      <Tag
+                                        color={getEntityColor('project')}
+                                        style={{ fontSize: 10, margin: 0 }}>
+                                        project
+                                      </Tag>
+                                      <span>{projectNameMap.get(pid) || pid.slice(0, 12)}</span>
+                                    </div>
+                                    <span className='detail-list-item__relation-id mono'>
+                                      {truncate(pid, 24)}
+                                    </span>
+                                  </div>
+                                </List.Item>
+                              )}
+                            />
+                          ) : (
+                            <Empty description='无匹配项目' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                          )
+                        }
+                      </SearchFilterBar>
+                    ),
+                  },
+                ]
+              : []),
+            ...(relatedTasks.length > 0
+              ? [
+                  {
+                    key: 'tasks',
+                    label: `关联任务 (${relatedTasks.length})`,
+                    children: (
+                      <SearchFilterBar
+                        items={relatedTasks}
+                        placeholder='搜索关联任务...'
+                        getSearchText={(t: TaskMeta) => t.title}
+                        filterOptions={TASK_STATUS_OPTIONS}
+                        getFilterValue={(t: TaskMeta) => t.status}>
+                        {(filtered) =>
+                          filtered.length > 0 ? (
+                            <List
+                              size='small'
+                              dataSource={filtered}
+                              renderItem={(t: TaskMeta) => (
+                                <List.Item
+                                  className='detail-list-item'
+                                  onClick={() => navigate(getViewPath('task', t.id))}>
+                                  <div className='detail-list-item__row'>
+                                    <Tag
+                                      color={getTaskStatusColor(t.status)}
+                                      style={{ fontSize: 10, margin: 0 }}>
+                                      {t.status}
+                                    </Tag>
+                                    <span>{truncate(t.title, 30)}</span>
+                                  </div>
+                                </List.Item>
+                              )}
+                            />
+                          ) : (
+                            <Empty description='无匹配任务' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                          )
+                        }
+                      </SearchFilterBar>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+        />
       </div>
     </div>
   );

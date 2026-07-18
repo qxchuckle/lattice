@@ -1,6 +1,6 @@
 import type { ViewMode } from '../../store';
 import type { SearchFilters } from '../../store';
-import type { SearchResult, TaskMeta } from '@qcqx/lattice-core';
+import type { SearchResult, TaskMeta, ParsedSpec } from '@qcqx/lattice-core';
 
 /** 树节点类型 */
 export interface TreeNode {
@@ -52,7 +52,10 @@ export function scopeLabelToValue(scope?: string): string {
 // ── 搜索结果信息提取 ──
 
 /** 从搜索结果提取 ID 和视角 */
-export function extractSearchResultInfo(item: SearchResult): { id: string; mode: ViewMode } {
+export function extractSearchResultInfo(
+  item: SearchResult,
+  specIdByPath?: Map<string, string>,
+): { id: string; mode: ViewMode } {
   const meta = item.meta;
   const typeMap: Record<string, ViewMode> = {
     task: 'task',
@@ -61,6 +64,7 @@ export function extractSearchResultInfo(item: SearchResult): { id: string; mode:
     relation: 'global',
   };
   const mode = typeMap[item.type] || 'global';
+  // 优先从 meta 取直接 ID
   const directId =
     (meta.id as string) ||
     (meta.taskId as string) ||
@@ -68,11 +72,19 @@ export function extractSearchResultInfo(item: SearchResult): { id: string; mode:
     (meta.specId as string);
   if (directId) return { id: directId, mode };
   const filePath = (meta.filePath as string) || '';
+  // spec: 优先从 specIdByPath 查找（frontmatter.id || fileName），与侧栏树 spec-item entityId 规则一致
+  if (item.type === 'spec' && specIdByPath) {
+    const specId = specIdByPath.get(filePath);
+    if (specId) return { id: specId, mode: 'spec' };
+  }
+  // project: meta.projectIds 是数组，取第一个（project 搜索结果的 filePath 是源码路径，不匹配 lattice 路径格式）
+  const projectIds = meta.projectIds as string[] | undefined;
+  if (projectIds && projectIds.length > 0) return { id: projectIds[0], mode };
+  // 从 filePath 提取
   const taskMatch = filePath.match(/\/task\/([^/]+)\//);
   if (taskMatch) return { id: taskMatch[1], mode: 'task' };
-  const projectMatch = filePath.match(/\/projects\/([^/]+)\//);
-  if (projectMatch) return { id: projectMatch[1], mode: 'project' };
-  const specMatch = filePath.match(/\/specs\/([^/]+)\.md$/);
+  // spec fallback: 从 filePath 提取文件名（含 .md 后缀，与 fileName 一致），兼容 /spec/ 单数与 /specs/ 复数
+  const specMatch = filePath.match(/\/specs?\/([^/]+\.md)$/);
   if (specMatch) return { id: specMatch[1], mode: 'spec' };
   return { id: item.title, mode };
 }
@@ -213,10 +225,16 @@ export function flattenSearch(
   data: SearchResult[],
   filters?: SearchFilters,
   tasks?: TaskMeta[],
+  specs?: ParsedSpec[],
 ): TreeNode[] {
+  // 构建 filePath → specId 映射（frontmatter.id || fileName），与侧栏树 spec-item entityId 一致
+  const specIdByPath = new Map<string, string>();
+  for (const s of specs || []) {
+    specIdByPath.set(s.filePath, s.frontmatter.id || s.fileName);
+  }
   return data
     .map((item: SearchResult, i: number) => {
-      const { id, mode } = extractSearchResultInfo(item);
+      const { id, mode } = extractSearchResultInfo(item, specIdByPath);
       const meta: TreeNode['meta'] = { desc: item.type };
 
       // 补全 task status

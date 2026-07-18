@@ -1,9 +1,10 @@
-import { memo, useState, useCallback, useMemo, useEffect } from 'react';
-import { Modal, Button, Segmented, App, Spin } from 'antd';
+import { memo, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Modal, Button, Segmented, App, Spin, Switch } from 'antd';
 import { EditOutlined, SaveOutlined } from '@ant-design/icons';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
+import { EditorView } from '@codemirror/view';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
 import { useTheme, useIsMobile } from '../../hooks';
@@ -38,6 +39,52 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   const [content, setContent] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split');
   const [saving, setSaving] = useState(false);
+  const [syncScroll, setSyncScroll] = useState(true);
+  const [wordWrap, setWordWrap] = useState(true);
+  const editorWrapRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const isSyncingRef = useRef(false);
+  const editorViewRef = useRef<EditorView | null>(null);
+  const [editorReadyKey, setEditorReadyKey] = useState(0);
+
+  // 分屏同步滚动：编辑器与预览区按 scrollTop 比例同步
+  // 依赖 editorReadyKey（onCreateEditor 触发）确保 CodeMirror 已渲染，用 view.scrollDOM 获取滚动元素
+  useEffect(() => {
+    if (mode !== 'split' || !syncScroll) return;
+    const editorScroller = editorViewRef.current?.scrollDOM ?? null;
+    const preview = previewRef.current;
+    if (!editorScroller || !preview) return;
+
+    const syncToPreview = () => {
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+      const max = editorScroller.scrollHeight - editorScroller.clientHeight;
+      const ratio = max > 0 ? editorScroller.scrollTop / max : 0;
+      const previewMax = preview.scrollHeight - preview.clientHeight;
+      preview.scrollTop = ratio * previewMax;
+      requestAnimationFrame(() => {
+        isSyncingRef.current = false;
+      });
+    };
+    const syncToEditor = () => {
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+      const max = preview.scrollHeight - preview.clientHeight;
+      const ratio = max > 0 ? preview.scrollTop / max : 0;
+      const editorMax = editorScroller.scrollHeight - editorScroller.clientHeight;
+      editorScroller.scrollTop = ratio * editorMax;
+      requestAnimationFrame(() => {
+        isSyncingRef.current = false;
+      });
+    };
+
+    editorScroller.addEventListener('scroll', syncToPreview);
+    preview.addEventListener('scroll', syncToEditor);
+    return () => {
+      editorScroller.removeEventListener('scroll', syncToPreview);
+      preview.removeEventListener('scroll', syncToEditor);
+    };
+  }, [mode, syncScroll, editorReadyKey]);
 
   // 每次打开时重置状态
   useEffect(() => {
@@ -62,8 +109,11 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   });
 
   const extensions = useMemo(
-    () => (isYaml ? [yaml()] : [markdown({ base: markdownLanguage })]),
-    [isYaml],
+    () =>
+      isYaml
+        ? [yaml(), ...(wordWrap ? [EditorView.lineWrapping] : [])]
+        : [markdown({ base: markdownLanguage }), ...(wordWrap ? [EditorView.lineWrapping] : [])],
+    [isYaml, wordWrap],
   );
 
   const handleSave = useCallback(async () => {
@@ -91,16 +141,34 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
       style={{ top: 20 }}
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Segmented
-            size='small'
-            value={mode}
-            onChange={(v) => setMode(v as 'edit' | 'preview' | 'split')}
-            options={[
-              { label: '编辑', value: 'edit' },
-              { label: '预览', value: 'preview' },
-              { label: '分屏', value: 'split' },
-            ]}
-          />
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <Segmented
+              size='small'
+              value={mode}
+              onChange={(v) => setMode(v as 'edit' | 'preview' | 'split')}
+              options={[
+                { label: '编辑', value: 'edit' },
+                { label: '预览', value: 'preview' },
+                { label: '分屏', value: 'split' },
+              ]}
+            />
+            {mode === 'split' && (
+              <Switch
+                size='small'
+                checked={syncScroll}
+                onChange={setSyncScroll}
+                checkedChildren='同步滚动'
+                unCheckedChildren='独立滚动'
+              />
+            )}
+            <Switch
+              size='small'
+              checked={wordWrap}
+              onChange={setWordWrap}
+              checkedChildren='换行'
+              unCheckedChildren='滚动'
+            />
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button onClick={onClose}>取消</Button>
             <Button type='primary' icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
@@ -123,6 +191,7 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
           }}>
           {(mode === 'edit' || mode === 'split') && (
             <div
+              ref={editorWrapRef}
               style={{
                 flex: mode === 'split' ? (isMobile ? '1 1 50%' : '1 1 50%') : '1 1 100%',
                 overflow: 'auto',
@@ -137,6 +206,10 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
                 theme={themeMode === 'dark' ? 'dark' : 'light'}
                 height='100%'
                 style={{ height: '100%', fontSize: 13 }}
+                onCreateEditor={(view) => {
+                  editorViewRef.current = view;
+                  setEditorReadyKey((k) => k + 1);
+                }}
               />
             </div>
           )}
@@ -155,6 +228,7 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
           )}
           {mode === 'split' && (
             <div
+              ref={previewRef}
               style={{
                 flex: '1 1 50%',
                 overflow: 'auto',

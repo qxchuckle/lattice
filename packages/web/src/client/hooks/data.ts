@@ -1,7 +1,8 @@
+import { useDeferredValue } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
 import { queryKeys } from '../lib';
-import type { ProjectMeta, TaskMeta, ParsedSpec } from '@qcqx/lattice-core';
+import type { ProjectMeta, TaskMeta, ParsedSpec, SearchResult } from '@qcqx/lattice-core';
 
 export function useEntityDetail(entityId: string | null, entityType: string | null) {
   const adapter = getAdapter();
@@ -58,5 +59,26 @@ export function useUsers() {
     queryKey: ['users'],
     queryFn: () => adapter.getUsers(),
     staleTime: 60_000,
+  });
+}
+
+/**
+ * 项目详情面板关联任务 tab 的 RAG 搜索。
+ * 调用 ltc 标准 hybridSearch（type=task + projectId 过滤），结果限定在当前项目关联任务范围。
+ * 参考 useSearch（hooks/ui.ts）的防抖与 staleTime 策略。
+ */
+export function useProjectTaskSearch(projectId: string | null, query: string) {
+  const debouncedQuery = useDeferredValue(query);
+  const adapter = getAdapter();
+  return useQuery<SearchResult[]>({
+    queryKey: ['project-task-search', projectId, debouncedQuery],
+    queryFn: () =>
+      adapter.search(debouncedQuery, {
+        type: 'task',
+        projectId: projectId || undefined,
+        limit: 50,
+      }),
+    enabled: debouncedQuery.length > 0 && !!projectId,
+    staleTime: 30_000,
   });
 }

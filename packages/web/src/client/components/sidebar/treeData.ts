@@ -30,7 +30,12 @@ function buildSpecTaskChildren(specId: string, tasks: TaskMeta[]): TreeNode[] | 
 }
 
 /** 构建树形数据：Spec / 项目 / 任务 三级树 */
-export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: TaskMeta[] } {
+export function useTreeData(): {
+  tree: TreeNode[];
+  loading: boolean;
+  tasks: TaskMeta[];
+  specs: ParsedSpec[];
+} {
   const adapter = getAdapter();
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects,
@@ -285,5 +290,11 @@ export function useTreeData(): { tree: TreeNode[]; loading: boolean; tasks: Task
     ];
   }, [loading, projectsQuery.data, tasksQuery.data, specsQuery.data]);
 
-  return { tree, loading, tasks: (tasksQuery.data as TaskMeta[] | undefined) ?? [] };
+  const specs = useMemo<ParsedSpec[]>(() => {
+    const s = specsQuery.data;
+    if (!s) return [];
+    return [...(s.global || []), ...(s.user || []), ...(s.project || [])];
+  }, [specsQuery.data]);
+
+  return { tree, loading, tasks: (tasksQuery.data as TaskMeta[] | undefined) ?? [], specs };
 }
