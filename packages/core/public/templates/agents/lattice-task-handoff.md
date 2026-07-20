@@ -1,6 +1,6 @@
 ---
 name: lattice-task-handoff
-description: 失忆恢复与上下文重建。当上下文被压缩、新会话继续旧任务、用户提到"刚才那个/之前的方案/上次说的"、或 AI 对当前项目 spec/规范印象模糊时委派此 agent。执行完整的「上下文压缩失忆恢复」流程（lattice-rules.md §五），返回完整的任务交接信息。
+description: MUST BE USED 失忆恢复与上下文重建。Use PROACTIVELY 当上下文被压缩、新会话继续旧任务、用户提到"刚才那个/之前的方案/上次说的"、或 AI 对当前项目 spec/规范印象模糊时。禁止主线直接跑恢复命令组合。执行完整的「上下文压缩失忆恢复」流程（lattice-rules.md §五），返回完整的任务交接信息。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice

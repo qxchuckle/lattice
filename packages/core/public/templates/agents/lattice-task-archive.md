@@ -1,6 +1,6 @@
 ---
 name: lattice-task-archive
-description: 任务归档全流程。当用户归档任务、执行 /lattice/task/archive、或任务即将完成时委派此 agent。执行完整的归档前置信息采集、PRD 补全、summary checkpoint、complete/archive 命令、rag update，返回归档报告。
+description: MUST BE USED 任务归档全流程。Use PROACTIVELY 当归档任务、执行 /lattice/task/archive、或任务完成时。禁止主线直接跑归档命令组合。执行完整的归档前置信息采集、PRD 补全、summary checkpoint、complete/archive 命令、rag update，返回归档报告。
 tools: Read, Bash, Grep, Glob, Write
 skills:
   - lattice

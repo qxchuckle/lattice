@@ -1,6 +1,6 @@
 ---
 name: lattice-context
-description: 项目上下文铺底。当进入新项目、会话开始、执行 /lattice/context、或需要了解当前项目全貌时委派此 agent。执行完整的「进入项目默认动作」链路，返回完整的项目上下文信息（spec 全文 + 任务列表）。
+description: MUST BE USED 项目上下文铺底。Use PROACTIVELY 当进入新项目、会话开始、执行 /lattice/context、或需要了解当前项目全貌时。禁止主线直接跑铺底命令组合。执行完整的「进入项目默认动作」链路，返回完整的项目上下文信息（spec 全文 + 任务列表）。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice

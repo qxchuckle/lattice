@@ -2,6 +2,19 @@
 
 当平台支持 subagent 时，把 lattice 中**重 IO、大输出、只取结论**的流程交给 subagent 并行执行，避免原始输出塞满主上下文。
 
+**硬约束：以下场景必须委派，禁止主线直接执行对应命令组合。** 平台不支持 subagent 时退化为串行执行（按同样命令清单顺序跑，主动收缩输出）。
+
+| 场景 | 必须委派的 subagent | 禁止主线直接执行的命令 |
+|------|---------------------|------------------------|
+| 任务起手信息收集 | `lattice-task-start` | `ltc context --task` + `ltc search` + `ltc spec show --detail` 组合 |
+| 任务归档 | `lattice-task-archive` | `ltc task progress` + PRD 补全 + checkpoint + archive 组合 |
+| 项目上下文铺底 | `lattice-context` | `ltc context` + `ltc status` + `ltc spec list` 组合 |
+| 跨项目搜索 | `lattice-search` | 多路 `ltc search --json` 并行 |
+| 失忆恢复 | `lattice-task-handoff` | 恢复流程全部命令 |
+| 规范精读 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show --detail` |
+| 变更影响分析 | `lattice-impact` | context + search + grep 组合 |
+| 健康巡检 | `lattice-health` | `ltc doctor` + `rag status` + `spec conflicts` 组合 |
+
 ## 预定义 subagent（优先使用）
 
 | name | 职责 | 触发场景 |
@@ -15,7 +28,7 @@
 | `lattice-spec-digest` | 规范摘要 | 涉及不熟悉模块/spec 多 |
 | `lattice-impact` | 变更影响分析 | 较大变更/跨模块修改前 |
 
-**调度规则**：场景匹配 → 优先预定义；不覆盖 → 按下方临时委派判定。`lattice-task-archive` 是唯一涉及写操作的预定义 subagent（只写 lattice 元数据）。
+**调度规则**：场景匹配上表 → 必须委派预定义 subagent；不覆盖 → 按下方临时委派判定。`lattice-task-archive` 是唯一涉及写操作的预定义 subagent（只写 lattice 元数据）。
 
 ## 临时委派判定
 

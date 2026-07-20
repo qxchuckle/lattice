@@ -1,6 +1,6 @@
 ---
 name: lattice-health
-description: Lattice 健康巡检。当需要检查系统状态、排查异常、定期体检、或搜索结果不准时委派此 agent。运行全部诊断命令，返回结构化健康报告与修复建议。只诊断不修复。
+description: MUST BE USED Lattice 健康巡检。Use PROACTIVELY 当需要检查系统状态、排查异常、搜索结果不准、或定期体检时。禁止主线直接跑诊断命令组合。运行全部诊断命令，返回结构化健康报告与修复建议。只诊断不修复。
 tools: Read, Bash
 skills:
   - lattice

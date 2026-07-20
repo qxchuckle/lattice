@@ -4,7 +4,7 @@ Lattice 是跨项目 AI 上下文管理工具。本文件定义 AI 使用 Lattic
 
 > **本文定位**：系统级硬约束清单（自含可读）。每条规则末尾 `（→ xxx.md#yy）` 跳到 skill 子文档展开。本文不复述子文档流程。
 
-**审慕原则**：行动前先确认有无 Lattice 更佳路径。需要看源码先查已注册仓库；需要项目约定先读 spec；不确定先查历史任务；**程序化工作流优先委派预定义 subagent**（→ [subagent-delegation.md#预定义-subagent优先使用](subagent-delegation.md#预定义-subagent优先使用)）。
+**审慕原则**：行动前先确认有无 Lattice 更佳路径。需要看源码先查已注册仓库；需要项目约定先读 spec；不确定先查历史任务；**程序化工作流必须委派预定义 subagent，禁止主线直接执行起手/归档/铺底等命令组合**；平台不支持 subagent 时退化为串行执行（→ [subagent-delegation.md#预定义-subagent优先使用](subagent-delegation.md#预定义-subagent优先使用)）。
 
 ## 一、起手契约（每个新会话第一件事）
 
@@ -64,7 +64,7 @@ Lattice 是跨项目 AI 上下文管理工具。本文件定义 AI 使用 Lattic
 
 信号：出现 "summary"/"continued from previous" · 不记得会话开头 · 用户提"之前的方案"但印象模糊 · 对 spec/规范印象模糊。
 
-恢复（优先委派 `lattice-task-handoff`）：
+恢复（必须委派 `lattice-task-handoff`；不支持 subagent 时串行执行）：
 
 1. 重新调用 `lattice` skill（→ [SKILL.md#文档加载策略](SKILL.md#文档加载策略)）
 2. `ltc context --query` + 精读 spec + read PRD/design.md

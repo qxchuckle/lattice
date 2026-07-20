@@ -1,6 +1,6 @@
 ---
 name: lattice-search
-description: 跨项目搜索与经验调研。当用户询问"之前做过类似的吗""有没有可复用方案""哪个项目处理过这个问题"时委派此 agent。执行多关键词×多类型的跨项目搜索，返回完整搜索结果与相关文档全文。
+description: MUST BE USED 跨项目搜索与经验调研。Use PROACTIVELY 当用户询问"之前做过类似的吗""有没有可复用方案""哪个项目处理过这个问题"时。禁止主线直接跑多路 search 组合。执行多关键词×多类型的跨项目搜索，返回完整搜索结果与相关文档全文。
 tools: Read, Bash
 skills:
   - lattice

@@ -49,7 +49,7 @@ ltc task update <task-id> --parent <id> / --clear-parent
 
 ## task start 后的起手动作
 
-> 委派：优先委派 `lattice-task-start` subagent，主线只等摘要。
+> 委派：必须委派 `lattice-task-start` subagent（不支持时退化串行），主线只等摘要。
 
 ```bash
 ltc task start <task-id>
@@ -185,7 +185,7 @@ ltc project relation add <a> <b> --type <type> --description "证据" --ai-infer
 
 ## 任务归档前置信息采集
 
-> 委派：整个归档流程优先委派 `lattice-task-archive` subagent。
+> 委派：必须委派 `lattice-task-archive` subagent（不支持时退化串行）。
 
 禁止跳过：未读 PRD + progress + design.md 就写归档总结 = 必然遗漏。
 

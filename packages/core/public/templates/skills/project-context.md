@@ -4,7 +4,7 @@
 
 ## 进入项目默认动作
 
-> 委派：优先委派 `lattice-context` subagent。
+> 委派：必须委派 `lattice-context` subagent（不支持时退化串行）。
 
 ```bash
 ltc context --query "<当前主题/意图>"
@@ -23,7 +23,7 @@ ltc status
 
 ## 跨项目相似需求搜索
 
-> 委派：优先委派 `lattice-search` subagent。
+> 委派：必须委派 `lattice-search` subagent（不支持时退化串行）。
 
 ```bash
 ltc search "<查询词>" --json

@@ -1,6 +1,6 @@
 ---
 name: lattice-impact
-description: 变更影响信息收集。当准备做较大变更、跨模块修改、引入新依赖、或需要评估"改这个会影响什么"时委派此 agent。搜索相关历史任务/spec/项目关系，结合代码层面扫描，完整返回所有相关信息。
+description: MUST BE USED 变更影响信息收集。Use PROACTIVELY 当准备做较大变更、跨模块修改、引入新依赖、或需要评估"改这个会影响什么"时。禁止主线直接跑影响分析命令组合。搜索相关历史任务/spec/项目关系，结合代码层面扫描，完整返回所有相关信息。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice

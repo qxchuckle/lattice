@@ -1,6 +1,6 @@
 ---
 name: lattice-task-start
-description: 任务起手信息收集。当用户开始新任务、执行 /lattice/task/start、或需要为任务收集上下文时委派此 agent。执行完整的 task start 起手动作链路，返回完整的结构化信息（spec 全文 + 任务列表 + design.md 内容）供主代理直接使用。
+description: MUST BE USED 任务起手信息收集。Use PROACTIVELY 当开始新任务、执行 /lattice/task/start、或需要为任务收集上下文时。禁止主线直接跑起手命令组合。执行完整的 task start 起手动作链路，返回完整的结构化信息（spec 全文 + 任务列表 + design.md 内容）供主代理直接使用。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice

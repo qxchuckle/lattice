@@ -1,6 +1,6 @@
 ---
 name: lattice-spec-digest
-description: 规范完整收集。当任务涉及不熟悉的模块、spec 数量多需要集中获取、需要确认"本次任务该遵守哪些规则"、或实施期新一轮涉及新模块时委派此 agent。执行完整的「按任务主题精读相关 spec」流程（spec-workflows.md），返回所有相关 spec 的完整内容。
+description: MUST BE USED 规范完整收集。Use PROACTIVELY 当任务涉及不熟悉的模块、spec 数量多需要集中获取、需要确认"本次任务该遵守哪些规则"、或实施期新一轮涉及新模块时。禁止主线直接跑批量 spec show 组合。执行完整的「按任务主题精读相关 spec」流程（spec-workflows.md），返回所有相关 spec 的完整内容。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice
