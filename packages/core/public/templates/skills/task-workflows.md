@@ -43,17 +43,22 @@ design 模式具体允许 / 禁止动作的硬约束清单见 [lattice-rules.md 
 
 > 何时读：`task create` / `task start` 收到的参数是描述 / 关键词 / 文件引用 / 需求段（不是已存在的任务 ID）时 → 下一步：拿到任务 ID 后跳到「task start 后的起手动作」。
 
+0. **项目定位（前置，必做）**：从用户输入中提取项目路径或语义描述，先定位实际工作项目：
+   - 提供了路径（文件 / 目录 / 包名）→ `ltc project where <path>`
+   - 提供了语义描述（需求段 / 项目名关键词）→ AI 抽取关键词 + 自由补充 → `ltc project list --search <keyword>`（可多次搜）
+   - 定位到项目 → 后续 create 用 `--project <id>`；无路径无语义描述 / 定位无结果 → 默认 `--current`
+   - 定位到的项目与当前目录项目是否一致无需比对：若一致，`--project <id>` 与 `--current` 等价
 1. 归纳简洁标题
 2. `ltc task list --current` + `ltc search "<标题>" --project <project-id> --type task --json` 查重
 3. 有相似 in_progress 任务 → 先停下列候选给用户确认
-4. `ltc task create "<标题>" --current [--parent <parent-task-id>]`
+4. `ltc task create "<标题>" [--current | --project <id>] [--parent <parent-task-id>]`（参数由第 0 步定位结果决定）
 
 ## 父子任务
 
 > 何时读：当前任务是另一任务的拆分 / 后续 / 子主题时 → 下一步：创建后回到「task start 后的起手动作」。
 
 ```bash
-ltc task create "<title>" --current --parent <parent-task-id>
+ltc task create "<title>" [--current | --project <id>] --parent <parent-task-id>
 ltc task lineage <task-id>
 ltc task tree <task-id> [--descendants]
 ltc task update <task-id> --parent <parent-task-id>
@@ -213,13 +218,19 @@ ltc task progress <task-id> [--last <n>] [--type <type>]
 
 ## 项目关联同步
 
-> 何时读：任务刚 start 后 / 编辑了新项目文件 / 中途切换项目目录 / 归档前复核时 → 下一步：执行 `task associate` 让 task.json 的 projects/scopePaths 反映实际工作范围。
+> 何时读：任务刚 start 后 / 编辑了新项目文件 / 中途切换项目目录 / 归档前复核时 → 下一步：按场景选择 `task associate` 参数，让 task.json 的 projects/scopePaths 反映实际工作范围。
 
-```bash
-ltc task associate <task-id> --current
-ltc task associate <task-id> --paths <path>
-ltc task associate <task-id> --project <project-id>
-```
+任务创建时的项目定位见「命令参数不是任务 ID 时」第 0 步。本节聚焦任务进行中新增 / 调整项目关联的场景。
+
+按任务实际涉及的项目选择参数：
+
+| 场景 | 命令 |
+|---|---|
+| 任务在当前工作目录对应的项目范围内 | `ltc task associate <task-id> --current` |
+| 任务目标是另一个已注册项目（与当前目录无关） | `ltc task associate <task-id> --project <project-id>` |
+| 任务涉及的路径不是已注册项目 | `ltc task associate <task-id> --paths <path>` |
+
+获取目标项目 ID：到目标项目目录下运行 `ltc context` / `ltc status`，或用 `ltc project where <path>` / `ltc project list --search <keyword>` 查询。不要用 `--current` 关联到与任务无关的当前目录项目。
 
 发现任务涉及新路径 / 新项目时当轮执行，不延后。只有关联了用户可能未预期的项目时才输出说明。
 
@@ -340,7 +351,7 @@ ltc task archive <task-id>
 
 ```bash
 ltc task list [--current] [--all-user]
-ltc task create "<title>" --current [--parent <id>]
+ltc task create "<title>" [--current | --project <id>] [--parent <id>]
 ltc task info <id>
 ltc task start <id>
 ltc task checkpoint <id> --type <type> --title "..." -m "..."
@@ -350,3 +361,5 @@ ltc task complete <id>
 ltc task archive <id>
 ltc context --task <id>
 ```
+
+> `--current` 基于当前工作目录解析项目。**写入类**（`task create` / `task associate`）：用户提供了路径/语义描述时必须先 `ltc project where` / `ltc project list --search` 定位，定位到用 `--project <id>`（见「命令参数不是任务 ID 时」第 0 步）。**读取类**（`task list`）：与当前目录无关时用 `--project <id>`。

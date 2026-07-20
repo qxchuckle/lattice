@@ -85,7 +85,7 @@ AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何
 | 当前目录属于哪个项目 | 项目身份 | `ltc project where .` / `ltc status` |
 | 不确定项目间依赖 / 关系 | 项目关系 | `ltc project relation list` / `ltc project list --with-relations` |
 | 任务关联了哪些项目 | 任务的项目集合 | `ltc task info <id>` |
-| 查看当前有哪些活跃任务 | 进行中任务 | `ltc task list --current` |
+| 查看当前有哪些活跃任务 | 进行中任务 | `ltc task list --current`（与当前目录无关时用 `--project <id>`） |
 | 数据 / 索引可能有问题 | 健康状态 | `ltc doctor` / `ltc rag status` |
 | 不确定某条 spec 的完整内容 | spec 正文 | `ltc spec show <name> --detail` |
 | 检查 spec 是否有层级冲突 | 冲突检测 | `ltc spec conflicts` |
@@ -108,7 +108,7 @@ AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何
 
 | 发现的变化 | 同步动作 | 命令 |
 |---|---|---|
-| 任务涉及新项目 / 新路径 | 更新 `projects` / `scopePaths` | `ltc task associate` |
+| 任务涉及新项目 / 新路径 | 更新 `projects` / `scopePaths` | `ltc task associate`（与当前目录无关时用 `--project <id>`） |
 | 参照了某 spec | 更新 `referencedSpecs` | `ltc task ref-spec` |
 | 发现未记录的项目间关系 | 写入 `relations.json` | `ltc project relation add --ai-inferred` |
 

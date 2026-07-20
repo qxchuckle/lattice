@@ -1,4 +1,4 @@
-import { useEffect, useState, useDeferredValue } from 'react';
+import { useEffect, useState } from 'react';
 import { useSnapshot } from 'valtio';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
@@ -133,9 +133,19 @@ export function useKeyboard() {
   }, []);
 }
 
+/** 传统 debounce：延迟 delay ms 后更新值，期间输入不触发更新（比 useDeferredValue 更可靠地限制请求频率） */
+export function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 export function useSearch() {
   const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
-  const debouncedKeyword = useDeferredValue(searchKeyword);
+  const debouncedKeyword = useDebouncedValue(searchKeyword, 300);
   const adapter = getAdapter();
   const hasStatusOrScopeFilter =
     searchFilters.taskStatus.length > 0 || searchFilters.specScope.length > 0;
@@ -145,25 +155,25 @@ export function useSearch() {
       ...searchFilters.taskStatus,
       ...searchFilters.specScope,
     ]),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       adapter.search(debouncedKeyword, {
         type: searchType,
         limit: hasStatusOrScopeFilter ? 50 : 20,
+        signal,
       }),
     enabled: debouncedKeyword.length > 0,
-    staleTime: 30_000,
   });
 }
 
 export function useGlobalSearch(query: string) {
-  const debouncedQuery = useDeferredValue(query);
+  const debouncedQuery = useDebouncedValue(query, 300);
   const adapter = getAdapter();
   const { searchType } = useSnapshot(globalSearchStore);
   const searchTypeParam = searchType === 'all' ? undefined : searchType;
   return useQuery({
     queryKey: ['global-search', debouncedQuery, searchType],
-    queryFn: () => adapter.search(debouncedQuery, { type: searchTypeParam, limit: 30 }),
+    queryFn: ({ signal }) =>
+      adapter.search(debouncedQuery, { type: searchTypeParam, limit: 30, signal }),
     enabled: debouncedQuery.length > 0,
-    staleTime: 30_000,
   });
 }

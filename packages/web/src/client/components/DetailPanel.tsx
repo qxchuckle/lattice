@@ -53,6 +53,7 @@ import {
 import { useEntityDetail, useProjectTaskSearch } from '../hooks';
 import { getAdapter } from '../adapters';
 import { apiGet } from '../lib';
+import type { SpecNodeData } from '../types/graph';
 import {
   formatDate,
   getTaskStatusColor,
@@ -1082,10 +1083,10 @@ function SearchFilterBar<T>({
 
 /** 从 task 类型搜索结果提取 taskId（filePath 格式 user/<u>/task/<taskId>/prd.md） */
 function extractTaskIdFromSearchResult(r: SearchResult): string | null {
-  const meta = r.meta as Record<string, unknown>;
-  const directId = (meta.id as string) || (meta.taskId as string);
+  const meta = r.meta;
+  const directId = (meta.id as string) || meta.taskId;
   if (directId) return directId;
-  const filePath = (meta.filePath as string) || '';
+  const filePath = meta.filePath || '';
   const match = filePath.match(/\/task\/([^/]+)\//);
   return match ? match[1] : null;
 }
@@ -1299,15 +1300,15 @@ function ProjectRelationsTab({
 
 // ── Spec 详情（直接从节点 data 渲染，不走 API）──
 
-function SpecDetail({ data }: { data: Record<string, unknown> }) {
+function SpecDetail({ data }: { data: SpecNodeData }) {
   const adapter = getAdapter();
   const navigate = useNavigate();
-  const title = (data.title as string) || '未知';
-  const specId = (data.specId as string) || '';
-  const scope = (data.scope as string) || 'project';
+  const title = data.title || '未知';
+  const specId = data.specId || '';
+  const scope = data.scope || 'project';
   const scopeLabel = scope === 'global' ? '全局级' : scope === 'user' ? '用户级' : '项目级';
   const scopeColor = scope === 'global' ? 'orange' : scope === 'user' ? 'cyan' : 'blue';
-  const filePath = (data.filePath as string) || null;
+  const filePath = data.filePath || null;
   const specsQuery = useQuery({
     queryKey: queryKeys.specs(),
     queryFn: () => adapter.getSpecs(),
@@ -1611,12 +1612,12 @@ export const DetailPanel = memo(function DetailPanel() {
   const detailQuery = useEntityDetail(isApiType ? entityId : null, isApiType ? entityType : null);
 
   // spec 直接从节点 data 渲染
-  if (entityType === 'spec' && entityData) {
+  if (entityType === 'spec' && entityData && entityData.entityType === 'spec') {
     return (
       <div className='detail-panel-root'>
         <DetailHeader entityId={entityId} entityType={entityType} />
         <div className='detail-panel-content'>
-          <SpecDetail data={entityData as Record<string, unknown>} />
+          <SpecDetail data={entityData} />
         </div>
       </div>
     );

@@ -14,6 +14,7 @@ import {
   getVisibleCanvasCenter,
 } from '../store';
 import { applyFocus, clearFocus } from './graph/layout';
+import type { LatticeNodeData } from '../types/graph';
 
 /** 执行搜索：从可见节点中筛选匹配项，并添加高亮 class */
 function searchNodes(query: string): void {
@@ -62,8 +63,8 @@ function focusCurrentMatch(): void {
   const nodeId = matchIds[matchIndex];
   const node = cy.getElementById(nodeId);
   if (node.length === 0) return;
-  const data = node.data() as Record<string, unknown>;
-  const entityType = data.entityType as 'task' | 'project' | 'spec';
+  const data = node.data() as LatticeNodeData;
+  const entityType = data.entityType;
 
   // 更新当前匹配高亮
   cy.nodes().removeClass('search-current');

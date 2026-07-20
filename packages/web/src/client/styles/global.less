@@ -17,7 +17,6 @@
   // ── 响应式变量（桌面端默认值）──
   --sidebar-width: 260px;
   --detail-width: 420px;
-  --panel-inset: 12px;
   --terminal-height: 300px;
   --touch-target: 32px; // 触摸目标最小尺寸（桌面端不强制放大）
   --safe-top: env(safe-area-inset-top, 0px);
@@ -157,8 +156,8 @@ body {
   background: transparent;
 }
 
-// ── 布局过渡 ──
-.sidebar-transition {
+// ── 侧栏复合面板容器（定位由 inline style 控制）──
+.tree-browser-sidebar {
   transition:
     opacity var(--transition-normal),
     transform var(--transition-normal);
@@ -170,15 +169,73 @@ body {
   }
 }
 
-.sidebar-collapsed-btn {
-  transition:
-    opacity var(--transition-normal),
-    transform var(--transition-normal);
+// ── Activity Bar（VS Code 式左侧图标栏）──
+.sidebar-activity-bar {
+  width: 48px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border);
 
-  &--hidden {
-    opacity: 0;
-    transform: translateX(-20px);
-    pointer-events: none;
+  &__item {
+    position: relative;
+    width: 48px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast);
+
+    &:hover {
+      color: var(--text);
+      background: var(--bg-secondary);
+    }
+
+    // 激活态：左侧指示条 + brand 色图标（VS Code 风格）
+    &--active {
+      color: var(--brand-color);
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--brand-color);
+      }
+    }
+  }
+}
+
+// ── 侧栏内容面板（Activity Bar 右侧）──
+.sidebar-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+
+  &__header {
+    flex-shrink: 0;
+    padding: 8px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    user-select: none;
   }
 }
 
@@ -210,6 +267,41 @@ body {
   &:active::after {
     background: var(--brand-color);
     height: 60px;
+  }
+}
+
+// ── 侧栏整体收起后的左缘展开按钮（镜像 detail-panel-collapsed）──
+.sidebar-expand-btn {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  z-index: 20;
+  width: 32px;
+  height: 48px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition:
+    opacity var(--transition-normal),
+    transform var(--transition-normal),
+    color var(--transition-fast),
+    background var(--transition-fast);
+
+  &:hover {
+    color: var(--text);
+    background: var(--bg-tertiary);
+  }
+
+  &--hidden {
+    opacity: 0;
+    transform: translateX(-20px);
+    pointer-events: none;
   }
 }
 
@@ -422,7 +514,6 @@ body {
   :root {
     --sidebar-width: 200px;
     --detail-width: 320px;
-    --panel-inset: 8px;
     --touch-target: 40px;
   }
 
@@ -455,7 +546,6 @@ body {
   :root {
     --sidebar-width: 100vw;
     --detail-width: 100vw;
-    --panel-inset: 0px;
     --terminal-height: 45vh;
     --touch-target: 44px; // Apple HIG 最小触摸目标
   }
@@ -470,36 +560,26 @@ body {
     width: 100% !important;
     height: 100% !important;
     z-index: auto !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-    background: var(--bg) !important;
     flex: 1;
     min-height: 0;
   }
 
-  // Drawer 内侧栏折叠按钮隐藏
-  .ant-drawer-body .sidebar-collapsed-btn {
-    display: none !important;
+  // Drawer 内容面板：自适应填满剩余宽度，去掉右边框
+  .ant-drawer-body .sidebar-panel {
+    width: auto !important;
+    flex: 1;
+    min-width: 0;
+    border-right: none;
   }
 
   // Drawer 内侧栏 resize handle 隐藏
-  .ant-drawer-body .sidebar-resize-handle,
-  .ant-drawer-body .sidebar-collapse-btn {
+  .ant-drawer-body .sidebar-resize-handle {
     display: none !important;
   }
 
   // Drawer 内详情面板全屏
   .ant-drawer-body .detail-panel-root {
     height: 100% !important;
-  }
-
-  // Drawer 内侧栏过渡状态覆盖（确保内容可见）
-  .ant-drawer-body .sidebar-transition--hidden {
-    opacity: 1 !important;
-    transform: none !important;
-    pointer-events: auto !important;
   }
 
   // ── antd 组件移动端全屏化 ──

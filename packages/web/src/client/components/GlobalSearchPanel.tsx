@@ -22,6 +22,7 @@ import { getAdapter } from '../adapters';
 import { getEntityColor, queryKeys } from '../lib';
 import { applyFocus } from './graph/layout';
 import { extractSearchResultInfo, searchTypeOptions } from './sidebar/treeUtils';
+import type { LatticeNodeData } from '../types/graph';
 
 /** 构造候选节点 ID 列表，用于在画布上匹配搜索结果对应的节点 */
 function buildCandidateIds(entityId: string, entityType: string): string[] {
@@ -94,8 +95,8 @@ function handleResultClick(
     const node = findNodeOnCanvas(cy, id, item.type);
     if (node) {
       // 节点在画布上 → 直接定位（不关闭面板，支持多次切换）+ 更新 URL
-      const data = node.data() as Record<string, unknown>;
-      const entityType = data.entityType as 'task' | 'project' | 'spec';
+      const data = node.data() as LatticeNodeData;
+      const entityType = data.entityType;
       selectNode(node.id(), entityType, data);
       applyFocus(cy, node.id(), canvasStore.focusDepth, false, true);
       navigate(getViewPath(mode, id));

@@ -102,8 +102,7 @@ export function useTreeData(): {
     }
     const projectSpecMap = new Map<string, ParsedSpec[]>();
     projectSpecs.forEach((s: ParsedSpec) => {
-      const match = s.filePath.match(/\/projects\/([^/]+)\//);
-      const rawPid = match ? match[1] : 'other';
+      const rawPid = s.projectId || 'other';
       const pid = rawPid === 'other' ? 'other' : resolvePrimaryId(idMap, rawPid);
       if (!projectSpecMap.has(pid)) projectSpecMap.set(pid, []);
       projectSpecMap.get(pid)!.push(s);
@@ -136,8 +135,7 @@ export function useTreeData(): {
         (t.projects || []).some((tpid: string) => resolvePrimaryId(idMap, tpid) === pid),
       );
       const projectSpecItems = projectSpecs.filter((s: ParsedSpec) => {
-        const match = s.filePath.match(/\/projects\/([^/]+)\//);
-        return match && resolvePrimaryId(idMap, match[1]) === pid;
+        return !!s.projectId && resolvePrimaryId(idMap, s.projectId) === pid;
       });
       const children: TreeNode[] = [];
       if (projectTasks.length > 0) {

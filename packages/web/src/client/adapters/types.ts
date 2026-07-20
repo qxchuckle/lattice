@@ -111,6 +111,7 @@ export interface SearchOpts {
   type?: string;
   projectId?: string;
   limit?: number;
+  signal?: AbortSignal;
 }
 
 export type EditorApp = 'vscode' | 'cursor' | 'qoder' | 'finder';

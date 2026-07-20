@@ -267,15 +267,15 @@ function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
       order.push(key);
       continue;
     }
-    const headMeta = head.meta as Record<string, unknown>;
+    const headMeta = head.meta;
     const existing = (headMeta.duplicates as DuplicateRecord[] | undefined) ?? [];
-    const meta = r.meta as Record<string, unknown>;
+    const meta = r.meta;
     existing.push({
-      filePath: (meta.filePath as string) ?? '',
+      filePath: meta.filePath ?? '',
       score: r.score,
-      username: (meta.username as string) || null,
-      projectIds: ((meta.projectIds as string[] | undefined) ?? []).slice(),
-      source: (meta.source as string) || null,
+      username: meta.username || null,
+      projectIds: (meta.projectIds ?? []).slice(),
+      source: meta.source || null,
       scopeKey: (meta.scopeKey as string) || null,
     });
     headMeta.duplicates = existing;
@@ -283,7 +283,7 @@ function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
   }
   return order.map((key) => {
     const head = groups.get(key)!;
-    const headMeta = head.meta as Record<string, unknown>;
+    const headMeta = head.meta;
     if (!headMeta.duplicates) {
       headMeta.duplicates = [] as DuplicateRecord[];
       headMeta.duplicateCount = 0;
@@ -711,8 +711,7 @@ export async function hybridSearch(
   if (opts?.projectId) {
     const normalizedFilterId = normalizeProjectId(opts.projectId as string);
     sorted = sorted.filter((r) => {
-      const projectIds =
-        ((r.meta as Record<string, unknown>).projectIds as string[] | undefined) ?? [];
+      const projectIds = r.meta.projectIds ?? [];
       // 双边归一化比较：存储侧可能有无前缀的老 ID
       return projectIds.some((id) => normalizeProjectId(id) === normalizedFilterId);
     });
@@ -733,7 +732,7 @@ export async function hybridSearch(
   const topScore = sorted.length > 0 ? sorted[0].score : 0;
   if (topScore > 0) {
     for (const r of sorted) {
-      const meta = r.meta as Record<string, unknown>;
+      const meta = r.meta;
       meta.normalizedScore = r.score / topScore;
       // 弱命中标记：绝对分低于阈值的结果，即便归一化是 100% 也提示用户该批可信度低。
       // 仅打标，不丢弃；上层根据 weakMatch 决定如何展示。
@@ -741,21 +740,23 @@ export async function hybridSearch(
     }
   }
 
-  // 后处理增强：为 checkpoint/relation 结果添加结构化上下文
+  // 后处理增强：为 task/design/checkpoint/relation 结果添加结构化上下文
   for (const r of sorted) {
-    const meta = r.meta as Record<string, unknown>;
-    const fp = (meta.filePath as string) ?? '';
+    const meta = r.meta;
+    const fp = meta.filePath ?? '';
 
-    if (r.type === 'checkpoint') {
-      // 解析 filePath: user/{username}/task/{taskId}/checkpoint/{cpId}
+    if (r.type === 'task' || r.type === 'design' || r.type === 'checkpoint') {
+      // 解析 filePath: user/{username}/task/{taskId}/[{checkpoint}/{cpId}]
       const parts = fp.split('/');
       const taskIdx = parts.indexOf('task');
       if (taskIdx >= 0 && taskIdx + 1 < parts.length) {
         meta.taskId = parts[taskIdx + 1];
       }
-      const cpIdx = parts.indexOf('checkpoint');
-      if (cpIdx >= 0 && cpIdx + 1 < parts.length) {
-        meta.checkpointId = parts[cpIdx + 1];
+      if (r.type === 'checkpoint') {
+        const cpIdx = parts.indexOf('checkpoint');
+        if (cpIdx >= 0 && cpIdx + 1 < parts.length) {
+          meta.checkpointId = parts[cpIdx + 1];
+        }
       }
     } else if (r.type === 'relation') {
       // 解析 filePath: user/{username}/relation/{relId}

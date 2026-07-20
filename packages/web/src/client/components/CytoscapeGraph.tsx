@@ -17,6 +17,7 @@ import { useGlobalGraph } from '../hooks';
 import { buildStylesheet } from './graph/stylesheet';
 import { runLayout, applyFocus, clearFocus, findNodeById } from './graph/layout';
 import { toElements } from './graph/elements';
+import type { LatticeNodeData } from '../types/graph';
 
 cytoscape.use(fcose);
 
@@ -101,8 +102,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       }
       hoveredElesRef.current = null;
       hoveredEdgesRef.current = null;
-      const data = node.data() as Record<string, unknown>;
-      const entityType = data.entityType as string;
+      const data = node.data() as LatticeNodeData;
+      const entityType = data.entityType;
       const nodeId = node.id();
       // 记录是否点击的是当前已选中节点：若已选中，selectNode 不改变 selectedNodeId、
       // navigate 不改变 URL，skip 标志不会被任何 useEffect 消费，会导致残留 true
@@ -495,12 +496,12 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
           if (anchorId) {
             const node = findNodeById(cy, anchorId);
             if (node.length > 0) {
-              const data = node.data() as Record<string, unknown>;
+              const data = node.data() as LatticeNodeData;
               // 仅在 selectedNodeId 会变化时设置 skipSelectedRef（HMR 后可能已选中同一节点）
               if (canvasStore.selectedNodeId !== anchorId) {
                 skipSelectedRef.current = true;
               }
-              selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
+              selectNode(anchorId, data.entityType, data);
               applyFocus(cy, node.id(), canvasStore.focusDepth, true);
             }
           } else if (selectedNodeId) {
@@ -530,8 +531,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       if (anchorId) {
         const node = findNodeById(cy, anchorId);
         if (node.length > 0) {
-          const data = node.data() as Record<string, unknown>;
-          selectNode(anchorId, data.entityType as 'task' | 'project' | 'spec', data);
+          const data = node.data() as LatticeNodeData;
+          selectNode(anchorId, data.entityType, data);
           applyFocus(cy, anchorId, canvasStore.focusDepth);
         }
       } else if (selectedNodeId) {
@@ -584,8 +585,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       skipSelectedRef.current = true;
     }
     if (node.length > 0) {
-      const data = node.data() as Record<string, unknown>;
-      selectNode(node.id(), data.entityType as 'task' | 'project' | 'spec', data);
+      const data = node.data() as LatticeNodeData;
+      selectNode(node.id(), data.entityType, data);
       applyFocus(cy, node.id(), canvasStore.focusDepth);
     } else {
       const entityType = canvasStore.viewMode === 'global' ? 'task' : canvasStore.viewMode;
@@ -789,8 +790,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     if (!cy || !locateNodeId) return;
     const node = findNodeById(cy, locateNodeId);
     if (node.length > 0) {
-      const data = node.data() as Record<string, unknown>;
-      selectNode(locateNodeId, data.entityType as 'task' | 'project' | 'spec', data);
+      const data = node.data() as LatticeNodeData;
+      selectNode(locateNodeId, data.entityType, data);
       // force=true 强制执行视口动画，即使用户已选中该节点
       // 不设置 skipAnchorRef：若 selectedNodeId 变化，selectedNodeId useEffect 中的
       // applyFocus(force=false) 会因同一节点自然跳过；若 selectedNodeId 不变，useEffect 不触发

@@ -193,7 +193,7 @@
 
 - `--status <status>`：按 `planning` / `in_progress` / `completed` / `archived` / `all` 过滤
 - `--project <id>`：按项目 ID 过滤
-- `--current`：自动识别当前目录对应的项目
+- `--current`：按当前目录对应的项目过滤（读取类：与当前目录无关时用 `--project <id>`）
 - `--all-user`：聚合所有用户的任务（需搭配 `--project` 或 `--current`）
 - `--user <users>`：聚合指定用户的任务，逗号分隔（需搭配 `--project` 或 `--current`）
 - `--json`：以 JSON 输出
@@ -204,7 +204,7 @@
 
 - `<title>`：任务标题
 - `-p, --project <ids...>`：关联一个或多个项目 ID
-- `--current`：自动关联当前目录对应项目
+- `--current`：自动关联当前目录对应项目（写入类：用户提供了路径/语义描述时必须先 `ltc project where` / `ltc project list --search` 定位，见 task-workflows.md「命令参数不是任务 ID 时」第 0 步）
 - `--parent <id>`：指定父任务 ID，支持完整 ID 或前缀匹配
 
 ### `ltc task info <id>`
@@ -287,7 +287,7 @@
 
 - `<id>`：任务 ID，支持前缀匹配
 - `-p, --project <ids...>`：追加关联项目 ID
-- `--current`：追加当前目录对应的项目
+- `--current`：追加当前目录对应的项目（写入类：用户提供了路径/语义描述时必须先 `ltc project where` / `ltc project list --search` 定位，见 task-workflows.md「项目关联同步」）
 - `--paths <paths...>`：追加额外路径（可多个，其中命中已注册项目的会自动进 projects）
 - `--note <note>`：赋予本次新增 scopePath 的备注
 - `--remove-path <path>`：从 scopePaths 中移除指定路径
@@ -357,6 +357,16 @@ Spec 管理。
 - `--add-tag <tag>`：新增标签（可重复使用）
 - `--rm-tag <tag>`：移除标签（可重复使用）
 - `--id <id>`：强制指定 id（一般不需要，谨慎使用）
+
+### `ltc spec migrate [name]`
+
+批量迁移历史 spec：自动补 id / 刷新 updated / 补 title（不自动补 description，仅报告缺失）。
+
+- `[name]`：可选，指定要迁移的 spec 名称（支持 fileName / relativePath / title 模糊匹配）；省略则批量全部
+- `--scope <scope>`：限定层级（`all` / `global` / `user` / `project`），默认 `all`
+- `--dry-run`：仅报告不写入
+- `--json`：以 JSON 输出
+- `--json-format`：JSON 输出时使用格式化（默认压缩）
 
 ## `ltc spec template`
 

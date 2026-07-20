@@ -105,6 +105,8 @@ ltc task associate <task-id> --remove-project <id>
 ltc task associate <task-id> --clear-paths
 ```
 
+场景判定（何时用 `--current` / `--project` / `--paths`）见 [task-workflows.md#项目关联同步](task-workflows.md#项目关联同步)。用 `--project` 时需先获取目标项目 ID：到目标项目目录下运行 `ltc context` / `ltc status`，或用 `ltc project where <path>` / `ltc project list --search <keyword>` 查询。不要用 `--current` 关联到与任务无关的当前目录项目。
+
 `--paths` 的智能行为：
 - 命中已注册项目（high 置信度）→ 自动加进 `projects[]`
 - 未命中或低置信度 → 加进 `scopePaths[]`，可选 `--note`

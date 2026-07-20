@@ -194,6 +194,7 @@ export function useGlobalGraph() {
           const specNodeId = `${username}:spec-${specId}`;
           specIdToNodeId.set(`${username}:${specId}`, specNodeId);
           specIdToNodeId.set(`${username}:${s.fileName}`, specNodeId);
+          const resolvedSpecPid = s.projectId ? resolvePrimaryId(idMap, s.projectId) : undefined;
           nodes.push({
             id: specNodeId,
             type: 'specNode',
@@ -205,25 +206,21 @@ export function useGlobalGraph() {
               scope,
               filePath: s.filePath,
               username,
+              projectId: resolvedSpecPid,
             },
           });
           // 项目级 Spec → 项目 边
-          if (isProjectScope) {
-            const match = s.filePath.match(/\/projects\/([^/]+)\//);
-            if (match) {
-              const resolvedPid = resolvePrimaryId(idMap, match[1]);
-              const projectNodeId = `${username}:${resolvedPid}`;
-              (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedPid;
-              edges.push({
-                id: `edge-${projectNodeId}-${specNodeId}`,
-                source: projectNodeId,
-                target: specNodeId,
-                type: 'smoothstep',
-                label: 'spec',
-                style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
-                data: { label: 'spec' },
-              });
-            }
+          if (isProjectScope && resolvedSpecPid) {
+            const projectNodeId = `${username}:${resolvedSpecPid}`;
+            edges.push({
+              id: `edge-${projectNodeId}-${specNodeId}`,
+              source: projectNodeId,
+              target: specNodeId,
+              type: 'smoothstep',
+              label: 'spec',
+              style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+              data: { label: 'spec' },
+            });
           }
         });
 
@@ -432,6 +429,7 @@ export function useGlobalGraph() {
       const specNodeId = `spec-${specId}`;
       specIdToNodeId.set(specId, specNodeId);
       specIdToNodeId.set(s.fileName, specNodeId);
+      const resolvedSpecPid = s.projectId ? resolvePrimaryId(idMap, s.projectId) : undefined;
       nodes.push({
         id: specNodeId,
         type: 'specNode',
@@ -442,25 +440,21 @@ export function useGlobalGraph() {
           title: s.frontmatter.title || s.fileName,
           scope: s.scopeLevel,
           filePath: s.filePath,
+          projectId: resolvedSpecPid,
         },
       });
       // 项目级 spec → 连到对应项目
-      if (s.scopeLevel === 'project') {
-        const match = s.filePath.match(/\/projects\/([^/]+)\//);
-        if (match) {
-          const resolvedSpecPid = resolvePrimaryId(idMap, match[1]);
-          // 存储 resolved projectId 供 elements 筛选使用
-          (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedSpecPid;
-          edges.push({
-            id: `edge-${resolvedSpecPid}-${specNodeId}`,
-            source: resolvedSpecPid,
-            target: specNodeId,
-            type: 'smoothstep',
-            label: 'spec',
-            style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
-            data: { label: 'spec' },
-          });
-        }
+      if (s.scopeLevel === 'project' && resolvedSpecPid) {
+        // 存储 resolved projectId 供 elements 筛选使用
+        edges.push({
+          id: `edge-${resolvedSpecPid}-${specNodeId}`,
+          source: resolvedSpecPid,
+          target: specNodeId,
+          type: 'smoothstep',
+          label: 'spec',
+          style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+          data: { label: 'spec' },
+        });
       }
       // 全局/用户级 spec：游离节点，不连项目
     });
@@ -1382,6 +1376,7 @@ export function useSpecGraph(_specId: string | null) {
       const specNodeId = `spec-${id}`;
       specIdToNodeId.set(id, specNodeId);
       specIdToNodeId.set(s.fileName, specNodeId);
+      const resolvedSpecPid = s.projectId ? resolvePrimaryId(idMap, s.projectId) : undefined;
       addNode({
         id: specNodeId,
         type: 'specNode',
@@ -1392,26 +1387,22 @@ export function useSpecGraph(_specId: string | null) {
           title: s.frontmatter.title || s.fileName,
           scope: s.scope,
           filePath: s.filePath,
+          projectId: resolvedSpecPid,
         },
       });
       // 项目级 Spec 连到对应项目
-      if (s.scope === 'project') {
-        const match = s.filePath.match(/\/projects\/([^/]+)\//);
-        if (match) {
-          const resolvedPid = resolvePrimaryId(idMap, match[1]);
-          // 存储 resolved projectId 供 elements 筛选使用
-          (nodes[nodes.length - 1].data as Record<string, unknown>).projectId = resolvedPid;
-          if (nodeIds.has(resolvedPid)) {
-            edges.push({
-              id: `edge-${resolvedPid}-${specNodeId}`,
-              source: resolvedPid,
-              target: specNodeId,
-              type: 'smoothstep',
-              label: 'spec',
-              style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
-              data: { label: 'spec' },
-            });
-          }
+      if (s.scope === 'project' && resolvedSpecPid) {
+        // 存储 resolved projectId 供 elements 筛选使用
+        if (nodeIds.has(resolvedSpecPid)) {
+          edges.push({
+            id: `edge-${resolvedSpecPid}-${specNodeId}`,
+            source: resolvedSpecPid,
+            target: specNodeId,
+            type: 'smoothstep',
+            label: 'spec',
+            style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+            data: { label: 'spec' },
+          });
         }
       }
     });

@@ -23,6 +23,8 @@ export interface MigrateOptions {
   dryRun?: boolean;
   /** 项目 ID（scope 为 project 时必填） */
   projectId?: string | null;
+  /** 按名称过滤（支持 fileName / relativePath / title 的子串或精确匹配） */
+  filter?: string;
 }
 
 /**
@@ -57,7 +59,23 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
     needsDescription: [],
   };
 
-  for (const spec of allSpecs) {
+  const filter = options?.filter?.toLowerCase() ?? null;
+  const filteredSpecs = filter
+    ? allSpecs.filter((s) => {
+        const name = s.fileName.replace(/\.md$/i, '').toLowerCase();
+        const rel = s.relativePath.toLowerCase();
+        const title = (s.frontmatter.title ?? '').toLowerCase();
+        return (
+          name === filter ||
+          rel === filter ||
+          name.includes(filter) ||
+          rel.includes(filter) ||
+          title.includes(filter)
+        );
+      })
+    : allSpecs;
+
+  for (const spec of filteredSpecs) {
     try {
       const fm = spec.frontmatter;
       const addedFields: string[] = [];

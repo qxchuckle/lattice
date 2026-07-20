@@ -9,6 +9,7 @@ export interface TaskNodeData {
   status: string;
   projectId?: string;
   projectIds?: string[];
+  username?: string;
   [key: string]: unknown;
 }
 
@@ -17,6 +18,7 @@ export interface ProjectNodeData {
   projectId: string;
   name: string;
   hasGit?: boolean;
+  username?: string;
   [key: string]: unknown;
 }
 
@@ -25,6 +27,9 @@ export interface SpecNodeData {
   specId: string;
   title: string;
   scope: string;
+  projectId?: string;
+  filePath?: string;
+  username?: string;
   [key: string]: unknown;
 }
 

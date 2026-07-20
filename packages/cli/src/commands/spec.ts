@@ -735,12 +735,13 @@ export function registerSpecCommand(program: Command): void {
   // migrate
   cmd
     .command('migrate')
+    .argument('[name]', '指定要迁移的 spec 名称（支持模糊匹配），省略则批量全部')
     .description('批量迁移历史 spec：自动补 id / updated / title（不自动补 description）')
     .option('--scope <scope>', '限定层级（all / global / user / project），默认 all')
     .option('--dry-run', '仅报告不写入')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
-    .action(async (opts) => {
+    .action(async (name: string | undefined, opts) => {
       try {
         await initDb();
         const projectId = (await resolveCurrentProject())?.id ?? null;
@@ -748,6 +749,7 @@ export function registerSpecCommand(program: Command): void {
           scope: opts.scope ?? 'all',
           dryRun: opts.dryRun ?? false,
           projectId,
+          filter: name,
         });
         closeDb();
 

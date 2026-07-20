@@ -6,6 +6,8 @@ import {
   FolderOutlined,
   FileTextOutlined,
   AimOutlined,
+  SearchOutlined,
+  FilterOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons';
@@ -16,9 +18,10 @@ import {
   sidebarStore,
   getViewPath,
   setSidebarWidth,
-  closeMobileSidebar,
+  setSidebarView,
+  type SidebarView,
 } from '../../store';
-import { useSearch, useUsers } from '../../hooks';
+import { useSearch, useUsers, useIsMobile } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
 import {
@@ -45,19 +48,11 @@ const ENTITY_COLOR_MAP: Record<string, string> = {
   relation: getEntityColor('project'),
 };
 
-function getTabStyle(active: boolean): React.CSSProperties {
-  return {
-    flex: 1,
-    textAlign: 'center' as const,
-    padding: '6px 0',
-    fontSize: 11,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-    color: active ? 'var(--brand-color)' : 'var(--text-secondary)',
-    borderBottom: active ? '2px solid var(--brand-color)' : '2px solid transparent',
-    transition: 'all 0.2s',
-  };
-}
+/** Activity Bar 视图定义（VS Code 式图标栏） */
+const SIDEBAR_VIEWS: { key: SidebarView; label: string; Icon: typeof SearchOutlined }[] = [
+  { key: 'search', label: '搜索', Icon: SearchOutlined },
+  { key: 'filter', label: '筛选', Icon: FilterOutlined },
+];
 
 // ── 可截断标题 ──
 
@@ -381,6 +376,12 @@ const SearchTreeTab = memo(function SearchTreeTab() {
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const { searchKeyword, searchFilters } = useSnapshot(sidebarStore);
+  const [inputValue, setInputValue] = useState(searchKeyword);
+  const isComposingRef = useRef(false);
+  // store → local 同步（外部清空时，如 allowClear / 程序化重置）
+  useEffect(() => {
+    if (!isComposingRef.current) setInputValue(searchKeyword);
+  }, [searchKeyword]);
   const searchResult = useSearch();
   const { tree, loading, tasks, specs } = useTreeData();
 
@@ -416,9 +417,19 @@ const SearchTreeTab = memo(function SearchTreeTab() {
           id='sidebar-search-input'
           size='small'
           placeholder='搜索 spec/项目/任务...'
-          defaultValue=''
+          value={inputValue}
           onChange={(e) => {
-            sidebarStore.searchKeyword = e.target.value;
+            setInputValue(e.target.value);
+            if (!isComposingRef.current) {
+              sidebarStore.searchKeyword = e.target.value;
+            }
+          }}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            isComposingRef.current = false;
+            sidebarStore.searchKeyword = e.currentTarget.value;
           }}
           allowClear
         />
@@ -1010,11 +1021,56 @@ const FilterTreeTab = memo(function FilterTreeTab() {
   );
 });
 
-// ── 侧栏容器：仅订阅 sidebarStore（collapsed/width），不订阅 canvasStore ──
+// ── Activity Bar：VS Code 式图标栏（常驻，点击切换视图 / 再点收起面板）──
+
+const ActivityBar = memo(function ActivityBar() {
+  const { activeView, collapsed } = useSnapshot(sidebarStore);
+  const isMobile = useIsMobile();
+
+  return (
+    <div className='sidebar-activity-bar'>
+      {!isMobile && (
+        <Tooltip title='收起面板' placement='right'>
+          <button
+            type='button'
+            className='sidebar-activity-bar__item'
+            onClick={() => {
+              sidebarStore.fullyCollapsed = true;
+            }}>
+            <MenuFoldOutlined />
+          </button>
+        </Tooltip>
+      )}
+      {SIDEBAR_VIEWS.map(({ key, label, Icon }) => {
+        const active = activeView === key && !collapsed;
+        return (
+          <Tooltip key={key} title={label} placement='right'>
+            <button
+              type='button'
+              className={`sidebar-activity-bar__item${active ? ' sidebar-activity-bar__item--active' : ''}`}
+              onClick={() => {
+                if (activeView === key) {
+                  // VS Code 行为：点击已激活图标 → 切换面板显示/隐藏
+                  sidebarStore.collapsed = !sidebarStore.collapsed;
+                } else {
+                  setSidebarView(key);
+                  sidebarStore.collapsed = false;
+                }
+              }}>
+              <Icon />
+            </button>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+});
+
+// ── 侧栏复合面板：Activity Bar + 内容面板（仅订阅 sidebarStore）──
 
 export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
-  const { collapsed, width } = useSnapshot(sidebarStore);
-  const [activeTab, setActiveTab] = useState<'search' | 'filter'>('search');
+  const { collapsed, fullyCollapsed, width, activeView } = useSnapshot(sidebarStore);
+  const isMobile = useIsMobile();
 
   const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1041,76 +1097,36 @@ export const TreeBrowserSidebar = memo(function TreeBrowserSidebar() {
   return (
     <>
       <div
+        className={`tree-browser-sidebar${fullyCollapsed ? ' tree-browser-sidebar--hidden' : ''}`}
         style={{
           position: 'absolute',
-          top: 12,
-          left: 12,
-          bottom: 'calc(12px + var(--terminal-offset, 0px))',
-          width: width,
+          top: 0,
+          left: 0,
+          bottom: 'var(--terminal-offset, 0px)',
           zIndex: 20,
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 12,
           display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-        }}
-        className={`tree-browser-sidebar sidebar-transition${collapsed ? ' sidebar-transition--hidden' : ''}`}>
-        {/* 右侧 resize handle */}
-        <div className='sidebar-resize-handle' onMouseDown={handleSidebarResizeStart} />
-        <Button
-          className='sidebar-collapse-btn'
-          size='small'
-          type='text'
-          icon={<MenuFoldOutlined />}
-          onClick={() => {
-            sidebarStore.collapsed = true;
-            closeMobileSidebar(); // 移动端同时关闭 Drawer（桌面端 no-op）
-          }}
-          style={{
-            position: 'absolute',
-            top: 6,
-            right: 6,
-            zIndex: 30,
-            borderRadius: '50%',
-          }}
-        />
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-          <div style={getTabStyle(activeTab === 'search')} onClick={() => setActiveTab('search')}>
-            搜索
-          </div>
-          <div style={getTabStyle(activeTab === 'filter')} onClick={() => setActiveTab('filter')}>
-            筛选
-          </div>
-        </div>
-
-        {activeTab === 'search' && <SearchTreeTab />}
-        {activeTab === 'filter' && <FilterTreeTab />}
-      </div>
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          left: 12,
-          zIndex: 20,
-          width: 32,
-          height: 48,
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
-        }}
-        className={`sidebar-collapsed-btn${collapsed ? '' : ' sidebar-collapsed-btn--hidden'}`}
-        onClick={() => {
-          sidebarStore.collapsed = false;
         }}>
-        <MenuUnfoldOutlined style={{ fontSize: 14 }} />
+        <ActivityBar />
+        {!collapsed && (
+          <div className='sidebar-panel' style={{ width }}>
+            {/* 右侧 resize handle */}
+            <div className='sidebar-resize-handle' onMouseDown={handleSidebarResizeStart} />
+            <div className='sidebar-panel__header'>{activeView === 'search' ? '搜索' : '筛选'}</div>
+            {activeView === 'search' && <SearchTreeTab />}
+            {activeView === 'filter' && <FilterTreeTab />}
+          </div>
+        )}
       </div>
+      {/* 整体收起后的左缘展开按钮（镜像右侧 detail-panel-collapsed 动画模式） */}
+      {!isMobile && (
+        <div
+          className={`sidebar-expand-btn${fullyCollapsed ? '' : ' sidebar-expand-btn--hidden'}`}
+          onClick={() => {
+            sidebarStore.fullyCollapsed = false;
+          }}>
+          <MenuUnfoldOutlined style={{ fontSize: 14 }} />
+        </div>
+      )}
     </>
   );
 });

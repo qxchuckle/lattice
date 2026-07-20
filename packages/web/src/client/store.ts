@@ -1,5 +1,6 @@
 import type cytoscape from 'cytoscape';
 import { proxy } from 'valtio';
+import type { LatticeNodeData } from './types/graph';
 
 // ── 画布状态 ──
 
@@ -134,11 +135,23 @@ export interface SearchFilters {
   specScope: readonly string[];
 }
 
+export type SidebarView = 'search' | 'filter';
+
+/** 左侧 Activity Bar 图标栏宽度（px，桌面端常驻，参与画布遮蔽计算） */
+export const ACTIVITY_BAR_WIDTH = 48;
+
 export const sidebarStore = proxy({
   /** 搜索关键词 */
   searchKeyword: '',
-  /** 侧栏是否折叠（桌面端） */
+  /** 侧栏是否折叠（桌面端：仅隐藏内容面板，Activity Bar 常驻） */
   collapsed: false,
+  /** 整个侧栏是否完全收起（含 Activity Bar，会话级，同 detailStore.collapsed） */
+  fullyCollapsed: false,
+  /** 当前侧栏视图（搜索 / 筛选），持久化到 localStorage */
+  activeView:
+    (localStorage.getItem('lattice-sidebar-view') as SidebarView) === 'filter'
+      ? 'filter'
+      : 'search',
   /** 移动端侧栏 Drawer 是否打开 */
   mobileOpen: false,
   /** 树形展开状态：key = nodeKey, value = true/false */
@@ -167,7 +180,7 @@ export const detailStore = proxy({
   /** 当前查看的实体类型 */
   entityType: null as 'task' | 'project' | 'spec' | null,
   /** 节点 data（spec 直接从此渲染，不走 API） */
-  entityData: null as Record<string, unknown> | null,
+  entityData: null as LatticeNodeData | null,
 });
 
 // ── 主题状态 ──
@@ -294,7 +307,7 @@ export function setViewMode(mode: ViewMode): void {
 export function selectNode(
   nodeId: string,
   entityType: 'task' | 'project' | 'spec',
-  data?: Record<string, unknown>,
+  data?: LatticeNodeData,
 ): void {
   canvasStore.selectedNodeId = nodeId;
   detailStore.open = true;
@@ -344,6 +357,12 @@ export function setSidebarWidth(width: number): void {
   localStorage.setItem('lattice-sidebar-width', String(clamped));
 }
 
+/** 设置侧栏视图（搜索 / 筛选）并持久化 */
+export function setSidebarView(view: SidebarView): void {
+  sidebarStore.activeView = view;
+  localStorage.setItem('lattice-sidebar-view', view);
+}
+
 /** 切换节点展开状态 */
 export function toggleNodeExpand(nodeId: string): void {
   canvasStore.expandedNodes[nodeId] = !canvasStore.expandedNodes[nodeId];
@@ -376,8 +395,8 @@ export interface VisibleCanvasBounds {
 }
 
 /** 计算面板遮蔽后的可视区域边界。
- *  左侧栏展开时占据左侧（12px 边距 + width + 12px 间隔），
- *  详情面板展开时占据右侧（同理）。面板折叠或未打开时遮蔽可忽略。
+ *  左侧 Activity Bar 常驻 48px，内容面板展开时再占据 width，
+ *  详情面板展开时占据右侧（width + 24px 边距）。面板折叠或未打开时遮蔽可忽略。
  *  移动端面板由 Drawer 承载，不遮蔽画布，偏移为 0。 */
 export function getVisibleCanvasBounds(
   containerWidth: number,
@@ -394,8 +413,10 @@ export function getVisibleCanvasBounds(
       height: containerHeight,
     };
   }
-  const leftOffset = sidebarStore.collapsed ? 0 : sidebarStore.width + 24;
-  const rightOffset = detailStore.collapsed || !detailStore.open ? 0 : detailStore.width + 24;
+  const leftOffset = sidebarStore.fullyCollapsed
+    ? 0
+    : ACTIVITY_BAR_WIDTH + (sidebarStore.collapsed ? 0 : sidebarStore.width);
+  const rightOffset = detailStore.collapsed || !detailStore.open ? 0 : detailStore.width;
   const width = Math.max(containerWidth - leftOffset - rightOffset, 200);
   return {
     left: leftOffset,

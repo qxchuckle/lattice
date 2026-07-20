@@ -30,8 +30,8 @@ function getAuthHeaders(): Record<string, string> {
   return authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: getAuthHeaders() });
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { headers: getAuthHeaders(), signal });
   if (res.status === 401) {
     clearToken();
     throw new Error('unauthorized');
@@ -139,7 +139,7 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (opts?.type) params.set('type', opts.type);
     if (opts?.projectId) params.set('projectId', opts.projectId);
     if (opts?.limit) params.set('limit', String(opts.limit));
-    return fetchJson<SearchResult[]>(`${API_BASE}/search?${params.toString()}`);
+    return fetchJson<SearchResult[]>(`${API_BASE}/search?${params.toString()}`, opts?.signal);
   }
 
   // ── 打开文件/目录 ──

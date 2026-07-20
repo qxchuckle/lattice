@@ -13,12 +13,15 @@ export async function parseSpec(
   if (raw === null) return null;
 
   const { data, content } = matter(raw);
+  // 项目级 spec 的 filePath 含 /projects/<projectId>/，提取 projectId
+  const projectMatch = filePath.match(/\/projects\/([^/]+)\//);
   return {
     frontmatter: data as SpecFrontmatter,
     content: content.trim(),
     filePath,
     fileName: basename(filePath),
     relativePath: relativePath ?? basename(filePath),
+    projectId: projectMatch ? projectMatch[1] : undefined,
   };
 }
 

@@ -13,17 +13,13 @@
 
 .detail-panel {
   position: absolute;
-  top: var(--panel-inset);
-  right: var(--panel-inset);
+  top: 0;
+  right: 0;
+  bottom: var(--terminal-offset, 0px);
   width: var(--detail-width);
-  height: calc(100vh - var(--panel-inset) * 2 - var(--terminal-offset, 0px));
   z-index: 20;
   background: var(--bg-secondary);
-  // backdrop-filter: blur(12px); — 临时移除测试：backdrop-filter 是 GPU 密集型操作，
-  // 浏览器在 GPU 内存压力时偶发失效/恢复，导致面板背景透明/不透明快速切换 = 闪烁
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -81,18 +77,18 @@
 .detail-panel-collapsed {
   position: absolute;
   top: 12px;
-  right: 12px;
+  right: 0;
   z-index: 20;
   width: 32px;
   height: 48px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transition:
     opacity var(--transition-normal),
     transform var(--transition-normal);
@@ -626,11 +622,6 @@
 
 // ── 平板适配 ──
 @media (max-width: 1023px) and (min-width: 768px) {
-  .detail-panel {
-    top: var(--panel-inset);
-    right: var(--panel-inset);
-  }
-
   // markdown TOC 面板缩窄
   .markdown-toc-float__panel {
     width: 220px;

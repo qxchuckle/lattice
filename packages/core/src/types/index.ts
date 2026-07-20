@@ -157,6 +157,8 @@ export interface ParsedSpec {
   filePath: string;
   fileName: string;
   relativePath: string;
+  /** 项目级 spec 的所属项目 ID（从 filePath 解析）；全局级/用户级为 undefined */
+  projectId?: string;
 }
 
 /** 全局配置 config.json */
@@ -359,12 +361,27 @@ export interface SpecTemplate {
 /** 搜索结果条目 */
 export type SearchDocumentType = 'spec' | 'task' | 'project' | 'checkpoint' | 'relation' | 'design';
 
+/** 搜索结果元数据（结构化常用字段 + 索引签名兼容扩展字段） */
+export interface SearchResultMeta {
+  filePath?: string;
+  username?: string;
+  projectIds?: string[];
+  source?: string;
+  taskId?: string;
+  checkpointId?: string;
+  relationId?: string;
+  specId?: string;
+  normalizedScore?: number;
+  weakMatch?: boolean;
+  [key: string]: unknown;
+}
+
 export interface SearchResult {
   type: SearchDocumentType;
   score: number;
   title: string;
   snippet: string;
-  meta: Record<string, unknown>;
+  meta: SearchResultMeta;
 }
 
 export type SearchDocKind = 'overview' | 'structure' | 'guideline' | 'reference' | 'unknown';

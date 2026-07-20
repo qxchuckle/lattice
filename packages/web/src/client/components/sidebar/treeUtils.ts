@@ -65,21 +65,19 @@ export function extractSearchResultInfo(
   };
   const mode = typeMap[item.type] || 'global';
   // 优先从 meta 取直接 ID
-  const directId =
-    (meta.id as string) ||
-    (meta.taskId as string) ||
-    (meta.projectId as string) ||
-    (meta.specId as string);
+  const directId = (meta.id as string) || meta.taskId || (meta.projectId as string) || meta.specId;
   if (directId) return { id: directId, mode };
-  const filePath = (meta.filePath as string) || '';
+  const filePath = meta.filePath || '';
   // spec: 优先从 specIdByPath 查找（frontmatter.id || fileName），与侧栏树 spec-item entityId 规则一致
   if (item.type === 'spec' && specIdByPath) {
     const specId = specIdByPath.get(filePath);
     if (specId) return { id: specId, mode: 'spec' };
   }
   // project: meta.projectIds 是数组，取第一个（project 搜索结果的 filePath 是源码路径，不匹配 lattice 路径格式）
-  const projectIds = meta.projectIds as string[] | undefined;
-  if (projectIds && projectIds.length > 0) return { id: projectIds[0], mode };
+  // 仅 project 类型走此分支；task 类型虽携带 projectIds（关联项目），但应从 filePath 提取 taskId
+  const projectIds = meta.projectIds;
+  if (item.type === 'project' && projectIds && projectIds.length > 0)
+    return { id: projectIds[0], mode };
   // 从 filePath 提取
   const taskMatch = filePath.match(/\/task\/([^/]+)\//);
   if (taskMatch) return { id: taskMatch[1], mode: 'task' };
@@ -245,7 +243,7 @@ export function flattenSearch(
 
       // 补全 spec scope
       if (item.type === 'spec') {
-        const filePath = (item.meta as Record<string, unknown>).filePath as string;
+        const filePath = item.meta.filePath || '';
         meta.scope = scopeValueToLabel(inferSpecScope(filePath));
       }
 

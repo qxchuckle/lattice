@@ -1,4 +1,4 @@
-import { useDeferredValue } from 'react';
+import { useDebouncedValue } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
 import { queryKeys } from '../lib';
@@ -68,17 +68,17 @@ export function useUsers() {
  * 参考 useSearch（hooks/ui.ts）的防抖与 staleTime 策略。
  */
 export function useProjectTaskSearch(projectId: string | null, query: string) {
-  const debouncedQuery = useDeferredValue(query);
+  const debouncedQuery = useDebouncedValue(query, 300);
   const adapter = getAdapter();
   return useQuery<SearchResult[]>({
     queryKey: ['project-task-search', projectId, debouncedQuery],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       adapter.search(debouncedQuery, {
         type: 'task',
         projectId: projectId || undefined,
         limit: 50,
+        signal,
       }),
     enabled: debouncedQuery.length > 0 && !!projectId,
-    staleTime: 30_000,
   });
 }
