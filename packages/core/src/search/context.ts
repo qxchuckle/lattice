@@ -25,6 +25,7 @@ import { getRelatedProjectIds } from '../project/virtual-merge';
 import { selectPrimaryId } from '../project/identity';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
+import { readProfileSummary, readProfileTags } from '../project/profile';
 
 /**
  * 获取虚拟合并组的所有任务 ID（去重）
@@ -420,10 +421,16 @@ const SCOPE_LABEL: Record<string, string> = {
 };
 
 /** 将上下文格式化为 Markdown 输出 */
-export function formatContextAsMarkdown(ctx: ProjectContext): string {
+export function formatContextAsMarkdown(ctx: ProjectContext, profileSection?: string): string {
   const lines: string[] = [];
 
   lines.push('# 项目上下文\n');
+
+  // 项目画像（置于最顶部）
+  if (profileSection) {
+    lines.push(profileSection);
+    lines.push('');
+  }
 
   // 祖先项目继承提示
   if (ctx.ancestors && ctx.ancestors.length > 0) {

@@ -28,6 +28,7 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 | `/lattice/spec/update/user` | 沉淀跨项目可复用、属于当前用户的规则 / 认知 | [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/update/user.md` |
 | `/lattice/spec/update/global` | 沉淀多用户多项目共享的默认规则 | [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/update/global.md` |
 | `/lattice/spec/sediment` | AI 自主识别可沉淀内容并判定层级，用户确认后批量写入 | [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) + [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/sediment.md` |
+| `/lattice/project/profile` | 为项目生成/更新智能画像（summary.md + tags），支持增量 | [command-reference.md](command-reference.md) | `project/profile.md` |
 
 > **说明**：commands 文件部署在客户端 `commands/lattice/` 目录下，与本 skill 不在同一相对路径。AI 接收 `/lattice/...` 命令时，agent 客户端会自动加载对应 commands 文件，本表只用于查找文件名与背后依赖的 skill 子文档。
 

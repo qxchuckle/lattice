@@ -4,6 +4,8 @@ import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from '../spec';
 import { listTasks, getTaskPrd, getTaskDesign } from '../task';
 import { readProgress } from '../task/checkpoint';
 import { listProjects, getAllUniqueRelations } from '../project';
+import { readProfileSummary, readProfileTags } from '../project/profile';
+import { getProjectProfileSummaryPath } from '../paths';
 
 export interface SearchDocumentInput {
   filePath: string;
@@ -175,6 +177,24 @@ async function collectUserDocs(username: string): Promise<SearchDocumentInput[]>
       projectId: project.id,
       projectIds: [project.id],
     });
+  }
+
+  // 项目画像（profile/summary.md）
+  for (const project of projects) {
+    const summary = await readProfileSummary(username, project.id);
+    if (summary) {
+      const tags = await readProfileTags(username, project.id);
+      docs.push({
+        filePath: getProjectProfileSummaryPath(username, project.id),
+        content: summary,
+        title: `${project.name} — 项目画像`,
+        tags: ['project-profile', ...tags],
+        username,
+        sourceType: 'project' as SearchDocumentType,
+        projectId: project.id,
+        projectIds: [project.id],
+      });
+    }
   }
 
   // 项目关联关系

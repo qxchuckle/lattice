@@ -10,6 +10,7 @@ import {
   resolveSpecScope,
   findProjectById,
   getProjectMeta,
+  buildProfileSection,
   type ContextOptions,
   type AncestorProjectInfo,
   type ParsedSpec,
@@ -220,7 +221,9 @@ export function registerContextCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
+          const profileData = await buildProfileSection(username, projectId);
           const jsonCtx = {
+            profile: profileData ?? null,
             projectSpecs: stripSpecs(ctx.projectSpecs, 'project'),
             userSpecs: stripSpecs(ctx.userSpecs, 'user'),
             globalSpecs: stripSpecs(ctx.globalSpecs, 'global'),
@@ -241,7 +244,12 @@ export function registerContextCommand(program: Command): void {
           return;
         }
 
-        logger.raw(formatContextAsMarkdown(ctx));
+        logger.raw(
+          formatContextAsMarkdown(
+            ctx,
+            (await buildProfileSection(username, projectId)) ?? undefined,
+          ),
+        );
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

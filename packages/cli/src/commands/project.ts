@@ -28,6 +28,17 @@ import {
   dirExists,
   mergeProjects,
   searchProjects,
+  checkProfiles,
+  checkSingleProfile,
+  markProfileDone,
+  readProfileTags,
+  writeProfileTags,
+  addProfileTags,
+  removeProfileTags,
+  getProfileShow,
+  getProfileDirPath,
+  getProfileBrief,
+  updateRagIndex,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource, ProjectMatchProvenance } from '@qcqx/lattice-core';
 import { logger, outputJson, shouldSkipConfirm } from '../utils';
@@ -737,6 +748,383 @@ export function registerProjectCommand(program: Command): void {
           }
           process.exitCode = 1;
         }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── profile ───
+  const profileCmd = cmd.command('profile').description('管理项目画像（标签、描述、缓存）');
+
+  // profile check
+  profileCmd
+    .command('check')
+    .description('检测哪些项目的画像需要更新')
+    .option('--project <id>', '检查指定项目')
+    .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化')
+    .action(async (opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+
+        if (opts.project) {
+          const match = resolveProjectById(username, opts.project);
+          if (!match) {
+            logger.raw(chalk.yellow(`未找到项目：${opts.project}`));
+            closeDb();
+            return;
+          }
+          const item = await checkSingleProfile(username, match.id, match.id, match.name);
+          closeDb();
+          if (opts.json) {
+            outputJson(item, opts.jsonFormat);
+            return;
+          }
+          if (item.status === 'fresh') {
+            logger.raw(chalk.green(`✓ ${item.name} — 已是最新`));
+          } else {
+            logger.raw(chalk.yellow(`△ ${item.name} — ${item.reasons.join('，')}`));
+          }
+          return;
+        }
+
+        const result = await checkProfiles(username);
+        closeDb();
+
+        if (opts.json) {
+          outputJson(result, opts.jsonFormat);
+          return;
+        }
+
+        if (result.stale.length > 0) {
+          logger.raw(chalk.yellow(`需要更新（${result.stale.length}）：`));
+          for (const item of result.stale) {
+            logger.raw(chalk.yellow(`  ${item.name} — ${item.reasons.join('，')}`));
+          }
+          logger.raw('');
+        }
+        if (result.fresh > 0) {
+          logger.raw(chalk.green(`已是最新（${result.fresh}）：跳过`));
+        }
+        if (result.noProfile.length > 0) {
+          logger.raw(
+            chalk.dim(
+              `未生成画像（${result.noProfile.length}）：${result.noProfile.map((p) => p.name).join(', ')}`,
+            ),
+          );
+        }
+        if (result.stale.length === 0 && result.noProfile.length === 0) {
+          logger.raw(chalk.green('✓ 所有项目画像均为最新'));
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // profile done
+  profileCmd
+    .command('done <id>')
+    .description('标记画像生成完成（采集缓存 + 同步 profileUpdated + 触发 rag update）')
+    .action(async (id: string) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        await markProfileDone(username, match.id, match.id);
+        closeDb();
+        // 触发增量 rag update（不阻塞）
+        try {
+          await updateRagIndex();
+        } catch {
+          // ignore
+        }
+        logger.raw(chalk.green(`✓ ${match.name} 画像缓存已更新`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // profile show
+  profileCmd
+    .command('show <id>')
+    .description('查看项目画像（summary + tags + cache 状态 + 文件路径）')
+    .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const profile = await getProfileShow(username, match.id);
+        closeDb();
+
+        if (opts.json) {
+          outputJson(profile, opts.jsonFormat);
+          return;
+        }
+
+        logger.raw(chalk.bold(`项目画像：${match.name}`));
+        logger.raw('');
+        logger.raw(`标签：${profile.tags.length > 0 ? profile.tags.join(', ') : chalk.dim('无')}`);
+        logger.raw(`画像目录：${profile.profileDir}`);
+        logger.raw(`summary：${profile.summaryPath}`);
+        logger.raw(`tags：${profile.tagsPath}`);
+        if (profile.cache) {
+          logger.raw(`缓存时间：${profile.cache.generatedAt}`);
+        } else {
+          logger.raw(chalk.dim('缓存：未生成'));
+        }
+        if (profile.summary) {
+          logger.raw('');
+          logger.raw(chalk.dim('─── summary.md ───'));
+          logger.raw(profile.summary);
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // profile path
+  profileCmd
+    .command('path <id>')
+    .description('输出项目 profile 目录路径')
+    .action(async (id: string) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const profileDir = getProfileDirPath(username, match.id);
+        closeDb();
+        logger.raw(profileDir);
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // profile brief
+  profileCmd
+    .command('brief <id>')
+    .description('一次性获取项目画像所需的所有 lattice 内部信息')
+    .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const brief = await getProfileBrief(username, match.id, match.id);
+        closeDb();
+        if (!brief) {
+          logger.raw(chalk.yellow(`无法获取项目信息：${id}`));
+          return;
+        }
+
+        if (opts.json) {
+          outputJson(brief, opts.jsonFormat);
+          return;
+        }
+
+        // 文本输出
+        logger.raw(chalk.bold(`项目：${brief.project.name}`));
+        logger.raw(`ID：${brief.project.id}`);
+        if (brief.project.description) logger.raw(`描述：${brief.project.description}`);
+        logger.raw(`本地路径：${brief.project.localPaths.join(', ') || '无'}`);
+        if (brief.project.groups?.length) logger.raw(`分组：${brief.project.groups.join(', ')}`);
+        if (brief.project.packageNames?.length)
+          logger.raw(`包名：${brief.project.packageNames.join(', ')}`);
+        if (brief.project.monorepoPackages?.length)
+          logger.raw(`monorepo 包：${brief.project.monorepoPackages.join(', ')}`);
+        logger.raw(`画像目录：${brief.profileDir}`);
+        logger.raw('');
+
+        // 已有画像
+        logger.raw(chalk.bold(`标签：${brief.tags.length > 0 ? brief.tags.join(', ') : '无'}`));
+        if (brief.summary) {
+          logger.raw(chalk.dim('─── 已有 summary.md ───'));
+          logger.raw(brief.summary);
+          logger.raw('');
+        } else {
+          logger.raw(chalk.dim('summary.md：未生成'));
+          logger.raw('');
+        }
+
+        // Spec 清单
+        logger.raw(chalk.bold(`项目级 Spec（${brief.specs.length}）：`));
+        for (const s of brief.specs) {
+          logger.raw(`  ${s.title}${s.description ? chalk.dim(` — ${s.description}`) : ''}`);
+        }
+        logger.raw('');
+
+        // 任务清单
+        logger.raw(chalk.bold(`关联任务（${brief.tasks.length}）：`));
+        for (const t of brief.tasks) {
+          logger.raw(`  [${t.status}] ${t.title} (${t.id})`);
+        }
+        logger.raw('');
+
+        // 关系
+        if (brief.relations.length > 0) {
+          logger.raw(chalk.bold(`项目关系（${brief.relations.length}）：`));
+          for (const r of brief.relations) {
+            logger.raw(
+              `  ${r.projectName} — ${r.type}${r.description ? ` (${r.description})` : ''}`,
+            );
+          }
+        }
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  // profile tags
+  const tagsCmd = profileCmd.command('tags').description('管理项目标签');
+
+  tagsCmd
+    .command('show <id>')
+    .description('查看项目标签')
+    .option('--json', 'JSON 格式输出')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const tags = await readProfileTags(username, match.id);
+        const profileDir = getProfileDirPath(username, match.id);
+        closeDb();
+        if (opts.json) {
+          outputJson({ tags, path: `${profileDir}/tags.json` });
+          return;
+        }
+        logger.raw(`标签：${tags.length > 0 ? tags.join(', ') : chalk.dim('无')}`);
+        logger.raw(`文件：${profileDir}/tags.json`);
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  tagsCmd
+    .command('set <id>')
+    .description('替换项目标签（全量）')
+    .requiredOption('--tags <tags>', '标签列表（逗号分隔）')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const tags = [
+          ...new Set(
+            (opts.tags as string)
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+          ),
+        ];
+        await writeProfileTags(username, match.id, tags);
+        closeDb();
+        logger.raw(chalk.green(`✓ 标签已设置：${tags.join(', ')}`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  tagsCmd
+    .command('add <id>')
+    .description('追加标签（去重）')
+    .requiredOption('--tags <tags>', '标签列表（逗号分隔）')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const newTags = (opts.tags as string)
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const result = await addProfileTags(username, match.id, newTags);
+        closeDb();
+        logger.raw(chalk.green(`✓ 标签已追加，当前：${result.join(', ')}`));
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        closeDb();
+        process.exitCode = 1;
+      }
+    });
+
+  tagsCmd
+    .command('remove <id>')
+    .description('删除指定标签')
+    .requiredOption('--tags <tags>', '标签列表（逗号分隔）')
+    .action(async (id: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const match = resolveProjectById(username, id);
+        if (!match) {
+          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          closeDb();
+          return;
+        }
+        const tagsToRemove = (opts.tags as string)
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const result = await removeProfileTags(username, match.id, tagsToRemove);
+        closeDb();
+        logger.raw(
+          chalk.green(`✓ 标签已删除，剩余：${result.length > 0 ? result.join(', ') : '无'}`),
+        );
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         closeDb();

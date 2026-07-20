@@ -106,6 +106,22 @@ export function getProjectSpecDir(username: string, projectDirName: string): str
   return pathJoin(getProjectDir(username, projectDirName), 'spec');
 }
 
+export function getProjectProfileDir(username: string, projectDirName: string): string {
+  return pathJoin(getProjectDir(username, projectDirName), 'profile');
+}
+
+export function getProjectProfileSummaryPath(username: string, projectDirName: string): string {
+  return pathJoin(getProjectProfileDir(username, projectDirName), 'summary.md');
+}
+
+export function getProjectProfileTagsPath(username: string, projectDirName: string): string {
+  return pathJoin(getProjectProfileDir(username, projectDirName), 'tags.json');
+}
+
+export function getProjectProfileCachePath(username: string, projectDirName: string): string {
+  return pathJoin(getProjectProfileDir(username, projectDirName), 'cache.json');
+}
+
 // ─── 任务 ───
 
 export function getTaskDir(username: string, taskId: string): string {

@@ -253,6 +253,31 @@ export { findSameProjectInOtherUsers, listAllUsernames, renameUser } from './pro
 // 项目指纹
 export { collectFingerprint, normalizeGitRemote, normalizeLocalPath } from './project/fingerprint';
 
+// 项目画像
+export {
+  readProfileTags,
+  writeProfileTags,
+  addProfileTags,
+  removeProfileTags,
+  readProfileSummary,
+  writeProfileSummary,
+  readProfileCache,
+  checkProfiles,
+  checkSingleProfile,
+  markProfileDone,
+  getProfileShow,
+  getProfileDirPath,
+  buildProfileSection,
+  getProfileBrief,
+  collectProfileInputs,
+  computeInputsHash,
+  type ProfileCache,
+  type ProfileCacheDetail,
+  type ProfileCheckResult,
+  type ProfileCheckResultItem,
+  type ProfileShowResult,
+} from './project/profile';
+
 // 扫描缓存
 export { readScanCache, writeScanCache, shouldScan, type ScanCache } from './cache/scan-cache';
 

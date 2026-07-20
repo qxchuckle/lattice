@@ -25,6 +25,8 @@ export interface ProjectMeta {
   fingerprintsUpdated?: string;
   groups?: string[];
   tags?: string[];
+  /** 项目画像最后更新时间 */
+  profileUpdated?: string;
   created: string;
   updated?: string;
 }

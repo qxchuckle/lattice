@@ -187,6 +187,49 @@
 
 > **虚拟合并 vs 物理合并**：IDs 有交集的项目在查询层自动虚拟合并（零物理操作），通常无需手动 merge。`merge` 用于需要真正消除重复项目的场景。
 
+### `ltc project profile check`
+
+检测哪些项目的画像需要更新。
+
+- `--project <id>`：检查指定项目（不传则检查所有）
+- `--json`：JSON 输出（agent 友好）
+
+### `ltc project profile brief <id>`
+
+一次性获取项目画像所需的所有 lattice 内部信息：项目元数据、profile 目录路径、已有 summary/tags、spec 清单、任务清单、项目关系。
+
+- `--json`：JSON 输出
+
+### `ltc project profile done <id>`
+
+标记画像生成完成。自动：采集当前状态写入 cache.json + 同步 project.json profileUpdated + 触发 rag update。
+
+### `ltc project profile show <id>`
+
+查看项目画像（summary + tags + cache 状态 + 文件路径）。
+
+- `--json`：JSON 输出
+
+### `ltc project profile path <id>`
+
+输出项目 profile 目录路径（AI 用于直接写 summary.md）。
+
+### `ltc project profile tags show <id>`
+
+查看项目标签 + tags.json 文件路径。
+
+### `ltc project profile tags set <id> --tags "a,b,c"`
+
+替换标签（全量写入 tags.json）。
+
+### `ltc project profile tags add <id> --tags "a,b"`
+
+追加标签（去重）。
+
+### `ltc project profile tags remove <id> --tags "a"`
+
+删除指定标签。
+
 ## `ltc task`
 
 任务管理。
