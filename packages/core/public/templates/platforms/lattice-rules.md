@@ -4,7 +4,12 @@ Lattice 是跨项目 AI 上下文管理工具。本文件定义 AI 使用 Lattic
 
 > **本文定位**：系统级硬约束清单（自含可读）。每条规则末尾 `（→ xxx.md#yy）` 跳到 skill 子文档展开。本文不复述子文档流程。
 
-**审慕原则**：行动前先确认有无 Lattice 更佳路径。需要看源码先查已注册仓库；需要项目约定先读 spec；不确定先查历史任务；**程序化工作流必须委派预定义 subagent，禁止主线直接执行起手/归档/铺底等命令组合**；平台不支持 subagent 时退化为串行执行（→ [subagent-delegation.md#预定义-subagent优先使用](subagent-delegation.md#预定义-subagent优先使用)）。
+**审慕原则**（行动前必过）：
+
+1. 需要看源码 → 先 `ltc project list --search <包名>` 查已注册仓库
+2. 需要项目约定 → 先读 spec
+3. 不确定 → 先查历史任务
+4. **程序化工作流（起手/归档/铺底/搜索/体检/失忆恢复/规范摘要/影响分析）→ 必须委派预定义 subagent，禁止主线直接执行对应命令组合**；平台不支持时退化串行（→ [subagent-delegation.md#预定义-subagent优先使用](subagent-delegation.md#预定义-subagent优先使用)）
 
 ## 一、起手契约（每个新会话第一件事）
 
@@ -42,15 +47,6 @@ Lattice 是跨项目 AI 上下文管理工具。本文件定义 AI 使用 Lattic
 颗粒度兜底：连续 3 轮无 checkpoint → 补 `note`。
 
 > **fast-start 例外**：不走实施期循环，但 spec 精读和沉淀判定仍适用（→ [fast-start-workflows.md](fast-start-workflows.md)）。
-
-### 为什么不能跳
-
-| 跳的是 | 后果 |
-|---|---|
-| PRD 同步 | 下轮压缩后认知偏差 → 改错代码 |
-| spec 精读 | 缺项目规则 → 产出与约定冲突 → 返工 |
-| checkpoint | 丢实施轨迹和关键决策 |
-| 项目关联 | task.json 与实际不一致 → 后续误判 |
 
 ## 四、项目关联同步
 
