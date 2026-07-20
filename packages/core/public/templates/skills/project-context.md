@@ -11,9 +11,11 @@
 > 何时读：会话开始、进入一个项目、切换工作目录后，或上下文压缩恢复后 → 下一步：拿到上下文后跳到 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec) 选读 spec。
 
 ```bash
-ltc context
+ltc context --query "<当前任务主题/用户意图关键词>"
 ltc status
 ```
+
+> **强制**：AI 调用 `ltc context` 时必须带 `--query`，传入当前任务主题、用户意图或任务描述。输出会自动携带「语义关联」节（相关 spec、参考任务、项目，已去重），减少额外 search 调用。
 
 需要明确的关键信息：
 

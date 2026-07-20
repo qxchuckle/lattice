@@ -71,7 +71,7 @@ ltc task update <task-id> --clear-parent
 
 ```bash
 ltc task start <task-id>
-ltc context --task <task-id>
+ltc context --task <task-id> --query "<任务标题/主题关键词>"
 ```
 
 1. 按主题选读相关 spec（→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）——分两步：先从 context 列表按标题/描述选读，再 `ltc search "<任务关键词>" --json` 语义搜索补漏
@@ -125,6 +125,7 @@ ltc context --task <task-id>
 - 用户提到“规范 / 约定 / 历史 / 类似 / 跨项目”
 - 涉及项目级 / 用户级 / 全局级规则的层级判定（→ [spec-workflows.md#层级](spec-workflows.md#层级)）
 - 涉及之前未涉及的项目模块边界 / 跨包调用
+- 遇到实现困难 / 多方案分支需要决策——通过 `ltc search` 查找相关 spec 或历史任务，学习已有经验再动手
 
 触发后的动作不仅是读已知 spec，还应**活用 `ltc search`** 搜索本轮新出现的关键词，发现起手时未识别的相关 spec 或历史任务经验。
 
@@ -359,7 +360,7 @@ ltc task progress <id> [--last <n>] [--type <type>]
 ltc task associate <id> [--current] [--paths ...] [--project <id>]
 ltc task complete <id>
 ltc task archive <id>
-ltc context --task <id>
+ltc context --task <id> --query "<任务主题>"
 ```
 
 > `--current` 基于当前工作目录解析项目。**写入类**（`task create` / `task associate`）：用户提供了路径/语义描述时必须先 `ltc project where` / `ltc project list --search` 定位，定位到用 `--project <id>`（见「命令参数不是任务 ID 时」第 0 步）。**读取类**（`task list`）：与当前目录无关时用 `--project <id>`。

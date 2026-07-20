@@ -79,7 +79,7 @@ AI 不限于在起手或特定步骤才调用 ltc 命令。对话过程中任何
 | 技术选型 / 架构决策 | 历史决策记录 | `ltc search "<关键词>" --type task --json` → read_file PRD |
 | 遇到报错 / 兼容性问题 | 类似踩坑经验 | `ltc search "<错误关键词>" --json` |
 | 用户说"之前做过类似的" | 相似需求的方案 | `ltc search "<需求描述>" --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)） |
-| 不确定当前项目约定 | 项目规范 | `ltc context` / `ltc spec list` |
+| 不确定当前项目约定 | 项目规范 | `ltc context --query "<主题>"` / `ltc spec list` |
 | 需要参考已完成任务的经验 | 任务 PRD + progress | `ltc task progress <id>` → read_file PRD |
 | 不确定本地有哪些项目 | 已注册项目清单 | `ltc project list --search <keyword>` / `ltc project list --with-relations` |
 | 当前目录属于哪个项目 | 项目身份 | `ltc project where .` / `ltc status` |
@@ -166,7 +166,7 @@ ltc rag status    # 查看索引状态
 
 ```bash
 # 无依赖：串联执行
-ltc context && ltc task list --current && ltc spec list
+ltc context --query "<当前主题>" && ltc task list --current && ltc spec list
 
 # 有依赖：分步执行
 ltc task list --current          # 先拿到 task-id

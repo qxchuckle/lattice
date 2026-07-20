@@ -10,7 +10,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 
 ## 一、起手契约（每个新会话第一件事）
 
-1. `ltc context` —— 拿当前项目聚合上下文（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
+1. `ltc context --query "<当前主题/意图>"` —— 拿当前项目聚合上下文 + 语义关联（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
 2. 按当前主题精读相关 spec（`ltc context` 输出只是标题列表，看到标题不等于了解内容；宁多勿少，不确定是否相关的 spec 读而非跳过；→ [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec)）
 3. 有活跃任务 → `ltc task info <id>` + `ltc task progress <id>` + read_file design.md（如存在；→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 用户提到"规范/之前/类似/历史/跨项目" → 先 `ltc search <query> --json`（→ [project-context.md#跨项目相似需求搜索](project-context.md#跨项目相似需求搜索)）
@@ -85,7 +85,7 @@ Lattice 是跨项目的 AI 上下文管理工具。本文件定义 AI 使用 Lat
 恢复动作（按顺序）：
 
 1. 重新调用 `lattice` skill（→ [SKILL.md#文档加载策略](SKILL.md#文档加载策略)）
-2. `ltc context` + 精读相关 spec + read_file PRD / design.md（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
+2. `ltc context --query "<当前主题>"` + 精读相关 spec + read_file PRD / design.md（→ [project-context.md#进入项目默认动作](project-context.md#进入项目默认动作)）
 3. `ltc task list --current` → `task info` → `task progress`（→ [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作)）
 4. 重载用户输入类 checkpoint（`--type correction/constraint/context`；→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）
 5. 回填缺失 checkpoint（→ [task-workflows.md#checkpoint-类型与触发条件](task-workflows.md#checkpoint-类型与触发条件)）

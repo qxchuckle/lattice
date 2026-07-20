@@ -11,10 +11,12 @@ import {
   findProjectById,
   getProjectMeta,
   buildProfileSection,
+  unifiedSearch,
   type ContextOptions,
   type AncestorProjectInfo,
   type ParsedSpec,
   type ProjectContext,
+  type SearchResult,
 } from '@qcqx/lattice-core';
 import {
   logger,
@@ -50,12 +52,80 @@ function stripCascadedSpecs(
   });
 }
 
+/** 语义搜索节：调用 unifiedSearch 并格式化输出 */
+async function performQuerySearch(
+  query: string,
+  opts?: { projectId?: string; usernames?: string[]; excludePaths?: Set<string> },
+): Promise<SearchResult[]> {
+  try {
+    const results = await unifiedSearch(query, {
+      projectId: opts?.projectId,
+      usernames: opts?.usernames,
+      limit: 5,
+      specLimit: 5,
+      taskLimit: 3,
+      projectLimit: 3,
+    });
+    // 去重：排除已在 context 中列出的 spec
+    if (opts?.excludePaths && opts.excludePaths.size > 0) {
+      return results.filter((r) => {
+        const fp = (r.meta as Record<string, unknown>).filePath as string | undefined;
+        return !fp || !opts.excludePaths!.has(fp);
+      });
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+function formatQuerySection(results: SearchResult[]): void {
+  if (results.length === 0) return;
+
+  const specs = results.filter((r) => r.type === 'spec');
+  const tasks = results.filter((r) => r.type === 'task' || r.type === 'design');
+  const projects = results.filter((r) => r.type === 'project');
+
+  logger.raw(chalk.green.bold('\n语义关联（--query）\n'));
+
+  if (specs.length > 0) {
+    logger.raw(chalk.green(`  相关 Spec（${specs.length}）：`));
+    for (const r of specs) {
+      const meta = r.meta as Record<string, unknown>;
+      const via = meta.matchedVia as { docTitle?: string } | undefined;
+      const viaLabel = via ? chalk.dim(` ← 任务「${via.docTitle}」`) : '';
+      logger.raw(`    ${chalk.bold(r.title)}${viaLabel}`);
+      logger.raw(chalk.dim(`      路径：${(meta.filePath as string) ?? ''}`));
+    }
+    logger.raw('');
+  }
+
+  if (tasks.length > 0) {
+    logger.raw(chalk.green(`  相关任务（${tasks.length}）：`));
+    for (const r of tasks) {
+      const meta = r.meta as Record<string, unknown>;
+      logger.raw(`    ${chalk.bold(r.title)} ${chalk.dim(`(${r.type})`)}`);
+      if (meta.taskId) logger.raw(chalk.dim(`      ID：${meta.taskId}`));
+    }
+    logger.raw('');
+  }
+
+  if (projects.length > 0) {
+    logger.raw(chalk.green(`  相关项目（${projects.length}）：`));
+    for (const r of projects) {
+      logger.raw(`    ${chalk.bold(r.title)}`);
+    }
+    logger.raw('');
+  }
+}
+
 export function registerContextCommand(program: Command): void {
   program
     .command('context')
     .description('输出当前项目的聚合上下文')
     .option('--task <id>', '指定任务 ID')
     .option('--project <id>', '指定项目 ID')
+    .option('--query <text>', '语义化查询（主题/意图/任务描述）：补充搜索相关的 spec、任务、项目')
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
@@ -71,6 +141,14 @@ export function registerContextCommand(program: Command): void {
         if (opts.task) {
           // 任务关联上下文
           const ctx = await getSmartContext(username, opts.task, contextOpts);
+
+          // --query 语义搜索补充
+          let queryResults: SearchResult[] = [];
+          if (opts.query) {
+            queryResults = await performQuerySearch(opts.query, {
+              usernames: opts.currentUser ? [username] : undefined,
+            });
+          }
           closeDb();
 
           if (opts.json) {
@@ -83,6 +161,7 @@ export function registerContextCommand(program: Command): void {
                 ...d,
                 directSpecs: stripSpecs(d.directSpecs, 'project'),
               })),
+              querySearch: queryResults.length > 0 ? queryResults : undefined,
             };
             outputJson(jsonCtx, opts.jsonFormat);
             return;
@@ -156,6 +235,11 @@ export function registerContextCommand(program: Command): void {
             logger.raw('');
           }
 
+          // --query 语义搜索节
+          if (queryResults.length > 0) {
+            formatQuerySection(queryResults);
+          }
+
           return;
         }
 
@@ -218,6 +302,22 @@ export function registerContextCommand(program: Command): void {
         }
 
         const ctx = await getContextForProject(username, projectId, contextOpts);
+
+        // --query 语义搜索补充（排除已在 context 中列出的 spec）
+        let queryResults: SearchResult[] = [];
+        if (opts.query) {
+          const excludePaths = new Set<string>([
+            ...ctx.projectSpecs.map((s) => s.filePath),
+            ...ctx.userSpecs.map((s) => s.filePath),
+            ...ctx.globalSpecs.map((s) => s.filePath),
+            ...(ctx.cascadedSpecs ?? []).map((s) => s.filePath),
+          ]);
+          queryResults = await performQuerySearch(opts.query, {
+            projectId,
+            usernames: opts.currentUser ? [username] : undefined,
+            excludePaths,
+          });
+        }
         closeDb();
 
         if (opts.json) {
@@ -239,6 +339,7 @@ export function registerContextCommand(program: Command): void {
             ancestorSpecs: ctx.ancestorSpecs
               ? stripSpecs(ctx.ancestorSpecs, 'ancestor')
               : undefined,
+            querySearch: queryResults.length > 0 ? queryResults : undefined,
           };
           outputJson(jsonCtx, opts.jsonFormat);
           return;
@@ -250,6 +351,11 @@ export function registerContextCommand(program: Command): void {
             (await buildProfileSection(username, projectId)) ?? undefined,
           ),
         );
+
+        // --query 语义搜索节
+        if (queryResults.length > 0) {
+          formatQuerySection(queryResults);
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

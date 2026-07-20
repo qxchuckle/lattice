@@ -124,7 +124,10 @@ export function registerSearchCommand(program: Command): void {
     .option('--project <id>', '限制在指定项目范围内')
     .option('--users <names>', '只搜索指定用户内容，逗号分隔')
     .option('--current-user', '只搜索当前用户内容')
-    .option('--limit <n>', '返回结果数量', '15')
+    .option('--limit <n>', '每类别返回结果数量', '10')
+    .option('--spec-limit <n>', 'Spec 结果数量（覆盖 --limit）')
+    .option('--task-limit <n>', '任务结果数量（覆盖 --limit）')
+    .option('--project-limit <n>', '项目结果数量（覆盖 --limit）')
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
@@ -160,6 +163,9 @@ export function registerSearchCommand(program: Command): void {
           projectId: opts.project,
           usernames,
           limit: parseInt(opts.limit, 10),
+          specLimit: opts.specLimit ? parseInt(opts.specLimit, 10) : undefined,
+          taskLimit: opts.taskLimit ? parseInt(opts.taskLimit, 10) : undefined,
+          projectLimit: opts.projectLimit ? parseInt(opts.projectLimit, 10) : undefined,
           useLightweightRerank: opts.rerank,
         });
         const ragStatus = await getRAGStatus();
@@ -202,64 +208,32 @@ export function registerSearchCommand(program: Command): void {
           headerParts.length > 0 ? chalk.dim(`（${headerParts.join('、')}）`) : '';
         logger.raw(chalk.blue(`\n找到 ${results.length} 个结果${headerExtra}\n`));
 
-        for (const r of results) {
-          const meta = r.meta as Record<string, unknown>;
-          const icon = TYPE_ICON[r.type] ?? '•';
-          const filePath = (meta.filePath as string) ?? '';
-          const username = (meta.username as string) || '';
-          const taskId = (meta.taskId as string) || '';
-          const scope = inferScopeLabel(filePath, r.type);
-          const isWeak = meta.weakMatch === true;
-          const scoreLabel = formatScorePercent(
-            r.score,
-            meta.normalizedScore as number | undefined,
-          );
-          const tagParts: string[] = [r.type];
-          if (scope && scope !== r.type) tagParts.push(scope);
-          if (scoreLabel) tagParts.push(scoreLabel);
-          if (isWeak) tagParts.push('弱命中');
-          const tag = isWeak
-            ? chalk.yellow.dim(`[${tagParts.join(' · ')}]`)
-            : chalk.dim(`[${tagParts.join(' · ')}]`);
-
-          // 主行：icon + 标题 + tag（弱命中时标题不加粗，以降低视觉权重）
-          const titlePart = isWeak ? chalk.dim(r.title) : chalk.bold(r.title);
-          let header = `  ${icon} ${titlePart} ${tag}`;
-          const dupCount = (meta.duplicateCount as number) ?? 0;
-          if (dupCount > 0) {
-            header += ' ' + chalk.yellow(`· 还有 ${dupCount} 项同名`);
+        // 无 --type 时按类型分组输出；有 --type 时平铺
+        const grouped = !opts.type;
+        if (grouped) {
+          const groups: { label: string; types: string[]; items: SearchResult[] }[] = [
+            { label: '项目', types: ['project'], items: [] },
+            { label: 'Spec', types: ['spec'], items: [] },
+            { label: '任务', types: ['task', 'design', 'checkpoint'], items: [] },
+            { label: '关联关系', types: ['relation'], items: [] },
+          ];
+          for (const r of results) {
+            const g = groups.find((g) => g.types.includes(r.type));
+            if (g) g.items.push(r);
+            else groups[groups.length - 1].items.push(r); // fallback
           }
-          logger.raw(header);
-
-          const snippet = prettifySnippet(r.snippet);
-          if (snippet) {
-            const truncated = snippet.length > 140 ? snippet.slice(0, 140) + '...' : snippet;
-            logger.raw(`    ${truncated}`);
-          }
-
-          if (username) {
-            logger.raw(`    ${chalk.dim(`用户：${username}`)}`);
-          }
-          if (taskId) {
-            logger.raw(`    ${chalk.dim(`任务：${taskId}`)}`);
-          }
-          if (filePath) {
-            logger.raw(`    ${chalk.dim(shortenPath(filePath))}`);
-          }
-
-          // duplicates 详情：默认只提示数量，--show-duplicates 时展开
-          if (showDuplicates && dupCount > 0) {
-            const dups = (meta.duplicates as Array<Record<string, unknown>>) ?? [];
-            for (const d of dups) {
-              const dPath = (d.filePath as string) || '';
-              const dScore = formatScorePercent(d.score as number | undefined, undefined);
-              logger.raw(
-                `      ${chalk.dim('↳')} ${chalk.dim(shortenPath(dPath))}` +
-                  (dScore ? chalk.dim(` (${dScore})`) : ''),
-              );
+          for (const g of groups) {
+            if (g.items.length === 0) continue;
+            logger.raw(chalk.bold.underline(`${g.label}（${g.items.length}）`));
+            logger.raw('');
+            for (const r of g.items) {
+              outputSingleResult(r, showDuplicates);
             }
           }
-          logger.raw('');
+        } else {
+          for (const r of results) {
+            outputSingleResult(r, showDuplicates);
+          }
         }
       } catch (err) {
         if (spinnerActive) {
@@ -279,5 +253,66 @@ function outputRagRefreshHint(lastUpdated: string | null): void {
   logger.raw(
     chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag update`。'),
   );
+  logger.raw('');
+}
+
+function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
+  const meta = r.meta as Record<string, unknown>;
+  const icon = TYPE_ICON[r.type] ?? '•';
+  const filePath = (meta.filePath as string) ?? '';
+  const username = (meta.username as string) || '';
+  const taskId = (meta.taskId as string) || '';
+  const scope = inferScopeLabel(filePath, r.type);
+  const isWeak = meta.weakMatch === true;
+  const scoreLabel = formatScorePercent(r.score, meta.normalizedScore as number | undefined);
+  const tagParts: string[] = [r.type];
+  if (scope && scope !== r.type) tagParts.push(scope);
+  if (scoreLabel) tagParts.push(scoreLabel);
+  if (isWeak) tagParts.push('弱命中');
+  const tag = isWeak
+    ? chalk.yellow.dim(`[${tagParts.join(' · ')}]`)
+    : chalk.dim(`[${tagParts.join(' · ')}]`);
+
+  const titlePart = isWeak ? chalk.dim(r.title) : chalk.bold(r.title);
+  let header = `  ${icon} ${titlePart} ${tag}`;
+  const dupCount = (meta.duplicateCount as number) ?? 0;
+  if (dupCount > 0) {
+    header += ' ' + chalk.yellow(`· 还有 ${dupCount} 项同名`);
+  }
+  logger.raw(header);
+
+  const snippet = prettifySnippet(r.snippet);
+  if (snippet) {
+    const truncated = snippet.length > 140 ? snippet.slice(0, 140) + '...' : snippet;
+    logger.raw(`    ${truncated}`);
+  }
+
+  if (username) {
+    logger.raw(`    ${chalk.dim(`用户：${username}`)}`);
+  }
+  if (taskId) {
+    logger.raw(`    ${chalk.dim(`任务：${taskId}`)}`);
+  }
+  const matchedVia = meta.matchedVia as
+    | { docType: string; docTitle: string; taskId?: string }
+    | undefined;
+  if (matchedVia && meta.source !== 'task-ref') {
+    logger.raw(`    ${chalk.green(`↳ 经由任务「${matchedVia.docTitle}」关联发现`)}`);
+  }
+  if (filePath) {
+    logger.raw(`    ${chalk.dim(shortenPath(filePath))}`);
+  }
+
+  if (showDuplicates && dupCount > 0) {
+    const dups = (meta.duplicates as Array<Record<string, unknown>>) ?? [];
+    for (const d of dups) {
+      const dPath = (d.filePath as string) || '';
+      const dScore = formatScorePercent(d.score as number | undefined, undefined);
+      logger.raw(
+        `      ${chalk.dim('↳')} ${chalk.dim(shortenPath(dPath))}` +
+          (dScore ? chalk.dim(` (${dScore})`) : ''),
+      );
+    }
+  }
   logger.raw('');
 }

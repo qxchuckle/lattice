@@ -2,6 +2,7 @@ import type { SearchDocumentType, SearchResult } from '../types';
 import { hybridSearch } from './search';
 import { searchProjects, projectSearchResultsToSearchResults } from './project-search';
 import { listAllUsernames } from '../project/cross-user';
+import { enrichSpecResultsWithTaskRefs } from './spec-task-enrichment';
 
 /**
  * 统一搜索入口：合并 hybridSearch（文档搜索）和 searchProjects（项目搜索）。
@@ -19,6 +20,10 @@ export async function unifiedSearch(
     projectId?: string;
     usernames?: string[];
     limit?: number;
+    /** 每类别独立 limit（优先于全局 limit） */
+    specLimit?: number;
+    taskLimit?: number;
+    projectLimit?: number;
     useLightweightRerank?: boolean;
     minFinalScore?: number;
   },
@@ -37,38 +42,41 @@ export async function unifiedSearch(
 
   // 具体类型（spec/task/checkpoint/design/relation）：走 hybridSearch
   if (opts?.type) {
-    return hybridSearch(query, opts);
+    const results = await hybridSearch(query, opts);
+    // spec 搜索时反查任务关联 spec
+    if (opts.type === 'spec') {
+      return enrichSpecResultsWithTaskRefs(results, query, {
+        projectId: opts.projectId,
+        usernames: opts.usernames,
+      });
+    }
+    return results;
   }
 
-  // type=undefined（全部）：hybridSearch + searchProjects 合并
-  const hybridResults = await hybridSearch(query, opts);
-
+  // type=undefined（全部）：分类搜索，每类各自应用 limit
   const usernames = opts?.usernames ?? (await listAllUsernames());
-  const spResult = await searchProjects(usernames, query, {
-    keywordOnly: false,
-    limit,
-  });
-  const projectResults = projectSearchResultsToSearchResults(spResult);
+  const specLimit = opts?.specLimit ?? limit;
+  const taskLimit = opts?.taskLimit ?? limit;
+  const projectLimit = opts?.projectLimit ?? limit;
 
-  // 按 projectIds 去重：hybridSearch 已返回的项目不再追加
-  const existingProjectIds = new Set<string>();
-  for (const r of hybridResults) {
-    if (r.type === 'project') {
-      const pids = (r.meta.projectIds as string[] | undefined) ?? [];
-      for (const pid of pids) existingProjectIds.add(pid);
-    }
-  }
+  // 并行搜索各类别
+  const [specResults, taskResults, projectResultsRaw, relationResults] = await Promise.all([
+    hybridSearch(query, { ...opts, type: 'spec', limit: specLimit }),
+    hybridSearch(query, { ...opts, type: 'task', limit: taskLimit }),
+    searchProjects(usernames, query, { keywordOnly: false, limit: projectLimit }),
+    hybridSearch(query, { ...opts, type: 'relation', limit: Math.min(limit, 5) }),
+  ]);
 
-  const merged = [...hybridResults];
-  for (const r of projectResults) {
-    const pids = (r.meta.projectIds as string[] | undefined) ?? [];
-    const isDuplicate = pids.length > 0 && pids.some((pid) => existingProjectIds.has(pid));
-    if (!isDuplicate) {
-      merged.push(r);
-    }
-  }
+  const projectResults = projectSearchResultsToSearchResults(projectResultsRaw);
 
-  // 按 score 降序，slice 到 limit
-  merged.sort((a, b) => b.score - a.score);
-  return merged.slice(0, limit);
+  // spec 结果做任务关联 enrichment，总数仍受 specLimit 约束
+  const enrichedSpecs = (
+    await enrichSpecResultsWithTaskRefs(specResults, query, {
+      projectId: opts?.projectId,
+      usernames: opts?.usernames,
+    })
+  ).slice(0, specLimit);
+
+  // 合并所有类别（各类已各自 limit，不再全局 slice）
+  return [...projectResults, ...enrichedSpecs, ...taskResults, ...relationResults];
 }
