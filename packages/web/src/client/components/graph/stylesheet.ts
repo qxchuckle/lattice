@@ -95,6 +95,15 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
       } as unknown as cytoscape.Css.Node,
     },
     {
+      // minimap 悬停联动高亮（金色边框，与选中蓝 .focused / 搜索金底 .search-match 区分）
+      selector: '.minimap-hover',
+      style: {
+        'border-width': 3,
+        'border-color': '#FAAD14',
+        'z-index': 90,
+      } as unknown as cytoscape.Css.Node,
+    },
+    {
       selector: '.focused',
       style: {
         'border-width': 4,

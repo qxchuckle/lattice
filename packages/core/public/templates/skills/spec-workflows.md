@@ -45,6 +45,8 @@ user / global 必须包含 `## 适用范围`，声明适用于哪些项目 / 语
 ## 按任务主题精读相关 spec
 
 > 何时读：任务起手（`ltc context` 之后、动手之前）、本轮涉及未读过的模块 / 概念、上下文压缩恢复后 → 下一步：精读完毕后回到 [task-workflows.md#task-start-后的起手动作](task-workflows.md#task-start-后的起手动作) 或 [task-workflows.md#spec-选读触发条件](task-workflows.md#spec-选读触发条件) 继续。
+>
+> 委派：当 spec 数量多或任务涉及不熟悉模块时，优先委派预定义 subagent `lattice-spec-digest` 执行精读并返回规则清单。
 
 > **spec 精读是动态持续过程，不是一次性动作**：起手读一批后，任务推进中涉及新模块 / 新概念 / 新约束时，应持续评估是否有未读的 spec 相关并即时补读。已读 spec 集合随任务推进只增不减——宁多勿少适用于每一轮，不限于第一次。
 

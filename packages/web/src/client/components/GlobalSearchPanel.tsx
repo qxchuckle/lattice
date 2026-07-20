@@ -1,7 +1,7 @@
-import { memo, useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { memo, useRef, useEffect, useCallback, useState, useMemo, Fragment } from 'react';
 import { Input, Skeleton, Empty } from 'antd';
 import type { InputRef } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined, CaretRightOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -139,6 +139,7 @@ const ResultItem = memo(function ResultItem({
 
   return (
     <div
+      data-result-index={index}
       onMouseEnter={() => onHover(index)}
       onClick={() => onClick(item)}
       style={{
@@ -205,6 +206,127 @@ const ResultItem = memo(function ResultItem({
   );
 });
 
+// ── 分组结果（搜索全部时按类型分组展示） ──
+
+const GROUP_CONFIG: { label: string; types: string[] }[] = [
+  { label: '项目', types: ['project'] },
+  { label: 'Spec', types: ['spec'] },
+  { label: '任务', types: ['task', 'design', 'checkpoint'] },
+  { label: '关联关系', types: ['relation'] },
+];
+
+const GROUP_HEADER_HEIGHT = 26;
+
+const GroupedResults = memo(function GroupedResults({
+  results,
+  selectedIndex,
+  isDark,
+  onClick,
+  onHover,
+}: {
+  results: SearchResult[];
+  selectedIndex: number;
+  isDark: boolean;
+  onClick: (item: SearchResult) => void;
+  onHover: (index: number) => void;
+}) {
+  // 计算每个分组的平铺索引范围（用于键盘导航映射）
+  const groups = useMemo(() => {
+    let globalIndex = 0;
+    return GROUP_CONFIG.map((group) => {
+      const items = results.filter((r) => group.types.includes(r.type));
+      const startIdx = globalIndex;
+      globalIndex += items.length;
+      return { ...group, items, startIdx };
+    }).filter((g) => g.items.length > 0);
+  }, [results]);
+
+  // 手风琴：当前展开的分组（同时只展开一个）
+  const [expandedLabel, setExpandedLabel] = useState<string | null>(null);
+
+  // 结果变化时默认展开第一个分组（若当前展开项仍存在则保持）
+  useEffect(() => {
+    if (groups.length === 0) {
+      setExpandedLabel(null);
+      return;
+    }
+    setExpandedLabel((prev) =>
+      prev && groups.some((g) => g.label === prev) ? prev : groups[0].label,
+    );
+  }, [groups]);
+
+  // 键盘导航进入某分组时切换为展开该组（手风琴）。
+  // 仅依赖 selectedIndex / groups：点击折叠导致的 expandedLabel 变化不触发，
+  // 避免「折叠后又被自动展开」的抖动。
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    const target = groups.find(
+      (g) => selectedIndex >= g.startIdx && selectedIndex < g.startIdx + g.items.length,
+    );
+    if (!target) return;
+    setExpandedLabel((prev) => (prev === target.label ? prev : target.label));
+  }, [selectedIndex, groups]);
+
+  const toggleGroup = useCallback((label: string) => {
+    setExpandedLabel((prev) => (prev === label ? null : label));
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {groups.map((group) => {
+        const isExpanded = expandedLabel === group.label;
+        return (
+          <Fragment key={group.label}>
+            <div
+              onClick={() => toggleGroup(group.label)}
+              style={{
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                height: GROUP_HEADER_HEIGHT,
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                padding: '0 14px',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                cursor: 'pointer',
+                userSelect: 'none',
+                background: isDark ? '#1D1D26' : '#FFFFFF',
+                borderBottom: '1px solid var(--border)',
+              }}>
+              <CaretRightOutlined
+                style={{
+                  fontSize: 8,
+                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s',
+                }}
+              />
+              {group.label}（{group.items.length}）
+            </div>
+            {isExpanded && (
+              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                {group.items.map((item, i) => (
+                  <ResultItem
+                    key={`${item.type}-${group.startIdx + i}-${item.title}`}
+                    item={item}
+                    index={group.startIdx + i}
+                    selectedIndex={selectedIndex}
+                    isDark={isDark}
+                    onClick={onClick}
+                    onHover={onHover}
+                  />
+                ))}
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+});
+
 // ── 全局搜索面板 ──
 
 export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
@@ -251,13 +373,7 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
     }
   }, [open]);
 
-  // 打开时重置局部状态
-  useEffect(() => {
-    if (open) {
-      setQuery('');
-      setSelectedIndex(-1);
-    }
-  }, [open]);
+  // 打开时不重置搜索词与选中项，保留上次搜索结果（react-query 缓存命中）
 
   // 搜索结果变化时重置选中项
   const results = searchResult.data || [];
@@ -303,20 +419,13 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
     }
   };
 
-  // 滚动选中项到可视区域
+  // 滚动选中项到可视区域：滚动该项所在的分组内部滚动区（而非整个容器）
   useEffect(() => {
     if (selectedIndex < 0 || !listRef.current) return;
-    const container = listRef.current;
-    const item = container.children[selectedIndex] as HTMLElement;
-    if (item) {
-      const itemTop = item.offsetTop;
-      const itemBottom = itemTop + item.offsetHeight;
-      if (itemTop < container.scrollTop) {
-        container.scrollTop = itemTop;
-      } else if (itemBottom > container.scrollTop + container.clientHeight) {
-        container.scrollTop = itemBottom - container.clientHeight;
-      }
-    }
+    const item = listRef.current.querySelector<HTMLElement>(
+      `[data-result-index="${selectedIndex}"]`,
+    );
+    item?.scrollIntoView({ block: 'nearest' });
   }, [selectedIndex]);
 
   if (!open) return null;
@@ -391,13 +500,15 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
         })}
       </div>
 
-      {/* 结果区域 */}
+      {/* 结果区域：固定高度的 flex 列，手风琴填满、各展开区域内部滚动 */}
       {hasQuery && (
         <div
           ref={listRef}
           style={{
-            maxHeight: 360,
-            overflowY: 'auto',
+            height: 360,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             borderTop: '1px solid var(--border)',
           }}>
           {isLoading && (
@@ -414,26 +525,38 @@ export const GlobalSearchPanel = memo(function GlobalSearchPanel() {
           )}
           {!isLoading && hasResults && (
             <>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
-                  padding: '4px 14px',
-                }}>
-                搜索结果 ({results.length})
-              </div>
-              {results.map((item, i) => (
-                <ResultItem
-                  key={`${item.type}-${i}-${item.title}`}
-                  item={item as SearchResult}
-                  index={i}
+              {searchType === 'all' ? (
+                <GroupedResults
+                  results={results as SearchResult[]}
                   selectedIndex={selectedIndex}
                   isDark={isDark}
                   onClick={handleClick}
                   onHover={handleHover}
                 />
-              ))}
+              ) : (
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)',
+                      padding: '4px 14px',
+                    }}>
+                    搜索结果 ({results.length})
+                  </div>
+                  {results.map((item, i) => (
+                    <ResultItem
+                      key={`${item.type}-${i}-${item.title}`}
+                      item={item as SearchResult}
+                      index={i}
+                      selectedIndex={selectedIndex}
+                      isDark={isDark}
+                      onClick={handleClick}
+                      onHover={handleHover}
+                    />
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

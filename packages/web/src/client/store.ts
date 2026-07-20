@@ -60,6 +60,8 @@ export const canvasStore = proxy({
   layoutRunning: false,
   /** 画布首次渲染完成（首次数据加载 + 布局完成），用于控制 loading 遮罩 */
   canvasReady: false,
+  /** 全景导航框（minimap）是否展开，持久化到 localStorage */
+  minimapOpen: localStorage.getItem('lattice-minimap-open') !== 'false',
 });
 
 /** Cytoscape 实例引用（非响应式，由 CytoscapeGraph 赋值，供 FloatingStatusBar 等跨组件访问） */
@@ -366,6 +368,11 @@ export function setSidebarView(view: SidebarView): void {
 /** 切换节点展开状态 */
 export function toggleNodeExpand(nodeId: string): void {
   canvasStore.expandedNodes[nodeId] = !canvasStore.expandedNodes[nodeId];
+}
+
+export function toggleMinimap(): void {
+  canvasStore.minimapOpen = !canvasStore.minimapOpen;
+  localStorage.setItem('lattice-minimap-open', String(canvasStore.minimapOpen));
 }
 
 /** 切换移动端侧栏 Drawer 开关 */

@@ -9,6 +9,8 @@
 ## 进入项目默认动作
 
 > 何时读：会话开始、进入一个项目、切换工作目录后，或上下文压缩恢复后 → 下一步：拿到上下文后跳到 [spec-workflows.md#按任务主题精读相关-spec](spec-workflows.md#按任务主题精读相关-spec) 选读 spec。
+>
+> 委派：此流程优先委派预定义 subagent `lattice-context` 执行，主线只等摘要结论。
 
 ```bash
 ltc context --query "<当前任务主题/用户意图关键词>"
@@ -36,7 +38,9 @@ ltc status
 
 ## 跨项目相似需求搜索
 
-> 何时读：用户提到"类似需求之前哪做过""有没有可复用方案""之前那个项目怎么做的"时 → 下一步：根据 search 结果决定是否进一步 `ltc spec show` / `read_file PRD`。
+> 何时读：用户提到“类似需求之前哪做过”“有没有可复用方案”“之前那个项目怎么做的”时 → 下一步：根据 search 结果决定是否进一步 `ltc spec show` / `read_file PRD`。
+>
+> 委派：此流程优先委派预定义 subagent `lattice-search` 执行，主线只等 top-K 结果与相关性判断。
 
 ```bash
 ltc search "<查询词>" --json

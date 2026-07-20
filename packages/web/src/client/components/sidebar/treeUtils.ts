@@ -14,7 +14,9 @@ export interface TreeNode {
     | 'spec-item'
     | 'project-item'
     | 'task-item'
-    | 'search-result';
+    | 'search-result'
+    | 'search-section'
+    | 'browser-match-section';
   children?: TreeNode[];
   entityId?: string;
   viewMode?: ViewMode;
@@ -230,7 +232,8 @@ export function flattenSearch(
   for (const s of specs || []) {
     specIdByPath.set(s.filePath, s.frontmatter.id || s.fileName);
   }
-  return data
+
+  const items = data
     .map((item: SearchResult, i: number) => {
       const { id, mode } = extractSearchResultInfo(item, specIdByPath);
       const meta: TreeNode['meta'] = { desc: item.type };
@@ -269,6 +272,27 @@ export function flattenSearch(
       }
       return true;
     });
+
+  // 按类型分组，返回可折叠树节点
+  const groups: { label: string; typePrefix: string; types: string[] }[] = [
+    { label: '项目', typePrefix: 'project', types: ['project'] },
+    { label: 'Spec', typePrefix: 'spec', types: ['spec'] },
+    { label: '任务', typePrefix: 'task', types: ['task', 'design', 'checkpoint'] },
+    { label: '关联关系', typePrefix: 'relation', types: ['relation'] },
+  ];
+
+  const result: TreeNode[] = [];
+  for (const group of groups) {
+    const children = items.filter((n) => group.types.includes(n.meta?.desc || ''));
+    if (children.length === 0) continue;
+    result.push({
+      key: `search-group-${group.typePrefix}`,
+      title: `${group.label}（${children.length}）`,
+      type: `${group.typePrefix}-root` as TreeNode['type'],
+      children,
+    });
+  }
+  return result;
 }
 
 // ── 筛选面板常量 ──

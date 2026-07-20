@@ -272,22 +272,23 @@ Lattice 向 AI 客户端注入三类文件，形成 **Rules + Skill + Commands**
 
 `ltc init` 通过 `detectAndConfigureAITools()` 自动检测本地已安装的 AI 客户端，并按各客户端的目录约定注入文件：
 
-| 客户端 | 检测路径 | Rules 落地 | Skill 落地 | Commands 落地 |
-|---|---|---|---|---|
-| **Cursor** | `~/.cursor/` | `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` |
-| **Claude Code** | `~/.claude/` | `CLAUDE.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` |
-| **Qoder** | `~/.qoder/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` |
-| **Trae** | `~/.trae/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` |
-| **Agent** | `~/.agents/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` |
-| **Windsurf** | `~/.windsurf/` | `rules/lattice.md` | — | — |
-| **Kiro** | `~/.kiro/` | `steering/lattice.md` | — | — |
-| **Codex** | `~/.codex/` | `AGENTS.md` | `skills/lattice/SKILL.md` | 转化为独立 skills |
+| 客户端 | 检测路径 | Rules 落地 | Skill 落地 | Commands 落地 | Agents 落地 |
+|---|---|---|---|---|---|
+| **Cursor** | `~/.cursor/` | `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
+| **Claude Code** | `~/.claude/` | `CLAUDE.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
+| **Qoder** | `~/.qoder/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
+| **Trae** | `~/.trae/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
+| **Agent** | `~/.agents/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
+| **Windsurf** | `~/.windsurf/` | `rules/lattice.md` | — | — | — |
+| **Kiro** | `~/.kiro/` | `steering/lattice.md` | — | — | — |
+| **Codex** | `~/.codex/` | `AGENTS.md` | `skills/lattice/SKILL.md` | 转化为独立 skills | — |
 
 所有客户端共享同一份 `lattice-rules.md` 正文内容，差异仅在于：
 
 - **Cursor 系**（.mdc 格式）在正文前拼接 frontmatter（`alwaysApply: true`）
 - **Claude Code / Qoder / Trae / Agent** 同时写入原生入口文件（`CLAUDE.md` / `AGENT.md`）和 `.mdc` 规则文件
 - **Codex** 没有原生 slash command 机制，commands 被转化为独立 skills（`deployCommandsAsSkills`）
+- **Agents 注入**使用增量复制（同名覆盖 + 新增，不删除用户自定义 agent），不支持 subagent 的平台跳过
 
 ### 标记化更新机制
 

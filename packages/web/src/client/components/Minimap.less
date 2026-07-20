@@ -1,0 +1,213 @@
+// ── 全景导航集群（minimap + 缩放控件条）：画布右下角 ──
+.minimap-cluster {
+  position: absolute;
+  right: 16px;
+  z-index: 12; // 低于左右面板（z-20）与灵动岛（z-15）
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+// ── 缩放控件条（VS Code 式：+/−/百分比/适配全部）──
+.minimap-zoombar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+
+  &:hover {
+    border-color: var(--brand-color);
+    box-shadow: var(--shadow-hover);
+  }
+
+  &__btn,
+  &__pct {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    border: none;
+    background: transparent;
+    border-radius: 5px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      background var(--transition-fast),
+      opacity var(--transition-fast);
+
+    &:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--bg-tertiary);
+    }
+
+    &:active:not(:disabled) {
+      color: var(--brand-color);
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+  }
+
+  &__btn {
+    width: 24px;
+    font-size: 11px;
+  }
+
+  &__pct {
+    min-width: 44px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  // 分组分隔线：缩放组 与 选中节点组
+  &__divider {
+    width: 1px;
+    height: 12px;
+    margin: 0 2px;
+    background: var(--border);
+  }
+}
+
+// ── 缩略图卡片 ──
+.minimap {
+  position: relative;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+
+  &:hover {
+    border-color: var(--brand-color);
+    box-shadow: var(--shadow-hover);
+  }
+
+  &__canvas {
+    display: block;
+    background: var(--canvas-bg);
+    border-radius: 5px;
+    cursor: crosshair;
+  }
+
+  // ── 底部迷你图例：三色圆点 + 计数，可点击切换类型显隐 ──
+  &__legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 4px 0 1px;
+    user-select: none;
+  }
+
+  &__legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      color var(--transition-fast),
+      opacity var(--transition-fast);
+
+    i {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      transition: transform var(--transition-fast);
+    }
+
+    &:hover {
+      color: var(--text);
+
+      i {
+        transform: scale(1.35);
+      }
+    }
+
+    // 类型已隐藏：置灰 + 计数划线
+    &--off {
+      opacity: 0.4;
+      text-decoration: line-through;
+    }
+  }
+
+  &__collapse {
+    position: absolute;
+    top: -9px;
+    right: -9px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity var(--transition-fast),
+      color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  &:hover &__collapse {
+    opacity: 1;
+  }
+
+  &__collapse:hover {
+    color: var(--text);
+    background: var(--border);
+  }
+}
+
+// ── 折叠态：贴右下角的展开按钮 ──
+.minimap-expand-btn {
+  position: absolute;
+  right: 16px;
+  z-index: 12;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+
+  &:hover {
+    color: var(--brand-color);
+    border-color: var(--brand-color);
+    box-shadow: var(--shadow-hover);
+  }
+}

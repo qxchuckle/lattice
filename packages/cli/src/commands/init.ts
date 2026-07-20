@@ -402,6 +402,11 @@ interface AIToolConfig {
   rulesContent: string;
   skillPath?: string;
   commandsRoot?: string;
+  /**
+   * 预定义 subagent 注入目录。存在则将 getBundledTemplateDir('agents') 增量复制到该目录。
+   * 不支持 subagent 的平台（Windsurf / Kiro / Codex）不设此字段。
+   */
+  agentsRoot?: string;
   appendRules?: boolean;
   defaultChecked?: boolean;
   /**
@@ -536,6 +541,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderCursorRules(),
       skillPath: join(home, '.cursor', 'skills', 'lattice', 'SKILL.md'),
       commandsRoot: join(home, '.cursor', 'commands'),
+      agentsRoot: join(home, '.cursor', 'agents'),
     },
     {
       id: 'claude-code',
@@ -545,6 +551,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       skillPath: join(home, '.claude', 'skills', 'lattice', 'SKILL.md'),
       commandsRoot: join(home, '.claude', 'commands'),
+      agentsRoot: join(home, '.claude', 'agents'),
       appendRules: true,
       // 主注入对象 CLAUDE.md 是 Claude Code 原生的必加载规则入口；
       // 额外同步写一份 ~/.claude/rules/lattice.mdc，保持与其他支持 rules/ 目录的客户端布局一致。
@@ -578,6 +585,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       commandsRoot: join(home, '.agents', 'commands'),
       skillPath: join(home, '.agents', 'skills', 'lattice', 'SKILL.md'),
+      agentsRoot: join(home, '.agents', 'agents'),
       defaultChecked: true,
       // Agent 类客户端同样支持 .mdc rules 系统，额外注入常驻规则文件。
       // 路径以 detectPath 开头，注入时会被 resolveToolPath 重写到每个 matchedRoot（~/.agents 与 ~/.agent）。
@@ -596,6 +604,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       commandsRoot: join(home, '.qoder', 'commands'),
       skillPath: join(home, '.qoder', 'skills', 'lattice', 'SKILL.md'),
+      agentsRoot: join(home, '.qoder', 'agents'),
       // Qoder 支持 .mdc rules 系统（与 Cursor 同源），额外注入常驻规则文件，
       // 提升 AI 按 lattice 工作流做事的硬约束（skill 是渐进式加载，rules 是默认常驻）。
       extraRules: [
@@ -614,6 +623,7 @@ async function detectAndConfigureAITools(): Promise<void> {
       rulesContent: renderClaudeCode(),
       commandsRoot: join(home, '.trae', 'commands'),
       skillPath: join(home, '.trae', 'skills', 'lattice', 'SKILL.md'),
+      agentsRoot: join(home, '.trae', 'agents'),
       // Trae 同样支持 .mdc rules 系统，额外注入常驻规则文件。
       // 路径以 detectPath 开头，注入时会被 resolveToolPath 重写到每个 matchedRoot（~/.trae 与 ~/.trae-cn）。
       extraRules: [
@@ -737,6 +747,14 @@ async function detectAndConfigureAITools(): Promise<void> {
         await rm(latticeCommandsRoot, { recursive: true, force: true });
         await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
         injectedPaths.push({ kind: 'commands', path: `${latticeCommandsRoot}/` });
+      }
+
+      // 预定义 subagent 注入：增量复制（同名覆盖 + 新增，不删除用户自定义 agent）
+      if (tool.agentsRoot) {
+        const agentsRoot = resolveToolPath(tool.agentsRoot);
+        await ensureDir(agentsRoot);
+        await cp(getBundledTemplateDir('agents'), agentsRoot, { recursive: true });
+        injectedPaths.push({ kind: 'agents', path: `${agentsRoot}/` });
       }
 
       // Codex 特有：将 commands 目录下每个命令文档转化为独立 Codex skill

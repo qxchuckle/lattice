@@ -110,6 +110,10 @@ function getNodeIcon(node: TreeNode): React.ReactNode {
       return <AimOutlined style={{ fontSize: 11, color: getEntityColor('task') }} />;
     case 'search-result':
       return <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>●</span>;
+    case 'search-section':
+      return <SearchOutlined style={{ fontSize: 12, color: 'var(--text-secondary)' }} />;
+    case 'browser-match-section':
+      return <FolderOutlined style={{ fontSize: 12, color: 'var(--text-secondary)' }} />;
     default:
       return null;
   }
@@ -402,6 +406,17 @@ const SearchTreeTab = memo(function SearchTreeTab() {
         : [],
     [isSearching, searchResult.data, searchFilters, tasks, specs],
   );
+
+  // 搜索结果变化时自动展开分组节点（含外层搜索结果/浏览器匹配区块）
+  useEffect(() => {
+    sidebarStore.expandedKeys['search-section'] = true;
+    sidebarStore.expandedKeys['browser-match-section'] = true;
+    for (const node of searchItems) {
+      if (node.children && node.children.length > 0) {
+        sidebarStore.expandedKeys[node.key] = true;
+      }
+    }
+  }, [searchItems]);
   const filteredTree = useMemo(
     () =>
       isSearching || hasFilters
@@ -449,39 +464,29 @@ const SearchTreeTab = memo(function SearchTreeTab() {
         )}
         {!loading && isSearching && searchItems.length > 0 && (
           <>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                marginBottom: 4,
-              }}>
-              搜索结果 ({searchItems.length})
-            </div>
-            {searchItems.map((node) => (
-              <MemoizedTreeItem key={node.key} node={node} depth={0} onNavigate={handleNavigate} />
-            ))}
+            <MemoizedTreeItem
+              key='search-section'
+              node={{
+                key: 'search-section',
+                title: `搜索结果 (${searchItems.reduce((sum, n) => sum + (n.children?.length ?? 0), 0)})`,
+                type: 'search-section',
+                children: searchItems,
+              }}
+              depth={0}
+              onNavigate={handleNavigate}
+            />
             {filteredTree.length > 0 && (
-              <>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    margin: '8px 0 4px',
-                  }}>
-                  浏览器匹配
-                </div>
-                {filteredTree.map((node) => (
-                  <MemoizedTreeItem
-                    key={node.key}
-                    node={node}
-                    depth={0}
-                    forceExpand
-                    onNavigate={handleNavigate}
-                  />
-                ))}
-              </>
+              <MemoizedTreeItem
+                key='browser-match-section'
+                node={{
+                  key: 'browser-match-section',
+                  title: '浏览器匹配',
+                  type: 'browser-match-section',
+                  children: filteredTree,
+                }}
+                depth={0}
+                onNavigate={handleNavigate}
+              />
             )}
           </>
         )}

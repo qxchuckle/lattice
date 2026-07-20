@@ -68,6 +68,8 @@ ltc task update <task-id> --clear-parent
 ## task start 后的起手动作
 
 > 何时读：`ltc task start` 执行完毕后必跑 → 下一步：进入「实施期多轮对话循环」。
+>
+> 委派：起手信息收集（上下文 + spec 精读 + 历史任务 PRD + design.md 检查）优先委派预定义 subagent `lattice-task-start` 执行，主线只等摘要结论后再完善 PRD 和输出确认。
 
 ```bash
 ltc task start <task-id>
@@ -296,6 +298,8 @@ PRD 补全内容：最终方案 + 任务完成总结 + 遗留事项。
 ## 归档流程
 
 > 何时读：「任务归档前置信息采集」+ PRD 补全 + summary checkpoint 完成后 → 下一步：执行「归档后的二次审阅与 spec 沉淀判定」。
+>
+> 委派：整个归档流程（前置采集 → PRD 补全 → summary → complete/archive → rag update → 二次审阅）优先委派预定义 subagent `lattice-task-archive` 执行。
 
 ```bash
 # 1. 前置信息采集（详见上一节）

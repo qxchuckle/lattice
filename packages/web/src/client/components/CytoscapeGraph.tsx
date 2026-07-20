@@ -17,6 +17,7 @@ import { useGlobalGraph } from '../hooks';
 import { buildStylesheet } from './graph/stylesheet';
 import { runLayout, applyFocus, clearFocus, findNodeById } from './graph/layout';
 import { toElements } from './graph/elements';
+import { Minimap } from './Minimap';
 import type { LatticeNodeData } from '../types/graph';
 
 cytoscape.use(fcose);
@@ -823,6 +824,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
           <Spin size='large' />
         </div>
       )}
+      <Minimap />
     </div>
   );
 });

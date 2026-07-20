@@ -1,16 +1,39 @@
 # Subagent 委派
 
-> **本文权威范围**：subagent 启用判定 / 6 类适合委派的 ltc 读类流程 / 禁止委派名单 / 主线与 subagent 契约 / 不支持 subagent 时的串行退路。
+> **本文权威范围**：预定义 subagent 优先调度 / 启用判定 / 6 类适合委派的 ltc 读类流程 / 禁止委派名单 / 主线与 subagent 契约 / 不支持 subagent 时的串行退路。
 >
 > 主线调用的具体 ltc 命令语义见 [project-context.md](project-context.md) / [project-discovery.md](project-discovery.md) / [task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [command-reference.md](command-reference.md)；输出过滤原则见 [SKILL.md#终端输出读取原则](SKILL.md#终端输出读取原则)。
 >
 > **章节阅读约定**：每个一级 `##` 章节顶部以 `> 何时读 / 下一步` 一句话点题。
 
-本文件用于：当所在 agent 平台支持 subagent（如 Claude Code 的 Task、Cursor 的 background agent、Qoder 的 Search Agent 等并行子代理）时，把 lattice 中**重 IO、大输出、只取结论**的流程交给 subagent 并行执行，避免原始命令输出塞满主上下文。
+本文件用于：当所在 agent 平台支持 subagent（如 Claude Code 的 Task、Cursor 的 background agent、Qoder 的 Custom Agent 等并行子代理）时，把 lattice 中**重 IO、大输出、只取结论**的流程交给 subagent 并行执行，避免原始命令输出塞满主上下文。
 
-## 判定是否启用 subagent
+## 预定义 subagent（优先使用）
 
-> 何时读：每次调用 ltc 命令前，尤其是预计输出量大 / 需要并行多个调用时 → 下一步：同时满足 4 条才启用 subagent，否则主线串行。
+> 何时读：任何需要委派 subagent 的场景 → 下一步：先检查是否有匹配的预定义 subagent，有则直接使用，无则按下方「判定是否启用」走临时委派。
+
+`ltc init` 会向支持 subagent 的平台注入以下预定义 agent（位于 `~/.<platform>/agents/`）：
+
+| name | 职责 | 触发场景 |
+|---|---|---|
+| `lattice-task-start` | 任务起手信息收集 | 开始新任务 / `/lattice/task/start` |
+| `lattice-task-archive` | 归档前置采集 + 执行归档 | 归档任务 / `/lattice/task/archive` |
+| `lattice-context` | 项目上下文铺底 | 进入新项目 / 会话开始 |
+| `lattice-search` | 跨项目搜索 | "之前做过类似的吗" |
+| `lattice-health` | 健康巡检（只诊断不修复） | 定期体检 / 排查异常 |
+| `lattice-task-handoff` | 失忆恢复 / 上下文重建 | 上下文压缩后 / 新会话继续旧任务 |
+| `lattice-spec-digest` | 规范摘要 | 任务涉及不熟悉模块 / spec 数量多 |
+| `lattice-impact` | 变更影响分析 | 准备做较大变更 / 跨模块修改前 |
+
+**调度规则**：
+- 场景匹配预定义 subagent 时，**优先使用预定义**（平台原生调度，无需手动拼装 prompt）
+- 预定义 subagent 不覆盖的场景（如临时性多任务并行梳理、link 候选调研），按下方「判定是否启用」走临时委派
+- `lattice-task-archive` 是唯一涉及写操作的预定义 subagent（只写 lattice 元数据，不改源码）
+- `lattice-health` 只诊断不修复，修复由主线/用户决定
+
+## 判定是否启用 subagent（临时委派）
+
+> 何时读：预定义 subagent 不覆盖当前场景，需要临时委派时 → 下一步：同时满足 4 条才启用 subagent，否则主线串行。
 
 仅在同时满足以下条件时启用：
 
@@ -21,9 +44,9 @@
 
 任一条件不满足 → 主线直接串行执行。
 
-## 适合委派给 subagent 的 ltc 流程
+## 适合临时委派给 subagent 的 ltc 流程
 
-> 何时读：上一节判定出可以启用 subagent 后 → 下一步：在下面 6 类场景里匹配当前任务，拼装 subagent prompt。
+> 何时读：上一节判定出可以启用 subagent，且无匹配的预定义 subagent 后 → 下一步：在下面 6 类场景里匹配当前任务，拼装 subagent prompt。
 
 ### 1. 进入新项目时的"上下文铺底"
 
@@ -115,6 +138,7 @@ ltc project where <path>
 以下流程必须由主线串行执行，subagent 无法保证写顺序、用户交互与上下文一致性：
 
 - 任何**写操作**：`ltc task create/update/checkpoint/complete/archive/delete`、`ltc unlink`、`ltc spec` 写入、`ltc project relation add/remove`、`ltc rag rebuild/update`
+  - **例外**：预定义 `lattice-task-archive` subagent 可执行归档相关写操作（checkpoint/complete/archive/PRD 补全/rag update），因为其流程已固化且不涉及源码修改
 - **用户手动命令**：`ltc link`（面向用户的注册命令，AI 不得自动调用，无论主线还是 subagent）
 - 需要**用户交互确认**的命令（即使加 `--force` 也保留可见性）
 - 单条快速查询（如 `ltc project where <path>` 单次）—— 并行无收益
