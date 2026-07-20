@@ -30,7 +30,7 @@ ltc status
 >
 > ⚠️ **源码查找优先级**：需要查看某个依赖包/模块/组件的源码时，优先 `ltc project list --search <包名>` 定位本地源码仓库，而不是直接翻 `node_modules`/`dist`。源码找不到或需要确认构建产物差异时，再看产物作为补充。
 
-如果当前目录不是 Lattice 项目，明确告诉用户，提示先 `ltc link`（详见 [project-discovery.md](project-discovery.md)）。
+如果当前目录不是 Lattice 项目，明确告知用户，建议用户自行执行 `ltc link`（非 Git 项目）或 `ltc scan`（Git 项目）。AI 不得代劳执行 `ltc link`（详见 [project-discovery.md#注册或恢复绑定ltc-link](project-discovery.md#注册或恢复绑定ltc-link)）。
 
 ## 跨项目相似需求搜索
 
@@ -120,4 +120,4 @@ ltc spec show <file> --user <username> --detail
 
 - 不要直接转储整份上下文，提炼与当前请求最相关的规则、历史方案和风险
 - AI 调用 `ltc search` 优先带 `--json`
-- 当前目录不是 Lattice 项目时明确说明，并提示 `ltc link`
+- 当前目录不是 Lattice 项目时明确告知用户，建议用户自行执行 `ltc link` 或 `ltc scan`（AI 不得代劳执行）

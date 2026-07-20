@@ -51,6 +51,8 @@ ltc project list --search <keyword> # 按关键词搜索已注册项目（名称
 
 > 何时读：上一步 `project where` 已知目录未注册、或用户明确要求绑定 / 重新绑定 / 强制独立时 → 下一步：根据场景选择默认 `link` / `--restore` / `--force-new` / `--yes`。
 
+> ⚠️ **AI 禁止自动调用 `ltc link`**。这是面向人类用户的命令，主要用于非 Git 项目和本地文件夹项目；Git 项目通过 `ltc scan` 自动发现，一般无需 link。AI 发现当前目录未注册时，告知用户并建议用户自行执行 `ltc link` 或 `ltc scan`，不得代劳执行。
+
 `ltc link`（默认）通过绝对路径和 ID 匹配查找已注册项目，根据匹配结果走不同分支：
 
 | 场景 | 行为 |

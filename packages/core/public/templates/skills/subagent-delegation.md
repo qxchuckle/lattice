@@ -96,7 +96,7 @@ ltc project list --orphaned
 
 ### 6. link 候选 ID 调研
 
-适用于 [project-discovery.md#注册或恢复绑定lattice-link](project-discovery.md#注册或恢复绑定lattice-link)（纯读阶段所以可委派；最终 link 必须主线执行）。
+适用于 [project-discovery.md#注册或恢复绑定lattice-link](project-discovery.md#注册或恢复绑定lattice-link)（纯读阶段所以可委派；`ltc link` 本身是用户手动执行的命令，AI 不得代劳）。
 
 `ltc link` 给出多个候选项目时，对每个候选并行查详情：
 
@@ -114,7 +114,8 @@ ltc project where <path>
 
 以下流程必须由主线串行执行，subagent 无法保证写顺序、用户交互与上下文一致性：
 
-- 任何**写操作**：`ltc task create/update/checkpoint/complete/archive/delete`、`ltc link/unlink`、`ltc spec` 写入、`ltc project relation add/remove`、`ltc rag rebuild/update`
+- 任何**写操作**：`ltc task create/update/checkpoint/complete/archive/delete`、`ltc unlink`、`ltc spec` 写入、`ltc project relation add/remove`、`ltc rag rebuild/update`
+- **用户手动命令**：`ltc link`（面向用户的注册命令，AI 不得自动调用，无论主线还是 subagent）
 - 需要**用户交互确认**的命令（即使加 `--force` 也保留可见性）
 - 单条快速查询（如 `ltc project where <path>` 单次）—— 并行无收益
 - 与当前正在编辑的文件**强耦合的小范围查询** —— 拆给 subagent 易丢主线上下文
