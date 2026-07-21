@@ -43,7 +43,13 @@ import type {
   ScopePath,
   TaskMetaWithSource,
 } from '@qcqx/lattice-core';
-import { logger, outputJson, resolveCurrentProject, shouldSkipConfirm } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveCurrentProject,
+  resolveAndRegisterUpwards,
+  shouldSkipConfirm,
+} from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 // 检查点类型按信息源三分（详见 core/types CheckpointType 注释）
@@ -938,7 +944,16 @@ export function registerTaskCommand(program: Command): void {
         if (opts.paths) {
           for (const raw of opts.paths as string[]) {
             const norm = normalizeLocalPath(pathResolve(raw));
-            const project = findProjectByPath(norm);
+            let project = findProjectByPath(norm);
+            // 未命中时尝试向上注册（路径本身及祖先可能有未注册的 ID 源）
+            if (!project) {
+              try {
+                await resolveAndRegisterUpwards(norm);
+                project = findProjectByPath(norm);
+              } catch {
+                // 注册失败不阻断，路径仍进 scopePaths
+              }
+            }
             if (project) {
               currentProjects.add(project.id);
               recognized.push({

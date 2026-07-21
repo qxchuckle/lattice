@@ -41,7 +41,7 @@ import {
   updateRagIndex,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource, ProjectMatchProvenance } from '@qcqx/lattice-core';
-import { logger, outputJson, shouldSkipConfirm } from '../utils';
+import { logger, outputJson, resolveAndRegisterUpwards, shouldSkipConfirm } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -456,6 +456,50 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(chalk.yellow('未找到与该路径匹配的已注册项目'));
         }
         logger.raw('');
+      } catch (err) {
+        console.error(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── register [paths...] ───
+  cmd
+    .command('register [paths...]')
+    .description('向上扫描路径的 ID 源（.git / lattice.json）并注册未注册项目（默认 cwd）')
+    .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .action(async (rawPaths: string[], opts) => {
+      try {
+        const dirs = rawPaths.length > 0 ? rawPaths.map((p) => pathResolve(p)) : [pathResolve('.')];
+        const results: {
+          dir: string;
+          result: Awaited<ReturnType<typeof resolveAndRegisterUpwards>>;
+        }[] = [];
+
+        for (const dir of dirs) {
+          const result = await resolveAndRegisterUpwards(dir);
+          results.push({ dir, result });
+        }
+
+        if (opts.json) {
+          outputJson(
+            results.map((r) => ({ queryPath: r.dir, ...r.result })),
+            opts.jsonFormat,
+          );
+          return;
+        }
+
+        for (const { dir, result } of results) {
+          if (!result) {
+            logger.raw(chalk.yellow(`✗ ${dir} — 未发现 ID 源（.git / lattice.json）`));
+            continue;
+          }
+          logger.raw(chalk.green(`✓ ${result.current.id}`));
+          logger.raw(chalk.dim(`  根目录：${result.current.root}`));
+          if (result.ancestors.length > 0) {
+            logger.raw(chalk.dim(`  祖先：${result.ancestors.map((a) => a.id).join(', ')}`));
+          }
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

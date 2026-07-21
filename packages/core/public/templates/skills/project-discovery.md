@@ -25,9 +25,20 @@ ltc project where <path>            # 精确+父目录前缀+ID 匹配
 ltc project list --search <keyword> # 关键词搜索
 ```
 
+## 自动注册（守卫）
+
+任何 ltc 命令自动从 cwd **向上**逐级查找 ID 源（`.git` / `lattice.json`），未注册的自动注册（幂等）。所有命令无例外。
+
+| 场景 | 动作 |
+|---|---|
+| 将在该路径执行 ltc 命令 | 守卫代劳，无需手动 |
+| 非 cwd 路径且不会在该路径执行 ltc 命令 | `ltc project register <paths...>` |
+| `ltc scan --dirs X` | 先向上注册 X 及祖先，再向下递归扫描 |
+| `ltc task associate --paths X` 未命中 | 自动向上注册后重试 → 命中进 `projects[]` |
+
 ## 注册或恢复绑定（ltc link）
 
-> ⚠️ **AI 禁止自动调用**。发现未注册 → 告知用户自行 `ltc link` 或 `ltc scan`。
+> ⚠️ **AI 禁止未经用户批准自动调用 `ltc link`**。Git 项目由守卫自动注册，无需 link。`ltc link` 主要用于非 git 目录或需要 `lattice.json` 的场景。
 
 | 场景 | 行为 |
 |---|---|
@@ -59,7 +70,7 @@ ltc task associate <id> --paths /p1 /p2 [--note "..."]
 ltc task associate <id> --remove-path /p / --remove-project <pid> / --clear-paths
 ```
 
-`--paths` 智能行为：命中已注册项目（high 置信度）→ 进 `projects[]`；否则进 `scopePaths[]`。
+`--paths` 智能行为：命中已注册项目 → 进 `projects[]`；未命中 → 向上解析注册后重试 → 仍无 ID 源则进 `scopePaths[]`。
 
 ## 项目关系（含 AI 推断）
 
@@ -97,7 +108,7 @@ ltc project merge <from> <to>     # 物理合并（事务）
 ## 手动扫描
 
 ```bash
-ltc init scan [--dirs /p1,/p2] [--auto]
+ltc scan --dirs /p1,/p2
 ```
 
-扫描发现 `.git` → 采集 ID → 注册或追加 `localPaths`。
+对每个目标路径：先**向上**注册（路径本身及祖先 ID 源），再**向下**递归扫描子目录发现 `.git` → 采集 ID → 注册或追加 `localPaths`。

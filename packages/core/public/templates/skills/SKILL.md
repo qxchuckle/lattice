@@ -64,6 +64,7 @@ description: >-
 | 参考已完成任务 | `ltc task progress <id>` → read PRD |
 | 查找本地项目/源码 | `ltc project list --search <keyword>` |
 | 当前目录属于哪个项目 | `ltc project where .` / `ltc status` |
+| 注册非 cwd 路径的项目 | `ltc project register <paths...>`（cwd 链由守卫自动处理，无需手动） |
 | 项目间关系 | `ltc project relation list` / `ltc project list --with-relations` |
 | 活跃任务 | `ltc task list --current` |
 | 索引/数据异常 | `ltc doctor` / `ltc rag status` |

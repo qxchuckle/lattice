@@ -19,7 +19,7 @@ ltc status
 >
 > ⚠️ 查源码优先 `ltc project list --search <包名>` 定位本地仓库，未找到再看 node_modules/dist。
 
-当前目录非 Lattice 项目 → 告知用户自行 `ltc link`/`ltc scan`（AI 不得代劳）。
+当前目录无 ID 源（非 git 且无 lattice.json）→ 告知用户自行 `ltc link`（AI 不得代劳）。Git 项目由守卫自动注册，无需手动操作。
 
 ## 跨项目相似需求搜索
 

@@ -10,6 +10,9 @@ Lattice 是跨项目 AI 上下文管理工具。本文件定义 AI 使用 Lattic
 2. 需要项目约定 → 先读 spec
 3. 不确定 → 先查历史任务
 4. **程序化工作流（起手/归档/铺底/搜索/体检/失忆恢复/规范摘要/影响分析）→ 必须委派预定义 subagent，禁止主线直接执行对应命令组合**；平台不支持时退化串行（→ [subagent-delegation.md#预定义-subagent优先使用](subagent-delegation.md#预定义-subagent优先使用)）
+5. 涉及非 cwd 路径且不会在该路径执行 ltc 命令 → `ltc project register <paths...>`（→ [project-discovery.md#自动注册守卫](project-discovery.md#自动注册守卫)）
+
+> **自动注册守卫**：任何 ltc 命令自动从 cwd 向上注册 ID 源（.git / lattice.json）。将在该路径执行 ltc 命令 → 守卫代劳，无需手动 register。
 
 ## 一、起手契约（每个新会话第一件事）
 

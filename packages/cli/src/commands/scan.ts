@@ -9,7 +9,7 @@ import {
   initDb,
   closeDb,
 } from '@qcqx/lattice-core';
-import { logger } from '../utils';
+import { logger, resolveAndRegisterUpwards } from '../utils';
 
 export function registerScanCommand(program: Command): void {
   program
@@ -38,6 +38,15 @@ export function registerScanCommand(program: Command): void {
         logger.raw(chalk.blue(`正在扫描 ${dirs.length} 个目录...`));
         for (const dir of dirs) {
           logger.raw(chalk.dim(`  ${dir}`));
+        }
+
+        // 向上注册：对每个目标路径解析其自身及祖先的 ID 源
+        for (const dir of dirs) {
+          try {
+            await resolveAndRegisterUpwards(dir);
+          } catch {
+            // 向上注册失败不阻断向下扫描
+          }
         }
 
         const startTime = Date.now();

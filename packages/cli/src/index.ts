@@ -3,6 +3,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck, closeDb } from '@qcqx/lattice-core';
+import { resolveCurrentProject } from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerLinkCommand } from './commands/link';
 import { registerUnlinkCommand } from './commands/unlink';
@@ -103,6 +104,13 @@ async function main(): Promise<void> {
       } catch {
         // 启动自检失败不阻断主命令执行
       }
+    }
+
+    // 自动注册守卫：向上查找 ID 源（.git / lattice.json）并注册未注册项目
+    try {
+      await resolveCurrentProject();
+    } catch {
+      // 自动注册失败不阻断主命令执行
     }
   });
 

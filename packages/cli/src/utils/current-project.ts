@@ -1,7 +1,5 @@
 import { resolve as pathResolve, dirname, sep, join } from 'node:path';
 import {
-  findUpwards,
-  findAllUpwards,
   readJSON,
   fileExists,
   initDb,
@@ -75,17 +73,14 @@ async function generateIdsForDir(
 }
 
 /**
- * 解析当前项目（查找 + 自动注册）
+ * 从 startDir 向上逐级查找 ID 源并自动注册（无缓存核心逻辑）
  *
- * 从 cwd 向上逐级查找 id 源（.git / lattice.json），未注册的自动注册。
- * 返回距 cwd 最近的已注册项目。
+ * 逐级向上发现 id 源（.git / lattice.json），未注册的自动注册。
+ * 返回距 startDir 最近的已注册项目及其祖先列表（近→远）。
  */
-export async function resolveCurrentProject(
+export async function resolveAndRegisterUpwards(
   startDir = process.cwd(),
-): Promise<CurrentProject | null> {
-  // 缓存检查
-  if (_cachedCurrent !== undefined) return _cachedCurrent;
-
+): Promise<CurrentProjectWithAncestors | null> {
   try {
     await initDb();
   } catch {
@@ -94,7 +89,7 @@ export async function resolveCurrentProject(
 
   const username = await getUsername();
 
-  // 从 cwd 向上逐级查找所有有 id 源的目录
+  // 从 startDir 向上逐级查找所有有 id 源的目录
   const idSourceDirs: { dir: string; ids: string[]; hasLatticeJson: boolean }[] = [];
   let currentDir = pathResolve(startDir);
 
@@ -107,7 +102,6 @@ export async function resolveCurrentProject(
   }
 
   if (idSourceDirs.length === 0) {
-    _cachedCurrent = null;
     return null;
   }
 
@@ -135,13 +129,33 @@ export async function resolveCurrentProject(
   }
 
   if (registered.length === 0) {
+    return null;
+  }
+
+  // 返回距 startDir 最近的已注册项目（idSourceDirs 是从近到远排序的）
+  return { current: registered[0], ancestors: registered.slice(1) };
+}
+
+/**
+ * 解析当前项目（查找 + 自动注册，带进程内缓存）
+ *
+ * 从 cwd 向上逐级查找 id 源（.git / lattice.json），未注册的自动注册。
+ * 返回距 cwd 最近的已注册项目。
+ */
+export async function resolveCurrentProject(
+  startDir = process.cwd(),
+): Promise<CurrentProject | null> {
+  // 缓存检查
+  if (_cachedCurrent !== undefined) return _cachedCurrent;
+
+  const result = await resolveAndRegisterUpwards(startDir);
+  if (!result) {
     _cachedCurrent = null;
     return null;
   }
 
-  // 返回距 cwd 最近的已注册项目（idSourceDirs 是从近到远排序的）
-  _cachedCurrent = registered[0];
-  _cachedAncestors = registered.slice(1);
+  _cachedCurrent = result.current;
+  _cachedAncestors = result.ancestors;
   return _cachedCurrent;
 }
 
@@ -153,13 +167,19 @@ export async function resolveCurrentProject(
 export async function resolveCurrentProjectWithAncestors(
   startDir = process.cwd(),
 ): Promise<CurrentProjectWithAncestors | null> {
-  const current = await resolveCurrentProject(startDir);
-  if (!current) return null;
+  if (_cachedCurrent !== undefined) {
+    return _cachedCurrent ? { current: _cachedCurrent, ancestors: _cachedAncestors ?? [] } : null;
+  }
 
-  return {
-    current,
-    ancestors: _cachedAncestors ?? [],
-  };
+  const result = await resolveAndRegisterUpwards(startDir);
+  if (!result) {
+    _cachedCurrent = null;
+    return null;
+  }
+
+  _cachedCurrent = result.current;
+  _cachedAncestors = result.ancestors;
+  return result;
 }
 
 /**
