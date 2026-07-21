@@ -42,15 +42,14 @@ ltc task info <task-id> && ltc task progress <task-id>
 
 prd.md + design.md（如存在）→ 记录路径。
 
-### 6. 重载用户输入类 checkpoint
+### 6. 按优先级重载 checkpoint
 
 ```bash
-ltc task progress <task-id> --type correction
-ltc task progress <task-id> --type constraint
-ltc task progress <task-id> --type context
+ltc task progress <task-id> --type correction && ltc task progress <task-id> --type constraint
+ltc task progress <task-id> --type decision && ltc task progress <task-id> --type pivot
 ```
 
-逐条提取：类型/标题/时间/内容摘要。
+优先级：correction/constraint（硬约束）→ decision/pivot（方向）→ 其余按需。
 
 ### 7. 检查 checkpoint 断层
 
@@ -60,6 +59,11 @@ progress 时间线有明显断层 → 标记"可能需回填"。
 
 ```markdown
 ## 任务交接目录
+### 锚定式恢复摘要
+- **intent**：当前任务目标
+- **changes**：已完成改动
+- **decisions**：关键决策及理由
+- **next**：下一步计划
 ### 当前任务
 - 标题/ID/状态/关联项目/父任务
 ### 文档路径（主对话必须 Read 全文）
@@ -67,8 +71,6 @@ progress 时间线有明显断层 → 标记"可能需回填"。
 - design.md 路径（如有）
 ### 相关 Spec（主对话必须 Read 全文）
 | 作用域 | 标题 | ID | 路径 | 标签 | 相关性 |
-### 进展（checkpoint 列表）
-- [类型] 标题 - 时间 - 摘要
 ### 用户约束与纠错（逐条列出，禁止省略）
 ### 可能需回填的 checkpoint
 ### 搜索发现的相关任务

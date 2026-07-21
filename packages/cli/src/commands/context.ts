@@ -25,37 +25,46 @@ import {
   resolveCurrentProjectWithAncestors,
 } from '../utils';
 
-/** 剥离 spec 的 content 字段，JSON 输出只保留 frontmatter + 路径信息 + scope */
-function stripSpecContent(
-  spec: ParsedSpec,
-  scope?: string,
-): Omit<ParsedSpec, 'content'> & { scope?: string } {
-  const { content: _, ...rest } = spec;
-  return scope ? { ...rest, scope } : rest;
+/** 剥离 spec 的 content 和冗余字段，JSON 输出精简 */
+function stripSpecContent(spec: ParsedSpec, scope?: string): Record<string, unknown> {
+  const { id, title, description, tags } = spec.frontmatter;
+  return {
+    title: title ?? spec.fileName,
+    filePath: spec.filePath,
+    ...(description ? { description } : {}),
+    ...(tags?.length ? { tags } : {}),
+    ...(scope ? { scope } : {}),
+  };
 }
 
-/** 剥离 spec 数组中的 content，附带 scope */
-function stripSpecs(
-  specs: ParsedSpec[],
-  scope?: string,
-): (Omit<ParsedSpec, 'content'> & { scope?: string })[] {
+/** 剥离 spec 数组中的 content */
+function stripSpecs(specs: ParsedSpec[], scope?: string): Record<string, unknown>[] {
   return specs.map((s) => stripSpecContent(s, scope));
 }
 
 /** 剥离 cascadedSpecs 并自动标记 scope */
-function stripCascadedSpecs(
-  ctx: ProjectContext,
-): (Omit<ParsedSpec, 'content'> & { scope: string })[] {
-  return ctx.cascadedSpecs.map((spec) => {
-    const { content: _, ...rest } = spec;
-    return { ...rest, scope: resolveSpecScope(spec, ctx) };
-  });
+function stripCascadedSpecs(ctx: ProjectContext): Record<string, unknown>[] {
+  return ctx.cascadedSpecs.map((spec) => stripSpecContent(spec, resolveSpecScope(spec, ctx)));
+}
+
+/** 截断搜索结果中的长小数 */
+function truncateScores(results: SearchResult[]): SearchResult[] {
+  return results.map((r) => ({
+    ...r,
+    score: Math.round((r.score ?? 0) * 10000) / 10000,
+    meta: Object.fromEntries(
+      Object.entries(r.meta as Record<string, unknown>).map(([k, v]) => [
+        k,
+        typeof v === 'number' ? Math.round(v * 10000) / 10000 : v,
+      ]),
+    ),
+  }));
 }
 
 /** 语义搜索节：调用 unifiedSearch 并格式化输出 */
 async function performQuerySearch(
   query: string,
-  opts?: { projectId?: string; usernames?: string[]; excludePaths?: Set<string> },
+  opts?: { projectId?: string; usernames?: string[] },
 ): Promise<SearchResult[]> {
   try {
     const results = await unifiedSearch(query, {
@@ -66,13 +75,6 @@ async function performQuerySearch(
       taskLimit: 3,
       projectLimit: 3,
     });
-    // 去重：排除已在 context 中列出的 spec
-    if (opts?.excludePaths && opts.excludePaths.size > 0) {
-      return results.filter((r) => {
-        const fp = (r.meta as Record<string, unknown>).filePath as string | undefined;
-        return !fp || !opts.excludePaths!.has(fp);
-      });
-    }
     return results;
   } catch {
     return [];
@@ -93,9 +95,9 @@ function formatQuerySection(results: SearchResult[]): void {
     for (const r of specs) {
       const meta = r.meta as Record<string, unknown>;
       const via = meta.matchedVia as { docTitle?: string } | undefined;
-      const viaLabel = via ? chalk.dim(` ← 任务「${via.docTitle}」`) : '';
+      const viaLabel = via ? chalk.dim(` ← 「${via.docTitle}」`) : '';
       logger.raw(`    ${chalk.bold(r.title)}${viaLabel}`);
-      logger.raw(chalk.dim(`      路径：${(meta.filePath as string) ?? ''}`));
+      logger.raw(chalk.dim(`      ${(meta.filePath as string) ?? ''}`));
     }
     logger.raw('');
   }
@@ -104,8 +106,8 @@ function formatQuerySection(results: SearchResult[]): void {
     logger.raw(chalk.green(`  相关任务（${tasks.length}）：`));
     for (const r of tasks) {
       const meta = r.meta as Record<string, unknown>;
-      logger.raw(`    ${chalk.bold(r.title)} ${chalk.dim(`(${r.type})`)}`);
-      if (meta.taskId) logger.raw(chalk.dim(`      ID：${meta.taskId}`));
+      const idTag = meta.taskId ? chalk.dim(` ${meta.taskId}`) : '';
+      logger.raw(`    ${chalk.bold(r.title)} ${chalk.dim(`(${r.type})`)}${idTag}`);
     }
     logger.raw('');
   }
@@ -161,7 +163,7 @@ export function registerContextCommand(program: Command): void {
                 ...d,
                 directSpecs: stripSpecs(d.directSpecs, 'project'),
               })),
-              querySearch: queryResults.length > 0 ? queryResults : undefined,
+              querySearch: queryResults.length > 0 ? truncateScores(queryResults) : undefined,
             };
             outputJson(jsonCtx, opts.jsonFormat);
             return;
@@ -303,43 +305,45 @@ export function registerContextCommand(program: Command): void {
 
         const ctx = await getContextForProject(username, projectId, contextOpts);
 
-        // --query 语义搜索补充（排除已在 context 中列出的 spec）
-        let queryResults: SearchResult[] = [];
+        // --query 语义搜索：标记匹配的 spec + 补充非已有结果
+        const queryResults: SearchResult[] = [];
+        const queryMatchedPaths: Set<string> = new Set();
         if (opts.query) {
-          const excludePaths = new Set<string>([
-            ...ctx.projectSpecs.map((s) => s.filePath),
-            ...ctx.userSpecs.map((s) => s.filePath),
-            ...ctx.globalSpecs.map((s) => s.filePath),
-            ...(ctx.cascadedSpecs ?? []).map((s) => s.filePath),
-          ]);
-          queryResults = await performQuerySearch(opts.query, {
-            projectId,
+          const cascadedPaths = new Set<string>((ctx.cascadedSpecs ?? []).map((s) => s.filePath));
+          // 单次搜索（不限项目范围），按结果拆分用途
+          const allResults = await performQuerySearch(opts.query, {
             usernames: opts.currentUser ? [username] : undefined,
-            excludePaths,
           });
+          for (const r of allResults) {
+            const fp = (r.meta as Record<string, unknown>).filePath as string | undefined;
+            if (r.type === 'spec' && fp && cascadedPaths.has(fp)) {
+              // 已在 context spec 列表中 → 仅标记匹配
+              queryMatchedPaths.add(fp);
+            } else {
+              // 补充结果（任务/项目/不在 context 中的 spec）
+              queryResults.push(r);
+            }
+          }
         }
         closeDb();
 
         if (opts.json) {
           const profileData = await buildProfileSection(username, projectId);
+          const specs = stripCascadedSpecs(ctx)
+            .map((s) => (queryMatchedPaths.has(s.filePath as string) ? { ...s, query: true } : s))
+            .sort((a, b) => (b.query ? 1 : 0) - (a.query ? 1 : 0));
           const jsonCtx = {
-            profile: profileData ?? null,
-            projectSpecs: stripSpecs(ctx.projectSpecs, 'project'),
-            userSpecs: stripSpecs(ctx.userSpecs, 'user'),
-            globalSpecs: stripSpecs(ctx.globalSpecs, 'global'),
-            cascadedSpecs: stripCascadedSpecs(ctx),
+            profile: profileData ?? undefined,
+            specs,
             activeTasks: ctx.activeTasks,
-            relatedProjects: ctx.relatedProjects,
+            relatedProjects: ctx.relatedProjects.length > 0 ? ctx.relatedProjects : undefined,
             crossUserData: ctx.crossUserData?.map((d) => ({
               ...d,
               projectSpecs: stripSpecs(d.projectSpecs, 'project'),
               userSpecs: stripSpecs(d.userSpecs, 'user'),
             })),
-            ancestors: ctx.ancestors,
-            ancestorSpecs: ctx.ancestorSpecs
-              ? stripSpecs(ctx.ancestorSpecs, 'ancestor')
-              : undefined,
-            querySearch: queryResults.length > 0 ? queryResults : undefined,
+            ancestors: ctx.ancestors?.length ? ctx.ancestors : undefined,
+            querySearch: queryResults.length > 0 ? truncateScores(queryResults) : undefined,
           };
           outputJson(jsonCtx, opts.jsonFormat);
           return;
@@ -349,6 +353,7 @@ export function registerContextCommand(program: Command): void {
           formatContextAsMarkdown(
             ctx,
             (await buildProfileSection(username, projectId)) ?? undefined,
+            queryMatchedPaths.size > 0 ? queryMatchedPaths : undefined,
           ),
         );
 

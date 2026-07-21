@@ -16,8 +16,6 @@ import {
   deleteTask,
   getTaskPrd,
   getTaskPrdPath,
-  getTaskDir,
-  getTaskProgressPath,
   getTaskDesignPath,
   resolveTaskById,
   getTaskGraphViews,
@@ -286,15 +284,13 @@ export function registerTaskCommand(program: Command): void {
         closeDb();
 
         logger.raw(chalk.green('✓ 任务已创建'));
-        logger.raw(chalk.dim(`  ID：${task.id}`));
-        logger.raw(chalk.dim(`  标题：${task.title}`));
+        logger.raw(chalk.dim(`  ${task.id}`));
         logger.raw(chalk.dim(`  PRD：${getTaskPrdPath(username, task.id)}`));
-        logger.raw(chalk.dim(`  目录：${getTaskDir(username, task.id)}`));
         if (task.parentTaskId) {
-          logger.raw(chalk.dim(`  父任务：${task.parentTaskId}`));
+          logger.raw(chalk.dim(`  父：${task.parentTaskId}`));
         }
         if (task.projects?.length) {
-          logger.raw(chalk.dim(`  关联项目：${task.projects.join(', ')}`));
+          logger.raw(chalk.dim(`  项目：${task.projects.join(', ')}`));
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -346,23 +342,18 @@ export function registerTaskCommand(program: Command): void {
         }
 
         logger.raw(chalk.bold(`\n${meta.title}`));
-        logger.raw(chalk.dim('─'.repeat(40)));
-        logger.raw(`  ID：${meta.id}`);
-        logger.raw(`  状态：${meta.status}`);
-        logger.raw(`  PRD：${getTaskPrdPath(username, meta.id)}`);
+        logger.raw(chalk.dim(`  ${meta.id} [${meta.status}]`));
+        logger.raw(chalk.dim(`  ${getTaskPrdPath(username, meta.id)}`));
         const designPath = getTaskDesignPath(username, meta.id);
         if (existsSync(designPath)) {
-          logger.raw(`  Design：${designPath}`);
+          logger.raw(chalk.dim(`  ${designPath}`));
         }
-        logger.raw(`  目录：${getTaskDir(username, meta.id)}`);
         if (meta.projects?.length) {
-          logger.raw(`  关联项目：${meta.projects.join(', ')}`);
+          logger.raw(chalk.dim(`  项目：${meta.projects.join(', ')}`));
         }
         if (meta.parentTaskId) {
-          logger.raw(`  父任务：${meta.parentTaskId}`);
+          logger.raw(chalk.dim(`  父：${meta.parentTaskId}`));
         }
-        logger.raw(`  创建：${meta.created}`);
-        if (meta.updated) logger.raw(`  更新：${meta.updated}`);
 
         if (prd) {
           logger.raw(chalk.dim('\n─── PRD ───'));
@@ -508,12 +499,11 @@ export function registerTaskCommand(program: Command): void {
         }
 
         logger.raw(chalk.green(`✓ 任务 ${updated.title} 已更新`));
-        logger.raw(chalk.dim(`  ID：${updated.id}`));
-        logger.raw(chalk.dim(`  状态：${updated.status}`));
-        logger.raw(chalk.dim(`  父任务：${updated.parentTaskId ?? '无'}`));
-        logger.raw(
-          chalk.dim(`  关联项目：${updated.projects?.length ? updated.projects.join(', ') : '无'}`),
-        );
+        logger.raw(chalk.dim(`  ${updated.id} [${updated.status}]`));
+        if (updated.parentTaskId) logger.raw(chalk.dim(`  父：${updated.parentTaskId}`));
+        if (updated.projects?.length) {
+          logger.raw(chalk.dim(`  项目：${updated.projects.join(', ')}`));
+        }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
@@ -766,11 +756,7 @@ export function registerTaskCommand(program: Command): void {
         }
 
         logger.raw(chalk.green(`✓ 检查点已添加`));
-        logger.raw(chalk.dim(`  ID：${entry.id}`));
-        logger.raw(chalk.dim(`  类型：${entry.type}`));
-        logger.raw(chalk.dim(`  标题：${entry.title}`));
-        logger.raw(chalk.dim(`  时间：${entry.time}`));
-        logger.raw(chalk.dim(`  文件：${getTaskProgressPath(username, match.id)}`));
+        logger.raw(chalk.dim(`  [${entry.type}] ${entry.title} (${entry.id})`));
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
@@ -807,8 +793,7 @@ export function registerTaskCommand(program: Command): void {
             return;
           }
           logger.raw(chalk.bold(`\n[${entry.type}] ${entry.title}`));
-          logger.raw(chalk.dim(`  ID：${entry.id}`));
-          logger.raw(chalk.dim(`  时间：${entry.time}`));
+          logger.raw(chalk.dim(`  ${entry.id} · ${entry.time}`));
           if (entry.message) {
             logger.raw(`\n${entry.message}`);
           }
@@ -992,18 +977,19 @@ export function registerTaskCommand(program: Command): void {
         }
 
         logger.raw(chalk.green(`✓ 任务 ${updated.title} 关联已更新`));
-        logger.raw(chalk.dim(`  关联项目：${updated.projects?.length ?? 0} 个`));
-        logger.raw(chalk.dim(`  scopePaths：${updated.scopePaths?.length ?? 0} 个`));
+        logger.raw(
+          chalk.dim(
+            `  项目 ${updated.projects?.length ?? 0} · 路径 ${updated.scopePaths?.length ?? 0}`,
+          ),
+        );
         if (recognized.length > 0) {
-          logger.raw(chalk.cyan(`\n  → 路径识别为项目（${recognized.length}）：`));
           for (const r of recognized) {
-            logger.raw(`    ${r.path} ${chalk.dim(`→ ${r.projectName} (score=${r.score})`)}`);
+            logger.raw(chalk.dim(`    ${r.path} → ${r.projectName}`));
           }
         }
         if (unrecognized.length > 0) {
-          logger.raw(chalk.cyan(`\n  → 记为额外路径（${unrecognized.length}）：`));
           for (const u of unrecognized) {
-            logger.raw(`    ${u.path}${u.note ? chalk.dim(` (${u.note})`) : ''}`);
+            logger.raw(chalk.dim(`    ${u.path}${u.note ? ` (${u.note})` : ''}`));
           }
         }
       } catch (err) {

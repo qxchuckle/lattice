@@ -187,28 +187,25 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(`  ${chalk.bold(p.name)} ${chalk.dim(`(${p.id})`)}`);
           const provenance = matchProvenance[p.id];
           if (provenance) {
-            logger.raw(
-              `    ${chalk.cyan('匹配来源：')}${provenance.docType} - ${provenance.docTitle}`,
-            );
+            logger.raw(chalk.dim(`    ← ${provenance.docType} - ${provenance.docTitle}`));
           }
           if (localPaths.length === 0) {
-            logger.raw(`    ${chalk.dim('(无路径记录)')}`);
+            logger.raw(chalk.dim(`    (无路径)`));
           } else if (localPaths.length === 1) {
             logger.raw(`    ${chalk.dim(localPaths[0])}`);
           } else {
-            logger.raw(`    ${chalk.cyan('路径：')}${localPaths.length} 个`);
             for (const path of localPaths) {
-              logger.raw(`      ${chalk.dim(path)}`);
+              logger.raw(`    ${chalk.dim(path)}`);
             }
           }
           if (gitRemotes.length) {
-            logger.raw(`    ${chalk.cyan('Git：')}${gitRemotes.join(', ')}`);
+            logger.raw(chalk.dim(`    git: ${gitRemotes.join(', ')}`));
           }
           if (pkgNames.length) {
-            logger.raw(`    ${chalk.cyan('Package：')}${pkgNames.join(', ')}`);
+            logger.raw(chalk.dim(`    pkg: ${pkgNames.join(', ')}`));
           }
-          if (groups.length) logger.raw(`    ${chalk.cyan('分组：')}${groups.join(', ')}`);
-          if (tags.length) logger.raw(`    ${chalk.cyan('标签：')}${tags.join(', ')}`);
+          if (groups.length) logger.raw(chalk.dim(`    组: ${groups.join(', ')}`));
+          if (tags.length) logger.raw(chalk.dim(`    [${tags.join(', ')}]`));
           if (opts.withRelations) {
             const relations = relationsMap.get(p.id) ?? [];
             if (relations.length > 0) {
@@ -217,7 +214,7 @@ export function registerProjectCommand(program: Command): void {
                 const other = projects.find((pp) => pp.id === otherId);
                 return `${other?.name ?? otherId}(${r.type})`;
               });
-              logger.raw(`    ${chalk.cyan('关系：')}${relStrs.join(', ')}`);
+              logger.raw(chalk.dim(`    → ${relStrs.join(', ')}`));
             }
           }
           logger.raw('');

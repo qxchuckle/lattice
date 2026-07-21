@@ -71,14 +71,12 @@ async function showGlobalStatus(
   }
 
   logger.raw(chalk.bold('\nLattice 全局状态\n'));
-  logger.raw(`  根目录：${chalk.cyan(status.latticeRoot)}`);
-  logger.raw(`  用户名：${chalk.cyan(status.username)}`);
-  logger.raw(`  项目数：${status.projectCount}`);
-  logger.raw(`  任务数：${status.taskCount}（活跃 ${status.activeTaskCount}）`);
-  logger.raw(`  数据库：${status.dbSizeKB} KB`);
-  logger.raw(`  Git：${status.gitEnabled ? '已启用' : '未启用'}`);
+  logger.raw(`  ${chalk.cyan(status.latticeRoot)} · ${chalk.cyan(status.username)}`);
+  logger.raw(
+    `  项目 ${status.projectCount} · 任务 ${status.taskCount}（活跃 ${status.activeTaskCount}）· DB ${status.dbSizeKB}KB · Git ${status.gitEnabled ? '✓' : '✗'}`,
+  );
   if (status.scanDirs.length) {
-    logger.raw(`  扫描目录：${status.scanDirs.join(', ')}`);
+    logger.raw(`  扫描：${status.scanDirs.join(', ')}`);
   }
   logger.raw('');
 }
@@ -181,22 +179,19 @@ async function showProjectStatus(
   }
 
   logger.raw(chalk.bold(`\n${meta.name}\n`));
-  logger.raw(`  ID：${meta.id}`);
-  logger.raw(`  当前绑定路径：${project.root}`);
+  logger.raw(chalk.dim(`  ${meta.id} · ${project.root}`));
   if (pathStatus.length > 1) {
-    logger.raw(chalk.cyan(`  所有路径（${pathStatus.length}）：`));
     for (const ps of pathStatus) {
       logger.raw(`    ${ps.exists ? chalk.green('●') : chalk.red('○')} ${ps.path}`);
     }
-  } else if (pathStatus.length === 1) {
-    const ps = pathStatus[0];
-    logger.raw(`  路径状态：${ps.exists ? chalk.green('存在') : chalk.red('已失效')}`);
+  } else if (pathStatus.length === 1 && !pathStatus[0].exists) {
+    logger.raw(chalk.red(`  路径已失效`));
   }
-  if (meta.description) logger.raw(`  描述：${meta.description}`);
-  if (meta.gitRemotes?.length) logger.raw(`  Git remote：${meta.gitRemotes.join(', ')}`);
-  if (meta.packageNames?.length) logger.raw(`  Package：${meta.packageNames.join(', ')}`);
-  if (meta.groups?.length) logger.raw(`  分组：${meta.groups.join(', ')}`);
-  if (meta.tags?.length) logger.raw(`  标签：${meta.tags.join(', ')}`);
+  if (meta.description) logger.raw(`  ${meta.description}`);
+  if (meta.gitRemotes?.length) logger.raw(chalk.dim(`  git: ${meta.gitRemotes.join(', ')}`));
+  if (meta.packageNames?.length) logger.raw(chalk.dim(`  pkg: ${meta.packageNames.join(', ')}`));
+  if (meta.groups?.length) logger.raw(chalk.dim(`  组: ${meta.groups.join(', ')}`));
+  if (meta.tags?.length) logger.raw(chalk.dim(`  [${meta.tags.join(', ')}]`));
 
   if (specs.length > 0) {
     logger.raw(chalk.blue(`\n  Spec 文件（${specs.length}）：`));

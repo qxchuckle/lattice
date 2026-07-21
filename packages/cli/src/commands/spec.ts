@@ -217,13 +217,12 @@ export function registerSpecCommand(program: Command): void {
           const s = m.spec;
           const title = s.frontmatter.title ?? s.fileName;
           logger.raw(chalk.bold(`\n${title}`) + userTag);
-          logger.raw(`  层级：${chalk.cyan(m.scope)}`);
-          logger.raw(`  路径：${chalk.dim(s.filePath)}`);
+          logger.raw(chalk.dim(`  ${m.scope} · ${s.filePath}`));
           if (s.frontmatter.tags?.length) {
-            logger.raw(`  标签：${s.frontmatter.tags.join(', ')}`);
+            logger.raw(chalk.dim(`  [${s.frontmatter.tags.join(', ')}]`));
           }
           if (s.frontmatter.description) {
-            logger.raw(`  描述：${s.frontmatter.description}`);
+            logger.raw(`  ${s.frontmatter.description}`);
           }
 
           if (opts.detail) {

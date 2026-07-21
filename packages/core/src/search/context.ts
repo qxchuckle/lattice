@@ -421,7 +421,11 @@ const SCOPE_LABEL: Record<string, string> = {
 };
 
 /** 将上下文格式化为 Markdown 输出 */
-export function formatContextAsMarkdown(ctx: ProjectContext, profileSection?: string): string {
+export function formatContextAsMarkdown(
+  ctx: ProjectContext,
+  profileSection?: string,
+  queryMatchedPaths?: Set<string>,
+): string {
   const lines: string[] = [];
 
   lines.push('# 项目上下文\n');
@@ -449,7 +453,15 @@ export function formatContextAsMarkdown(ctx: ProjectContext, profileSection?: st
 
   if (ctx.cascadedSpecs.length > 0) {
     lines.push('## 规范（Spec）\n');
-    for (const spec of ctx.cascadedSpecs) {
+    // 语义匹配的排前面
+    const sorted = queryMatchedPaths?.size
+      ? [...ctx.cascadedSpecs].sort((a, b) => {
+          const am = queryMatchedPaths.has(a.filePath) ? 1 : 0;
+          const bm = queryMatchedPaths.has(b.filePath) ? 1 : 0;
+          return bm - am;
+        })
+      : ctx.cascadedSpecs;
+    for (const spec of sorted) {
       const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
       const scope = resolveSpecScope(spec, ctx);
       const scopeTag = SCOPE_LABEL[scope] ?? scope;
@@ -457,10 +469,11 @@ export function formatContextAsMarkdown(ctx: ProjectContext, profileSection?: st
         typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
           ? spec.frontmatter.description.trim()
           : '[缺失摘要]';
-      lines.push(`### ${title}\n`);
-      lines.push(`- 作用域：${scopeTag}`);
-      lines.push(`- 路径：${spec.filePath}`);
-      lines.push(`- 摘要：${description}`);
+      const matched = queryMatchedPaths?.has(spec.filePath) ? '★ ' : '';
+      lines.push(`### ${matched}${title}\n`);
+      lines.push(`- ${scopeTag}`);
+      lines.push(`- ${spec.filePath}`);
+      lines.push(`- ${description}`);
       lines.push('');
     }
   }

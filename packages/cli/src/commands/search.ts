@@ -9,9 +9,8 @@ import {
   isModelLoaded,
   isModelLoadNetworkError,
   formatModelNetworkHint,
-  getRAGStatus,
 } from '@qcqx/lattice-core';
-import { formatRagTimestamp, logger, outputJson } from '../utils';
+import { logger, outputJson } from '../utils';
 import type { SearchResult } from '@qcqx/lattice-core';
 
 /** 精简 JSON 输出：只保留对调用方有用的字段 */
@@ -35,14 +34,15 @@ function cleanResultsForJson(results: SearchResult[]): unknown[] {
     const cleanMeta: Record<string, unknown> = {};
     for (const key of Object.keys(meta)) {
       if (META_FIELDS_KEEP.has(key) && meta[key] !== null && meta[key] !== undefined) {
-        cleanMeta[key] = meta[key];
+        const val = meta[key];
+        cleanMeta[key] = typeof val === 'number' ? Math.round(val * 10000) / 10000 : val;
       }
     }
     return {
       type: r.type,
       title: r.title,
       snippet: r.snippet,
-      score: r.score,
+      score: Math.round((r.score ?? 0) * 10000) / 10000,
       meta: cleanMeta,
     };
   });
@@ -168,7 +168,6 @@ export function registerSearchCommand(program: Command): void {
           projectLimit: opts.projectLimit ? parseInt(opts.projectLimit, 10) : undefined,
           useLightweightRerank: opts.rerank,
         });
-        const ragStatus = await getRAGStatus();
         const showDuplicates = Boolean(opts.showDuplicates);
 
         if (isModelLoaded()) {
@@ -185,8 +184,6 @@ export function registerSearchCommand(program: Command): void {
           outputJson(opts.jsonFull ? results : cleanResultsForJson(results), opts.jsonFormat);
           return;
         }
-
-        outputRagRefreshHint(ragStatus.lastUpdated);
 
         if (results.length === 0) {
           logger.raw(chalk.dim('未找到相关结果。'));
@@ -245,15 +242,6 @@ export function registerSearchCommand(program: Command): void {
         closeDb();
       }
     });
-}
-
-function outputRagRefreshHint(lastUpdated: string | null): void {
-  const updatedLabel = formatRagTimestamp(lastUpdated);
-  logger.raw(chalk.dim(`RAG 上次构建时间：${updatedLabel}`));
-  logger.raw(
-    chalk.dim('如近期新增或修改了 spec、任务或项目信息，建议主动运行 `lattice rag update`。'),
-  );
-  logger.raw('');
 }
 
 function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
