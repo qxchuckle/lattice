@@ -3,6 +3,7 @@ import { hybridSearch } from './search';
 import { searchProjects, projectSearchResultsToSearchResults } from './project-search';
 import { listAllUsernames } from '../project/cross-user';
 import { enrichSpecResultsWithTaskRefs } from './spec-task-enrichment';
+import { computeDynamicLimits } from './dynamic-limits';
 
 /**
  * 统一搜索入口：合并 hybridSearch（文档搜索）和 searchProjects（项目搜索）。
@@ -28,21 +29,26 @@ export async function unifiedSearch(
     minFinalScore?: number;
   },
 ): Promise<SearchResult[]> {
-  const limit = opts?.limit ?? 10;
+  // 显式传 limit → 使用传入值；未传 → 动态计算
+  const dynamic = opts?.limit == null ? computeDynamicLimits() : null;
+  const limit = opts?.limit ?? dynamic?.spec ?? 10;
 
   // type=project：走 searchProjects（关键词匹配 + 反查）
   if (opts?.type === 'project') {
     const usernames = opts.usernames ?? (await listAllUsernames());
+    const projectLimit = opts?.projectLimit ?? dynamic?.project ?? limit;
     const spResult = await searchProjects(usernames, query, {
       keywordOnly: false,
-      limit,
+      limit: projectLimit,
     });
-    return projectSearchResultsToSearchResults(spResult).slice(0, limit);
+    return projectSearchResultsToSearchResults(spResult).slice(0, projectLimit);
   }
 
   // 具体类型（spec/task/checkpoint/design/relation）：走 hybridSearch
   if (opts?.type) {
-    const results = await hybridSearch(query, opts);
+    const typeLimit =
+      opts?.limit ?? (dynamic ? (dynamic[opts.type as keyof typeof dynamic] ?? limit) : limit);
+    const results = await hybridSearch(query, { ...opts, limit: typeLimit });
     // spec 搜索时反查任务关联 spec
     if (opts.type === 'spec') {
       return enrichSpecResultsWithTaskRefs(results, query, {
@@ -55,16 +61,17 @@ export async function unifiedSearch(
 
   // type=undefined（全部）：分类搜索，每类各自应用 limit
   const usernames = opts?.usernames ?? (await listAllUsernames());
-  const specLimit = opts?.specLimit ?? limit;
-  const taskLimit = opts?.taskLimit ?? limit;
-  const projectLimit = opts?.projectLimit ?? limit;
+  const specLimit = opts?.specLimit ?? dynamic?.spec ?? limit;
+  const taskLimit = opts?.taskLimit ?? dynamic?.task ?? limit;
+  const projectLimit = opts?.projectLimit ?? dynamic?.project ?? limit;
+  const relationLimit = dynamic?.relation ?? Math.min(limit, 5);
 
   // 并行搜索各类别
   const [specResults, taskResults, projectResultsRaw, relationResults] = await Promise.all([
     hybridSearch(query, { ...opts, type: 'spec', limit: specLimit }),
     hybridSearch(query, { ...opts, type: 'task', limit: taskLimit }),
     searchProjects(usernames, query, { keywordOnly: false, limit: projectLimit }),
-    hybridSearch(query, { ...opts, type: 'relation', limit: Math.min(limit, 5) }),
+    hybridSearch(query, { ...opts, type: 'relation', limit: relationLimit }),
   ]);
 
   const projectResults = projectSearchResultsToSearchResults(projectResultsRaw);

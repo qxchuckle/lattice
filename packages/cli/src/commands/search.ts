@@ -124,7 +124,7 @@ export function registerSearchCommand(program: Command): void {
     .option('--project <id>', '限制在指定项目范围内')
     .option('--users <names>', '只搜索指定用户内容，逗号分隔')
     .option('--current-user', '只搜索当前用户内容')
-    .option('--limit <n>', '每类别返回结果数量', '10')
+    .option('--limit <n>', '每类别返回结果数量（不传则按数据量动态计算）')
     .option('--spec-limit <n>', 'Spec 结果数量（覆盖 --limit）')
     .option('--task-limit <n>', '任务结果数量（覆盖 --limit）')
     .option('--project-limit <n>', '项目结果数量（覆盖 --limit）')
@@ -162,7 +162,7 @@ export function registerSearchCommand(program: Command): void {
           type: opts.type,
           projectId: opts.project,
           usernames,
-          limit: parseInt(opts.limit, 10),
+          limit: opts.limit ? parseInt(opts.limit, 10) : undefined,
           specLimit: opts.specLimit ? parseInt(opts.specLimit, 10) : undefined,
           taskLimit: opts.taskLimit ? parseInt(opts.taskLimit, 10) : undefined,
           projectLimit: opts.projectLimit ? parseInt(opts.projectLimit, 10) : undefined,

@@ -1293,6 +1293,24 @@ export function searchVec(embedding: Float32Array, limit = 10): { id: string; di
   }
 }
 
+/** 按 source_type 统计文档数（去重 file_path），用于动态计算搜索 limit */
+export function getDocCountByType(): Record<string, number> {
+  try {
+    const rows = getDb()
+      .prepare(
+        'SELECT source_type, COUNT(DISTINCT file_path) as cnt FROM specs_fts GROUP BY source_type',
+      )
+      .all() as { source_type: string; cnt: number }[];
+    const result: Record<string, number> = {};
+    for (const row of rows) {
+      result[row.source_type] = row.cnt;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 /** 获取 chunk/doc 统计，用于动态调整搜索候选量 */
 export function getChunkStats(): { totalChunks: number; totalDocs: number } {
   try {

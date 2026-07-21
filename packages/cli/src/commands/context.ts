@@ -70,10 +70,7 @@ async function performQuerySearch(
     const results = await unifiedSearch(query, {
       projectId: opts?.projectId,
       usernames: opts?.usernames,
-      limit: 5,
-      specLimit: 5,
-      taskLimit: 3,
-      projectLimit: 3,
+      // 不传 limit → core 层自动按数据量动态计算
     });
     return results;
   } catch {

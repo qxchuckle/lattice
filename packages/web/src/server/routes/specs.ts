@@ -35,11 +35,10 @@ export function registerSpecRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { q: string; type?: string; projectId?: string; limit?: string } }>(
     '/api/search',
     async (req) => {
-      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 10;
       const opts: Record<string, unknown> = {};
       if (req.query.type) opts.type = req.query.type;
       if (req.query.projectId) opts.projectId = req.query.projectId;
-      if (req.query.limit) opts.limit = limit;
+      if (req.query.limit) opts.limit = parseInt(req.query.limit, 10);
       return unifiedSearch(req.query.q, opts);
     },
   );

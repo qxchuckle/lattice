@@ -386,7 +386,9 @@ export {
   searchProjects,
   projectSearchResultsToSearchResults,
   unifiedSearch,
+  computeDynamicLimits,
   type ContextOptions,
+  type DynamicLimits,
   type ProjectMatchProvenance,
   type ProjectSearchResult,
 } from './search';
