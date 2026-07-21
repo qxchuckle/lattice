@@ -58,7 +58,7 @@ ltc fast-start log add "修复了参数解析" -m "修改了 task.ts" --files pa
 
 ```bash
 ltc fast-start log list [--last N] [--current]
-ltc fast-start log search <关键词>
+ltc fast-start log search <query>
 ltc fast-start log show <id>
 ltc fast-start log stats
 ```

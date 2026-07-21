@@ -49,7 +49,7 @@ ltc task update <task-id> --parent <id> / --clear-parent
 
 ## task start 后的起手动作
 
-> 委派：必须委派 `lattice-task-start` subagent（不支持时退化串行），主线只等摘要。
+> 委派：必须委派 `lattice-task-start` subagent（不支持时退化串行）。subagent 读取并筛选相关 spec 与任务，返回目录；**主线凭目录 Read 相关文档全文，并可自主调用 `ltc search` / `ltc context` 补全信息**。
 
 ```bash
 ltc task start <task-id>

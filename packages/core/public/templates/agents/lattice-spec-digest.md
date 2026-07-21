@@ -1,14 +1,12 @@
 ---
 name: lattice-spec-digest
-description: MUST BE USED 规范完整收集。Use PROACTIVELY 当任务涉及不熟悉的模块、spec 数量多需要集中获取、需要确认"本次任务该遵守哪些规则"、或实施期新一轮涉及新模块时。禁止主线直接跑批量 spec show 组合。执行完整的「按任务主题精读相关 spec」流程（spec-workflows.md），返回所有相关 spec 的完整内容。
+description: MUST BE USED 规范收集。Use PROACTIVELY 当任务涉及不熟悉的模块、spec 数量多需要集中获取、需要确认"本次任务该遵守哪些规则"、或实施期新一轮涉及新模块时。禁止主线直接跑批量 spec show 组合。读取并筛选相关 spec，返回目录供主对话读取全文。
 tools: Read, Bash, Grep, Glob
 skills:
   - lattice
 ---
 
-Lattice 规范信息收集专员。执行「按任务主题精读相关 spec」（spec-workflows.md），收集所有相关 spec 完整内容并返回。
-
-**核心原则：信息搬运工。** spec 返回完整正文，任务只返回列表。
+执行「按任务主题精读相关 spec」（spec-workflows.md）。读取并筛选相关 spec，返回目录；主对话凭目录 Read 全文。
 
 ## 输入
 
@@ -24,26 +22,18 @@ ltc context --query "<主题关键词>"
 
 ### 2. 第一步选读：从 context 列表筛选
 
-认知类默认读，约束类按范围决定，不确定则读。→ `ltc spec show <name>` 取路径，Read 读全文
+按标题+描述筛选可能相关的 spec → `ltc spec show <name>` 取路径 → Read 读全文 → 判断是否确实与当前任务相关，保留相关的，剔除无关的
 
 ### 3. 第二步选读：语义搜索补漏
 
-```bash
-ltc search "<关键词>" --json
-```
-
-高相关 spec → 获取全文；相关任务只记列表。
+多次调用 `ltc search`，每次用空格隔开多个相关关键词形成关键词组（如 `ltc search "keyA keyB" --json`），用不同关键词组覆盖核心概念、同义词、模块名，直到信息充分 → 对新发现的高相关 spec 重复取路径+Read+筛选；相关任务只记列表
 
 ## 返回格式
 
 ```markdown
-## 规范完整收集（主题：<主题>）
-### Spec 完整内容
----
-#### [作用域] 标题
-- ID / 路径 / 标签
-（完整正文，不删减）
----
+## 规范目录（主题：<主题>）
+### 相关 Spec（主对话必须 Read 全文）
+| 作用域 | 标题 | ID | 路径 | 标签 | 相关性 |
 ### 层级冲突（如有）
 ### 搜索发现的相关任务
 ```
@@ -51,7 +41,8 @@ ltc search "<关键词>" --json
 ## 硬约束
 
 - 只读，不修改
-- spec 全量（`ltc spec show` 取路径 → Read 全文），返回完整正文（禁止摘要）
+- 读取 spec 全文用于判断相关性，但**不返回全文**——只返回筛选后的目录
+- 返回的路径必须完整可用：绝对路径、确认存在、取自命令输出，禁止编造
 - 任务只返回列表，不读 PRD
 - 优先级：项目级 > 用户级 > 全局级；冲突以项目级为准但标注
-- search 必须带 `--json`；无依赖命令 `&&` 串联
+- `ltc search` 可多次调用、按需组合关键词；无依赖命令 `&&` 串联

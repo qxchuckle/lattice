@@ -33,7 +33,7 @@
 | "最近完成了什么" | `ltc task list --status completed` |
 | "XX 任务的进展" | `ltc task info <id>` + `ltc task progress <id>` |
 | "这个项目有什么规范" | `ltc spec show --project <id>` |
-| "之前有没有做过类似的事" | `ltc search <关键词> --json` |
+| "之前有没有做过类似的事" | `ltc search "keyA keyB" --json` |
 | "有哪些项目" / "项目间什么关系" | `ltc project list --with-relations` |
 | "XX 任务的设计方案是什么" | read_file 任务 `design.md` |
 | "这个任务的 PRD 是什么" | read_file 任务 `prd.md` |

@@ -4,7 +4,7 @@
 
 ## 进入项目默认动作
 
-> 委派：必须委派 `lattice-context` subagent（不支持时退化串行）。
+> 委派：必须委派 `lattice-context` subagent（不支持时退化串行）。subagent 读取并筛选相关 spec，返回目录；**主线凭目录 Read 全文，并可自主调用 `ltc search` / `ltc context` 补全信息**。
 
 ```bash
 ltc context --query "<当前主题/意图>"

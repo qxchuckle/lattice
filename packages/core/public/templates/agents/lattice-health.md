@@ -21,7 +21,7 @@ ltc doctor --json && ltc rag status --json && ltc spec conflicts && ltc project 
 如有具体问题，额外针对性检查：
 - 搜索不准 → 对比 rag status 文档数与实际数量
 - context 报错 → `ltc project where .`
-- 项目识别异常 → `ltc project list --search "<关键词>"`
+- 项目识别异常 → `ltc project list --search "keyA"`
 
 ## 返回格式
 
