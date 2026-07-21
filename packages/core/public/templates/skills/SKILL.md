@@ -56,7 +56,7 @@ description: >-
 
 | 情况 | 命令 |
 |---|---|
-| 涉及不熟悉的模块/概念 | `ltc spec show <name> --detail` / `ltc spec list` |
+| 涉及不熟悉的模块/概念 | `ltc spec show <name>` 取路径 → Read 全文 / `ltc spec list` |
 | 技术选型/架构决策 | `ltc search "<关键词>" --type task --json` → read PRD |
 | 报错/兼容性问题 | `ltc search "<错误关键词>" --json` |
 | 用户说"之前做过类似的" | `ltc search "<需求描述>" --json` |

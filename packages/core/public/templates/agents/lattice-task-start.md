@@ -24,7 +24,7 @@ ltc context --task <task-id> --query "<主题关键词>"
 
 ### 2. 精读相关 spec（两步选读，宁多勿少）
 
-**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name> --detail`
+**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name>` 取路径，Read 读全文
 
 **第二步**：`ltc search "<关键词>" --json` 补漏 → 高相关 spec 获取全文；相关任务只记列表
 

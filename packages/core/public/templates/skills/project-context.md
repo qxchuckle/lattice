@@ -59,7 +59,7 @@ ltc project relation list <id>
 ltc search "..." --current-user / --users u1,u2
 ltc project relation list <id> --current-user / --user <users>
 ltc task list --current --all-user / --user <users>
-ltc spec show <file> --user <username> --detail
+ltc spec show <file> --user <username>  # 取路径后 Read 全文
 ```
 
 `--user` 与 `--current-user`/`--all-user` 互斥。

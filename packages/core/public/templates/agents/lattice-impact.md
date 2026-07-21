@@ -26,7 +26,7 @@ Lattice 变更影响信息收集专员。在动手修改前收集变更可能影
 ltc context --query "<模块/概念关键词>"
 ```
 
-**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name> --detail`
+**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name>` 取路径，Read 读全文
 
 **第二步**：`ltc search "<关键词>" --json` 补漏 → 高相关 spec 获取全文 + 高相关历史任务进入第 3 步
 

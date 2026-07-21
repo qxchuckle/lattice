@@ -24,7 +24,7 @@ ltc context --query "<主题关键词>"
 
 ### 2. 第一步选读：从 context 列表筛选
 
-认知类默认读，约束类按范围决定，不确定则读。→ `ltc spec show <name> --detail`
+认知类默认读，约束类按范围决定，不确定则读。→ `ltc spec show <name>` 取路径，Read 读全文
 
 ### 3. 第二步选读：语义搜索补漏
 
@@ -51,7 +51,7 @@ ltc search "<关键词>" --json
 ## 硬约束
 
 - 只读，不修改
-- spec 全量（`--detail`），返回完整正文（禁止摘要）
+- spec 全量（`ltc spec show` 取路径 → Read 全文），返回完整正文（禁止摘要）
 - 任务只返回列表，不读 PRD
 - 优先级：项目级 > 用户级 > 全局级；冲突以项目级为准但标注
 - search 必须带 `--json`；无依赖命令 `&&` 串联

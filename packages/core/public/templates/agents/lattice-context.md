@@ -26,7 +26,7 @@ ltc context --query "<主题/意图>" && ltc status
 
 ### 2. 精读相关 spec（两步选读，宁多勿少）
 
-**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name> --detail`
+**第一步**：从 context 列表选读（认知类默认读，不确定则读）→ `ltc spec show <name>` 取路径，Read 读全文
 
 **第二步**：`ltc search "<关键词>" --json` 补漏 → 高相关 spec 获取全文；相关任务只记列表
 
@@ -53,7 +53,7 @@ ltc context --query "<主题/意图>" && ltc status
 
 - 只读，不修改任何文件
 - `ltc context` 必须带 `--query`；search 必须带 `--json`
-- spec 必须全量（`--detail`），返回完整正文（禁止只返回摘要）
+- spec 必须全量（`ltc spec show` 取路径 → Read 全文），返回完整正文（禁止只返回摘要）
 - 任务只返回列表，不读 PRD
 - 当前目录未注册 → 报告并建议用户 `ltc link`/`ltc scan`
 - 无依赖命令 `&&` 串联

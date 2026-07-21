@@ -6,12 +6,12 @@
 
 | 场景 | 必须委派的 subagent | 禁止主线直接执行的命令 |
 |------|---------------------|------------------------|
-| 任务起手信息收集 | `lattice-task-start` | `ltc context --task` + `ltc search` + `ltc spec show --detail` 组合 |
+| 任务起手信息收集 | `lattice-task-start` | `ltc context --task` + `ltc search` + `ltc spec show` + Read 组合 |
 | 任务归档 | `lattice-task-archive` | `ltc task progress` + PRD 补全 + checkpoint + archive 组合 |
 | 项目上下文铺底 | `lattice-context` | `ltc context` + `ltc status` + `ltc spec list` 组合 |
 | 跨项目搜索 | `lattice-search` | 多路 `ltc search --json` 并行 |
 | 失忆恢复 | `lattice-task-handoff` | 恢复流程全部命令 |
-| 规范精读 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show --detail` |
+| 规范精读 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show` + Read |
 | 变更影响分析 | `lattice-impact` | context + search + grep 组合 |
 | 健康巡检 | `lattice-health` | `ltc doctor` + `rag status` + `spec conflicts` 组合 |
 

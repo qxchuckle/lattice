@@ -36,7 +36,7 @@ ltc search "<关键词A>" --type checkpoint --json
 ### 4. 获取高相关结果全文
 
 - 任务类：全量读取 PRD
-- spec 类：`ltc spec show <name> --detail`
+- spec 类：`ltc spec show <name>` 取路径，Read 读全文
 - checkpoint 类：提取完整上下文
 
 ### 5. （可选）查找关联项目
