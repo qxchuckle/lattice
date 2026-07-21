@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runStartupSelfCheck, closeDb } from '@qcqx/lattice-core';
+import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
 import { resolveCurrentProject } from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerLinkCommand } from './commands/link';
@@ -103,6 +103,20 @@ async function main(): Promise<void> {
         }
       } catch {
         // 启动自检失败不阻断主命令执行
+      }
+    }
+
+    // init-meta 版本检查：agent 文档是否过期（init 命令本身跳过；未初始化时跳过）
+    if (name !== 'init') {
+      try {
+        if (await isInitialized()) {
+          const meta = await readInitMeta();
+          if (!meta || meta.version !== pkg.version) {
+            console.warn('\x1b[33m⚠ lattice 注入已过期，运行 ltc init 更新\x1b[0m');
+          }
+        }
+      } catch {
+        // 检查失败不阻断主命令执行
       }
     }
 

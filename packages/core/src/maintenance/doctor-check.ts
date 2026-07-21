@@ -45,6 +45,7 @@ import { getUsername, isInitialized } from '../config';
 import { closeDb, deleteProject, initDb } from '../db';
 import { FTS_INDEX_VERSION, getFtsIndexVersion } from '../db';
 import { getRAGStatus } from '../rag';
+import { readInitMeta } from '../cache/init-meta';
 
 /** 解析 JSON 数组字符串 */
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -101,6 +102,30 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
     message: localConfigExists ? '存在' : '缺失',
     fix: '运行 lattice init 重新生成',
   });
+
+  // 2.5 Agent 文档注入状态
+  const initMeta = await readInitMeta();
+  if (!initMeta) {
+    entries.push({
+      item: 'Agent 文档注入',
+      status: 'stale',
+      message: '未找到注入记录（init-meta.json 缺失）',
+      fix: '运行 ltc init 注入 agent 文档',
+    });
+  } else if (opts.cliVersion && initMeta.version !== opts.cliVersion) {
+    entries.push({
+      item: 'Agent 文档注入',
+      status: 'stale',
+      message: `注入版本 v${initMeta.version} 与当前 CLI v${opts.cliVersion} 不一致`,
+      fix: '运行 ltc init 更新 agent 文档',
+    });
+  } else {
+    entries.push({
+      item: 'Agent 文档注入',
+      status: 'healthy',
+      message: `v${initMeta.version}（${initMeta.platforms.join(', ')}）`,
+    });
+  }
 
   // 3. 目录结构
   const username = await getUsername();

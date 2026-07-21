@@ -47,8 +47,10 @@ import {
   renderWindsurfRules,
   renderKiroSteering,
   initLatticeGit,
+  writeInitMeta,
 } from '@qcqx/lattice-core';
 import { logger } from '../utils';
+import { cliVersion } from '../version';
 import {
   resolveBundledSpecTemplateNames,
   syncBundledSpecTemplatesWithPrompt,
@@ -788,6 +790,9 @@ async function detectAndConfigureAITools(): Promise<void> {
       }
     }
   }
+
+  // 写入 init-meta.json，记录本次注入的版本与平台列表
+  await writeInitMeta(cliVersion, selectedToolIds);
 }
 
 function registerInitScanSubcommand(initCmd: Command): void {

@@ -254,6 +254,8 @@ export interface DoctorOptions {
   migrate?: boolean;
   rebuildFingerprints?: boolean;
   recheckScopePaths?: boolean;
+  /** 当前 CLI 版本号，用于比对 init-meta 注入版本 */
+  cliVersion?: string;
 }
 
 /** Spec 冲突信息 */

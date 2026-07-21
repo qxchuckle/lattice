@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { runDoctorCheck, initDb, closeDb } from '@qcqx/lattice-core';
 import type { DoctorEntry } from '@qcqx/lattice-core';
 import { logger, outputJson } from '../utils';
+import { cliVersion } from '../version';
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -22,6 +23,7 @@ export function registerDoctorCommand(program: Command): void {
           migrate: opts.migrate,
           rebuildFingerprints: opts.rebuildFingerprints,
           recheckScopePaths: opts.recheckScopePaths,
+          cliVersion,
         });
 
         if (opts.json) {

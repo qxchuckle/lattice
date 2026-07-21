@@ -280,6 +280,7 @@ export {
 
 // 扫描缓存
 export { readScanCache, writeScanCache, shouldScan, type ScanCache } from './cache/scan-cache';
+export { getInitMetaPath, readInitMeta, writeInitMeta, type InitMeta } from './cache/init-meta';
 
 // Spec
 export {

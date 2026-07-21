@@ -14,7 +14,8 @@
     "build": "tsup",
     "check-types": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "tsup",
+    "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",
@@ -34,7 +35,8 @@
     "typescript": "^5.8.3"
   },
   "files": [
-    "dist"
+    "dist",
+    "scripts"
   ],
   "engines": {
     "node": ">=18"
