@@ -12,6 +12,7 @@
  *   pnpm release patch --web    # 只发布 web
  *   pnpm release patch --core --web  # 发布 core 和 web
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
+ *   pnpm release continue        # 发布失败后继续（跳过版本bump和构建，重试发布+git）
  */
 
 import { execSync } from 'node:child_process';
@@ -38,10 +39,12 @@ const versionArg = args.find((a) => !a.startsWith('--'));
 
 if (!versionArg) {
   console.error(
-    '❌ 请指定版本: pnpm release <patch|minor|major|x.y.z> [--core|--cli|--web] [--dry-run]',
+    '❌ 请指定版本: pnpm release <patch|minor|major|x.y.z|continue> [--core|--cli|--web] [--dry-run]',
   );
   process.exit(1);
 }
+
+const isContinue = versionArg === 'continue';
 
 // --- 工具函数 ---
 function readPkg(path) {
@@ -88,46 +91,69 @@ if (!hasFlag) {
   if (onlyWeb) targets.push('web');
 }
 
-// --- 升版本 ---
+// --- 升版本（continue 模式跳过） ---
 const corePkg = readPkg(PACKAGES.core);
-const newVersion = bumpVersion(corePkg.version, versionArg);
+let newVersion;
 
-console.log(`\n📦 Lattice Release ${dryRun ? '(dry-run)' : ''}`);
-console.log(`   版本: ${corePkg.version} → ${newVersion}`);
-console.log(`   包:   ${targets.join(', ')}\n`);
+if (isContinue) {
+  newVersion = corePkg.version;
+  console.log(`\n📦 Lattice Release --continue ${dryRun ? '(dry-run)' : ''}`);
+  console.log(`   版本: ${newVersion}（沿用当前 package.json）`);
+  console.log(`   包:   ${targets.join(', ')}\n`);
+} else {
+  newVersion = bumpVersion(corePkg.version, versionArg);
 
-for (const name of targets) {
-  const pkgPath = PACKAGES[name];
-  const pkg = readPkg(pkgPath);
-  pkg.version = newVersion;
-  console.log(`✏️  ${pkg.name} → ${newVersion}`);
-  if (!dryRun) {
-    writePkg(pkgPath, pkg);
+  console.log(`\n📦 Lattice Release ${dryRun ? '(dry-run)' : ''}`);
+  console.log(`   版本: ${corePkg.version} → ${newVersion}`);
+  console.log(`   包:   ${targets.join(', ')}\n`);
+
+  for (const name of targets) {
+    const pkgPath = PACKAGES[name];
+    const pkg = readPkg(pkgPath);
+    pkg.version = newVersion;
+    console.log(`✏️  ${pkg.name} → ${newVersion}`);
+    if (!dryRun) {
+      writePkg(pkgPath, pkg);
+    }
   }
-}
 
-// --- 构建 ---
-console.log('\n🔨 构建...');
-// core 是 cli 和 web 的共同依赖，有任一在 targets 中就需要先构建 core
-if (targets.includes('cli') || targets.includes('web')) {
-  if (!targets.includes('core')) {
+  // --- 构建 ---
+  console.log('\n🔨 构建...');
+  // core 是 cli 和 web 的共同依赖，有任一在 targets 中就需要先构建 core
+  if (targets.includes('cli') || targets.includes('web')) {
+    if (!targets.includes('core')) {
+      run('pnpm run build:core');
+    }
+  }
+  if (targets.includes('core')) {
     run('pnpm run build:core');
   }
-}
-if (targets.includes('core')) {
-  run('pnpm run build:core');
-}
-if (targets.includes('cli')) {
-  run('pnpm run build:cli');
-}
-if (targets.includes('web')) {
-  run('pnpm run build:web');
+  if (targets.includes('cli')) {
+    run('pnpm run build:cli');
+  }
+  if (targets.includes('web')) {
+    run('pnpm run build:web');
+  }
 }
 
 // --- 发布 ---
 console.log('\n🚀 发布...');
 for (const name of targets) {
-  run(`pnpm --filter @qcqx/lattice-${name} publish --no-git-checks`);
+  const cmd = `pnpm --filter @qcqx/lattice-${name} publish --no-git-checks`;
+  if (dryRun) {
+    run(cmd);
+    continue;
+  }
+  try {
+    run(cmd);
+  } catch {
+    // continue 模式下容忍"已发布过"错误，跳过该包继续
+    if (isContinue) {
+      console.log(`⚠️  @qcqx/lattice-${name} 发布失败（可能已发布过），跳过继续`);
+    } else {
+      throw new Error(`发布 @qcqx/lattice-${name} 失败，可运行 pnpm release continue 重试`);
+    }
+  }
 }
 
 // --- Git tag (可选) ---
