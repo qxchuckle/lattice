@@ -41,6 +41,12 @@ import {
 
 // ── 模块级常量 ──
 
+/**
+ * 树行高度（px）：padding 3+3 + 内容 20 + sticky 行 border-bottom 1 = 27。
+ * sticky 吸顶 top 按 depth * TREE_ROW_HEIGHT 递增堆叠，必须与实际行高一致，否则错位。
+ */
+const TREE_ROW_HEIGHT = 27;
+
 const ENTITY_COLOR_MAP: Record<string, string> = {
   task: getEntityColor('task'),
   project: getEntityColor('project'),
@@ -53,6 +59,16 @@ const SIDEBAR_VIEWS: { key: SidebarView; label: string; Icon: typeof SearchOutli
   { key: 'search', label: '搜索', Icon: SearchOutlined },
   { key: 'filter', label: '筛选', Icon: FilterOutlined },
 ];
+
+/** 递归展开树节点（写入指定展开表）。用于搜索时浏览器匹配默认全展开，用户可再手动折叠。 */
+function expandTreeNodes(nodes: TreeNode[], target: Record<string, boolean>) {
+  for (const node of nodes) {
+    if (node.children && node.children.length > 0) {
+      target[node.key] = true;
+      expandTreeNodes(node.children, target);
+    }
+  }
+}
 
 // ── 可截断标题 ──
 
@@ -125,16 +141,25 @@ function TreeItemBase({
   node,
   depth,
   forceExpand = false,
+  searchExpansion = false,
   onNavigate,
 }: {
   node: TreeNode;
   depth: number;
   forceExpand?: boolean;
+  /** true 时展开状态读写 sidebarStore.searchExpandedKeys（搜索态），与普通树 expandedKeys 隔离 */
+  searchExpansion?: boolean;
   onNavigate: (node: TreeNode) => void;
 }) {
-  // useSnapshot 追踪 expandedKeys[node.key] 的访问，仅该 key 变化时重渲染本组件
-  const { expandedKeys } = useSnapshot(sidebarStore);
-  const isExpanded = forceExpand || !!expandedKeys[node.key];
+  // useSnapshot 追踪所选展开表[node.key] 的访问，仅该 key 变化时重渲染本组件。
+  // 三元只访问选中的表，避免普通树组件订阅搜索态、反之亦然。
+  const snap = useSnapshot(sidebarStore);
+  const expansionMap = searchExpansion ? snap.searchExpandedKeys : snap.expandedKeys;
+  const isExpanded = forceExpand || !!expansionMap[node.key];
+  const toggleExpand = () => {
+    const map = searchExpansion ? sidebarStore.searchExpandedKeys : sidebarStore.expandedKeys;
+    map[node.key] = !map[node.key];
+  };
   const hasChildren = node.children && node.children.length > 0;
   const isLeaf =
     (node.type === 'task-item' && !hasChildren) ||
@@ -142,7 +167,9 @@ function TreeItemBase({
     (node.type === 'project-item' && !hasChildren);
   const isSearchResult = node.type === 'search-result';
 
-  // 容器节点 sticky 置顶：展开的祖先节点滚动时固定在顶部
+  // 容器节点 sticky 置顶：展开的祖先节点滚动时固定在顶部。
+  // search-section / browser-match-section 区块头也必须吸顶，否则其子分组（depth 1）
+  // 会按 top=1*ROW_HEIGHT 吸顶而上方没有 depth 0 吸顶头，产生向下偏移的留白。
   const isStickyHeader =
     !isLeaf &&
     depth < 4 &&
@@ -150,6 +177,8 @@ function TreeItemBase({
       node.type === 'project-root' ||
       node.type === 'task-root' ||
       node.type === 'spec-scope' ||
+      node.type === 'search-section' ||
+      node.type === 'browser-match-section' ||
       (node.type === 'project-item' && hasChildren) ||
       (node.type === 'task-item' && hasChildren));
 
@@ -170,7 +199,7 @@ function TreeItemBase({
           ...(isStickyHeader
             ? {
                 position: 'sticky' as const,
-                top: depth * 25,
+                top: depth * TREE_ROW_HEIGHT,
                 zIndex: 20 - depth,
               }
             : {}),
@@ -179,7 +208,7 @@ function TreeItemBase({
           if (node.entityId && node.viewMode) {
             onNavigate(node);
           } else if (hasChildren && !isLeaf) {
-            sidebarStore.expandedKeys[node.key] = !sidebarStore.expandedKeys[node.key];
+            toggleExpand();
           }
         }}>
         {hasChildren && !isLeaf ? (
@@ -203,7 +232,7 @@ function TreeItemBase({
             }}
             onClick={(e) => {
               e.stopPropagation();
-              sidebarStore.expandedKeys[node.key] = !sidebarStore.expandedKeys[node.key];
+              toggleExpand();
             }}>
             {isExpanded ? (
               <DownOutlined style={{ fontSize: 11 }} />
@@ -270,6 +299,7 @@ function TreeItemBase({
             node={child}
             depth={depth + 1}
             forceExpand={forceExpand}
+            searchExpansion={searchExpansion}
             onNavigate={onNavigate}
           />
         ))}
@@ -407,23 +437,30 @@ const SearchTreeTab = memo(function SearchTreeTab() {
     [isSearching, searchResult.data, searchFilters, tasks, specs],
   );
 
-  // 搜索结果变化时自动展开分组节点（含外层搜索结果/浏览器匹配区块）
+  // 搜索结果变化时自动展开分组节点（含外层搜索结果/浏览器匹配区块）。
+  // 搜索态展开统一写入 searchExpandedKeys（与普通树 expandedKeys 隔离）：
+  // 浏览器匹配默认全展开，但用户可点击折叠（折叠状态保留到下次搜索结果更新）。
   useEffect(() => {
-    sidebarStore.expandedKeys['search-section'] = true;
-    sidebarStore.expandedKeys['browser-match-section'] = true;
+    sidebarStore.searchExpandedKeys['search-section'] = true;
+    sidebarStore.searchExpandedKeys['browser-match-section'] = true;
     for (const node of searchItems) {
       if (node.children && node.children.length > 0) {
-        sidebarStore.expandedKeys[node.key] = true;
+        sidebarStore.searchExpandedKeys[node.key] = true;
       }
     }
+    // 仅搜索时展开浏览器匹配（filteredTree 为过滤树）；非搜索时 filteredTree 是全量树，不能误展开
+    if (isSearching) {
+      expandTreeNodes(filteredTree, sidebarStore.searchExpandedKeys);
+    }
+    // filteredTree/isSearching 有意不入依赖：仅在搜索结果更新时重展开，
+    // 若依赖 filteredTree（每次渲染新引用）会导致用户刚折叠就被立即重新展开
   }, [searchItems]);
-  const filteredTree = useMemo(
-    () =>
-      isSearching || hasFilters
-        ? filterTreeByKeywordAndFilters(tree, searchKeyword, searchFilters)
-        : tree,
-    [isSearching, hasFilters, tree, searchKeyword, searchFilters],
-  );
+  // 浏览器匹配的本地过滤树：直接计算（不经 useMemo 缓存），确保始终反映当前 searchKeyword。
+  // 此前用 useMemo 缓存在部分渲染时序下会滞留旧关键词的过滤结果，导致"浏览器匹配"不随搜索更新。
+  const filteredTree =
+    isSearching || hasFilters
+      ? filterTreeByKeywordAndFilters(tree, searchKeyword, searchFilters)
+      : tree;
 
   return (
     <>
@@ -473,6 +510,7 @@ const SearchTreeTab = memo(function SearchTreeTab() {
                 children: searchItems,
               }}
               depth={0}
+              searchExpansion
               onNavigate={handleNavigate}
             />
             {filteredTree.length > 0 && (
@@ -485,6 +523,7 @@ const SearchTreeTab = memo(function SearchTreeTab() {
                   children: filteredTree,
                 }}
                 depth={0}
+                searchExpansion
                 onNavigate={handleNavigate}
               />
             )}

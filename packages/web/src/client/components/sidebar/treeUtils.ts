@@ -117,6 +117,35 @@ function updateTitleCount(title: string, children: TreeNode[] | undefined): stri
   return `${match[1]} (${children.length})`;
 }
 
+/** 统计子树中指定类型节点的数量 */
+function countNodesOfType(nodes: TreeNode[], type: TreeNode['type']): number {
+  let count = 0;
+  for (const n of nodes) {
+    if (n.type === type) count++;
+    if (n.children) count += countNodesOfType(n.children, type);
+  }
+  return count;
+}
+
+/**
+ * 关键词过滤后更新容器标题计数。
+ * 根容器按对应 item 类型统计子树内的匹配数（spec-root→spec-item 等），
+ * 其余容器用直接子节点数；标题无 (n) 格式时原样返回。
+ */
+function updateFilteredCount(node: TreeNode, children: TreeNode[] | undefined): string {
+  if (!children) return node.title;
+  const itemTypeByRoot: Partial<Record<TreeNode['type'], TreeNode['type']>> = {
+    'spec-root': 'spec-item',
+    'project-root': 'project-item',
+    'task-root': 'task-item',
+  };
+  const itemType = itemTypeByRoot[node.type];
+  const count = itemType ? countNodesOfType(children, itemType) : children.length;
+  const match = node.title.match(/^(.+?)\s*\((\d+)\)$/);
+  if (!match) return node.title;
+  return `${match[1]} (${count})`;
+}
+
 /**
  * 递归过滤树（关键词 + 筛选条件）
  * - 顶层根节点按 type 筛选：任务/Spec 类型同时保留 project-root
@@ -180,11 +209,13 @@ export function filterTreeByKeywordAndFilters(
     const hasChildren = !!node.children;
 
     if (hasKeyword && !hasAnyFilter) {
-      // 纯关键词搜索：保持原 filterTree 逻辑
+      // 纯关键词搜索：保持原 filterTree 逻辑 + 更新计数（让浏览器匹配直观反映匹配数量）
       if (titleMatch || filteredChildren.length > 0) {
+        const newChildren = filteredChildren.length > 0 ? filteredChildren : node.children;
         result.push({
           ...node,
-          children: filteredChildren.length > 0 ? filteredChildren : node.children,
+          title: updateFilteredCount(node, newChildren),
+          children: newChildren,
         });
       }
     } else if (hasKeyword && hasAnyFilter) {
@@ -200,12 +231,18 @@ export function filterTreeByKeywordAndFilters(
         });
       }
     } else {
-      // 纯筛选（无关键词）：容器需要子节点不为空 + 更新计数
-      if (!hasChildren || filteredChildren.length > 0) {
+      // 纯筛选（无关键词）：容器节点仅在有匹配子节点时保留；
+      // item 节点（spec/project/task-item）本身通过类型/状态/范围筛选即保留——
+      // 其关联子节点（关联任务/引用Spec/子任务）可能被类型筛选清空，但 item 本身不应因此丢弃
+      // （修复：type=spec 时带关联任务的 spec 被误删，导致 Spec 计数远少于"全部"）
+      const isItemNode =
+        node.type === 'spec-item' || node.type === 'project-item' || node.type === 'task-item';
+      const newChildren = filteredChildren.length > 0 ? filteredChildren : undefined;
+      if (isItemNode || !hasChildren || filteredChildren.length > 0) {
         result.push({
           ...node,
-          title: updateTitleCount(node.title, hasChildren ? filteredChildren : undefined),
-          children: hasChildren ? filteredChildren : undefined,
+          title: updateFilteredCount(node, newChildren),
+          children: newChildren,
         });
       }
     }

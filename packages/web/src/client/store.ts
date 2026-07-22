@@ -158,6 +158,9 @@ export const sidebarStore = proxy({
   mobileOpen: false,
   /** 树形展开状态：key = nodeKey, value = true/false */
   expandedKeys: {} as Record<string, boolean>,
+  /** 搜索态树形展开状态（搜索结果 + 浏览器匹配）：与普通树 expandedKeys 独立维护，
+   * 避免搜索时的自动展开/折叠污染普通树（浏览器匹配复用普通树节点 key）。 */
+  searchExpandedKeys: {} as Record<string, boolean>,
   /** 侧栏宽度（px），持久化到 localStorage */
   width: parseInt(localStorage.getItem('lattice-sidebar-width') || '260', 10),
   /** 搜索面板筛选状态（会话级，不持久化） */
