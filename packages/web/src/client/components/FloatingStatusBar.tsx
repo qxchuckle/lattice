@@ -36,7 +36,7 @@ import {
   toggleMobileSidebar,
 } from '../store';
 import { fitToElements } from './graph/layout';
-import { useStats, useIsMobile } from '../hooks';
+import { useIsMobile } from '../hooks';
 import { CanvasSearchBar } from './CanvasSearchBar';
 
 const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] = [
@@ -57,7 +57,6 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const isFetching = useIsFetching() > 0;
-  const stats = useStats();
   const isDark = mode === 'dark';
   const { authEnabled, initialized } = useSnapshot(authStore);
 
@@ -167,14 +166,6 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
           <Tooltip title='布局优化中…'>
             <LoadingOutlined style={{ fontSize: 12, color: '#52C41A' }} />
           </Tooltip>
-        )}
-        {stats.data && (
-          <span
-            className='floating-status-bar__stats'
-            style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontSize: 11 }}>
-            {stats.data.projectCount} 项目 · {stats.data.taskCount} 任务 ·{' '}
-            {stats.data.activeTaskCount} 进行中
-          </span>
         )}
         <Tooltip title='全局搜索 (⌘P)'>
           <Button
