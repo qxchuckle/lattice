@@ -4,7 +4,7 @@
 >
 > **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
 > - `task-workflows.md`：任务模式 / 标题归纳与查重 / task start 起手动作 / 实施期多轮对话循环 / PRD 同步硬触发清单 / checkpoint 类型与触发条件
-> - `spec-workflows.md`：按任务主题精读相关 spec
+> - `spec-workflows.md`：按任务主题全文读取相关 spec
 > - `project-context.md`：项目上下文报告 / 嵌套项目继承
 > - `lattice-rules.md`：起手与实施期硬规则（跨会话遵守）
 
@@ -32,7 +32,7 @@ ltc context --task <task-id>
 
 按 skill `task-workflows.md` 的「task start 后的起手动作」 执行：
 
-1. **按主题精读相关 spec**（必做）：见 skill `spec-workflows.md` 的「按任务主题精读相关 spec」
+1. **按主题全文读取相关 spec**（必做）：见 skill `spec-workflows.md` 的「按任务主题全文读取相关 spec」
 2. **参考近似任务**（按复杂性 1~5 个 PRD）
 3. **完善 PRD**：不要停留在默认空白标题；只记录当前最佳认知内容（目标 / 关键约束 / 当前方案 / 修改文件索引 / 风险）；如有 design.md 先读
 4. **输出 PRD 当前规模摘要**：写完 PRD 后用 1~3 行告知用户本轮 PRD 覆盖了哪几个关键段落（目标 / 修改文件数 / 实施阶段数），让 PRD 状态在会话中可见
@@ -51,7 +51,7 @@ ltc context --task <task-id>
 
 ### 步骤 2：spec 选读
 
-本轮涉及之前没读过的模块 / 概念 / 规范分层？是→ read_file 精读相关 spec（规则详见 skill `task-workflows.md` 「spec 选读触发条件」）。
+本轮涉及之前没读过的模块 / 概念 / 规范分层？是→ read_file 全文读取相关 spec（规则详见 skill `task-workflows.md` 「spec 选读触发条件」）。
 
 ### 步骤 3：写代码
 

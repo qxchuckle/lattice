@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-执行「按任务主题精读相关 spec」（spec-workflows.md）。读取并筛选相关 spec，返回目录；主对话凭目录 Read 全文。
+执行「按任务主题全文读取相关 spec」（spec-workflows.md）。读取并筛选相关 spec，返回目录；主对话凭目录 Read 全文。
 
 ## 输入
 

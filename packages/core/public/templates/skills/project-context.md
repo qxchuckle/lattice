@@ -14,7 +14,7 @@ ltc context --query "<主题>" && ltc status
 
 需明确：spec 列表 · 活跃任务 · spec 冲突 · 是否嵌套。
 
-> ⚠️ spec 列表 ≠ 内容，必须精读（→ [spec-workflows.md](spec-workflows.md#按任务主题精读相关-spec)）。宁多勿少 · 持续补读。
+> ⚠️ spec 列表 ≠ 内容，必须全文读取（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）。宁多勿少 · 持续补读。
 >
 > ⚠️ 查源码 → `ltc project list --search <包名>`，未找到再看 node_modules。
 

@@ -47,7 +47,7 @@ ltc task update <id> --parent <id> / --clear-parent
 ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 ```
 
-1. 按主题精读 spec（→ [spec-workflows.md](spec-workflows.md#按任务主题精读相关-spec)）：context 列表选读 + `ltc search` 补漏
+1. 按主题全文读取 spec（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）：context 列表选读 + `ltc search` 补漏
 2. 参考近似历史任务 PRD
 3. 完善 PRD（目标、约束、方案、文件索引）
 4. 有 design.md → 先 read

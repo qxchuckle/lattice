@@ -15,7 +15,7 @@
 ## 一、起手契约（新会话第一件事）
 
 1. `ltc context --query "<主题>"`（→ [project-context.md](project-context.md#进入项目默认动作)）
-2. 按主题精读 spec，宁多勿少（→ [spec-workflows.md](spec-workflows.md#按任务主题精读相关-spec)）
+2. 按主题全文读取 spec，宁多勿少（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）
 3. 有活跃任务 → `task info` + `task progress` + read design.md（→ [task-workflows.md](task-workflows.md#task-start-后的起手动作)）
 4. 用户提"规范/之前/类似/历史/跨项目" → `ltc search --json`
 5. 多仓库 → `ltc project list --with-relations`；未记录关系 → `relation add --ai-inferred`
@@ -29,7 +29,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 ## 三、实施期循环
 
-每轮：PRD 同步 → spec 精读 → 改代码 → checkpoint。（→ [task-workflows.md](task-workflows.md#实施期循环每轮用户输入到来时)）
+每轮：PRD 同步 → spec 全文读取 → 改代码 → checkpoint。（→ [task-workflows.md](task-workflows.md#实施期循环每轮用户输入到来时)）
 
 1. PRD 硬触发命中 → 先改 PRD（→ [T1~T8](task-workflows.md#-prd-硬触发t1t8)）
 2. 写代码前/checkpoint 前/complete 前/推翻方案后各有必做动作
@@ -39,7 +39,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 6. 单输入多语义 → 拆多条 checkpoint
 7. 信息齐备再动手
 
-兜底：3 轮无 checkpoint → 补 `note`。fast-start 不走循环，但 spec 精读和沉淀仍适用。
+兜底：3 轮无 checkpoint → 补 `note`。fast-start 不走循环，但 spec 全文读取和沉淀仍适用。
 
 ## 四、项目关联同步
 
@@ -54,7 +54,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 恢复（必须委派 `lattice-task-handoff`；不支持时串行）：
 
 1. 重载 lattice skill
-2. `ltc context --query` + 精读 spec + read PRD/design.md
+2. `ltc context --query` + 全文读取 spec + read PRD/design.md
 3. `task list --current` → `task info` → `task progress`
 4. 按优先级重载 checkpoint：correction/constraint（硬约束）→ decision/pivot（方向）→ 其余按需
 5. 构建锚定式恢复摘要（4 字段）：

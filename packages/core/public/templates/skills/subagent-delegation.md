@@ -1,6 +1,6 @@
 # Subagent 委派
 
-当平台支持 subagent 时，把 lattice 中**重 IO、多路并行**的信息收集流程交给 subagent 执行。信息提供型 subagent 读取并筛选相关 spec 与任务，返回经过滤的目录（路径 + ID + 元信息 + 相关性说明）；**主线凭目录 Read 所需文档全文，并可自主调用 `ltc search` / `ltc context` 补全信息**。Read 无截断限制，主线拥有完整对话上下文，比 subagent 更能判断精读范围。
+当平台支持 subagent 时，把 lattice 中**重 IO、多路并行**的信息收集流程交给 subagent 执行。信息提供型 subagent 读取并筛选相关 spec 与任务，返回经过滤的目录（路径 + ID + 元信息 + 相关性说明）；**主线凭目录 Read 所需文档全文，并可自主调用 `ltc search` / `ltc context` 补全信息**。Read 无截断限制，主线拥有完整对话上下文，比 subagent 更能判断全文读取范围。
 
 **硬约束：以下场景必须委派，禁止主线直接执行对应命令组合。** 平台不支持 subagent 时退化为串行执行（按同样命令清单顺序跑，主动收缩输出）。
 
@@ -11,7 +11,7 @@
 | 项目上下文铺底 | `lattice-context` | `ltc context` + `ltc status` + `ltc spec list` 组合 |
 | 跨项目搜索 | `lattice-search` | 多路 `ltc search --json` 并行 |
 | 失忆恢复 | `lattice-task-handoff` | 恢复流程全部命令 |
-| 规范精读 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show` + Read |
+| 规范全文读取 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show` + Read |
 | 变更影响分析 | `lattice-impact` | context + search + grep 组合 |
 | 健康巡检 | `lattice-health` | `ltc doctor` + `rag status` + `spec conflicts` 组合 |
 

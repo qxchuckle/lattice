@@ -5,7 +5,7 @@
 > **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
 > - `fast-start-workflows.md`：转正常模式完整流程
 > - `task-workflows.md`：标题归纳与查重 / task start 起手动作 / 实施期多轮对话循环
-> - `spec-workflows.md`：按任务主题精读相关 spec
+> - `spec-workflows.md`：按任务主题全文读取相关 spec
 
 **目标**：将当前 fast-start 会话转入正常任务模式——创建任务、回填 PRD、后续按正常实施期循环执行。
 

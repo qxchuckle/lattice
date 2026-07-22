@@ -24,7 +24,7 @@
 2. **工作流约束**：lattice-rules.md 实施期循环（PRD → spec → code → progress）/ checkpoint 时机 / spec 更新规则是否在当前上下文中明确可述？
    - 否 → 读 `SKILL.md` + `lattice-rules.md`；实施期循环 / checkpoint 时机 模糊 → 加读 `task-workflows.md`；spec 更新规则模糊 → 加读 `spec-workflows.md`
 3. **Spec 清单**：当前项目可用 spec 列表（项目级 / 用户级 / 全局级各有哪些主题）是否在当前上下文中明确可列？
-   - 否 → `ltc context` 重新拉取上下文与 spec 列表（仅清单层，不展开精读）；如对 spec 层级 / 冲突 / 模板机制也模糊 → 加读 `spec-workflows.md`
+   - 否 → `ltc context` 重新拉取上下文与 spec 列表（仅清单层，不展开全文读取）；如对 spec 层级 / 冲突 / 模板机制也模糊 → 加读 `spec-workflows.md`
 4. **PRD 范围**：当前请求落在活跃任务 PRD 目标 / 范围 / 约束内？
    - 否 → 提示用户走 `/lattice/task/start` 新建任务，不默默扩范围
 5. **漂移盘点**：上次 checkpoint 后有未记录改动？对话已确定的目标 / 范围 / 约束 / 方案变更已同步 PRD？
