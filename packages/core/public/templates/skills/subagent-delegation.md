@@ -58,11 +58,12 @@
 1. 命令带 `--json`
 2. 信息提供型（context / task-start / spec-digest / task-handoff / search / impact）：读取并筛选相关 spec 与任务，返回经过滤的目录（路径 + ID + 元信息 + 相关性说明），**不返回文档全文**；返回的路径必须完整可用（绝对路径、确认存在、取自命令输出）
 3. **主线收到目录后必须 Read 相关文档全文**（spec / PRD / design.md）——这是硬义务，不是可选动作；跳过 Read = 在没有规范约束的情况下工作
-4. 主线可自主调用 `ltc search` / `ltc context` 等方法补全信息——不被 subagent 目录限制；`ltc search` 单次用空格隔开多个相关关键词形成关键词组，多次用不同关键词组，直到信息充分
-5. 分析型（health）：返回诊断结论与修复建议
-6. 执行型（task-archive）：返回执行报告
-7. 不递归委派
-8. 失败回退：subagent 报信息不足 → 主线自己跑全量再判断
+4. 信息提供型 subagent 的 dispatch prompt **只提供输入参数**（任务 ID、主题、工作目录），执行步骤和返回格式由 subagent 定义文件控制——禁止在 prompt 中要求"返回全文 / 返回完整内容"或重复指定执行流程；违反 = 以 prompt 覆盖 subagent 定义中的"不返回全文"硬约束
+5. 主线可自主调用 `ltc search` / `ltc context` 等方法补全信息——不被 subagent 目录限制；`ltc search` 单次用空格隔开多个相关关键词形成关键词组，多次用不同关键词组，直到信息充分
+6. 分析型（health）：返回诊断结论与修复建议
+7. 执行型（task-archive）：返回执行报告
+8. 不递归委派
+9. 失败回退：subagent 报信息不足 → 主线自己跑全量再判断
 
 ## 不支持 subagent 时
 
