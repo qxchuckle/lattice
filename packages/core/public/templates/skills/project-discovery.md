@@ -38,7 +38,7 @@ ltc project list --search <keyword> # 关键词搜索
 
 ## 注册或恢复绑定（ltc link）
 
-> ⚠️ **AI 禁止未经用户批准自动调用 `ltc link`**。Git 项目由守卫自动注册，无需 link。`ltc link` 主要用于非 git 目录或需要 `lattice.json` 的场景。
+**⚠️ AI 禁止未经用户批准自动调用 `ltc link`**。Git 项目由守卫自动注册，无需 link。`ltc link` 主要用于非 git 目录或需要 `lattice.json` 的场景。
 
 | 场景 | 行为 |
 |---|---|

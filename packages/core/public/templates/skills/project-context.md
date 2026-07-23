@@ -4,7 +4,7 @@
 
 ## 进入项目默认动作
 
-> 必须委派 `lattice-context` subagent（不支持时退化串行）。
+**必须委派 `lattice-context` subagent（不支持时退化串行）。**
 
 ```bash
 ltc context --query "<主题>" && ltc status
@@ -14,15 +14,15 @@ ltc context --query "<主题>" && ltc status
 
 需明确：spec 列表 · 活跃任务 · spec 冲突 · 是否嵌套。
 
-> ⚠️ spec 列表 ≠ 内容，必须全文读取（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）。宁多勿少 · 持续补读。
->
-> ⚠️ 查源码 → `ltc project list --search <包名>`，未找到再看 node_modules。
+**⚠️ spec 列表 ≠ 内容，必须全文读取（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）。宁多勿少 · 持续补读。**
+
+**⚠️ 查源码 → `ltc project list --search <包名>`，未找到再看 node_modules。**
 
 无 ID 源（非 git 无 lattice.json）→ 告知用户 `ltc link`（AI 不得代劳）。Git 由守卫自动注册。
 
 ## 跨项目搜索
 
-> 必须委派 `lattice-search` subagent（不支持时退化串行）。
+**必须委派 `lattice-search` subagent（不支持时退化串行）。**
 
 ```bash
 ltc search "<查询词>" --json

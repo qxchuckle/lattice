@@ -41,7 +41,7 @@ ltc task update <id> --parent <id> / --clear-parent
 
 ## task start 后的起手动作
 
-> 必须委派 `lattice-task-start` subagent（不支持时退化串行）。
+**必须委派 `lattice-task-start` subagent（不支持时退化串行）。**
 
 ```bash
 ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
@@ -144,7 +144,7 @@ ltc project relation add <a> <b> --type <type> --description "证据" --ai-infer
 
 ## 归档
 
-> 必须委派 `lattice-task-archive` subagent（不支持时退化串行）。
+**必须委派 `lattice-task-archive` subagent（不支持时退化串行）。**
 
 ### 前置采集（必做，未读就写总结 = 遗漏）
 

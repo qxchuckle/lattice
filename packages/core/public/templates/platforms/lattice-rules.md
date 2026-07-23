@@ -10,7 +10,7 @@
 4. 程序化工作流（起手/归档/铺底/搜索/体检/失忆恢复/规范摘要/影响分析）→ 必须委派 subagent；不支持时退化串行（→ [subagent-delegation.md](subagent-delegation.md)）
 5. 非 cwd 路径且不执行 ltc → `ltc project register <paths...>`（→ [project-discovery.md](project-discovery.md#自动注册守卫)）
 
-> ltc 命令自动从 cwd 向上注册。将在该路径执行 ltc → 无需手动 register。
+ltc 命令自动从 cwd 向上注册。将在该路径执行 ltc → 无需手动 register。
 
 ## 一、起手契约（新会话第一件事）
 

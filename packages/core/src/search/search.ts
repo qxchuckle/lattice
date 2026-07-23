@@ -32,6 +32,12 @@ const HEADING_LEVEL_BONUS = 0.01;
 // 0.04 → 0.06：过滤更激进，避免低分纯噪音随机命中（如纯数字/英文乱码）。
 const MIN_FINAL_SCORE = 0.06;
 
+// FTS 原始查询短语/AND 命中 boost：当文档被原始查询（作为完整短语或全词 AND）
+// 在 FTS 中命中时，说明查询的核心标识符/术语确实出现在文档正文中，是极强的精确信号。
+// 该 boost 确保精确内容命中不被标题关键词 boost 淹没。
+// 量级设计：> TITLE_KEYWORD_BOOST(0.04)×2，< TITLE_PARTIAL_BOOST(0.15)。
+const EXACT_PHRASE_BOOST = 0.1;
+
 // 弱命中阈值：当结果绝对分低于此值时，归一化后再高也标记为 weakMatch=true，
 // CLI 显示侧据此降低视觉权重，避免「低绝对分被归一化拉到 100%」的误导。
 const WEAK_SCORE_THRESHOLD = 0.12;
@@ -157,10 +163,14 @@ function buildSignalTerms(query: string): string[] {
  * - 不会把长度 = 2 的中文 ngram 全部交给 lexical（会让 LIKE 误命中拉边）
  * - 仅保留：原 query / extractKeywords 整词 / 长度 ≥ 3 的中文 ngram
  * - 2-字 ngram 仍在 signalTerms 中参与 rerankBoost，不影响微词语义信号。
+ * - 多词查询额外生成 AND 变体（所有关键词必须出现），提升召回。
  */
 function buildLexicalQueries(query: string): string[] {
   const longGrams = buildChineseNgrams(query).filter((gram) => gram.length >= 3);
-  return uniqueNonEmpty([query, ...extractKeywords(query), ...longGrams]);
+  const keywords = extractKeywords(query);
+  // 多词查询：生成 AND 变体（FTS5 语法：所有关键词必须出现在文档中）
+  const andVariant = keywords.length >= 2 ? keywords.join(' AND ') : '';
+  return uniqueNonEmpty([query, andVariant, ...keywords, ...longGrams]);
 }
 
 /**
@@ -171,11 +181,26 @@ function buildLexicalQueries(query: string): string[] {
  * source_type 等路径或元数据列上的字面命中污染（解决 G3「ragtest」、
  * C5「lattice」等 query 误命中所有文档的问题）。
  *
+ * 多词 AND 变体（含 " AND " 分隔符）：每个词独立限定列，用 AND 连接：
+ *   {cols}: "color" AND {cols}: "convert"
+ *
  * fallback (LIKE) 走另一条路径，无需此处理。
  */
 function wrapFtsColumnQuery(variant: string): string {
   const trimmed = variant.trim();
   if (!trimmed) return trimmed;
+
+  // 检测 AND 变体（由 buildLexicalQueries 生成的 "word1 AND word2" 格式）
+  if (trimmed.includes(' AND ')) {
+    const terms = trimmed.split(' AND ');
+    return terms
+      .map((term) => {
+        const escaped = term.trim().replace(/"/g, '""');
+        return `${FTS_QUERY_COLUMNS}: "${escaped}"`;
+      })
+      .join(' AND ');
+  }
+
   // FTS5 短语内部必须用 "" 转义双引号；其他特殊字符（连字符/冒号等）
   // 在双引号内被当作 phrase 字面，由 tokenizer 自然切分。
   const escaped = trimmed.replace(/"/g, '""');
@@ -508,6 +533,35 @@ export async function hybridSearch(
   const queryVariants = buildLexicalQueries(query);
   const lexicalLimit = limit * 4;
 
+  // ─── 精确短语命中检测 ───
+  // 用原始查询作为 FTS 短语 + AND 查询，收集命中的 filePath。
+  // 这些文档包含了查询的核心标识符/术语原文，是极强的精确信号，
+  // 在后续打分中获得 EXACT_PHRASE_BOOST 并豁免 MIN_FINAL_SCORE。
+  const exactPhraseMatchPaths = new Set<string>();
+  {
+    const ftsOpts = { type: opts?.type, projectId: opts?.projectId, usernames: opts?.usernames };
+    // 短语查询：原始 query 作为完整短语
+    try {
+      const phraseRows = searchFts(wrapFtsColumnQuery(query), lexicalLimit, ftsOpts);
+      for (const row of phraseRows) exactPhraseMatchPaths.add(row.file_path);
+    } catch {
+      /* FTS 不可用 */
+    }
+    // AND 查询：多词时所有关键词必须出现（比短语宽松，但仍是强信号）
+    const keywords = extractKeywords(query);
+    if (keywords.length >= 2) {
+      try {
+        const andQuery = keywords
+          .map((kw) => `${FTS_QUERY_COLUMNS}: "${kw.replace(/"/g, '""')}"`)
+          .join(' AND ');
+        const andRows = searchFts(andQuery, lexicalLimit, ftsOpts);
+        for (const row of andRows) exactPhraseMatchPaths.add(row.file_path);
+      } catch {
+        /* FTS 不可用 */
+      }
+    }
+  }
+
   const ftsResults = mergeLexicalResults(
     queryVariants,
     (variant) =>
@@ -660,7 +714,9 @@ export async function hybridSearch(
       const { rerankBoost, matchedKeywords } = useLightweightRerank
         ? getRerankBoost(queryProfile, searchMeta, termDocumentFrequency, scopePrototypes)
         : { rerankBoost: 0, matchedKeywords: [] };
-      const baseScore = candidate.fusionScore + titleBoost + rerankBoost;
+      // 精确短语/AND 命中 boost：文档正文包含查询核心术语原文
+      const phraseBoost = exactPhraseMatchPaths.has(candidate.filePath) ? EXACT_PHRASE_BOOST : 0;
+      const baseScore = candidate.fusionScore + titleBoost + rerankBoost + phraseBoost;
       // type 与 scope 硬加权：relation 轻度降权、项目级 spec 高于用户级高于全局
       const typeWeight = getTypeWeight(candidate.type);
       const scopeWeight = inferScopeWeight(candidate.filePath, candidate.type);
@@ -682,6 +738,7 @@ export async function hybridSearch(
           matchedSections: candidate.matchedSections ?? null,
           fusionScore: candidate.fusionScore,
           titleBoost,
+          phraseBoost,
           rerankEnabled: useLightweightRerank,
           rerankBoost,
           matchedKeywords,
@@ -718,8 +775,13 @@ export async function hybridSearch(
   }
 
   // 最小分阈值：过滤掉几乎不相关的噪音候选。
+  // 精确短语/AND 命中的文档豁免：它们包含查询核心术语原文，不应被阈值误杀。
   if (minFinalScore > 0) {
-    sorted = sorted.filter((r) => r.score >= minFinalScore);
+    sorted = sorted.filter(
+      (r) =>
+        r.score >= minFinalScore ||
+        exactPhraseMatchPaths.has((r.meta as Record<string, unknown>).filePath as string),
+    );
   }
 
   // 同名聚合（方案 E）：对 (type, normalizedTitle) 相同的多条候选，

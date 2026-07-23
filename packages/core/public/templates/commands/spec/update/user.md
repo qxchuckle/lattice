@@ -1,11 +1,11 @@
 # /lattice/spec/update/user
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `spec-workflows.md`：spec 是什么 / 层级（含 user / global 必须附 `## 适用范围`）/ 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`ltc rag update`）
-> - `lattice-rules.md` §五 / §七：spec 更新与冲突硬规则
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `spec-workflows.md`：spec 定义 / 层级（含 user / global 必须附 `## 适用范围`）/ 沉淀判定 / 写入流程
+- `SKILL.md`：索引维护（`ltc rag update`）
+- `lattice-rules.md` §七：spec 优先级与冲突
 
 **目标**：把跨多个项目可复用、但仍属于当前用户工作方式的经验沉淀到用户级 spec。
 
@@ -13,7 +13,7 @@
 
 判定核心问题：**这条规则跨项目可复用，但又没普适到所有用户、所有项目都适合**。
 
-spec 双重职能详见 skill `spec-workflows.md` 的「spec 是什么」。两类都适合沉淀为用户级（**前提**：跨项目可复用且需声明"适用范围"）：
+spec 双重职能详见 skill `spec-workflows.md` 的「spec 定义」。两类都适合沉淀为用户级（**前提**：跨项目可复用且需声明"适用范围"）：
 
 - **行为约束类**：个人 / 团队在多个项目中重复采用的做法、跨项目的代码风格 / 架构偏好 / 协作方式
 - **认知 / 方法论类**：个人通用的调试套路、排查清单、定位手段；多项目复用的领域认知（某技术栈常见 pitfall、某类业务的标准建模思路）；个人偏好的工作流方法论（设计讨论流程、PR review 检查清单）

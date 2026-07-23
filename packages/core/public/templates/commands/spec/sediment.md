@@ -1,11 +1,11 @@
 # /lattice/spec/sediment
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `spec-workflows.md`：spec 是什么 / 层级判定 / 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`ltc rag update`）
-> - `lattice-rules.md` §七：spec 优先级与冲突
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `spec-workflows.md`：spec 定义 / 层级 / 沉淀判定 / 写入流程
+- `SKILL.md`：索引维护（`ltc rag update`）
+- `lattice-rules.md` §七：spec 优先级与冲突
 
 **目标**：AI 自主扫描当前会话中的可沉淀内容，自行判定每条应放在哪个层级（项目/用户/全局），向用户确认后执行写入。用户无需手动指定层级。
 

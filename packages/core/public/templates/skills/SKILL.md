@@ -77,7 +77,7 @@ description: >-
 | 参照 spec | `ltc task ref-spec` |
 | 未记录关系 | `ltc project relation add --ai-inferred` |
 
-> task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。
+**task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。**
 
 ## 索引维护
 

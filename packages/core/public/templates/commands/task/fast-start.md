@@ -1,11 +1,11 @@
 # /lattice/task/fast-start
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间按需 read）：
-> - `project-context.md`：项目上下文报告
-> - `spec-workflows.md`：按任务主题全文读取相关 spec / 沉淀判定
-> - `fast-start-workflows.md`：fast-start 完整工作流（启动 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档）
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间按需 read）：
+- `project-context.md`：进入项目默认动作
+- `spec-workflows.md`：按任务主题全文读取相关 spec / 沉淀判定
+- `fast-start-workflows.md`：fast-start 完整工作流（启动 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档）
 
 **目标**：以轻量模式开始工作——获取项目上下文和 spec，但不创建任务、不写 PRD、不打 checkpoint。可选记录轻量日志。
 

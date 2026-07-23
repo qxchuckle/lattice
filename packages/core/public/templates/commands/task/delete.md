@@ -1,10 +1,10 @@
 # /lattice/task/delete
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会按需 read 的 skill 子文档）：
-> - `task-workflows.md`：任务目录与文件结构 / checkpoint 类型
-> - `command-reference.md`：`ltc task delete` / `ltc task list` / `ltc search` 参数字典
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会按需 read 的 skill 子文档）：
+- `task-workflows.md`：任务目录结构 / checkpoint 类型
+- `command-reference.md`：`ltc task delete` / `ltc task list` / `ltc search` 参数字典
 
 **目标**：删除任务，支持自然语言匹配候选任务交用户确认，无参数时删除当前 in_progress 任务，有风险因素时强制用户二次确认。
 
@@ -86,7 +86,7 @@ ltc task list --current
 ltc task delete <task-id>
 ```
 
-> 删除是软删除（移入垃圾桶），可通过 `ltc trash list` 查看、`ltc trash restore <id>` 恢复。
+删除是软删除（移入垃圾桶），可通过 `ltc trash list` 查看、`ltc trash restore <id>` 恢复。
 
 ## 输出要求
 

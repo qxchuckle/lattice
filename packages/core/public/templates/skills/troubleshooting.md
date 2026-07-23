@@ -1,6 +1,6 @@
 # 故障排查
 
-> 委派：必须委派 `lattice-health` subagent（不支持时退化串行）。只诊断不修复。
+**必须委派 `lattice-health` subagent（不支持时退化串行）。只诊断不修复。**
 
 ## 快速诊断
 

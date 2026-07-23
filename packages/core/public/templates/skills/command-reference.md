@@ -47,7 +47,7 @@ AI 调用以下命令**必须**加 `-f`/`--force`：
 - `--current-user`：仅当前用户
 - `--json`
 
-> 嵌套项目自动继承祖先 spec。级联：`当前 > 父级 > 祖先 > 用户级 > 全局`。
+嵌套项目自动继承祖先 spec。级联：`当前 > 父级 > 祖先 > 用户级 > 全局`。
 
 ## `ltc search <query>`
 
@@ -61,7 +61,7 @@ AI 调用以下命令**必须**加 `-f`/`--force`：
 
 ## `ltc link`
 
-> ⚠️ AI 不得自动调用。面向用户的注册命令。
+**⚠️ AI 不得自动调用。面向用户的注册命令。**
 
 - `--name <name>` / `--description <desc>` / `--groups <groups>` / `--tags <tags>`
 - `--template <templates>`：应用 spec 模板（逗号分隔或 `all`）

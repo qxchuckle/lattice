@@ -1,6 +1,6 @@
 # /lattice/project/profile
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
 **目标**：为项目生成/更新智能画像（summary.md + tags），支持增量更新。
 

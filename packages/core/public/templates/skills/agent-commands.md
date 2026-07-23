@@ -1,16 +1,16 @@
 # Agent Commands
 
-> **本文权威范围**：agent 平台注入的 `/lattice/...` 工作流命令清单 + 它们对应的 commands 文件路径。
->
-> 本文**不讲命令背后的工作流**：收到 `/lattice/task/start` 后该做什么 → [task-workflows.md](task-workflows.md)；收到 `/lattice/spec/update/...` 后该做什么 → [spec-workflows.md](spec-workflows.md)；收到 `/lattice/context` 后该做什么 → [project-context.md](project-context.md)。
->
-> 本文也**不等于 CLI 子命令**：agent commands 是 agent 入口，CLI 子命令参数字典见 [command-reference.md](command-reference.md)。
+**本文权威范围**：agent 平台注入的 `/lattice/...` 工作流命令清单 + 它们对应的 commands 文件路径。
+
+本文**不讲命令背后的工作流**：收到 `/lattice/task/start` 后该做什么 → [task-workflows.md](task-workflows.md)；收到 `/lattice/spec/update/...` 后该做什么 → [spec-workflows.md](spec-workflows.md)；收到 `/lattice/context` 后该做什么 → [project-context.md](project-context.md)。
+
+本文也**不等于 CLI 子命令**：agent commands 是 agent 入口，CLI 子命令参数字典见 [command-reference.md](command-reference.md)。
 
 Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 agent 入口，**不等同于 CLI 子命令本身**。
 
 ## 命令清单与用途
 
-> 何时读：收到以 `/lattice/` 开头的命令 / 需要查某个命令对应的 commands 文件名时 → 下一步：agent 客户端会自动加载对应 commands 文件，本表只用于查阅。
+何时读：收到以 `/lattice/` 开头的命令 / 需要查某个命令对应的 commands 文件名时。agent 客户端会自动加载对应 commands 文件，本表只用于查阅。
 
 | 命令 | 何时使用 | 背后依赖的 skill 子文档 | commands 文件 |
 |---|---|---|---|
@@ -30,17 +30,17 @@ Lattice 会向支持 commands 的 agent 注入一组工作流命令。它们是 
 | `/lattice/spec/sediment` | AI 自主识别可沉淀内容并判定层级，用户确认后批量写入 | [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) + [spec-workflows.md#写入流程](spec-workflows.md#写入流程) | `spec/sediment.md` |
 | `/lattice/project/profile` | 为项目生成/更新智能画像（summary.md + tags），支持增量 | [command-reference.md](command-reference.md) | `project/profile.md` |
 
-> **说明**：commands 文件部署在客户端 `commands/lattice/` 目录下，与本 skill 不在同一相对路径。AI 接收 `/lattice/...` 命令时，agent 客户端会自动加载对应 commands 文件，本表只用于查找文件名与背后依赖的 skill 子文档。
+**说明**：commands 文件部署在客户端 `commands/lattice/` 目录下，与本 skill 不在同一相对路径。AI 接收 `/lattice/...` 命令时，agent 客户端会自动加载对应 commands 文件，本表只用于查找文件名与背后依赖的 skill 子文档。
 
 ## 层级判断（spec/update/*）
 
-> 何时读：收到 `/lattice/spec/update/{project|user|global}` 任一变体、或 AI 主动拟沉淀规则但不确定层级时 → 下一步：按 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) 的梯子选层，不要默认写 global。
+何时读：收到 `/lattice/spec/update/{project|user|global}` 任一变体、或 AI 主动拟沉淀规则但不确定层级时。按 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定) 的梯子选层，不要默认写 global。
 
 层级判定标准统一见 [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)。
 
 ## 与 CLI 的关系
 
-> 何时读：考虑"agent commands与 CLI 是什么关系"或决定输出详略时 → 下一步：按以下分工拼装响应。
+何时读：考虑"agent commands 与 CLI 是什么关系"或决定输出详略时。按以下分工拼装响应。
 
 - **Agent Commands 负责组织 workflow**（按动词组织：进入上下文 / 查询 / 讨论 / 开始 / 归档 / 沉淀）
 - **CLI 负责真正执行**（读写、搜索、列举、状态更新）——参数详见 [command-reference.md](command-reference.md)

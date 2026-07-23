@@ -1,11 +1,11 @@
 # /lattice/task/fast-start/to-normal
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `fast-start-workflows.md`：转正常模式完整流程
-> - `task-workflows.md`：标题归纳与查重 / task start 起手动作 / 实施期多轮对话循环
-> - `spec-workflows.md`：按任务主题全文读取相关 spec
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `fast-start-workflows.md`：转正常模式完整流程
+- `task-workflows.md`：标题归纳与查重 / task start 后的起手动作 / 实施期循环（每轮用户输入到来时）
+- `spec-workflows.md`：按任务主题全文读取相关 spec
 
 **目标**：将当前 fast-start 会话转入正常任务模式——创建任务、回填 PRD、后续按正常实施期循环执行。
 
@@ -48,7 +48,7 @@ ltc task associate <task-id> --current
 
 ### 5. 后续按正常模式执行
 
-从此刻起，完全按 `task-workflows.md` 的「实施期多轮对话循环」执行：
+从此刻起，完全按 `task-workflows.md` 的「实施期循环（每轮用户输入到来时）」执行：
 
 - PRD 同步硬触发检查
 - spec 选读

@@ -1,12 +1,12 @@
 # /lattice/task/start
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `task-workflows.md`：任务模式 / 标题归纳与查重 / task start 起手动作 / 实施期多轮对话循环 / PRD 同步硬触发清单 / checkpoint 类型与触发条件
-> - `spec-workflows.md`：按任务主题全文读取相关 spec
-> - `project-context.md`：项目上下文报告 / 嵌套项目继承
-> - `lattice-rules.md`：起手与实施期硬规则（跨会话遵守）
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `task-workflows.md`：任务模式 / 标题归纳与查重 / task start 后的起手动作 / 实施期循环（每轮用户输入到来时）/ PRD 硬触发（T1~T8）/ checkpoint 类型
+- `spec-workflows.md`：按任务主题全文读取相关 spec
+- `project-context.md`：进入项目默认动作 / 嵌套继承
+- `lattice-rules.md`：起手与实施期硬规则（跨会话遵守）
 
 **目标**：开始一个任务，让当前会话和任务状态保持一致。
 
@@ -40,30 +40,30 @@ ltc context --task <task-id>
 
 ## 实施期循环（任务进行中每轮必做）
 
-**每一轮用户输入到来后按以下步骤执行，不能跳步**（详见 skill `task-workflows.md` 的「实施期多轮对话循环（每轮用户输入到来时）」）：
+**每一轮用户输入到来后按以下步骤执行，不能跳步**（详见 skill `task-workflows.md` 的「实施期循环（每轮用户输入到来时）」）：
 
 ### 步骤 1：PRD 同步硬触发检查（命中即先改 PRD）
 
-本轮是否命中 skill `task-workflows.md` 「PRD 同步硬触发清单（T1~T8）」中的 T1~T8 任一项？
+本轮是否命中 skill `task-workflows.md` 「PRD 硬触发（T1~T8）」中的 T1~T8 任一项？
 
 - **是** → 必须先 `read_file prd.md` → `search_replace prd.md` 修订对应段落 → 打 decision/pivot checkpoint → 才进入下一步
 - **否** → 跳过，进入步骤 2
 
 ### 步骤 2：spec 选读
 
-本轮涉及之前没读过的模块 / 概念 / 规范分层？是→ read_file 全文读取相关 spec（规则详见 skill `task-workflows.md` 「spec 选读触发条件」）。
+本轮涉及之前没读过的模块 / 概念 / 规范分层？是→ read_file 全文读取相关 spec（规则详见 skill `task-workflows.md` 「② spec 选读（每轮必检）」）。
 
 ### 步骤 3：写代码
 
-动作锚点：本轮要 search_replace 或 create_file 的业务文件 ≥ 3 个 → 必须先 `read_file prd.md` 校对"修改文件索引"（详见 skill `task-workflows.md` 「写代码前的动作锚点」）。
+动作锚点：本轮要 search_replace 或 create_file 的业务文件 ≥ 3 个 → 必须先 `read_file prd.md` 校对"修改文件索引"（详见 skill `task-workflows.md` 「③ 写代码前锚点」）。
 
 ### 步骤 4：打 checkpoint
 
-必须先按 skill `task-workflows.md` 「打 checkpoint 前的 PRD 自检」 过一遍，命中任一项未同步项 → 先 search_replace prd.md 再打点。
+必须先按 skill `task-workflows.md` 「④ checkpoint 前 PRD 自检」 过一遍，命中任一项未同步项 → 先 search_replace prd.md 再打点。
 
 ### 强制项
 
-上述 4 步与 platforms 「lattice-rules.md §三 实施期多轮对话循环」双向同步。详见 skill `task-workflows.md` 「强制规则（与 lattice-rules.md §三 双向同步）」：
+上述 4 步与 `lattice-rules.md` §三 实施期循环双向同步：
 
 - PRD 永不能落后于代码（同步硬触发任一项命中 → 先改 PRD）
 - 新主题先选读 spec
@@ -72,11 +72,11 @@ ltc context --task <task-id>
 
 ## 进展追踪
 
-详见 skill `task-workflows.md` 的「checkpoint 类型与触发条件」。
+详见 skill `task-workflows.md` 的「checkpoint 类型」。
 
 ## 输出要求
 
-详见 skill `task-workflows.md` 的「输出原则：精简但不静默」。重点：
+详见 skill `task-workflows.md` 的「输出原则」。重点：
 
 - 关键节点必须输出（任务创建后 / 启动后 / 关联项目变化后 / 发现相似任务时）
 - 任务进入实施前补一段整体确认：任务 ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束要点

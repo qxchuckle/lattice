@@ -1,11 +1,11 @@
 # /lattice/spec/update/global
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `spec-workflows.md`：spec 是什么 / 层级（含 user / global 必须附 `## 适用范围`）/ 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`ltc rag update`）
-> - `lattice-rules.md` §五 / §七：spec 更新与冲突硬规则
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `spec-workflows.md`：spec 定义 / 层级（含 user / global 必须附 `## 适用范围`）/ 沉淀判定 / 写入流程
+- `SKILL.md`：索引维护（`ltc rag update`）
+- `lattice-rules.md` §七：spec 优先级与冲突
 
 **目标**：把对多用户、多项目都成立的高层规则沉淀到全局 spec。
 
@@ -13,7 +13,7 @@
 
 判定核心问题：**这条规则已经不是某个项目或某个用户的偏好，具备明显的通用性和稳定性，作为全局默认规则能减少重复沟通**。
 
-spec 双重职能详见 skill `spec-workflows.md` 的「spec 是什么」。全局 spec 只保留**高价值、低争议、可迁移**的内容：
+spec 双重职能详见 skill `spec-workflows.md` 的「spec 定义」。全局 spec 只保留**高价值、低争议、可迁移**的内容：
 
 - **通用约束类**：跨用户跨项目都成立的命名原则、文档结构通则、任务管理习惯、通用协作规则
 - **通用认知 / 方法论类**：跨项目通识（通用的代码组织心智、命名直觉）、适用于多用户多项目的标准方法论、通用的排错或交付节奏

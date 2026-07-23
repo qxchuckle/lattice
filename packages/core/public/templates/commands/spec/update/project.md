@@ -1,11 +1,11 @@
 # /lattice/spec/update/project
 
-> **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
->
-> **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-> - `spec-workflows.md`：spec 是什么 / 层级 / 沉淀判定 / 写入流程
-> - `SKILL.md`：索引维护（`ltc rag update`）
-> - `lattice-rules.md` §五 / §七：spec 更新与冲突硬规则
+**[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
+
+**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
+- `spec-workflows.md`：spec 定义 / 层级 / 沉淀判定 / 写入流程
+- `SKILL.md`：索引维护（`ltc rag update`）
+- `lattice-rules.md` §七：spec 优先级与冲突
 
 **目标**：把当前会话中对"当前项目"长期有效的经验沉淀到项目级 spec。
 
@@ -13,7 +13,7 @@
 
 判定核心问题：**下次有人 / AI 进入这个项目，是否还需要这条信息？**
 
-spec 同时承担行为约束 + 项目认知两种职能（详见 skill `spec-workflows.md` 的「spec 是什么」）。两类内容都适合沉淀为项目级 spec：
+spec 同时承担行为约束 + 项目认知两种职能（详见 skill `spec-workflows.md` 的「spec 定义」）。两类内容都适合沉淀为项目级 spec：
 
 - **行为约束类**：只对当前项目有效的编码规范 / 提交流程 / 命名规则 / 架构边界 / 目录规范 / 依赖方向 / 联调方式 / 部署流程 / 反复出现问题的稳定做法
 - **项目认知类**：本项目的结构地图（哪个包做什么、模块职责、目录约定）/ 独有的领域概念 / 业务术语 / 数据结构语义 / 关键设计动机 / 架构选型理由 / 被否决的方案与原因 / 解决某类问题的标准方法论 / 模块入口 / 调用链概览 / 扩展点与适配方式
