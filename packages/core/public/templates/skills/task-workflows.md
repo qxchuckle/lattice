@@ -60,7 +60,7 @@ ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 用户输入 → ①PRD硬触发？→ ②spec选读？→ ③写代码 → ④checkpoint → ⑤回答闭合自检（→ lattice-rules.md §十）
 ```
 
-### ① PRD 硬触发（T1~T8）
+**① PRD 硬触发（T1~T8）**
 
 命中 → 先 `read_file prd.md` → 修订对应段落 → decision/pivot checkpoint → 才继续。未命中 → 跳过。
 
@@ -75,21 +75,21 @@ ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 | T7 | 准备打 milestone |
 | T8 | PRD 写入路径/包名/spec 但 task.json 未同步 |
 
-### ② spec 选读 + 历史任务参考（每轮必检）
+**② spec 选读 + 历史任务参考（每轮必检）**
 
 触发条件（任一）：本轮主题词首次出现 · 用户提"规范/约定/历史/类似/跨项目" · 涉及层级判定 · 未涉及的模块边界/跨包 · 实现困难需查历史
 
 发现：`ltc context` 标题列表选读 + `ltc search "<关键词>" --json` 补漏 → read_file 全文读取。实现困难或需先例 → `ltc search "<描述>" --type task --json` 查历史任务，相关则 read 其 PRD。
 
-### ③ 写代码前锚点
+**③ 写代码前锚点**
 
 改 ≥3 业务文件 → 先 `read_file prd.md` 校对文件索引。缺失 → T3 先改 PRD。
 
-### ④ checkpoint 前 PRD 自检
+**④ checkpoint 前 PRD 自检**
 
 确认：改动文件在索引中 · 决策写入「当前方案」· 无未同步硬触发。未过 → 先改 PRD。
 
-### ⑤ 回答闭合自检
+**⑤ 回答闭合自检**
 
 按 lattice-rules.md「§十 回答闭合自检」条件表逐项审查，命中则执行闭合动作。信息不足 → 主动调 `ltc search` / `ltc context` 核实。
 

@@ -18,17 +18,15 @@ description: >-
 
 ## 何时使用
 
-| 触发场景 | 作用域 |
-|---|---|
-| 进入/切换项目目录 | 项目身份与上下文 |
-| 编码前确认规则；问"类似需求哪做过""有无可复用方案" | 项目认知 |
-| 多仓库、共享组件、跨项目任务 | 跨项目协作 |
-| 存在或将建立 lattice 任务 | 任务全周期 |
-| 形成值得沉淀的规则/决策/概念/方法论 | 知识沉淀 |
+- 进入/切换项目目录 → 项目身份与上下文
+- 编码前确认规则；问"类似需求哪做过""有无可复用方案" → 项目认知
+- 多仓库、共享组件、跨项目任务 → 跨项目协作
+- 存在或将建立 lattice 任务 → 任务全周期
+- 形成值得沉淀的规则/决策/概念/方法论 → 知识沉淀
 
 ## 文档加载
 
-### 必读（首次 + 压缩后重读）
+**必读**（首次 + 压缩后重读）：
 
 | 文档 | 职责 |
 |---|---|
@@ -38,15 +36,13 @@ description: >-
 | [task-workflows.md](task-workflows.md) | 任务全周期 |
 | [subagent-delegation.md](subagent-delegation.md) | 委派判定、dispatch prompt 契约、返回格式 |
 
-### 按需（执行对应动作前读取）
+**按需**（执行对应动作前读取）：
 
-| 硬触发 | 文档 |
-|---|---|
-| 注册/识别项目 · 多路径判定 · AI 推断项目关系 · 非 cwd 路径首次出现 | [project-discovery.md](project-discovery.md) |
-| 执行或索引 agent command · 不确定有哪些 slash command 可用 | [agent-commands.md](agent-commands.md) |
-| 使用 fast-start 流程 · `ltc fast-start` 相关操作 | [fast-start-workflows.md](fast-start-workflows.md) |
-| 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 | [command-reference.md](command-reference.md) |
-| `ltc` 命令程序性异常报错 · RAG 搜索结果异常 · 索引/数据不一致 | [troubleshooting.md](troubleshooting.md) |
+- 注册/识别项目 · 多路径判定 · AI 推断项目关系 · 非 cwd 路径首次出现 → [project-discovery.md](project-discovery.md)
+- 执行或索引 agent command · 不确定有哪些 slash command 可用 → [agent-commands.md](agent-commands.md)
+- 使用 fast-start 流程 · `ltc fast-start` 相关操作 → [fast-start-workflows.md](fast-start-workflows.md)
+- 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 → [command-reference.md](command-reference.md)
+- `ltc` 命令程序性异常报错 · RAG 搜索结果异常 · 索引/数据不一致 → [troubleshooting.md](troubleshooting.md)
 
 ## 自主信息获取
 
@@ -71,11 +67,9 @@ description: >-
 
 ## 元数据维护（发现变化当轮同步）
 
-| 变化 | 命令 |
-|---|---|
-| 新项目/路径 | `ltc task associate`（非 cwd 用 `--project <id>`） |
-| 参照 spec | `ltc task ref-spec` |
-| 未记录关系 | `ltc project relation add --ai-inferred` |
+- 新项目/路径 → `ltc task associate`（非 cwd 用 `--project <id>`）
+- 参照 spec → `ltc task ref-spec`
+- 未记录关系 → `ltc project relation add --ai-inferred`
 
 **task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。**
 

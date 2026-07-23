@@ -100,17 +100,15 @@ fast-start 归档：创建任务 → start → 回填 PRD → 按上述闭环。
 
 有活跃任务时，每轮回答发出前逐项审查（命中才执行，未命中跳过）：
 
-| 本轮发生了… | 闭合动作 |
-|---|---|
-| 读取/参照了新 spec | `ltc task ref-spec <task-id> <spec-name>` |
-| 出现非 cwd 新路径（未注册） | `ltc project register <paths...>` |
-| 发现项目间未记录关系 | `ltc project relation add <a> <b> --type <t> --description "证据" --ai-inferred --from-task <id>` |
-| 涉及新项目/路径（任务未关联） | `ltc task associate <task-id> --project <pid>` / `--paths <p>` |
-| PRD 写入了路径/包名/spec 但 task.json 未同步 | CLI 同步（T8） |
-| 代码改动完成但本轮无 checkpoint | `ltc task checkpoint <task-id> --type <type> --title "..." -m "..."` |
-| 推翻/变更了方案方向 | checkpoint `--type pivot` |
-| 产生可复用认知/规则 | 询问用户是否沉淀 spec |
-| 编辑了 spec 正文 | `ltc spec migrate` |
-| spec/PRD/项目结构变更 | `ltc rag update` |
+1. 读取/参照了新 spec → `ltc task ref-spec <task-id> <spec-name>`
+2. 出现非 cwd 新路径（未注册） → `ltc project register <paths...>`
+3. 发现项目间未记录关系 → `ltc project relation add <a> <b> --type <t> --description "证据" --ai-inferred --from-task <id>`
+4. 涉及新项目/路径（任务未关联） → `ltc task associate <task-id> --project <pid>` / `--paths <p>`
+5. PRD 写入了路径/包名/spec 但 task.json 未同步 → CLI 同步（T8）
+6. 代码改动完成但本轮无 checkpoint → `ltc task checkpoint <task-id> --type <type> --title "..." -m "..."`
+7. 推翻/变更了方案方向 → checkpoint `--type pivot`
+8. 产生可复用认知/规则 → 询问用户是否沉淀 spec
+9. 编辑了 spec 正文 → `ltc spec migrate`
+10. spec/PRD/项目结构变更 → `ltc rag update`
 
 无活跃任务 → 整段跳过。
