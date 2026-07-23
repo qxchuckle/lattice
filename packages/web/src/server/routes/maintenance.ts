@@ -13,7 +13,7 @@ import {
 } from '@qcqx/lattice-core';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf-8'));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../../package.json'), 'utf-8'));
 
 export function registerDoctorRoutes(app: FastifyInstance): void {
   app.post<{ Body: DoctorOptions }>('/api/doctor/run', async (req) => {

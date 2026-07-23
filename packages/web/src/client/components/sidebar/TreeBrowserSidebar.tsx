@@ -10,6 +10,7 @@ import {
   FilterOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import { useNavigate } from 'react-router';
@@ -23,6 +24,7 @@ import {
 } from '../../store';
 import { useSearch, useUsers, useIsMobile } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
+import { agentStore, initAgentTree } from '../agent/agentStore';
 import { useTreeData } from './treeData';
 import {
   type TreeNode,
@@ -1069,6 +1071,7 @@ const FilterTreeTab = memo(function FilterTreeTab() {
 
 const ActivityBar = memo(function ActivityBar() {
   const { activeView, collapsed } = useSnapshot(sidebarStore);
+  const { visible: agentVisible } = useSnapshot(agentStore);
   const isMobile = useIsMobile();
 
   return (
@@ -1106,6 +1109,18 @@ const ActivityBar = memo(function ActivityBar() {
           </Tooltip>
         );
       })}
+      {/* Agent 对话树（独立于侧栏视图，全屏画布） */}
+      <Tooltip title='Agent 对话树' placement='right'>
+        <button
+          type='button'
+          className={`sidebar-activity-bar__item${agentVisible ? ' sidebar-activity-bar__item--active' : ''}`}
+          onClick={() => {
+            agentStore.visible = !agentStore.visible;
+            if (agentStore.visible) initAgentTree();
+          }}>
+          <RobotOutlined />
+        </button>
+      </Tooltip>
     </div>
   );
 });

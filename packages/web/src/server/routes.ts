@@ -13,6 +13,9 @@ import { registerGitRoutes } from './routes/git';
 import { registerContentRoutes, registerStatsRoutes } from './routes/content-stats';
 import { registerTerminalRoutes } from './routes/terminal';
 import { registerAuthRoutes } from './routes/auth';
+import { registerAgentRoutes } from './routes/agents';
+import { registerFilesystemRoutes } from './routes/filesystem';
+import { registerFileWatcherRoutes } from './routes/file-watcher';
 
 /** 注册所有 API 路由 */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -40,4 +43,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   // 内置终端（WebSocket）
   registerTerminalRoutes(app);
+
+  // Agent 工作台（WebSocket + REST）
+  registerAgentRoutes(app);
+
+  // 文件系统（Monaco 编辑器用）
+  registerFilesystemRoutes(app);
+
+  // 文件监听（chokidar + SSE）
+  registerFileWatcherRoutes(app);
 }

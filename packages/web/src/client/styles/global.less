@@ -83,11 +83,13 @@ body {
 }
 
 .react-flow__node {
-  transition: all var(--transition-fast);
+  // 注意：绝不能用 transition: all —— 会对 transform（位置）和 width/height（尺寸）
+  // 也做过渡动画，而连线（SVG path）是瞬时更新的，导致缩放/移动节点时连线脱离节点。
+  // 只过渡 box-shadow（hover 阴影）。位置/尺寸由 React Flow 即时控制。
+  transition: box-shadow var(--transition-fast);
 }
 
 .react-flow__node:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-hover);
 }
 

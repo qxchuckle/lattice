@@ -1,0 +1,43 @@
+{
+  "name": "@qcqx/lattice-agent",
+  "version": "0.1.0",
+  "description": "Lattice Agent 核心（平台无关）：对话树、工具注册、上下文引擎、工作流",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "check-types": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.80.0",
+    "@earendil-works/pi-ai": "^0.80.0",
+    "@qcqx/lattice-core": "workspace:*",
+    "@qoder-ai/qoder-agent-sdk": "^1.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

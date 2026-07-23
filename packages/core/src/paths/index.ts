@@ -21,6 +21,11 @@ export function getDbPath(): string {
   return pathJoin(getCacheDir(), 'lattice.db');
 }
 
+/** Agent 对话会话缓存目录（缓存层，避免被 git 索引） */
+export function getSessionsCacheDir(): string {
+  return pathJoin(getCacheDir(), 'sessions');
+}
+
 // ─── fast-start 日志 ───
 
 export function getFastStartLogDir(username: string): string {

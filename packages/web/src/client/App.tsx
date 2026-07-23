@@ -24,6 +24,7 @@ import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import { AdminDrawer } from './components/admin/AdminDrawer';
 import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { LoginPage } from './components/LoginPage';
+import { AgentPanel } from './components/agent/AgentPanel';
 import './components/DetailPanel.less';
 
 // ── 路由同步 ──
@@ -223,6 +224,7 @@ export default function App() {
       {!isMobile && <DetailPanelContainer />}
       <AdminDrawer />
       <TerminalPanel />
+      <AgentPanel />
 
       {/* 移动端组件（桌面端不渲染）*/}
       {isMobile && (

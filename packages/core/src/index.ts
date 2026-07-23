@@ -48,6 +48,7 @@ export {
   getLatticeRoot,
   getCacheDir,
   getDbPath,
+  getSessionsCacheDir,
   getConfigDir,
   getGlobalConfigPath,
   getLocalConfigPath,
