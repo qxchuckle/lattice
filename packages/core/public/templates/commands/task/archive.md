@@ -2,35 +2,35 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
-**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-- `task-workflows.md`：归档 > 前置采集 / 归档 > 流程 / 归档 > 二次审阅 / 空参数归档推断
-- `spec-workflows.md`：沉淀判定 / 写入流程 / 层级
-- `subagent-delegation.md`：委派判定 / dispatch prompt 契约（归档委派 `lattice-task-archive`）
+**[依赖文档]**：
+- task-workflows.md：归档 > 前置采集 / 归档 > 流程 / 归档 > 二次审阅 / 空参数归档推断
+- spec-workflows.md：沉淀判定 / 写入流程 / 层级
+- subagent-delegation.md：委派判定 / dispatch prompt 契约（归档委派 `lattice-task-archive`）
 
 **目标**：结束并归档一个任务，同时判断是否需要沉淀规范。
 
 ## 命令参数解析
 
 - 命令后是任务 ID → 走"情况一"
-- 命令后没有内容或不是有效任务 ID → 走"情况二"自动推断（详见 skill `task-workflows.md` 的「空参数归档推断」）
+- 命令后没有内容或不是有效任务 ID → 走"情况二"自动推断（→ task-workflows.md「空参数归档推断」）
 
 ## 执行步骤
 
 ### 情况一：命令后有任务 ID
 
-完整归档闭环详见 skill `task-workflows.md` 的「归档流程」：
+完整归档闭环 → task-workflows.md「归档」：
 
-1. **前置信息采集（必须先读后写）**：见 skill `task-workflows.md` 的「归档 > 前置采集」。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
+1. **前置信息采集（必须先读后写）**：→ task-workflows.md「归档 > 前置采集」。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
    - 含代码变更审查：如项目使用 git，通过 diff 审查本次任务修改的代码（`git diff --stat`），必要时阅读完整源文件，以确保归档信息完整覆盖所有实际变更
 2. **更新 PRD**：补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落；确保 progress 中的关键决策已在 PRD 中体现
    - 任务有父 / 子任务时先用 `ltc task lineage` / `ltc task tree --descendants` 检查链路是否仍合理
 3. **summary checkpoint** + **complete** + **archive** + **`ltc rag update`**
-4. **归档后二次审阅**（必做）：见 skill `task-workflows.md` 的「归档 > 二次审阅」
+4. **归档后二次审阅**（必做）：→ task-workflows.md「归档 > 二次审阅」
 5. **spec 沉淀判定**：见下文「归档前检查」
 
 ### 情况二：参数为空 / 不是任务 ID
 
-按 skill `task-workflows.md` 的「空参数归档推断」 自动推断：
+按 → task-workflows.md「空参数归档推断」 自动推断：
 
 - **自动归档**（无需用户确认）：满足"`in_progress` 唯一或高度匹配 + 对话围绕该任务有实质工作 + AI 有把握"全部条件时直接归档
 - **需要用户确认**：多候选无法确定 / 对话未围绕明确任务 / AI 信心不足 → 列出候选请用户确认
@@ -50,7 +50,7 @@ fast-start 模式下虽然没有任务记录，但对话中的实质工作和 sp
 
 ## 归档前检查（spec 沉淀判定）
 
-完整判定标准见 skill `spec-workflows.md` 的「沉淀判定」。在归档输出中必须补充：
+完整判定标准 → spec-workflows.md「沉淀判定」。在归档输出中必须补充：
 
 - **强制沉淀判定**：是否存在用户显式行为指示 / 用户主动给出的项目认知 → 任一存在**必须**沉淀，不能只留在对话中消失
 - **建议沉淀判定**（两类都要看）：行为约束类 + 项目认知类

@@ -1,6 +1,6 @@
 # 项目上下文与搜索
 
-进入项目动作、跨项目搜索、嵌套继承、跨用户聚合。项目身份/关系见 [project-discovery.md](project-discovery.md)。
+进入项目动作、跨项目搜索、嵌套继承、跨用户聚合。项目身份/关系见 project-discovery.md。
 
 ## 进入项目默认动作
 
@@ -14,7 +14,7 @@ ltc context --query "<主题>" && ltc status
 
 需明确：spec 列表 · 活跃任务 · spec 冲突 · 是否嵌套。
 
-**⚠️ spec 列表 ≠ 内容，必须全文读取（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）。宁多勿少 · 持续补读。**
+**⚠️ spec 列表 ≠ 内容，必须全文读取（→ spec-workflows.md「按任务主题全文读取相关 spec」）。宁多勿少 · 持续补读。**
 
 **⚠️ 查源码 → `ltc project list --search <包名>`，未找到再看 node_modules。**
 
@@ -45,7 +45,7 @@ ltc project list --search <kw> / --with-relations
 ltc project relation list <id>
 ```
 
-发现未记录关系 → 必须记录（→ [project-discovery.md](project-discovery.md#项目关系含-ai-推断)）。
+发现未记录关系 → 必须记录（→ project-discovery.md「项目关系（含 AI 推断）」）。
 
 ## 跨用户聚合
 

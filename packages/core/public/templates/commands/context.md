@@ -2,11 +2,11 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
-**[依赖 skill 子文档]**（本命令期间会 read 的 skill 子文档）：
-- `project-context.md`：进入项目默认动作 / 嵌套继承 / 跨用户聚合
-- `spec-workflows.md`：按任务主题全文读取相关 spec
-- `project-discovery.md`（按需）：当前目录未注册时如何走 `ltc link`
-- `subagent-delegation.md`：委派判定 / dispatch prompt 契约（上下文铺底委派 `lattice-context`，搜索委派 `lattice-search`）
+**[依赖文档]**：
+- project-context.md：进入项目默认动作 / 嵌套继承 / 跨用户聚合
+- spec-workflows.md：按任务主题全文读取相关 spec
+- project-discovery.md（按需）：当前目录未注册时如何走 `ltc link`
+- subagent-delegation.md：委派判定 / dispatch prompt 契约（铺底委派 `lattice-context`，搜索委派 `lattice-search`）
 
 **目标**：快速获取当前项目或当前任务的高信号上下文，作为后续实现和分析的起点。
 
@@ -25,7 +25,7 @@
    ltc context --task <task-id>
    ```
 
-3. **按当前请求 / 任务主题全文读取相关 spec**（必做）：详见 skill `spec-workflows.md` 的「按任务主题全文读取相关 spec」。`ltc context` 输出只是 spec 标题列表，**摘要常缺失，看标题不等于了解内容**。
+3. **按当前请求 / 任务主题全文读取相关 spec**（必做）：→ spec-workflows.md「按任务主题全文读取相关 spec」。`ltc context` 输出只是 spec 标题列表，**摘要常缺失，看标题不等于了解内容**。
 
 ## 输出要求
 

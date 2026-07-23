@@ -7,16 +7,16 @@
 1. 看源码 → `ltc project list --search <包名>`
 2. 项目约定 → 读 spec
 3. 不确定 → 查历史任务
-4. 程序化工作流（起手/归档/铺底/搜索/体检/失忆恢复/规范摘要/影响分析）→ 必须委派 subagent；不支持时退化串行（→ [subagent-delegation.md](subagent-delegation.md)）
-5. 非 cwd 路径且不执行 ltc → `ltc project register <paths...>`（→ [project-discovery.md](project-discovery.md#自动注册守卫)）
+4. 程序化工作流（起手/归档/铺底/搜索/体检/失忆恢复/规范摘要/影响分析）→ 必须委派 subagent；不支持时退化串行（→ subagent-delegation.md）
+5. 非 cwd 路径且不执行 ltc → `ltc project register <paths...>`（→ project-discovery.md「自动注册守卫」）
 
 ltc 命令自动从 cwd 向上注册。将在该路径执行 ltc → 无需手动 register。
 
 ## 一、起手契约（新会话第一件事）
 
-1. `ltc context --query "<主题>"`（→ [project-context.md](project-context.md#进入项目默认动作)）
-2. 按主题全文读取 spec，宁多勿少（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）
-3. 有活跃任务 → `task info` + `task progress` + read design.md（→ [task-workflows.md](task-workflows.md#task-start-后的起手动作)）
+1. `ltc context --query "<主题>"`（→ project-context.md「进入项目默认动作」）
+2. 按主题全文读取 spec，宁多勿少（→ spec-workflows.md「按任务主题全文读取相关 spec」）
+3. 有活跃任务 → `task info` + `task progress` + read design.md（→ task-workflows.md「task start 后的起手动作」）
 4. 用户提"规范/之前/类似/历史/跨项目" → `ltc search --json`
 5. 多仓库 → `ltc project list --with-relations`；未记录关系 → `relation add --ai-inferred`
 6. 查源码 → `ltc project list --search <包名>`
@@ -29,13 +29,13 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 ## 三、实施期循环
 
-每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检。（→ [task-workflows.md](task-workflows.md#实施期循环每轮用户输入到来时)）
+每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检。（→ task-workflows.md「实施期循环」）
 
-1. PRD 硬触发命中 → 先改 PRD（→ [T1~T8](task-workflows.md#-prd-硬触发t1t8)）
+1. PRD 硬触发命中 → 先改 PRD（→ task-workflows.md「① PRD 硬触发」）
 2. 写代码前/checkpoint 前/complete 前/推翻方案后各有必做动作
 3. spec 每轮检查，非一次性
 4. 代码改完 → checkpoint；推翻方案 → pivot
-5. 可复用内容 → 询问用户沉淀 spec（→ [spec-workflows.md](spec-workflows.md#沉淀判定)）
+5. 可复用内容 → 询问用户沉淀 spec（→ spec-workflows.md「沉淀判定」）
 6. 单输入多语义 → 拆多条 checkpoint
 7. 信息齐备再动手
 
@@ -43,7 +43,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 ## 四、项目关联同步
 
-实时维护 task.json `projects`/`scopePaths`/`referencedSpecs`。发现新项目/路径/spec 当轮同步（→ [task-workflows.md](task-workflows.md#项目关联同步)）。
+实时维护 task.json `projects`/`scopePaths`/`referencedSpecs`。发现新项目/路径/spec 当轮同步（→ task-workflows.md「项目关联同步」）。
 
 **task.json 是机器可读元数据唯一来源，PRD 不可替代。**（T8）
 
@@ -68,7 +68,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 `task complete` 前：
 
-1. 前置采集（→ [task-workflows.md](task-workflows.md#归档)）
+1. 前置采集（→ task-workflows.md「归档」）
 2. PRD 补全（最终方案+总结）
 3. summary checkpoint
 4. `ltc rag update`

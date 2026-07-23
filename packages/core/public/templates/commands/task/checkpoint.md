@@ -2,9 +2,9 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
-**[依赖 skill 子文档]**（本命令期间会 read 的 skill 子文档）：
-- `task-workflows.md`：PRD 硬触发（T1~T8）/ ④ checkpoint 前 PRD 自检 / checkpoint 类型
-- `lattice-rules.md`：回答闭合自检（§十）
+**[依赖文档]**：
+- task-workflows.md：PRD 硬触发（T1~T8）/ ④ checkpoint 前 PRD 自检 / checkpoint 类型
+- lattice-rules.md：回答闭合自检（§十）
 
 **目标**：记录当前任务的关键进展，确保过程信息结构化落盘，支持跨会话追踪。
 
@@ -24,9 +24,9 @@ ltc task list --current     # 无 ID 时，选 in_progress 的
 
 ### 2. PRD 自检前置步骤（强制，打点前必过）
 
-执行 `ltc task checkpoint` **之前必须先过以下自检**——任意一条命中而 PRD 未同步，**必须先 `read_file prd.md` → `search_replace prd.md` 同步后再打点**（详见 skill `task-workflows.md` 「④ checkpoint 前 PRD 自检」）：
+执行 `ltc task checkpoint` **之前必须先过以下自检**——任意一条命中而 PRD 未同步，**必须先 `read_file prd.md` → `search_replace prd.md` 同步后再打点**（→ task-workflows.md「④ checkpoint 前 PRD 自检」）：
 
-- [ ] 本轮是否触发了 skill `task-workflows.md` 「PRD 硬触发（T1~T8）」中任一项（T1~T8）？
+- [ ] 本轮是否触发了 → task-workflows.md「① PRD 硬触发」中任一项（T1~T8）？
 - [ ] 本轮改动的文件是否全部出现在 PRD 的"修改文件索引"中？
 - [ ] 本轮的方案 / 决策 / 否决理由是否已写入 PRD 对应段落？
 - [ ] 本轮发现的新约束 / 边界 / 风险是否已写入 PRD「关键约束」或「风险」段？
@@ -35,7 +35,7 @@ ltc task list --current     # 无 ID 时，选 in_progress 的
 
 ### 3. 总结当前会话进展
 
-结合对话内容归纳出 type / title / message。**类型选择和触发时机**详见 skill `task-workflows.md` 的「checkpoint 类型」。
+结合对话内容归纳出 type / title / message。**类型选择和触发时机** → task-workflows.md「checkpoint 类型」。
 
 ### 4. 写入
 
@@ -54,4 +54,4 @@ ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 - 标题简洁（≤ 30 字），message 可详细
 - 一次对话有多个值得记录的进展可以分多次调用
 - checkpoint 记录过程信息（决策事件 / 问题事件 / 调整事件），**不能替代 PRD 的当前最佳认知**——任何会使 PRD 变动的决策都必须同步补 PRD，不能只写进 checkpoint
-- checkpoint 完成后仍需过 `lattice-rules.md`「§十 回答闭合自检」其余项（ref-spec / 项目关系 / associate 等）
+- checkpoint 完成后仍需过 → lattice-rules.md「§十 回答闭合自检」其余项（ref-spec / 项目关系 / associate 等）

@@ -1,6 +1,6 @@
 # 项目查找、识别与关联
 
-项目身份认知：多 ID 模型、`project where`、`ltc link`、任务关联、项目关系（含 AI 推断）、数据完整性。进入项目后的上下文铺底见 [project-context.md](project-context.md)。
+项目身份认知：多 ID 模型、`project where`、`ltc link`、任务关联、项目关系（含 AI 推断）、数据完整性。进入项目后的上下文铺底见 project-context.md。
 
 ## 核心模型
 

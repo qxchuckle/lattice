@@ -79,7 +79,7 @@ description: >-
 
 **task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。**
 
-**回答闭合时**：逐项审查上表是否触发（→ [lattice-rules.md §十](lattice-rules.md#十回答闭合自检)）。
+**回答闭合时**：逐项审查上表是否触发（→ lattice-rules.md「§十 回答闭合自检」）。
 
 ## 索引维护
 
@@ -94,4 +94,4 @@ spec/PRD/项目变更后 → `ltc rag update`；报错 → `ltc rag rebuild`。
 
 ## --force
 
-AI 调用必须带 `-f`：`init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 → [command-reference.md](command-reference.md#通用约定-f---force-跳过二次确认)。
+AI 调用必须带 `-f`：`init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 → command-reference.md「通用约定」。
