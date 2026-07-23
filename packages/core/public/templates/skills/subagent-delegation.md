@@ -32,7 +32,7 @@
 
 ## 临时委派判定
 
-同时满足才启用：① 平台支持 subagent ② 命令属读类 ③ 输出体量大或需并行 ④ 主线只需索引或结论。任一不满足 → 主线串行。
+同时满足才启用：1. 平台支持 subagent 2. 命令属读类 3. 输出体量大或需并行 4. 主线只需索引或结论。任一不满足 → 主线串行。
 
 ## 适合临时委派的 6 类场景
 
@@ -42,7 +42,7 @@
 | 2 | 跨项目相似经验调研 | 多关键字 `ltc search --json` 并行 | `{path,score,type,title}` 列表 + 相关性判断 |
 | 3 | 多任务并行梳理 | 对 N 个 task 并行 `context --task` / `progress` | 按 id 分组 `{title,status,last_checkpoint,blockers}` |
 | 4 | 跨多项目元信息汇总 | `project list --with-relations` + 并行 `project info` | `{projectId,name,mainPath,relations}` 列表 |
-| 5 | 健康巡检 | `doctor` + `rag status` + `spec conflicts` + `project list --orphaned` | 每项「健康/警告/错误」+ 待修复数 |
+| 5 | 健康巡检 | `doctor` + `rag status` + `spec conflicts` + `project list --orphaned` | 每项#健康/警告/错误+ 待修复数 |
 | 6 | link 候选 ID 调研 | 对候选并行 `project info` / `project where` | 候选对比表 |
 
 ## 禁止委派

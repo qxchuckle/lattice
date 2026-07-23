@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-执行 → task-workflows.md「task start 后的起手动作」。读取并筛选相关 spec 与历史任务，返回目录；主对话凭目录 Read 全文。
+执行 [task-workflows.md#task start 后的起手动作]。读取并筛选相关 spec 与历史任务，返回目录；主对话凭目录 Read 全文。
 
 ## 输入
 

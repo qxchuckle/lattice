@@ -26,6 +26,8 @@ description: >-
 
 ## 文档加载
 
+所有引用文档与本文件同目录（skill 加载时的 base directory）。
+
 **必读**（首次 + 压缩后重读）：
 
 | 文档 | 职责 |
@@ -73,7 +75,7 @@ description: >-
 
 **task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。**
 
-**回答闭合时**：逐项审查上表是否触发（→ lattice-rules.md「§十 回答闭合自检」）。
+**回答闭合时**：逐项审查上表是否触发（[lattice-rules.md#十、回答闭合自检]）。
 
 ## 索引维护
 
@@ -88,4 +90,4 @@ spec/PRD/项目变更后 → `ltc rag update`；报错 → `ltc rag rebuild`。
 
 ## --force
 
-AI 调用必须带 `-f`：`init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 → command-reference.md「通用约定」。
+AI 调用必须带 `-f`：`init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 [command-reference.md#通用约定]。

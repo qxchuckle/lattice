@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-执行「进入项目默认动作」（project-context.md）。读取并筛选相关 spec 与任务，返回目录；主对话凭目录 Read 全文。
+执行#进入项目默认动作（project-context.md）。读取并筛选相关 spec 与任务，返回目录；主对话凭目录 Read 全文。
 
 ## 输入
 

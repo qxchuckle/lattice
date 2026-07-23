@@ -18,7 +18,7 @@
 
 ### 1. 归纳任务标题
 
-从对话上下文归纳简洁标题。按 `task-workflows.md` 的「命令参数不是任务 ID 时：标题归纳与查重」流程：
+从对话上下文归纳简洁标题。按 `task-workflows.md` 的#命令参数不是任务 ID 时：标题归纳与查重流程：
 
 - `ltc task list --current` + `ltc search "<标题>" --type task --json` 查重
 - 有相似 in_progress 任务 → 先停下列候选给用户确认
@@ -48,7 +48,7 @@ ltc task associate <task-id> --current
 
 ### 5. 后续按正常模式执行
 
-从此刻起，完全按 `task-workflows.md` 的「实施期循环（每轮用户输入到来时）」执行：
+从此刻起，完全按 `task-workflows.md` 的#实施期循环（每轮用户输入到来时）执行：
 
 - PRD 同步硬触发检查
 - spec 选读

@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-Lattice 任务归档专员。执行「任务完成闭环」（lattice-rules.md §六 + task-workflows.md 归档流程）。
+Lattice 任务归档专员。执行#任务完成闭环（lattice-rules.md §六 + task-workflows.md 归档流程）。
 
 ## 输入
 

@@ -2,9 +2,9 @@
 
 查阅式字典。不知该调哪个命令 → 读流程文档（[task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [project-context.md](project-context.md) / [project-discovery.md](project-discovery.md)）。
 
-## 通用约定：`-f, --force` 跳过二次确认
+## 通用约定
 
-AI 调用以下命令**必须**加 `-f`/`--force`：
+`-f, --force` 跳过二次确认。AI 调用以下命令**必须**加 `-f`/`--force`：
 
 | 命令 | 确认内容 |
 |---|---|

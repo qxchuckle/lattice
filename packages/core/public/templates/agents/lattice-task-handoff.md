@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-执行「上下文压缩失忆恢复」（lattice-rules.md §五）。读取并筛选相关 spec 与任务文档，返回目录；主对话凭目录 Read 全文。
+执行#上下文压缩失忆恢复（lattice-rules.md §五）。读取并筛选相关 spec 与任务文档，返回目录；主对话凭目录 Read 全文。
 
 ## 输入
 

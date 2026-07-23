@@ -25,7 +25,7 @@
    ltc context --task <task-id>
    ```
 
-3. **按当前请求 / 任务主题全文读取相关 spec**（必做）：→ spec-workflows.md「按任务主题全文读取相关 spec」。`ltc context` 输出只是 spec 标题列表，**摘要常缺失，看标题不等于了解内容**。
+3. **按当前请求 / 任务主题全文读取相关 spec**（必做）：[spec-workflows.md#按任务主题全文读取相关 spec]。`ltc context` 输出只是 spec 标题列表，**摘要常缺失，看标题不等于了解内容**。
 
 ## 输出要求
 

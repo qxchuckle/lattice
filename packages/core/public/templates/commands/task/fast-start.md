@@ -24,7 +24,7 @@
 ## 执行步骤
 
 1. **获取项目上下文**：`ltc context`
-2. **全文读取相关 spec**：按 `spec-workflows.md` 的「按任务主题全文读取相关 spec」选读
+2. **全文读取相关 spec**：按 `spec-workflows.md` 的#按任务主题全文读取相关 spec选读
 3. **输出简短确认**：已加载的项目上下文 + 读取了哪些 spec（2~3 行）
 4. **直接开始工作**：不创建任务、不写 PRD、不打 checkpoint
 
@@ -63,19 +63,19 @@ ltc fast-start log show <id>
 ltc fast-start log stats
 ```
 
-不强制每轮都记——日志是可选的追溯手段。详见 `fast-start-workflows.md` 的「轻量日志」。
+不强制每轮都记——日志是可选的追溯手段。详见 `fast-start-workflows.md` 的#轻量日志。
 
 ## spec 沉淀
 
 fast-start 模式**不创建任务**，但 spec 沉淀能力不受影响：
 
-- 发现可复用内容（行为约束 / 项目认知 / 试错经验）→ 按 `spec-workflows.md` 的「沉淀判定」主动询问用户是否沉淀
+- 发现可复用内容（行为约束 / 项目认知 / 试错经验）→ 按 `spec-workflows.md` 的#沉淀判定主动询问用户是否沉淀
 - 用户可随时使用 `/lattice/spec/update/{project|user|global}` 命令沉淀
 - 沉淀流程与正常模式完全一致（前置采集 → 查已有 → 冲突检测 → 写入 → 元数据刷新 → 索引更新）
 
 ## 归档
 
-fast-start 模式下执行 `/lattice/task/archive` 时，因未创建任务，归档命令会先创建任务再按正常流程归档。详见 `task/archive.md` 的「情况三：fast-start 模式归档」。
+fast-start 模式下执行 `/lattice/task/archive` 时，因未创建任务，归档命令会先创建任务再按正常流程归档。详见 `task/archive.md` 的#情况三：fast-start 模式归档。
 
 ## 约束
 

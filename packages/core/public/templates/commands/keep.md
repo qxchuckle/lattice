@@ -6,7 +6,7 @@
 
 **[依赖文档]**（本命令期间按需 read，不要全量加载）：
 - SKILL.md：导航 + 起手契约（默认必读）
-- lattice-rules.md：实施期循环 / checkpoint 时机 / spec 更新硬规则 / 回答闭合自检（§十）
+- lattice-rules.md：实施期循环 / checkpoint 时机 / spec 更新硬规则 / 回答闭合自检（#十、回答闭合自检）
 - task-workflows.md：任务身份不明 / 实施期循环模糊 / checkpoint 触发条件不明
 - spec-workflows.md：spec 清单不记得 / spec 层级与冲突不明
 
@@ -30,9 +30,9 @@
 5. **漂移盘点**：上次 checkpoint 后有未记录改动？对话已确定的目标 / 范围 / 约束 / 方案变更已同步 PRD？
    - 未记录改动 → `ltc task checkpoint` 立即补打
    - PRD 漂移 → `search_replace` 同步 PRD + 补 `decision` / `pivot` checkpoint
-   - checkpoint 类型 / 触发条件不确定 → 读 task-workflows.md「checkpoint 类型」
-6. **回答闭合**：按 → lattice-rules.md「§十 回答闭合自检」条件表审查本轮是否有遗漏的元数据维护动作（ref-spec / 项目注册 / 关系 / associate / rag update）
-   - 信息不足 → 主动调 `ltc search` / `ltc context` / `ltc project list` 核实（→ SKILL.md「自主信息获取」）
+   - checkpoint 类型 / 触发条件不确定 → 读 [task-workflows.md#checkpoint 类型]
+6. **回答闭合**：按 [lattice-rules.md#十、回答闭合自检] 条件表审查本轮是否有遗漏的元数据维护动作（ref-spec / 项目注册 / 关系 / associate / rag update）
+   - 信息不足 → 主动调 `ltc search` / `ltc context` / `ltc project list` 核实（[SKILL.md#自主信息获取]）
    - 命中 → 立即执行对应闭合动作
 
 本命令仅校验 spec **清单**是否记得；spec **内容**认知丢失到无法判断行为合规性，属严重漂移，走升级路径。
@@ -55,7 +55,7 @@
 - 当前对话主题与活跃任务 PRD 主题完全不同
 - 关键 spec 认知丢失到无法判断行为合规性
 
-处理：输出 `⚠ 发现 N 处严重漂移：xxx；转入完整重对齐。` 一行，随即按 → lattice-rules.md「§五 失忆恢复」流程执行，不交用户决策；附加请求顺延到重对齐完成后再处理。
+处理：输出 `⚠ 发现 N 处严重漂移：xxx；转入完整重对齐。` 一行，随即按 [lattice-rules.md#五、失忆恢复] 流程执行，不交用户决策；附加请求顺延到重对齐完成后再处理。
 
 ## 约束
 
