@@ -32,7 +32,7 @@ description: >-
 
 | 文档 | 职责 |
 |---|---|
-| [lattice-rules.md](lattice-rules.md) | 起手/实施期/失忆恢复/归档硬约束 |
+| [lattice-rules.md](lattice-rules.md) | 起手/实施期/失忆恢复/归档硬约束/回答闭合自检 |
 | [project-context.md](project-context.md) | 进入项目动作、搜索、嵌套继承 |
 | [spec-workflows.md](spec-workflows.md) | spec 读写、沉淀判定 |
 | [task-workflows.md](task-workflows.md) | 任务全周期 |
@@ -78,6 +78,8 @@ description: >-
 | 未记录关系 | `ltc project relation add --ai-inferred` |
 
 **task.json 是机器可读元数据唯一来源，PRD 自然语言不可替代。**
+
+**回答闭合时**：逐项审查上表是否触发（→ [lattice-rules.md §十](lattice-rules.md#十回答闭合自检)）。
 
 ## 索引维护
 

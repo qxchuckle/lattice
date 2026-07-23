@@ -6,7 +6,7 @@
 
 **[依赖 skill 子文档]**（本命令期间按需 read，不要全量加载）：
 - `SKILL.md`：导航 + 起手契约（默认必读）
-- `lattice-rules.md`：实施期循环 / checkpoint 时机 / spec 更新硬规则
+- `lattice-rules.md`：实施期循环 / checkpoint 时机 / spec 更新硬规则 / 回答闭合自检（§十）
 - `task-workflows.md`：任务身份不明 / 实施期循环模糊 / checkpoint 触发条件不明
 - `spec-workflows.md`：spec 清单不记得 / spec 层级与冲突不明
 
@@ -31,6 +31,9 @@
    - 未记录改动 → `ltc task checkpoint` 立即补打
    - PRD 漂移 → `search_replace` 同步 PRD + 补 `decision` / `pivot` checkpoint
    - checkpoint 类型 / 触发条件不确定 → 读 `task-workflows.md` 「checkpoint 类型」
+6. **回答闭合**：按 `lattice-rules.md`「§十 回答闭合自检」条件表审查本轮是否有遗漏的元数据维护动作（ref-spec / 项目注册 / 关系 / associate / rag update）
+   - 信息不足 → 主动调 `ltc search` / `ltc context` / `ltc project list` 核实（详见 `SKILL.md`「自主信息获取」）
+   - 命中 → 立即执行对应闭合动作
 
 本命令仅校验 spec **清单**是否记得；spec **内容**认知丢失到无法判断行为合规性，属严重漂移，走升级路径。
 
@@ -57,7 +60,7 @@
 ## 约束
 
 - 无漂移不无中生有打 checkpoint / 改 PRD
-- 仅允许写入：`ltc task checkpoint` / `ltc task associate` / `search_replace` 同 PRD
+- 仅允许写入：`ltc task checkpoint` / `ltc task associate` / `search_replace` 同 PRD / §十 闭合动作（ref-spec / register / relation add / spec migrate / rag update）
 - 不在 Lattice 项目目录 → 仅做 skill 与对话级保持，告知用户后继续
-- 无活跃任务 → 跳过 1 / 4 / 5 步，仅核对工作流约束与 spec 清单
+- 无活跃任务 → 跳过 1 / 4 / 5 / 6 步，仅核对工作流约束与 spec 清单
 - 不替代常规 checkpoint：实施期循环该打的照打，不堆到本命令集中触发

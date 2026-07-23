@@ -6,6 +6,7 @@
 - `project-context.md`：进入项目默认动作 / 嵌套继承 / 跨用户聚合
 - `spec-workflows.md`：按任务主题全文读取相关 spec
 - `project-discovery.md`（按需）：当前目录未注册时如何走 `ltc link`
+- `subagent-delegation.md`：委派判定 / dispatch prompt 契约（上下文铺底委派 `lattice-context`，搜索委派 `lattice-search`）
 
 **目标**：快速获取当前项目或当前任务的高信号上下文，作为后续实现和分析的起点。
 

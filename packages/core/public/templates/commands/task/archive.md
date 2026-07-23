@@ -5,6 +5,7 @@
 **[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
 - `task-workflows.md`：归档 > 前置采集 / 归档 > 流程 / 归档 > 二次审阅 / 空参数归档推断
 - `spec-workflows.md`：沉淀判定 / 写入流程 / 层级
+- `subagent-delegation.md`：委派判定 / dispatch prompt 契约（归档委派 `lattice-task-archive`）
 
 **目标**：结束并归档一个任务，同时判断是否需要沉淀规范。
 

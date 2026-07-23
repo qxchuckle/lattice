@@ -4,6 +4,7 @@
 
 **[依赖 skill 子文档]**（本命令期间会 read 的 skill 子文档）：
 - `task-workflows.md`：PRD 硬触发（T1~T8）/ ④ checkpoint 前 PRD 自检 / checkpoint 类型
+- `lattice-rules.md`：回答闭合自检（§十）
 
 **目标**：记录当前任务的关键进展，确保过程信息结构化落盘，支持跨会话追踪。
 
@@ -53,3 +54,4 @@ ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 - 标题简洁（≤ 30 字），message 可详细
 - 一次对话有多个值得记录的进展可以分多次调用
 - checkpoint 记录过程信息（决策事件 / 问题事件 / 调整事件），**不能替代 PRD 的当前最佳认知**——任何会使 PRD 变动的决策都必须同步补 PRD，不能只写进 checkpoint
+- checkpoint 完成后仍需过 `lattice-rules.md`「§十 回答闭合自检」其余项（ref-spec / 项目关系 / associate 等）

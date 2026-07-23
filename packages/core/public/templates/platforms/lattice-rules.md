@@ -29,7 +29,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 ## 三、实施期循环
 
-每轮：PRD 同步 → spec 全文读取 → 改代码 → checkpoint。（→ [task-workflows.md](task-workflows.md#实施期循环每轮用户输入到来时)）
+每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检。（→ [task-workflows.md](task-workflows.md#实施期循环每轮用户输入到来时)）
 
 1. PRD 硬触发命中 → 先改 PRD（→ [T1~T8](task-workflows.md#-prd-硬触发t1t8)）
 2. 写代码前/checkpoint 前/complete 前/推翻方案后各有必做动作
@@ -95,3 +95,22 @@ fast-start 归档：创建任务 → start → 回填 PRD → 按上述闭环。
 ## 九、输出精简
 
 省主语、省预告、省过渡、省复述。无依赖命令 `&&` 串联。直接做，不先解释。
+
+## 十、回答闭合自检
+
+有活跃任务时，每轮回答发出前逐项审查（命中才执行，未命中跳过）：
+
+| 本轮发生了… | 闭合动作 |
+|---|---|
+| 读取/参照了新 spec | `ltc task ref-spec <task-id> <spec-name>` |
+| 出现非 cwd 新路径（未注册） | `ltc project register <paths...>` |
+| 发现项目间未记录关系 | `ltc project relation add <a> <b> --type <t> --description "证据" --ai-inferred --from-task <id>` |
+| 涉及新项目/路径（任务未关联） | `ltc task associate <task-id> --project <pid>` / `--paths <p>` |
+| PRD 写入了路径/包名/spec 但 task.json 未同步 | CLI 同步（T8） |
+| 代码改动完成但本轮无 checkpoint | `ltc task checkpoint <task-id> --type <type> --title "..." -m "..."` |
+| 推翻/变更了方案方向 | checkpoint `--type pivot` |
+| 产生可复用认知/规则 | 询问用户是否沉淀 spec |
+| 编辑了 spec 正文 | `ltc spec migrate` |
+| spec/PRD/项目结构变更 | `ltc rag update` |
+
+无活跃任务 → 整段跳过。

@@ -47,21 +47,22 @@ ltc task update <id> --parent <id> / --clear-parent
 ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 ```
 
-1. 按主题全文读取 spec（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）：context 列表选读 + `ltc search` 补漏
-2. 参考近似历史任务 PRD
-3. 完善 PRD（目标、约束、方案、文件索引）
-4. 有 design.md → 先 read
-5. 输出整体确认（ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
+1. 按主题全文读取 spec（→ [spec-workflows.md](spec-workflows.md#按任务主题全文读取相关-spec)）：context 列表选读 + `ltc search` 补漏。读完全文后 → `ltc task ref-spec <task-id> <spec-name>` 关联（subagent 只读不关联，主线负责）
+2. 参考近似历史任务 PRD（按复杂性 1~5 个）
+3. 完善 PRD（目标、约束、方案、文件索引、风险）；有 design.md → 先 read。不要停留在默认空白标题，只记录当前最佳认知
+4. 输出 PRD 规模摘要（1~3 行：覆盖了哪几个关键段落）
+5. 同步项目关联（→ [项目关联同步](#项目关联同步)）：新路径 `--paths`，新已注册项目 `--project <id>`
+6. 输出整体确认（ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
 
 ## 实施期循环（每轮用户输入到来时）
 
 ```
-用户输入 → ①PRD硬触发？→ ②spec选读？→ ③写代码 → ④checkpoint
+用户输入 → ①PRD硬触发？→ ②spec选读？→ ③写代码 → ④checkpoint → ⑤回答闭合自检（→ lattice-rules.md §十）
 ```
 
 ### ① PRD 硬触发（T1~T8）
 
-命中 → 先改 PRD → decision/pivot checkpoint → 才继续。
+命中 → 先 `read_file prd.md` → 修订对应段落 → decision/pivot checkpoint → 才继续。未命中 → 跳过。
 
 | # | 触发条件 |
 |---|----------|
@@ -74,9 +75,11 @@ ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 | T7 | 准备打 milestone |
 | T8 | PRD 写入路径/包名/spec 但 task.json 未同步 |
 
-### ② spec 选读（每轮必检）
+### ② spec 选读 + 历史任务参考（每轮必检）
 
 触发条件（任一）：本轮主题词首次出现 · 用户提"规范/约定/历史/类似/跨项目" · 涉及层级判定 · 未涉及的模块边界/跨包 · 实现困难需查历史
+
+发现：`ltc context` 标题列表选读 + `ltc search "<关键词>" --json` 补漏 → read_file 全文读取。实现困难或需先例 → `ltc search "<描述>" --type task --json` 查历史任务，相关则 read 其 PRD。
 
 ### ③ 写代码前锚点
 
@@ -85,6 +88,10 @@ ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 ### ④ checkpoint 前 PRD 自检
 
 确认：改动文件在索引中 · 决策写入「当前方案」· 无未同步硬触发。未过 → 先改 PRD。
+
+### ⑤ 回答闭合自检
+
+按 [lattice-rules.md §十](lattice-rules.md#十回答闭合自检) 条件表逐项审查，命中则执行闭合动作。信息不足 → 主动调 `ltc search` / `ltc context` 核实。
 
 ## checkpoint 类型
 

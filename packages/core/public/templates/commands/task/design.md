@@ -4,6 +4,8 @@
 
 **[依赖 skill 子文档]**（本命令期间会 read 的 skill 子文档）：
 - `task-workflows.md`：任务模式（design vs implementation）/ 命令参数非任务 ID 时：标题归纳与查重 / checkpoint 类型
+- `lattice-rules.md`：回答闭合自检（§十，design 模式适用项：ref-spec / 项目注册 / 项目关系）
+- `spec-workflows.md`：按任务主题全文读取相关 spec（讨论需 spec 辅助时选读）
 
 **目标**：进入"方案讨论模式" —— 只分析、只提案、不修改代码文件，直到用户明确要求开始实施。
 
@@ -58,6 +60,7 @@ ltc task list --current --status in_progress
 1. **读取上下文**：PRD、progress、已有 design.md
 2. **开始讨论**：围绕用户问题分析、提出候选方案、对比利弊
 3. **实时记录**：将讨论内容追加到 `design.md`
+4. **回答闭合**：每轮回答发出前按 skill `lattice-rules.md`「§十 回答闭合自检」审查适用项（ref-spec / 项目注册 / 项目关系 / checkpoint）
 
 ### design.md 写入格式
 
