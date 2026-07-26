@@ -52,9 +52,14 @@ export type { ToolFilter } from './tools/tool-registry.js';
 export { PermissionGuard } from './permission/permission-guard.js';
 export type { PermissionRule, ScopeConfig } from './permission/permission-guard.js';
 
-// ── Agent Core ──
-export { AgentCore } from './core/agent-core.js';
-export type { AgentCoreConfig, ActiveSession } from './core/agent-core.js';
+// ── Agent Source（re-export 供 web 等消费方使用） ──
+export {
+  createAgentSource,
+  PiSource,
+  QoderSource,
+  SourceRegistry,
+} from '@qcqx/lattice-agent-source';
+export type { AgentSourceInstance, QoderSourceConfig } from '@qcqx/lattice-agent-source';
 
 // ── Context Engine ──
 export { ContextEngine } from './context/context-engine.js';
@@ -71,15 +76,3 @@ export type { LatticeAgent, LatticeAgentDeps } from './factory.js';
 // ── Lattice Workflow Tool Provider ──
 export { LatticeWorkflowProvider } from './tools/lattice-provider.js';
 export type { LatticeToolDeps } from './tools/lattice-provider.js';
-
-// ── 外部 Agent 适配器 ──
-export { ClaudeCodeAdapter, GenericPtyAdapter, AgentRegistry } from './core/external-agents.js';
-export type {
-  IExternalAgentAdapter,
-  ExternalAgentConfig,
-  ExternalAgentSession,
-} from './core/external-agents.js';
-
-// ── Qoder 适配器 ──
-export { QoderAdapter } from './core/qoder-adapter.js';
-export type { QoderAdapterConfig } from './core/qoder-adapter.js';

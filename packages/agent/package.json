@@ -27,11 +27,9 @@
     "node": ">=20.19"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.80.0",
-    "@earendil-works/pi-ai": "^0.80.0",
     "@qcqx/lattice-agent-protocol": "workspace:*",
-    "@qcqx/lattice-core": "workspace:*",
-    "@qoder-ai/qoder-agent-sdk": "^1.0.15"
+    "@qcqx/lattice-agent-source": "workspace:*",
+    "@qcqx/lattice-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

@@ -7,7 +7,14 @@
  *                    tree.updated / permission.request
  */
 import type { FastifyInstance } from 'fastify';
-import { createLatticeAgent, QoderAdapter, type LatticeAgent } from '@qcqx/lattice-agent';
+import {
+  createLatticeAgent,
+  createAgentSource,
+  PiSource,
+  QoderSource,
+  type LatticeAgent,
+  type AgentSourceInstance,
+} from '@qcqx/lattice-agent';
 import type { ClientMessage } from '@qcqx/lattice-agent-protocol';
 import { getUsername, isAuthEnabled, readWebAuth, getSessionsCacheDir } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
@@ -26,30 +33,28 @@ function send(ws: { send: (data: string) => void }, payload: Record<string, unkn
 export function registerAgentRoutes(app: FastifyInstance): void {
   // Agent 实例（懒初始化，每个 server 一个）
   let agent: LatticeAgent | null = null;
-  // Qoder 适配器（默认 Agent）
-  let qoder: QoderAdapter | null = null;
-  // 外部 agent 会话映射: wsSessionId → qoderSessionId
-  const qoderSessions = new Map<string, string>();
+  let sourcesInstance: AgentSourceInstance | null = null;
+  // 会话 → 源 ID 映射
+  const sessionSourceMap = new Map<string, string>();
 
-  function getAgent(_username: string): LatticeAgent {
+  async function getAgent(_username: string): Promise<LatticeAgent> {
     if (!agent) {
+      if (!sourcesInstance) {
+        sourcesInstance = await createAgentSource({
+          sources: [
+            new PiSource(),
+            new QoderSource({ authMode: 'cli', permissionMode: 'acceptEdits' }),
+          ],
+        });
+      }
       agent = createLatticeAgent({
         storage: {
           baseDir: getSessionsCacheDir(),
         },
+        sources: sourcesInstance,
       });
     }
     return agent;
-  }
-
-  function getQoder(): QoderAdapter {
-    if (!qoder) {
-      qoder = new QoderAdapter({
-        authMode: 'cli',
-        permissionMode: 'acceptEdits',
-      });
-    }
-    return qoder;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,7 +74,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       }
 
       const username = await getUsername();
-      const latticeAgent = getAgent(username);
+      const latticeAgent = await getAgent(username);
 
       // 监听 Agent 事件 → 转发给前端
       const unsubPermission = latticeAgent.events.on('permission:request', (event) => {
@@ -87,22 +92,17 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
         switch (msg.type) {
           case 'session.create': {
-            const agentId = msg.agentId ?? 'qoder';
+            const sourceId = msg.agentId ?? 'qoder';
             const cwd = msg.cwd ?? process.env.HOME ?? '/';
 
-            let sessionId: string;
-            if (agentId === 'qoder') {
-              // 使用 Qoder 适配器
-              sessionId = await getQoder().createSession(cwd);
-              qoderSessions.set(sessionId, sessionId);
-            } else {
-              // 内置 Agent（Pi）
-              sessionId = latticeAgent.core.createSession({
-                agentId,
-                cwd,
-                taskId: msg.taskId,
-              });
+            const source = latticeAgent.sources.registry.getSource(sourceId);
+            if (!source) {
+              send(socket, { type: 'session.error', message: `Source not found: ${sourceId}` });
+              return;
             }
+
+            const sessionId = await source.createSession({ model: 'auto', cwd });
+            sessionSourceMap.set(sessionId, sourceId);
 
             // 复用已有对话树（恢复会话）或创建新树
             let treeId = msg.treeId;
@@ -110,7 +110,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
               const tree = await latticeAgent.session.createTree({ taskId: msg.taskId });
               treeId = tree.id;
             }
-            send(socket, { type: 'session.created', sessionId, treeId, agentId });
+            send(socket, { type: 'session.created', sessionId, treeId, agentId: sourceId });
             break;
           }
 
@@ -119,18 +119,20 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
             // 流式响应（节点持久化由前端通过 REST /api/agent/turns 完成）
             try {
-              const isQoderSession = qoderSessions.has(msg.sessionId);
-
-              if (isQoderSession) {
-                // Qoder 适配器流式
-                for await (const event of getQoder().send(msg.sessionId, msg.message)) {
-                  send(socket, { type: 'event', sessionId: msg.sessionId, event });
-                }
-              } else {
-                // 内置 Agent（Pi）
-                for await (const event of latticeAgent.core.prompt(msg.sessionId, msg.message)) {
-                  send(socket, { type: 'event', sessionId: msg.sessionId, event });
-                }
+              const sourceId = sessionSourceMap.get(msg.sessionId);
+              const source = sourceId
+                ? latticeAgent.sources.registry.getSource(sourceId)
+                : undefined;
+              if (!source) {
+                send(socket, {
+                  type: 'session.error',
+                  sessionId: msg.sessionId,
+                  message: 'Session source not found',
+                });
+                return;
+              }
+              for await (const event of source.prompt(msg.sessionId, msg.message)) {
+                send(socket, { type: 'event', sessionId: msg.sessionId, event });
               }
             } catch (err) {
               send(socket, {
@@ -144,23 +146,23 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
           case 'session.abort': {
             if (msg.sessionId) {
-              if (qoderSessions.has(msg.sessionId)) {
-                await getQoder().abort(msg.sessionId);
-              } else {
-                latticeAgent.core.abort(msg.sessionId);
-              }
+              const sourceId = sessionSourceMap.get(msg.sessionId);
+              const source = sourceId
+                ? latticeAgent.sources.registry.getSource(sourceId)
+                : undefined;
+              source?.abort(msg.sessionId);
             }
             break;
           }
 
           case 'session.destroy': {
             if (msg.sessionId) {
-              if (qoderSessions.has(msg.sessionId)) {
-                await getQoder().destroySession(msg.sessionId);
-                qoderSessions.delete(msg.sessionId);
-              } else {
-                latticeAgent.core.destroySession(msg.sessionId);
-              }
+              const sourceId = sessionSourceMap.get(msg.sessionId);
+              const source = sourceId
+                ? latticeAgent.sources.registry.getSource(sourceId)
+                : undefined;
+              await source?.destroySession(msg.sessionId);
+              sessionSourceMap.delete(msg.sessionId);
             }
             send(socket, { type: 'session.closed', sessionId: msg.sessionId });
             break;
@@ -236,7 +238,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   app.get('/api/agent/tree/:treeId', async (req) => {
     const { treeId } = req.params as { treeId: string };
     const username = await getUsername();
-    const latticeAgent = getAgent(username);
+    const latticeAgent = await getAgent(username);
     const tree = await latticeAgent.session.loadTree(treeId);
     if (!tree) return { error: 'not_found' };
     const nodes = latticeAgent.session.getNodes(treeId);
