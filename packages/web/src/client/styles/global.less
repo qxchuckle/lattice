@@ -659,3 +659,59 @@ body {
     padding-bottom: var(--safe-bottom);
   }
 }
+
+/* Agent 节点内 Markdown 紧凑化 */
+.agent-md-block {
+  p {
+    margin: 0 0 6px;
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+  ul,
+  ol {
+    margin: 4px 0;
+    padding-left: 18px;
+  }
+  li {
+    margin: 2px 0;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 8px 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  code {
+    font-size: 11px;
+    padding: 1px 4px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+  pre {
+    margin: 4px 0;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: auto;
+    code {
+      padding: 0;
+      background: none;
+    }
+  }
+  blockquote {
+    margin: 4px 0;
+    padding-left: 8px;
+    border-left: 2px solid var(--border);
+    color: var(--text-secondary);
+  }
+  strong {
+    font-weight: 600;
+  }
+  a {
+    color: var(--brand-color);
+    text-decoration: none;
+  }
+}

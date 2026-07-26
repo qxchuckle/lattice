@@ -23,7 +23,7 @@ export function MergeDialog({ onMerge }: Props) {
 
   // 可选目标节点（默认路径上的节点）
   const targetOptions = snap.nodes.filter(
-    (n) => n.branchId === (snap.tree?.defaultBranchId ?? 'default')
+    (n) => n.branchId === (snap.tree?.defaultBranchId ?? 'default'),
   );
 
   const handleGenerateSummary = useCallback(async () => {
@@ -39,7 +39,9 @@ export function MergeDialog({ onMerge }: Props) {
         const data = await res.json();
         setSummary(data.summary ?? '');
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setGenerating(false);
   }, [branchId, snap.treeId]);
 
@@ -64,8 +66,7 @@ export function MergeDialog({ onMerge }: Props) {
                 ...modeBtnStyle,
                 borderColor: mode === m ? '#1677ff' : '#444',
                 color: mode === m ? '#1677ff' : '#888',
-              }}
-            >
+              }}>
               {m === 'squash' ? '压缩合并' : m === 'cherry-pick' ? '逐条选取' : '引用注入'}
             </button>
           ))}
@@ -75,12 +76,14 @@ export function MergeDialog({ onMerge }: Props) {
         <select
           value={targetNodeId}
           onChange={(e) => setTargetNodeId(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="">选择目标节点...</option>
+          style={selectStyle}>
+          <option value=''>选择目标节点...</option>
           {targetOptions.map((n) => (
             <option key={n.id} value={n.id}>
-              {n.role}: {n.content[0]?.text?.slice(0, 40) ?? n.id.slice(0, 8)}
+              {n.role}:{' '}
+              {n.content[0] && 'text' in n.content[0]
+                ? n.content[0].text.slice(0, 40)
+                : n.id.slice(0, 8)}
             </option>
           ))}
         </select>
@@ -94,13 +97,15 @@ export function MergeDialog({ onMerge }: Props) {
         <textarea
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
-          placeholder="总结合并内容（将注入目标路径作为 merge-summary 节点）"
+          placeholder='总结合并内容（将注入目标路径作为 merge-summary 节点）'
           style={textareaStyle}
           rows={4}
         />
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-          <button onClick={closeMergeDialog} style={cancelBtnStyle}>取消</button>
+          <button onClick={closeMergeDialog} style={cancelBtnStyle}>
+            取消
+          </button>
           <button onClick={handleConfirm} disabled={!targetNodeId} style={confirmBtnStyle}>
             确认合并
           </button>
@@ -111,17 +116,80 @@ export function MergeDialog({ onMerge }: Props) {
 }
 
 const overlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.6)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
 };
 const dialogStyle: React.CSSProperties = {
-  background: '#1e1e2e', borderRadius: 8, padding: 20, width: 420,
-  border: '1px solid #444', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+  background: '#1e1e2e',
+  borderRadius: 8,
+  padding: 20,
+  width: 420,
+  border: '1px solid #444',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
 };
-const labelStyle: React.CSSProperties = { fontSize: 12, color: '#888', display: 'block', marginBottom: 4 };
-const modeBtnStyle: React.CSSProperties = { padding: '4px 10px', fontSize: 12, border: '1px solid', borderRadius: 4, background: 'transparent', cursor: 'pointer' };
-const selectStyle: React.CSSProperties = { width: '100%', padding: '6px 8px', background: '#2a2a3e', border: '1px solid #444', borderRadius: 4, color: '#ccc', fontSize: 12, marginBottom: 12 };
-const genBtnStyle: React.CSSProperties = { padding: '3px 8px', fontSize: 11, border: '1px solid #722ed1', background: 'transparent', color: '#722ed1', borderRadius: 3, cursor: 'pointer' };
-const textareaStyle: React.CSSProperties = { width: '100%', padding: '8px', background: '#2a2a3e', border: '1px solid #444', borderRadius: 4, color: '#ccc', fontSize: 12, resize: 'vertical' };
-const cancelBtnStyle: React.CSSProperties = { padding: '6px 14px', fontSize: 12, border: '1px solid #555', background: 'transparent', color: '#888', borderRadius: 4, cursor: 'pointer' };
-const confirmBtnStyle: React.CSSProperties = { padding: '6px 14px', fontSize: 12, border: 'none', background: '#1677ff', color: '#fff', borderRadius: 4, cursor: 'pointer' };
+const labelStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: '#888',
+  display: 'block',
+  marginBottom: 4,
+};
+const modeBtnStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  fontSize: 12,
+  border: '1px solid',
+  borderRadius: 4,
+  background: 'transparent',
+  cursor: 'pointer',
+};
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  background: '#2a2a3e',
+  border: '1px solid #444',
+  borderRadius: 4,
+  color: '#ccc',
+  fontSize: 12,
+  marginBottom: 12,
+};
+const genBtnStyle: React.CSSProperties = {
+  padding: '3px 8px',
+  fontSize: 11,
+  border: '1px solid #722ed1',
+  background: 'transparent',
+  color: '#722ed1',
+  borderRadius: 3,
+  cursor: 'pointer',
+};
+const textareaStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px',
+  background: '#2a2a3e',
+  border: '1px solid #444',
+  borderRadius: 4,
+  color: '#ccc',
+  fontSize: 12,
+  resize: 'vertical',
+};
+const cancelBtnStyle: React.CSSProperties = {
+  padding: '6px 14px',
+  fontSize: 12,
+  border: '1px solid #555',
+  background: 'transparent',
+  color: '#888',
+  borderRadius: 4,
+  cursor: 'pointer',
+};
+const confirmBtnStyle: React.CSSProperties = {
+  padding: '6px 14px',
+  fontSize: 12,
+  border: 'none',
+  background: '#1677ff',
+  color: '#fff',
+  borderRadius: 4,
+  cursor: 'pointer',
+};

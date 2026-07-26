@@ -24,7 +24,7 @@ import {
 } from '../../store';
 import { useSearch, useUsers, useIsMobile } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
-import { agentStore, initAgentTree } from '../agent/agentStore';
+import { agentStore, initAgent } from '../agent/agentStore';
 import { useTreeData } from './treeData';
 import {
   type TreeNode,
@@ -1116,7 +1116,7 @@ const ActivityBar = memo(function ActivityBar() {
           className={`sidebar-activity-bar__item${agentVisible ? ' sidebar-activity-bar__item--active' : ''}`}
           onClick={() => {
             agentStore.visible = !agentStore.visible;
-            if (agentStore.visible) initAgentTree();
+            if (agentStore.visible) initAgent();
           }}>
           <RobotOutlined />
         </button>

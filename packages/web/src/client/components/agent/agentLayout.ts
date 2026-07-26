@@ -4,17 +4,25 @@
  * 避免 AgentCanvas ↔ ConversationNodeComponent 循环依赖
  */
 import dagre from '@dagrejs/dagre';
-import type { TreeNode } from './agentStore';
+
+/** 布局所需的最小节点接口 */
+export interface LayoutNode {
+  id: string;
+  parentId: string | null;
+  width: number;
+  height: number;
+  childIds: string[];
+}
 
 /** 节点最小间距（同层水平间距 / 父子层间距） */
 export const NODE_GAP = 40;
 export const RANK_GAP = 60;
 
 /** 计算每个节点的树深度（根 = 0），用于同层顶对齐 */
-function computeDepths(nodes: TreeNode[]): Map<string, number> {
+function computeDepths(nodes: LayoutNode[]): Map<string, number> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const depths = new Map<string, number>();
-  const getDepth = (node: TreeNode): number => {
+  const getDepth = (node: LayoutNode): number => {
     const cached = depths.get(node.id);
     if (cached !== undefined) return cached;
     let d = 0;
@@ -28,7 +36,9 @@ function computeDepths(nodes: TreeNode[]): Map<string, number> {
 }
 
 /** dagre 自动布局：从上到下，使用每个节点的实际宽高 */
-export function layoutTree(nodes: TreeNode[]): { positions: Map<string, { x: number; y: number }> } {
+export function layoutTree(nodes: LayoutNode[]): {
+  positions: Map<string, { x: number; y: number }>;
+} {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'TB', nodesep: NODE_GAP, ranksep: RANK_GAP });

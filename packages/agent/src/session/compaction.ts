@@ -84,7 +84,7 @@ export async function compactConversation(
   const messages = toCompact.map((n) => ({
     role: n.role,
     content: n.content
-      .map((c) => c.text ?? '')
+      .map((c) => ('text' in c ? c.text : ''))
       .join('\n')
       .slice(0, 2000), // 每条最多 2000 字符，避免 token 爆炸
   }));

@@ -183,7 +183,7 @@ export class QoderSource implements ISource {
   async *prompt(
     sessionId: string,
     message: string | ContentBlock[],
-    _opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal },
   ): AsyncIterable<SourceEvent> {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -199,7 +199,13 @@ export class QoderSource implements ISource {
     }
 
     session.status = 'running';
-    session.abortController = new AbortController();
+    // 使用外部传入的 signal（per-request），回退到 session 级 controller
+    const controller = new AbortController();
+    session.abortController = controller;
+    if (opts?.signal) {
+      if (opts.signal.aborted) controller.abort();
+      else opts.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
     const text =
       typeof message === 'string'
         ? message
@@ -223,7 +229,7 @@ export class QoderSource implements ISource {
             ...this.injectedTools.map((t) => t.name),
           ],
           includePartialMessages: true,
-          abortController: session.abortController,
+          abortController: controller,
           ...(mcpServers ? { mcpServers: mcpServers as Record<string, McpServerConfig> } : {}),
         },
       });
@@ -233,7 +239,7 @@ export class QoderSource implements ISource {
       }
       yield { type: 'done' };
     } catch (err) {
-      if (!session.abortController.signal.aborted) {
+      if (!controller.signal.aborted) {
         yield {
           type: 'error',
           message: err instanceof Error ? err.message : String(err),

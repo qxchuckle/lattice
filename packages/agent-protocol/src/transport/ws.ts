@@ -21,11 +21,17 @@ export interface SessionSendMessage {
   type: 'session.send';
   sessionId: string;
   message: string;
+  /** 父节点 ID（从哪个节点发起对话，null = 根节点） */
+  parentNodeId?: string | null;
+  /** 客户端生成的请求 ID，用于并行流事件路由 */
+  requestId?: string;
 }
 
 export interface SessionAbortMessage {
   type: 'session.abort';
   sessionId: string;
+  /** 精确中止某个请求，不传则中止整个 session */
+  requestId?: string;
 }
 
 export interface SessionDestroyMessage {
@@ -99,6 +105,8 @@ export interface AgentEventMessage {
   type: 'event';
   sessionId: string;
   event: SourceEvent;
+  /** 对应 client 的 requestId，用于并行流事件路由 */
+  requestId?: string;
 }
 
 export interface SessionErrorMessage {

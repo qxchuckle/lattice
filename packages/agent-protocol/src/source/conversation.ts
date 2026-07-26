@@ -5,12 +5,26 @@
 
 export type NodeRole = 'user' | 'assistant' | 'tool' | 'system' | 'merge-summary' | 'aggregation';
 
-export interface NodeContent {
-  type: 'text' | 'code' | 'diff' | 'image';
-  text?: string;
-  language?: string;
-  path?: string;
-}
+/**
+ * 对话节点内容块（判别联合）
+ * 完整保存原始对话记录：文本/代码/思考/工具/终端/错误等
+ */
+export type NodeContent =
+  | { type: 'text'; text: string }
+  | { type: 'code'; text: string; language?: string }
+  | { type: 'diff'; text: string; path: string }
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'thinking'; text: string }
+  | {
+      type: 'tool_call';
+      toolId: string;
+      name: string;
+      args: Record<string, unknown>;
+      status?: 'pending' | 'success' | 'error';
+    }
+  | { type: 'tool_result'; toolId: string; name: string; result?: unknown; isError?: boolean }
+  | { type: 'terminal'; command: string; output?: string }
+  | { type: 'error'; message: string; suggestion?: string };
 
 export interface ToolCallRecord {
   toolId: string;

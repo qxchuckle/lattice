@@ -16,9 +16,8 @@ export function mapQoderMessage(
     };
     if (message?.content) {
       for (const block of message.content) {
-        if (block.type === 'text' && block.text) {
-          events.push({ type: 'text', content: block.text });
-        } else if (block.type === 'tool_use') {
+        // 跳过 text：流式 delta 已经产出过，避免重复
+        if (block.type === 'tool_use') {
           events.push({
             type: 'tool_call',
             id: block.id ?? '',
