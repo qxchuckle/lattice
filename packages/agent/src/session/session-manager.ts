@@ -103,13 +103,17 @@ export class SessionManager {
       const tree: ConversationTree = JSON.parse(metaRaw);
       this.trees.set(treeId, tree);
 
-      // 加载节点
-      const nodesRaw = await readFile(join(dir, 'nodes.jsonl'), 'utf-8');
+      // 加载节点（nodes.jsonl 可能不存在 = 空树）
       const nodeMap = new Map<string, ConversationNode>();
-      for (const line of nodesRaw.split('\n')) {
-        if (!line.trim()) continue;
-        const node: ConversationNode = JSON.parse(line);
-        nodeMap.set(node.id, node);
+      try {
+        const nodesRaw = await readFile(join(dir, 'nodes.jsonl'), 'utf-8');
+        for (const line of nodesRaw.split('\n')) {
+          if (!line.trim()) continue;
+          const node: ConversationNode = JSON.parse(line);
+          nodeMap.set(node.id, node);
+        }
+      } catch {
+        /* nodes.jsonl 不存在 = 空树 */
       }
       this.nodes.set(treeId, nodeMap);
       return tree;
@@ -229,6 +233,7 @@ export class SessionManager {
   async addNode(
     treeId: string,
     opts: {
+      id?: string;
       parentId: string | null;
       role: NodeRole;
       content: NodeContent[];
@@ -240,7 +245,7 @@ export class SessionManager {
     if (!tree) throw new Error(`Tree not found: ${treeId}`);
 
     const node: ConversationNode = {
-      id: randomUUID(),
+      id: opts.id ?? randomUUID(),
       parentId: opts.parentId,
       branchId: this.resolveBranch(tree, opts.parentId),
       role: opts.role,

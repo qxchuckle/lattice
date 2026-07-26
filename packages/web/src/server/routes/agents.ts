@@ -143,6 +143,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   const sessionSourceMap = new Map<string, string>();
   const sessionTreeMap = new Map<string, string>(); // sessionId → treeId
   const requestAbortMap = new Map<string, AbortController>(); // requestId → AbortController
+  const branchSessionMap = new Map<string, string>(); // branchKey → source sessionId
+  const nodeBranchMap = new Map<string, string>(); // persisted nodeId → branchKey
 
   async function getAgent(): Promise<LatticeAgent> {
     if (!agent) {
@@ -271,15 +273,48 @@ export function registerAgentRoutes(app: FastifyInstance): void {
               });
             }
 
+            // 计算分支标识（branchKey）
+            const treeIdForContext = sessionTreeMap.get(msg.sessionId);
+            let branchKey = msg.requestId ?? `root-${Date.now()}`;
+
+            if (treeIdForContext && msg.parentNodeId) {
+              const nodes = latticeAgent.session.getNodes(treeIdForContext);
+              let cursor: string | null = msg.parentNodeId;
+              let rootAncestor = msg.parentNodeId;
+              while (cursor) {
+                const node = nodes.find((n) => n.id === cursor);
+                if (!node) break;
+                rootAncestor = node.id;
+                cursor = node.parentId;
+              }
+              branchKey = nodeBranchMap.get(rootAncestor) ?? rootAncestor;
+            }
+
+            // 分支 session 管理：同分支复用，新分支创建（带历史）
+            let sourceSessionId = branchSessionMap.get(branchKey);
+            if (!sourceSessionId || !source.isSessionAlive(sourceSessionId)) {
+              const newId = await source.createSession({
+                model: 'auto',
+                cwd: process.env.HOME ?? '/',
+              });
+              branchSessionMap.set(branchKey, newId);
+              sourceSessionId = newId;
+            }
+
             // 流式响应
             const collectedEvents: SourceEvent[] = [];
             const requestId = msg.requestId;
             const abortController = new AbortController();
             if (requestId) requestAbortMap.set(requestId, abortController);
+
             try {
-              for await (const event of source.prompt(msg.sessionId, msg.message, {
-                signal: abortController.signal,
-              })) {
+              for await (const event of source.prompt(
+                sourceSessionId,
+                [{ type: 'text', text: msg.message }],
+                {
+                  signal: abortController.signal,
+                },
+              )) {
                 collectedEvents.push(event);
                 send(socket, { type: 'event', sessionId: msg.sessionId, event, requestId });
               }
@@ -315,12 +350,33 @@ export function registerAgentRoutes(app: FastifyInstance): void {
                 tree.title = msg.message.slice(0, 30) + (msg.message.length > 30 ? '...' : '');
               }
 
-              // 持久化 user 节点
-              const userNode = await latticeAgent.session.addNode(treeId, {
-                parentId,
-                role: 'user',
-                content: [{ type: 'text', text: msg.message }],
-              });
+              // 重试：按 retryNodeId 直接定位，删除其 assistant 子节点
+              let retryUserNode: { id: string } | undefined;
+              if (msg.retry && msg.retryNodeId) {
+                const nodes = latticeAgent.session.getNodes(treeId);
+                retryUserNode = nodes.find((n) => n.id === msg.retryNodeId);
+                if (retryUserNode) {
+                  const oldAssistant = nodes.find(
+                    (n) => n.parentId === retryUserNode!.id && n.role === 'assistant',
+                  );
+                  if (oldAssistant) {
+                    await latticeAgent.session.deleteNodes(treeId, [oldAssistant.id]);
+                  }
+                }
+              }
+
+              // 持久化 user 节点（用 client 的 requestId 作为节点 ID，全栈统一）
+              const userNode =
+                retryUserNode ??
+                (await latticeAgent.session.addNode(treeId, {
+                  id: requestId,
+                  parentId,
+                  role: 'user',
+                  content: [{ type: 'text', text: msg.message }],
+                }));
+              if (!retryUserNode) {
+                nodeBranchMap.set(userNode.id, branchKey);
+              }
 
               // 持久化 assistant 节点
               if (collectedEvents.length > 0) {
@@ -332,9 +388,14 @@ export function registerAgentRoutes(app: FastifyInstance): void {
                   agentId: data.agentId,
                   metadata: data.metadata,
                 });
-                send(socket, { type: 'tree.updated', treeId, headNodeId: assistantNode.id });
+                send(socket, {
+                  type: 'tree.updated',
+                  treeId,
+                  headNodeId: assistantNode.id,
+                  requestId,
+                });
               } else {
-                send(socket, { type: 'tree.updated', treeId, headNodeId: userNode.id });
+                send(socket, { type: 'tree.updated', treeId, headNodeId: userNode.id, requestId });
               }
             }
             break;

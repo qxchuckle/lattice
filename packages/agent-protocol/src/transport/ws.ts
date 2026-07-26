@@ -25,6 +25,10 @@ export interface SessionSendMessage {
   parentNodeId?: string | null;
   /** 客户端生成的请求 ID，用于并行流事件路由 */
   requestId?: string;
+  /** 重试标志：server 先删除同 parent 的旧节点再重新持久化 */
+  retry?: boolean;
+  /** 重试时指定要重新生成的 user 节点 ID */
+  retryNodeId?: string;
 }
 
 export interface SessionAbortMessage {
@@ -125,6 +129,10 @@ export interface TreeUpdatedMessage {
   treeId: string;
   branch?: unknown;
   headNodeId?: string | null;
+  /** 本次持久化的 user 节点 ID（client 用于重试定位） */
+  userNodeId?: string;
+  /** 对应的 client requestId */
+  requestId?: string;
 }
 
 export interface TreeErrorMessage {

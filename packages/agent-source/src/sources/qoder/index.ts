@@ -30,6 +30,10 @@ interface QoderSession {
   model: string;
   abortController: AbortController;
   status: 'idle' | 'running';
+  /** SDK session ID（用于 resume，SDK 内部维护对话状态 + KV cache） */
+  sdkSessionId: string;
+  /** 是否已成功完成过 prompt */
+  hasPrompted?: boolean;
 }
 
 export interface QoderSourceConfig {
@@ -176,13 +180,14 @@ export class QoderSource implements ISource {
       model: opts.model,
       abortController: new AbortController(),
       status: 'idle',
+      sdkSessionId: opts.resumeSessionId ?? id,
     });
     return id;
   }
 
   async *prompt(
     sessionId: string,
-    message: string | ContentBlock[],
+    message: ContentBlock[],
     opts?: { signal?: AbortSignal },
   ): AsyncIterable<SourceEvent> {
     const session = this.sessions.get(sessionId);
@@ -198,25 +203,23 @@ export class QoderSource implements ISource {
       return;
     }
 
-    session.status = 'running';
-    // 使用外部传入的 signal（per-request），回退到 session 级 controller
     const controller = new AbortController();
     session.abortController = controller;
     if (opts?.signal) {
       if (opts.signal.aborted) controller.abort();
       else opts.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
-    const text =
-      typeof message === 'string'
-        ? message
-        : message.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
+
+    const text = message.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
     const src = { id: this.id, name: this.displayName };
+    session.status = 'running';
 
     try {
       const { query, qodercliAuth, accessTokenFromEnv } = await import('@qoder-ai/qoder-agent-sdk');
       const auth = this.config.authMode === 'env' ? accessTokenFromEnv() : qodercliAuth();
       const mcpServers = await buildMcpServers(this.injectedTools);
 
+      // 每次 prompt 创建新 query；后续用 resume 恢复上下文（SDK 内部维护 KV cache）
       const q = query({
         prompt: text,
         options: {
@@ -230,14 +233,23 @@ export class QoderSource implements ISource {
           ],
           includePartialMessages: true,
           abortController: controller,
+          // 已 prompt 过 → resume 恢复会话上下文
+          ...(session.hasPrompted && session.sdkSessionId ? { resume: session.sdkSessionId } : {}),
           ...(mcpServers ? { mcpServers: mcpServers as Record<string, McpServerConfig> } : {}),
         },
       });
 
       for await (const msg of q) {
-        for (const event of mapQoderMessage(msg as Record<string, unknown>, src)) yield event;
+        const m = msg as Record<string, unknown>;
+        // 捕获 SDK session ID（用于后续 resume）
+        if (m.session_id && typeof m.session_id === 'string') {
+          session.sdkSessionId = m.session_id;
+        }
+        for (const event of mapQoderMessage(m, src)) yield event;
+        if (m.type === 'result') break;
       }
       yield { type: 'done' };
+      session.hasPrompted = true;
     } catch (err) {
       if (!controller.signal.aborted) {
         yield {

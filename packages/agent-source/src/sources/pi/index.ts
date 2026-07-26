@@ -125,13 +125,29 @@ export class PiSource implements ISource {
     } as Parameters<typeof createAgentSession>[0]);
 
     const s = session as unknown as AgentSession;
+
+    // forkSession + resumeSessionId：从已有 session 复制消息数组（Pi 的 fork = 拷贝历史）
+    if (opts.forkSession && opts.resumeSessionId) {
+      const parent = this.sessions.get(opts.resumeSessionId);
+      if (parent) {
+        const parentMsgs = (
+          parent as unknown as { messages?: Array<{ role: string; content: string }> }
+        ).messages;
+        const childMsgs = (s as unknown as { messages?: Array<{ role: string; content: string }> })
+          .messages;
+        if (Array.isArray(parentMsgs) && Array.isArray(childMsgs)) {
+          childMsgs.push(...parentMsgs.map((m) => ({ ...m })));
+        }
+      }
+    }
+
     this.sessions.set(s.sessionId, s);
     return s.sessionId;
   }
 
   async *prompt(
     sessionId: string,
-    message: string | ContentBlock[],
+    message: ContentBlock[],
     _opts?: { signal?: AbortSignal },
   ): AsyncIterable<SourceEvent> {
     const session = this.sessions.get(sessionId);
@@ -147,10 +163,7 @@ export class PiSource implements ISource {
       return;
     }
 
-    const text =
-      typeof message === 'string'
-        ? message
-        : message.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
+    const text = message.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
 
     const events: SourceEvent[] = [];
     let resolve: (() => void) | null = null;

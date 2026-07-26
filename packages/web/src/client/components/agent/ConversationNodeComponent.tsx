@@ -9,6 +9,7 @@ import {
   agentStore,
   submitFromNode,
   abortStream,
+  retryTurn,
   getChildIds,
   getSiblings,
   MIN_NODE_WIDTH,
@@ -66,9 +67,8 @@ function ConversationNodeInner({ data }: NodeProps) {
 
   const handleRetry = useCallback(() => {
     if (!turn) return;
-    // 重试 = 用相同的 userMessage 创建新子节点
-    submitFromNode(turn.parentTurnId, turn.userMessage);
-  }, [turn]);
+    retryTurn(turnId);
+  }, [turn, turnId]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

@@ -167,7 +167,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     }
     case 'tree.updated':
-      loadConversations(); // 标题/节点数变更后刷新历史列表
+      loadConversations();
       break;
     case 'permission.request':
       break;

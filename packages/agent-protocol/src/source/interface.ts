@@ -2,7 +2,7 @@
  * 源接口 + 能力声明 + SystemPrompt 策略 + Session 配置
  */
 import type { SourceEvent } from './events.js';
-import type { ContentBlock, StandardMessage } from './messages.js';
+import type { ContentBlock } from './messages.js';
 import type { ModelInfo } from './models.js';
 import type { AuthRequirement, AuthStatus } from './auth.js';
 import type { ToolInfo, ToolDefinition, InjectToolsConfig } from './tools.js';
@@ -43,10 +43,12 @@ export interface SessionCreateOpts {
   model: string;
   cwd: string;
   systemPrompt?: SystemPromptConfig;
-  /** 初始历史（结构化消息数组，源内部决定怎么用） */
-  history?: StandardMessage[];
   thinkingLevel?: 'none' | 'low' | 'medium' | 'high';
   maxIterations?: number;
+  /** 从已有 session 恢复/分叉（源内部通过此 ID 获取历史上下文） */
+  resumeSessionId?: string;
+  /** 与 resumeSessionId 配合：fork 出新 session（不修改原 session） */
+  forkSession?: boolean;
 }
 
 // ── 源接口（核心契约） ──
@@ -80,7 +82,7 @@ export interface ISource {
   createSession(opts: SessionCreateOpts): Promise<string>;
   prompt(
     sessionId: string,
-    message: string | ContentBlock[],
+    message: ContentBlock[],
     opts?: { signal?: AbortSignal },
   ): AsyncIterable<SourceEvent>;
   abort(sessionId: string): void;

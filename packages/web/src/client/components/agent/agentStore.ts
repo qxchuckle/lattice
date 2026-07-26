@@ -39,16 +39,40 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
   if (!agentStore.sessionId) {
     if (!isWsReady()) {
       connectAgentWs();
-      setTimeout(() => submitFromNode(parentTurnId, message), 500);
-      return null;
     }
-    // WS 已连接但无 session → 创建
+    // 发送 session.create 并等待响应
     sendWs({
       type: 'session.create',
       agentId: agentStore.activeSourceId,
       treeId: agentStore.treeId ?? undefined,
     });
-    setTimeout(() => submitFromNode(parentTurnId, message), 300);
+    // 等待 session 建立后重试（最多 5 次，每次 300ms）
+    let attempts = 0;
+    const waitForSession = () => {
+      attempts++;
+      if (agentStore.sessionId) {
+        submitFromNode(parentTurnId, message);
+      } else if (attempts < 5) {
+        setTimeout(waitForSession, 300);
+      } else {
+        // 超时：创建 error 状态的 turn（用户可见 + 可重试）
+        const turnId = crypto.randomUUID();
+        const turn: TurnNode = {
+          id: turnId,
+          parentTurnId,
+          userMessage: message.trim(),
+          blocks: [{ kind: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
+          status: 'error',
+          timestamp: Date.now(),
+          sourceId: agentStore.activeSourceId,
+          modelId: agentStore.activeModelId,
+        };
+        agentStore.turns.set(turnId, turn);
+        ensureUi(turnId);
+        agentStore.version++;
+      }
+    };
+    setTimeout(waitForSession, 300);
     return null;
   }
 
@@ -58,8 +82,8 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     return null;
   }
 
-  const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const requestId = turnId; // 复用 turnId 作为 requestId
+  const turnId = crypto.randomUUID();
+  const requestId = turnId; // 全栈统一 ID：turnId = requestId = persisted nodeId
   const turn: TurnNode = {
     id: turnId,
     parentTurnId,
@@ -91,6 +115,30 @@ export function abortStream(turnId?: string): void {
   if (!agentStore.sessionId) return;
   // turnId === requestId（submitFromNode 中复用）
   sendWs({ type: 'session.abort', sessionId: agentStore.sessionId, requestId: turnId });
+}
+
+// ── 重试（在当前节点上重新发送，不创建新分支） ──
+
+export function retryTurn(turnId: string): void {
+  const turn = agentStore.turns.get(turnId);
+  if (!turn || !agentStore.sessionId) return;
+
+  // 重置当前节点状态
+  turn.blocks = [];
+  turn.status = 'streaming';
+  agentStore.version++;
+
+  // turnId 就是 persisted node ID（全栈统一），直接用作 retryNodeId
+  setStreamingTarget(turnId, turnId);
+  sendWs({
+    type: 'session.send',
+    sessionId: agentStore.sessionId,
+    message: turn.userMessage,
+    parentNodeId: turn.parentTurnId,
+    requestId: turnId,
+    retry: true,
+    retryNodeId: turnId,
+  });
 }
 
 // ── 节点尺寸 ──

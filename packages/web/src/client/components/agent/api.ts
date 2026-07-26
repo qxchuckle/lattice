@@ -43,7 +43,7 @@ export async function loadTree(treeId: string): Promise<void> {
           parentTurnId,
           userMessage: userText,
           blocks: assistant ? buildBlocksFromNode(assistant) : [],
-          status: 'done',
+          status: assistant?.content?.some((c) => c.type === 'error') ? 'error' : 'done',
           timestamp: un.timestamp,
           sourceId: assistant?.agentId ?? 'qoder',
           modelId: assistant?.metadata?.model ?? '',
