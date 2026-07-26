@@ -129,7 +129,7 @@ function createSpawnProcess(shell: string, cwd: string, env: NodeJS.ProcessEnv):
 // client → server: { type: 'init', cwd, cols, rows } | { type: 'input', data } | { type: 'resize', cols, rows }
 // server → client: { type: 'mode', mode } | { type: 'output', data } | { type: 'exit', code } | { type: 'error', message }
 
-interface ClientMessage {
+interface TerminalClientMessage {
   type: 'init' | 'input' | 'resize';
   cwd?: string;
   cols?: number;
@@ -186,7 +186,7 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
       };
 
       socket.on('message', async (raw: Buffer | string | unknown[]) => {
-        let msg: ClientMessage;
+        let msg: TerminalClientMessage;
         try {
           const text = typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString();
           msg = JSON.parse(text);

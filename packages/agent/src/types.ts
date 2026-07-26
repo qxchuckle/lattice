@@ -1,100 +1,44 @@
-// ── 对话树数据模型 ──
+// ── 对话树数据模型（从 protocol re-export） ──
 
-export type NodeRole = 'user' | 'assistant' | 'tool' | 'system' | 'merge-summary' | 'aggregation';
+export type {
+  NodeRole,
+  NodeContent,
+  ToolCallRecord,
+  FileChange,
+  ConversationNode,
+  ConversationBranch,
+  ConversationTree,
+  MergeMode,
+  PermissionLevel,
+  PermissionRequest,
+  AgentSessionOpts,
+} from '@qcqx/lattice-agent-protocol';
 
-export interface MessageContent {
-  type: 'text' | 'code' | 'diff' | 'image';
-  text?: string;
-  language?: string;
-  path?: string;
-}
+// ── Agent 事件（统一使用 protocol 的 SourceEvent） ──
 
-export interface ToolCallRecord {
-  toolId: string;
-  args: Record<string, unknown>;
-  result?: unknown;
-  status: 'pending' | 'success' | 'error';
-  startedAt: number;
-  endedAt?: number;
-}
+export type { SourceEvent, SourceEvent as AgentEvent } from '@qcqx/lattice-agent-protocol';
 
-export interface FileChange {
-  path: string;
-  diff: string;
-  status: 'pending' | 'accepted' | 'rejected';
-}
+// ── Agent 内部工具定义（区别于 protocol 的 ToolDefinition） ──
 
-export interface ConversationNode {
-  id: string;
-  parentId: string | null;
-  branchId: string;
-  role: NodeRole;
-  content: MessageContent[];
-  timestamp: number;
-  agentId?: string;
-  metadata?: {
-    toolCalls?: ToolCallRecord[];
-    fileChanges?: FileChange[];
-    tokensUsed?: number;
-    model?: string;
-    thinkingLevel?: string;
-  };
-}
-
-export interface ConversationBranch {
-  id: string;
-  name: string;
-  forkPointId: string;
-  isDefault: boolean;
-  createdAt: number;
-  description?: string;
-  agentId?: string;
-  mergedAt?: number;
-}
-
-export interface ConversationTree {
-  id: string;
-  taskId?: string;
-  title?: string;
-  branches: ConversationBranch[];
-  headNodeId: string | null;
-  defaultBranchId: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-// ── Agent 事件 ──
-
-export type AgentEvent =
-  | { type: 'text'; content: string }
-  | { type: 'thinking'; content: string }
-  | { type: 'tool_call'; name: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; name: string; result: unknown; isError?: boolean }
-  | { type: 'file_edit'; path: string; diff: string }
-  | { type: 'terminal'; command: string; output?: string }
-  | { type: 'done'; summary?: string }
-  | { type: 'error'; message: string };
-
-// ── Tool 定义 ──
-
-export interface ToolParameter {
+export interface AgentToolParameter {
   name: string;
   type: 'string' | 'number' | 'boolean' | 'array' | 'object';
   description: string;
   required?: boolean;
 }
 
-export interface ToolDefinition {
+/** Agent 内部工具定义（带 id/权限，区别于 protocol 的源级 ToolDefinition） */
+export interface AgentToolDefinition {
   id: string;
   name: string;
   description: string;
   category: string;
-  parameters: ToolParameter[];
+  parameters: AgentToolParameter[];
   /** 权限级别 */
   permission: 'allow' | 'ask' | 'deny';
 }
 
-export interface ToolResult {
+export interface AgentToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
@@ -107,22 +51,14 @@ export interface IToolProvider {
   readonly name: string;
   readonly category: string;
   init(config?: Record<string, unknown>): Promise<boolean>;
-  getTools(): ToolDefinition[];
-  execute(toolId: string, args: Record<string, unknown>): Promise<ToolResult>;
+  getTools(): AgentToolDefinition[];
+  execute(toolId: string, args: Record<string, unknown>): Promise<AgentToolResult>;
   dispose(): Promise<void>;
 }
 
-// ── 权限 ──
+// ── 权限（从 protocol re-export） ──
 
-export type PermissionLevel = 'allow' | 'ask' | 'deny';
-
-export interface PermissionRequest {
-  id: string;
-  tool: string;
-  args: Record<string, unknown>;
-  level: PermissionLevel;
-  timestamp: number;
-}
+// PermissionLevel / PermissionRequest 已在上方对话树段 re-export
 
 // ── 上下文 ──
 
@@ -150,16 +86,10 @@ export interface SlashCommand {
   toolName?: string;
 }
 
-// ── Session 选项 ──
+// ── Session 选项（从 protocol re-export） ──
 
-export interface SessionOpts {
-  agentId: string;
-  cwd: string;
-  taskId?: string;
-  model?: string;
-  thinkingLevel?: 'low' | 'medium' | 'high';
-}
+// SessionOpts 已在上方对话树段 re-export
 
-// ── Merge 模式 ──
+// ── Merge 模式（从 protocol re-export） ──
 
-export type MergeMode = 'squash' | 'cherry-pick' | 'reference';
+// MergeMode 已在上方对话树段 re-export

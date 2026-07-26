@@ -1,8 +1,14 @@
 /**
  * Session Manager — 对话树 CRUD、分支、merge、JSONL 持久化
  * 兼容 Pi SessionManager 的 id/parentId JSONL 格式
+ *
+ * 分层加载（参考 Claude Code / Cursor 按需加载模式）：
+ *   Level 0: loadTreeMeta — 只读 tree.json（元数据）
+ *   Level 1: loadRecentNodes — 尾部读取最近 N 条节点
+ *   Level 2: loadBranchNodes — 按分支筛选
+ *   Level 3: loadTree — 全量加载（兜底）
  */
-import { readFile, writeFile, appendFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, readdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -11,20 +17,35 @@ import type {
   ConversationTree,
   MergeMode,
   NodeRole,
-  MessageContent,
+  NodeContent,
 } from '../types.js';
+import { SessionIndexManager } from './session-index.js';
+import type { SessionIndexEntry } from './session-index.js';
 
 export interface SessionStorage {
-  baseDir: string; // ~/.lattice/users/<u>/sessions/
+  baseDir: string; // ~/.lattice/.cache/sessions/
+  indexPath?: string; // 索引文件路径（可选，不传则不启用索引）
 }
 
 export class SessionManager {
   private trees = new Map<string, ConversationTree>();
   private nodes = new Map<string, Map<string, ConversationNode>>(); // treeId → nodeId → node
   private storage: SessionStorage;
+  private indexManager: SessionIndexManager | null = null;
 
   constructor(storage: SessionStorage) {
     this.storage = storage;
+    if (storage.indexPath) {
+      this.indexManager = new SessionIndexManager({
+        indexPath: storage.indexPath,
+        baseDir: storage.baseDir,
+      });
+    }
+  }
+
+  /** 获取索引管理器（可能为 null） */
+  getIndexManager(): SessionIndexManager | null {
+    return this.indexManager;
   }
 
   // ── 树生命周期 ──
@@ -54,6 +75,19 @@ export class SessionManager {
     this.trees.set(id, tree);
     this.nodes.set(id, new Map());
     await this.persistTree(tree);
+
+    // 索引维护
+    if (this.indexManager) {
+      await this.indexManager.upsert({
+        treeId: id,
+        title: opts?.title,
+        taskId: opts?.taskId,
+        nodeCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
     return tree;
   }
 
@@ -84,6 +118,112 @@ export class SessionManager {
     }
   }
 
+  // ── 分层加载 ──
+
+  /**
+   * Level 0: 只加载 tree.json 元数据（不读 nodes.jsonl）
+   * 适用于列表展示、分支切换等只需结构信息的场景
+   */
+  async loadTreeMeta(treeId: string): Promise<ConversationTree | undefined> {
+    if (this.trees.has(treeId)) return this.trees.get(treeId);
+    try {
+      const dir = join(this.storage.baseDir, treeId);
+      const metaRaw = await readFile(join(dir, 'tree.json'), 'utf-8');
+      const tree: ConversationTree = JSON.parse(metaRaw);
+      this.trees.set(treeId, tree);
+      // 不加载节点，确保 nodes map 存在但为空
+      if (!this.nodes.has(treeId)) this.nodes.set(treeId, new Map());
+      return tree;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Level 1: 加载最近 N 个节点（从 JSONL 尾部读取，避免全量加载）
+   * 适用于恢复对话、展示最近几轮的场景
+   */
+  async loadRecentNodes(treeId: string, count = 50): Promise<ConversationNode[]> {
+    const dir = join(this.storage.baseDir, treeId);
+    const filePath = join(dir, 'nodes.jsonl');
+
+    try {
+      const lines = await this.readTailLines(filePath, count);
+      const nodes: ConversationNode[] = [];
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const node: ConversationNode = JSON.parse(line);
+        nodes.push(node);
+      }
+
+      // 同时填充内存缓存
+      if (!this.nodes.has(treeId)) this.nodes.set(treeId, new Map());
+      const nodeMap = this.nodes.get(treeId)!;
+      for (const node of nodes) nodeMap.set(node.id, node);
+
+      return nodes;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Level 2: 加载指定分支的节点
+   * 适用于分支切换后只展示当前分支对话的场景
+   */
+  async loadBranchNodes(treeId: string, branchId: string): Promise<ConversationNode[]> {
+    // 如果已全量加载，直接筛选
+    const cached = this.nodes.get(treeId);
+    if (cached && cached.size > 0) {
+      return [...cached.values()].filter((n) => n.branchId === branchId);
+    }
+
+    // 否则全量读取后筛选（分支筛选无法用尾部读取优化）
+    const dir = join(this.storage.baseDir, treeId);
+    try {
+      const nodesRaw = await readFile(join(dir, 'nodes.jsonl'), 'utf-8');
+      const nodes: ConversationNode[] = [];
+      const nodeMap = new Map<string, ConversationNode>();
+      for (const line of nodesRaw.split('\n')) {
+        if (!line.trim()) continue;
+        const node: ConversationNode = JSON.parse(line);
+        nodeMap.set(node.id, node);
+        if (node.branchId === branchId) nodes.push(node);
+      }
+      this.nodes.set(treeId, nodeMap);
+      return nodes;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 列出所有会话（通过索引，不读 JSONL 正文）
+   * 索引不存在时自动从目录重建
+   */
+  async listSessions(): Promise<SessionIndexEntry[]> {
+    if (!this.indexManager) {
+      // 无索引时退化为目录遍历
+      return this.listSessionsFromDir();
+    }
+    const sessions = await this.indexManager.listSessions();
+    if (sessions.length === 0) {
+      // 索引为空可能是首次使用或损坏，尝试重建
+      await this.indexManager.rebuild();
+      return this.indexManager.listSessions();
+    }
+    return sessions;
+  }
+
+  /** 从祖先路径加载（只加载 HEAD 到 root 的路径节点） */
+  async loadAncestorPath(treeId: string, nodeId: string): Promise<ConversationNode[]> {
+    // 需要先有节点数据
+    if (!this.nodes.has(treeId) || this.nodes.get(treeId)!.size === 0) {
+      await this.loadTree(treeId);
+    }
+    return this.getAncestorPath(treeId, nodeId);
+  }
+
   // ── 节点操作 ──
 
   async addNode(
@@ -91,7 +231,7 @@ export class SessionManager {
     opts: {
       parentId: string | null;
       role: NodeRole;
-      content: MessageContent[];
+      content: NodeContent[];
       agentId?: string;
       metadata?: ConversationNode['metadata'];
     },
@@ -116,6 +256,15 @@ export class SessionManager {
 
     await this.appendNode(treeId, node);
     await this.persistTree(tree);
+
+    // 索引维护
+    if (this.indexManager) {
+      await this.indexManager.touch(treeId, {
+        lastRole: node.role,
+        nodeCount: this.nodes.get(treeId)!.size,
+      });
+    }
+
     return node;
   }
 
@@ -209,9 +358,7 @@ export class SessionManager {
 
     // 如果 HEAD 被删，回退到父节点
     if (tree.headNodeId && toDelete.has(tree.headNodeId)) {
-      const deletedNode = nodeIds.includes(tree.headNodeId)
-        ? undefined
-        : undefined;
+      const deletedNode = nodeIds.includes(tree.headNodeId) ? undefined : undefined;
       // 找到第一个被删节点的父
       const firstDeleted = this.getNode(treeId, nodeIds[0]);
       tree.headNodeId = firstDeleted?.parentId ?? null;
@@ -263,12 +410,14 @@ export class SessionManager {
     const branch = tree.branches.find((b) => b.id === branchId);
     if (!branch) throw new Error(`Branch not found: ${branchId}`);
 
-    let content: MessageContent[];
+    let content: NodeContent[];
     if (mode === 'squash') {
       content = [{ type: 'text', text: `[从分支 "${branch.name}" 合并]\n${summary ?? ''}` }];
     } else if (mode === 'reference') {
       const branchNodes = this.getNodes(treeId).filter((n) => n.branchId === branchId);
-      content = [{ type: 'text', text: `📎 参考分支 "${branch.name}"（${branchNodes.length} 轮对话）` }];
+      content = [
+        { type: 'text', text: `📎 参考分支 "${branch.name}"（${branchNodes.length} 轮对话）` },
+      ];
     } else {
       content = [{ type: 'text', text: `[cherry-pick from "${branch.name}"]` }];
     }
@@ -309,5 +458,91 @@ export class SessionManager {
     const nodes = this.getNodes(treeId);
     const content = nodes.map((n) => JSON.stringify(n)).join('\n') + '\n';
     await writeFile(join(dir, 'nodes.jsonl'), content, 'utf-8');
+  }
+
+  /**
+   * 从文件尾部读取最后 N 行（避免全量 readFile）
+   * 使用 fs.read 从文件末尾反向扫描换行符定位
+   */
+  private async readTailLines(filePath: string, count: number): Promise<string[]> {
+    const fh = await open(filePath, 'r');
+    try {
+      const { size } = await fh.stat();
+      if (size === 0) return [];
+
+      // 对于小文件（< 64KB），直接全量读取更简单
+      if (size < 65536) {
+        const buf = Buffer.alloc(size);
+        await fh.read(buf, 0, size, 0);
+        const content = buf.toString('utf-8');
+        const lines = content.split('\n').filter((l) => l.trim());
+        return lines.slice(-count);
+      }
+
+      // 大文件：从尾部反向读取
+      const chunkSize = 8192;
+      const lines: string[] = [];
+      let remaining = '';
+      let position = size;
+
+      while (position > 0 && lines.length < count) {
+        const readSize = Math.min(chunkSize, position);
+        position -= readSize;
+        const buf = Buffer.alloc(readSize);
+        await fh.read(buf, 0, readSize, position);
+
+        const chunk = buf.toString('utf-8') + remaining;
+        const parts = chunk.split('\n');
+        remaining = parts[0]; // 第一个可能是不完整的行
+
+        // 从后往前收集完整行
+        for (let i = parts.length - 1; i >= 1; i--) {
+          if (parts[i].trim()) {
+            lines.unshift(parts[i]);
+            if (lines.length >= count) break;
+          }
+        }
+      }
+
+      // 处理文件开头的剩余部分
+      if (lines.length < count && remaining.trim()) {
+        lines.unshift(remaining);
+      }
+
+      return lines.slice(-count);
+    } finally {
+      await fh.close();
+    }
+  }
+
+  /** 无索引时退化为目录遍历列出会话 */
+  private async listSessionsFromDir(): Promise<SessionIndexEntry[]> {
+    const entries: SessionIndexEntry[] = [];
+    let dirs: string[];
+    try {
+      dirs = await readdir(this.storage.baseDir);
+    } catch {
+      return [];
+    }
+
+    for (const dir of dirs) {
+      if (dir.startsWith('.') || dir === 'index.json') continue;
+      try {
+        const raw = await readFile(join(this.storage.baseDir, dir, 'tree.json'), 'utf-8');
+        const tree = JSON.parse(raw) as ConversationTree;
+        entries.push({
+          treeId: tree.id,
+          title: tree.title,
+          taskId: tree.taskId,
+          nodeCount: 0, // 不读 JSONL，未知
+          createdAt: tree.createdAt,
+          updatedAt: tree.updatedAt,
+        });
+      } catch {
+        // 跳过无效目录
+      }
+    }
+
+    return entries.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 }

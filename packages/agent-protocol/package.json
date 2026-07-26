@@ -1,7 +1,7 @@
 {
-  "name": "@qcqx/lattice-agent",
+  "name": "@qcqx/lattice-agent-protocol",
   "version": "0.1.0",
-  "description": "Lattice Agent 核心（平台无关）：对话树、工具注册、上下文引擎、工作流",
+  "description": "Lattice Agent 契约层：源接口、事件、传输消息格式，零依赖纯类型 + 轻量 guards",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,13 +25,6 @@
   ],
   "engines": {
     "node": ">=20.19"
-  },
-  "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.80.0",
-    "@earendil-works/pi-ai": "^0.80.0",
-    "@qcqx/lattice-agent-protocol": "workspace:*",
-    "@qcqx/lattice-core": "workspace:*",
-    "@qoder-ai/qoder-agent-sdk": "^1.0.15"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

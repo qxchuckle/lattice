@@ -53,7 +53,16 @@ export class ClaudeCodeAdapter implements IExternalAgentAdapter {
 
   async *send(sessionId: string, message: string): AsyncIterable<AgentEvent> {
     const session = this.sessions.get(sessionId);
-    if (!session) { yield { type: 'error', message: 'Session not found' }; return; }
+    if (!session) {
+      yield {
+        type: 'error',
+        message: 'Session not found',
+        code: 'session_not_found' as const,
+        retryable: false,
+        source: { id: 'claude-code', name: 'Claude Code' },
+      };
+      return;
+    }
 
     // TODO: Phase 4 实际集成 @anthropic-ai/claude-code SDK
     // 当前为骨架：通过 claude --print 模式调用
@@ -102,8 +111,12 @@ export class GenericPtyAdapter implements IExternalAgentAdapter {
     yield { type: 'done' };
   }
 
-  async abort(): Promise<void> { /* TODO */ }
-  async destroySession(): Promise<void> { /* TODO */ }
+  async abort(): Promise<void> {
+    /* TODO */
+  }
+  async destroySession(): Promise<void> {
+    /* TODO */
+  }
 }
 
 // ── Agent 注册表 ──
@@ -129,6 +142,9 @@ export class AgentRegistry {
   }
 
   list(): { id: string; name: string }[] {
-    return [...this.adapters.values()].map((a) => ({ id: a.config.id, name: a.config.displayName }));
+    return [...this.adapters.values()].map((a) => ({
+      id: a.config.id,
+      name: a.config.displayName,
+    }));
   }
 }

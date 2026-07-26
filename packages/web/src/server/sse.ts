@@ -1,23 +1,7 @@
 import type { FastifyReply } from 'fastify';
+import type { SseProgress, SseDone } from '@qcqx/lattice-agent-protocol';
 
-/** SSE 进度数据 */
-export interface SseProgress {
-  current: number;
-  total: number;
-  added?: number;
-  updated?: number;
-  removed?: number;
-  skipped?: number;
-  chunksProcessed?: number;
-  currentFile?: string;
-}
-
-/** SSE 完成数据 */
-export interface SseDone {
-  done: true;
-  result?: Record<string, unknown>;
-  error?: string;
-}
+export type { SseProgress, SseDone };
 
 /**
  * 设置 SSE 响应头，返回写入函数。

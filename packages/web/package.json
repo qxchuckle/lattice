@@ -46,6 +46,7 @@
     "@fastify/websocket": "^11.0.0",
     "@monaco-editor/react": "^4.7.0",
     "@qcqx/lattice-agent": "workspace:*",
+    "@qcqx/lattice-agent-protocol": "workspace:*",
     "@qcqx/lattice-core": "workspace:*",
     "@sinclair/typebox": "^0.34.0",
     "@tanstack/react-query": "^5.0.0",

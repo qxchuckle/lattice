@@ -6,25 +6,27 @@
 // ── 类型 ──
 export type {
   NodeRole,
-  MessageContent,
+  NodeContent,
   ToolCallRecord,
   FileChange,
   ConversationNode,
   ConversationBranch,
   ConversationTree,
   AgentEvent,
-  ToolParameter,
-  ToolDefinition,
-  ToolResult,
+  AgentToolParameter,
+  AgentToolDefinition,
+  AgentToolResult,
   IToolProvider,
   PermissionLevel,
   PermissionRequest,
   ContextLayer,
   BuiltContext,
   SlashCommand,
-  SessionOpts,
+  AgentSessionOpts,
   MergeMode,
 } from './types.js';
+
+export type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 
 // ── Event Bus ──
 export { EventBus } from './events/event-bus.js';
@@ -33,6 +35,14 @@ export type { LatticeAgentEvent } from './events/event-bus.js';
 // ── Session Manager ──
 export { SessionManager } from './session/session-manager.js';
 export type { SessionStorage } from './session/session-manager.js';
+
+// ── Session Index ──
+export { SessionIndexManager } from './session/session-index.js';
+export type { SessionIndex, SessionIndexEntry } from './session/session-index.js';
+
+// ── Compaction ──
+export { compactConversation, shouldCompact, filterCompactedNodes } from './session/compaction.js';
+export type { CompactionOptions, CompactionResult, SummarizeFn } from './session/compaction.js';
 
 // ── Tool Registry ──
 export { ToolRegistry } from './tools/tool-registry.js';
@@ -64,7 +74,11 @@ export type { LatticeToolDeps } from './tools/lattice-provider.js';
 
 // ── 外部 Agent 适配器 ──
 export { ClaudeCodeAdapter, GenericPtyAdapter, AgentRegistry } from './core/external-agents.js';
-export type { IExternalAgentAdapter, ExternalAgentConfig, ExternalAgentSession } from './core/external-agents.js';
+export type {
+  IExternalAgentAdapter,
+  ExternalAgentConfig,
+  ExternalAgentSession,
+} from './core/external-agents.js';
 
 // ── Qoder 适配器 ──
 export { QoderAdapter } from './core/qoder-adapter.js';

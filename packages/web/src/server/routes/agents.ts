@@ -8,41 +8,11 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { createLatticeAgent, QoderAdapter, type LatticeAgent } from '@qcqx/lattice-agent';
+import type { ClientMessage } from '@qcqx/lattice-agent-protocol';
 import { getUsername, isAuthEnabled, readWebAuth, getSessionsCacheDir } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
 import { readFile, appendFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-
-interface ClientMessage {
-  type:
-    | 'session.create'
-    | 'session.send'
-    | 'session.abort'
-    | 'session.destroy'
-    | 'tree.fork'
-    | 'tree.delete'
-    | 'tree.merge'
-    | 'tree.switchHead'
-    | 'tree.setDefault'
-    | 'permission.respond';
-  // session
-  agentId?: string;
-  cwd?: string;
-  taskId?: string;
-  sessionId?: string;
-  message?: string;
-  // tree
-  treeId?: string;
-  nodeId?: string;
-  nodeIds?: string[];
-  branchName?: string;
-  branchId?: string;
-  targetNodeId?: string;
-  mode?: string;
-  // permission
-  requestId?: string;
-  allowed?: boolean;
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function send(ws: { send: (data: string) => void }, payload: Record<string, unknown>) {

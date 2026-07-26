@@ -2,7 +2,12 @@
  * Tool Registry — 工具注册、发现、调度
  * 可插拔 Provider 模式，支持 MCP 桥接
  */
-import type { ToolDefinition, ToolResult, IToolProvider, PermissionLevel } from '../types.js';
+import type {
+  AgentToolDefinition,
+  AgentToolResult,
+  IToolProvider,
+  PermissionLevel,
+} from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
 
 export interface ToolFilter {
@@ -12,7 +17,7 @@ export interface ToolFilter {
 
 export class ToolRegistry {
   private providers = new Map<string, IToolProvider>();
-  private tools = new Map<string, { def: ToolDefinition; providerId: string }>();
+  private tools = new Map<string, { def: AgentToolDefinition; providerId: string }>();
   private events: EventBus;
 
   constructor(events: EventBus) {
@@ -20,7 +25,10 @@ export class ToolRegistry {
   }
 
   /** 注册一个 Tool Provider */
-  async registerProvider(provider: IToolProvider, config?: Record<string, unknown>): Promise<boolean> {
+  async registerProvider(
+    provider: IToolProvider,
+    config?: Record<string, unknown>,
+  ): Promise<boolean> {
     const ok = await provider.init(config);
     if (!ok) return false;
 
@@ -51,7 +59,7 @@ export class ToolRegistry {
   }
 
   /** 获取所有已注册 tools（可过滤） */
-  getTools(filter?: ToolFilter): ToolDefinition[] {
+  getTools(filter?: ToolFilter): AgentToolDefinition[] {
     let defs = [...this.tools.values()].map((t) => t.def);
     if (filter?.category) defs = defs.filter((d) => d.category === filter.category);
     if (filter?.permission) defs = defs.filter((d) => d.permission === filter.permission);
@@ -59,12 +67,12 @@ export class ToolRegistry {
   }
 
   /** 获取单个 tool 定义 */
-  getTool(toolId: string): ToolDefinition | undefined {
+  getTool(toolId: string): AgentToolDefinition | undefined {
     return this.tools.get(toolId)?.def;
   }
 
   /** 执行 tool */
-  async execute(toolId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(toolId: string, args: Record<string, unknown>): Promise<AgentToolResult> {
     const entry = this.tools.get(toolId);
     if (!entry) return { success: false, error: `Tool not found: ${toolId}` };
 
@@ -76,7 +84,11 @@ export class ToolRegistry {
 
     try {
       const result = await provider.execute(toolId, args);
-      this.events.emit('tools:execute_end', { toolId, success: result.success, duration: Date.now() - startedAt });
+      this.events.emit('tools:execute_end', {
+        toolId,
+        success: result.success,
+        duration: Date.now() - startedAt,
+      });
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
@@ -87,7 +99,11 @@ export class ToolRegistry {
 
   /** 已注册 Provider 列表 */
   getProviders(): { id: string; name: string; category: string }[] {
-    return [...this.providers.values()].map((p) => ({ id: p.id, name: p.name, category: p.category }));
+    return [...this.providers.values()].map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+    }));
   }
 
   /** 已注册 tool 数量 */

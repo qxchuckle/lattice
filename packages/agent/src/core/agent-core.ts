@@ -10,7 +10,7 @@ import {
   type AgentMessage,
   type AgentEvent as PiAgentEvent,
 } from '@earendil-works/pi-agent-core';
-import type { AgentEvent, SessionOpts } from '../types.js';
+import type { AgentEvent, AgentSessionOpts } from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { PermissionGuard } from '../permission/permission-guard.js';
@@ -28,7 +28,7 @@ export interface AgentCoreConfig {
 
 export interface ActiveSession {
   id: string;
-  opts: SessionOpts;
+  opts: AgentSessionOpts;
   status: 'idle' | 'running' | 'error';
   abortController: AbortController;
   /** Pi 对话历史 */
@@ -84,11 +84,16 @@ export class AgentCore {
           args: args as Record<string, unknown>,
         });
         if (!allowed) {
-          return { content: [{ type: 'text' as const, text: `Permission denied for tool: ${t.name}` }], isError: true };
+          return {
+            content: [{ type: 'text' as const, text: `Permission denied for tool: ${t.name}` }],
+            isError: true,
+          };
         }
         const result = await this.tools.execute(t.name, args as Record<string, unknown>);
         const text = result.success
-          ? (typeof result.data === 'string' ? result.data : JSON.stringify(result.data))
+          ? typeof result.data === 'string'
+            ? result.data
+            : JSON.stringify(result.data)
           : (result.error ?? 'Tool execution failed');
         return {
           content: [{ type: 'text' as const, text }],
@@ -105,7 +110,7 @@ export class AgentCore {
   }
 
   /** 创建会话 */
-  createSession(opts: SessionOpts): string {
+  createSession(opts: AgentSessionOpts): string {
     const id = `${opts.agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const session: ActiveSession = {
       id,
@@ -113,7 +118,8 @@ export class AgentCore {
       status: 'idle',
       abortController: new AbortController(),
       messages: [],
-      systemPrompt: 'You are Lattice Agent, a helpful coding assistant integrated with the Lattice workflow system.',
+      systemPrompt:
+        'You are Lattice Agent, a helpful coding assistant integrated with the Lattice workflow system.',
     };
     this.sessions.set(id, session);
     this.events.emit('agent:session_created', { sessionId: id, agentId: opts.agentId });
@@ -121,7 +127,11 @@ export class AgentCore {
   }
 
   /** 发送消息并获取流式响应 */
-  async *prompt(sessionId: string, message: string, systemPrompt?: string): AsyncIterable<AgentEvent> {
+  async *prompt(
+    sessionId: string,
+    message: string,
+    systemPrompt?: string,
+  ): AsyncIterable<AgentEvent> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
 
@@ -141,7 +151,10 @@ export class AgentCore {
     const model = this.resolveModel();
     if (!model) {
       // 模型不可用时的降级响应
-      yield { type: 'text', content: `[Agent] 模型 ${this.config.defaultModel} 不可用，请检查 API key 配置。` };
+      yield {
+        type: 'text',
+        content: `[Agent] 模型 ${this.config.defaultModel} 不可用，请检查 API key 配置。`,
+      };
       yield { type: 'done', summary: 'Model not available' };
       session.status = 'idle';
       return;
@@ -188,7 +201,13 @@ export class AgentCore {
       const errorMsg = err instanceof Error ? err.message : String(err);
       session.status = 'error';
       this.events.emit('agent:error', { sessionId, error: errorMsg });
-      yield { type: 'error', message: errorMsg };
+      yield {
+        type: 'error',
+        message: errorMsg,
+        code: 'unknown' as const,
+        retryable: false,
+        source: { id: 'pi', name: 'Pi Agent' },
+      };
       return;
     }
 
@@ -208,12 +227,26 @@ export class AgentCore {
         return e.delta?.text ? { type: 'text', content: e.delta.text } : null;
       }
       case 'tool_execution_start': {
-        const e = event as { type: string; toolCall?: { name?: string } };
-        return { type: 'tool_call', name: e.toolCall?.name ?? 'unknown', args: {} };
+        const e = event as { type: string; toolCall?: { id?: string; name?: string } };
+        return {
+          type: 'tool_call',
+          id: e.toolCall?.id ?? crypto.randomUUID(),
+          name: e.toolCall?.name ?? 'unknown',
+          args: {},
+        };
       }
       case 'tool_execution_end': {
-        const e = event as { type: string; toolCall?: { name?: string }; result?: unknown };
-        return { type: 'tool_result', name: e.toolCall?.name ?? 'unknown', result: e.result };
+        const e = event as {
+          type: string;
+          toolCall?: { id?: string; name?: string };
+          result?: unknown;
+        };
+        return {
+          type: 'tool_result',
+          id: e.toolCall?.id ?? crypto.randomUUID(),
+          name: e.toolCall?.name ?? 'unknown',
+          result: e.result,
+        };
       }
       case 'turn_end':
         return { type: 'thinking', content: 'Turn complete' };

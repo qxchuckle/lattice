@@ -26,6 +26,11 @@ export function getSessionsCacheDir(): string {
   return pathJoin(getCacheDir(), 'sessions');
 }
 
+/** Session 索引文件路径（列表操作不读 JSONL 正文） */
+export function getSessionsIndexPath(): string {
+  return pathJoin(getSessionsCacheDir(), 'index.json');
+}
+
 // ─── fast-start 日志 ───
 
 export function getFastStartLogDir(username: string): string {

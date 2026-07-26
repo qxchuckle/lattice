@@ -2,7 +2,7 @@
  * Lattice Workflow Tool Provider — 将 lattice 工作流能力暴露为 Agent tools
  * 直接调用 @qcqx/lattice-core 函数（不走 CLI）
  */
-import type { IToolProvider, ToolDefinition, ToolResult } from '../types.js';
+import type { IToolProvider, AgentToolDefinition, AgentToolResult } from '../types.js';
 
 export interface LatticeToolDeps {
   /** 获取当前用户名 */
@@ -10,9 +10,14 @@ export interface LatticeToolDeps {
   /** 获取任务列表 */
   listTasks(opts?: { status?: string }): Promise<{ id: string; title: string; status: string }[]>;
   /** 获取任务详情 */
-  getTask(taskId: string): Promise<{ id: string; title: string; status: string; prd?: string } | null>;
+  getTask(
+    taskId: string,
+  ): Promise<{ id: string; title: string; status: string; prd?: string } | null>;
   /** 搜索历史 */
-  search(query: string, opts?: { type?: string }): Promise<{ title: string; snippet: string; type: string }[]>;
+  search(
+    query: string,
+    opts?: { type?: string },
+  ): Promise<{ title: string; snippet: string; type: string }[]>;
   /** 获取 spec */
   getSpec(name: string): Promise<{ name: string; content: string; scope: string } | null>;
   /** 列出 spec */
@@ -40,7 +45,7 @@ export class LatticeWorkflowProvider implements IToolProvider {
     return true;
   }
 
-  getTools(): ToolDefinition[] {
+  getTools(): AgentToolDefinition[] {
     return [
       {
         id: 'lattice.listTasks',
@@ -48,7 +53,13 @@ export class LatticeWorkflowProvider implements IToolProvider {
         description: '列出 lattice 任务（可按状态过滤）',
         category: 'lattice',
         permission: 'allow',
-        parameters: [{ name: 'status', type: 'string', description: '过滤状态: in_progress/completed/archived' }],
+        parameters: [
+          {
+            name: 'status',
+            type: 'string',
+            description: '过滤状态: in_progress/completed/archived',
+          },
+        ],
       },
       {
         id: 'lattice.getTask',
@@ -93,7 +104,12 @@ export class LatticeWorkflowProvider implements IToolProvider {
         permission: 'ask',
         parameters: [
           { name: 'taskId', type: 'string', description: '任务 ID', required: true },
-          { name: 'type', type: 'string', description: '类型: decision/milestone/note/issue/context/correction/constraint', required: true },
+          {
+            name: 'type',
+            type: 'string',
+            description: '类型: decision/milestone/note/issue/context/correction/constraint',
+            required: true,
+          },
           { name: 'title', type: 'string', description: '标题', required: true },
           { name: 'message', type: 'string', description: '内容', required: true },
         ],
@@ -109,7 +125,7 @@ export class LatticeWorkflowProvider implements IToolProvider {
     ];
   }
 
-  async execute(toolId: string, args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(toolId: string, args: Record<string, unknown>): Promise<AgentToolResult> {
     if (!this.initialized) return { success: false, error: 'Provider not initialized' };
 
     try {
@@ -123,7 +139,9 @@ export class LatticeWorkflowProvider implements IToolProvider {
           return task ? { success: true, data: task } : { success: false, error: 'Task not found' };
         }
         case 'lattice.search': {
-          const results = await this.deps.search(args.query as string, { type: args.type as string | undefined });
+          const results = await this.deps.search(args.query as string, {
+            type: args.type as string | undefined,
+          });
           return { success: true, data: results };
         }
         case 'lattice.getSpec': {

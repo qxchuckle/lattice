@@ -69,16 +69,20 @@ export class QoderAdapter implements IExternalAgentAdapter {
   async *send(sessionId: string, message: string): AsyncIterable<AgentEvent> {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      yield { type: 'error', message: 'Session not found' };
+      yield {
+        type: 'error',
+        message: 'Session not found',
+        code: 'session_not_found' as const,
+        retryable: false,
+        source: { id: 'qoder', name: 'Qoder' },
+      };
       return;
     }
 
     session.status = 'running';
     session.abortController = new AbortController();
 
-    const auth = this.adapterConfig.authMode === 'env'
-      ? accessTokenFromEnv()
-      : qodercliAuth();
+    const auth = this.adapterConfig.authMode === 'env' ? accessTokenFromEnv() : qodercliAuth();
 
     const q = query({
       prompt: message,
@@ -105,7 +109,13 @@ export class QoderAdapter implements IExternalAgentAdapter {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       if (!session.abortController.signal.aborted) {
-        yield { type: 'error', message: errorMsg };
+        yield {
+          type: 'error',
+          message: errorMsg,
+          code: 'unknown' as const,
+          retryable: false,
+          source: { id: 'qoder', name: 'Qoder' },
+        };
       }
     } finally {
       session.activeQuery = null;
@@ -119,18 +129,27 @@ export class QoderAdapter implements IExternalAgentAdapter {
     const type = msg.type as string;
 
     if (type === 'assistant') {
-      const message = msg.message as { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      const message = msg.message as {
+        content?: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
+      };
       if (message?.content) {
         for (const block of message.content) {
           if (block.type === 'text' && block.text) {
             events.push({ type: 'text', content: block.text });
           } else if (block.type === 'tool_use') {
-            events.push({ type: 'tool_call', name: block.name ?? 'unknown', args: (block.input as Record<string, unknown>) ?? {} });
+            events.push({
+              type: 'tool_call',
+              id: crypto.randomUUID(),
+              name: block.name ?? 'unknown',
+              args: (block.input as Record<string, unknown>) ?? {},
+            });
           }
         }
       }
     } else if (type === 'stream_event') {
-      const event = msg.event as { delta?: { type: string; text?: string; thinking?: string; partial_json?: string } };
+      const event = msg.event as {
+        delta?: { type: string; text?: string; thinking?: string; partial_json?: string };
+      };
       const delta = event?.delta;
       if (delta?.type === 'text_delta' && delta.text) {
         events.push({ type: 'text', content: delta.text });
@@ -142,7 +161,13 @@ export class QoderAdapter implements IExternalAgentAdapter {
       if (subtype === 'success') {
         events.push({ type: 'done', summary: 'success' });
       } else if (subtype === 'error') {
-        events.push({ type: 'error', message: (msg.error as string) ?? 'Unknown error' });
+        events.push({
+          type: 'error',
+          message: (msg.error as string) ?? 'Unknown error',
+          code: 'unknown' as const,
+          retryable: false,
+          source: { id: 'qoder', name: 'Qoder' },
+        });
       }
     }
 
@@ -154,7 +179,11 @@ export class QoderAdapter implements IExternalAgentAdapter {
     if (session) {
       session.abortController.abort();
       if (session.activeQuery) {
-        try { await session.activeQuery.interrupt(); } catch { /* ignore */ }
+        try {
+          await session.activeQuery.interrupt();
+        } catch {
+          /* ignore */
+        }
       }
       session.status = 'idle';
     }
@@ -165,7 +194,11 @@ export class QoderAdapter implements IExternalAgentAdapter {
     if (session) {
       session.abortController.abort();
       if (session.activeQuery) {
-        try { await session.activeQuery.close(); } catch { /* ignore */ }
+        try {
+          await session.activeQuery.close();
+        } catch {
+          /* ignore */
+        }
       }
       this.sessions.delete(sessionId);
     }
