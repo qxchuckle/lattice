@@ -5,6 +5,10 @@
  * 事件映射 → ./map-event.ts
  * 认证/模型 → ./auth.ts
  */
+import { randomUUID } from 'node:crypto';
+import { mkdir, readdir, rename } from 'node:fs/promises';
+import { join, basename } from 'node:path';
+import { homedir } from 'node:os';
 import type {
   ISource,
   SourceCapabilities,
@@ -15,7 +19,7 @@ import type {
   ToolInfo,
   ToolDefinition,
   InjectToolsConfig,
-  SessionCreateOpts,
+  PromptOpts,
   SourceEvent,
   ContentBlock,
 } from '../../types.js';
@@ -31,6 +35,15 @@ type AgentSession = {
   dispose(): void;
 };
 
+/** Pi SessionManager 的最小结构类型（仅声明用到的方法） */
+type PiSessionManager = {
+  getLeafId(): string | null;
+  createBranchedSession(leafId: string): string | undefined;
+  getSessionFile(): string | undefined;
+};
+
+type PiSessionHandle = { session: AgentSession; manager: PiSessionManager };
+
 export class PiSource implements ISource {
   readonly id = 'pi';
   readonly displayName = 'Pi Agent';
@@ -40,7 +53,7 @@ export class PiSource implements ISource {
   readonly capabilities: SourceCapabilities = {
     executionMode: 'local',
     builtinTools: ['read', 'write', 'edit', 'bash', 'glob', 'grep'],
-    sessionResume: false,
+    sessionResume: true,
     mcpSupport: true,
     maxConcurrentSessions: 0,
   };
@@ -51,16 +64,25 @@ export class PiSource implements ISource {
     canAppend: false,
   };
 
-  private sessions = new Map<string, AgentSession>();
+  private sessions = new Map<string, PiSessionHandle>();
   private injectedTools: ToolDefinition[] = [];
   private initialized = false;
+
+  /** Pi 会话持久化根目录（每个源 session 独立子目录，重启可恢复） */
+  private get sessionsRoot(): string {
+    return join(homedir(), '.lattice', 'agent-sessions', 'pi');
+  }
+
+  private sessionDir(ourId: string): string {
+    return join(this.sessionsRoot, ourId);
+  }
 
   async init(): Promise<void> {
     this.initialized = true;
   }
 
   async dispose(): Promise<void> {
-    for (const session of this.sessions.values()) session.dispose();
+    for (const handle of this.sessions.values()) handle.session.dispose();
     this.sessions.clear();
     this.initialized = false;
   }
@@ -109,59 +131,48 @@ export class PiSource implements ISource {
     this.injectedTools.push(...tools);
   }
 
-  async createSession(opts: SessionCreateOpts): Promise<string> {
-    if (!this.initialized) throw SourceError.notInitialized(this.id, this.displayName);
-
-    const { createAgentSession, SessionManager } = await import('@earendil-works/pi-coding-agent');
-
-    let systemPrompt: string | undefined;
-    if (opts.systemPrompt?.mode === 'override') systemPrompt = opts.systemPrompt.prompt;
-    if (opts.systemPrompt?.mode === 'append') systemPrompt = opts.systemPrompt.additional;
-
-    const { session } = await createAgentSession({
-      sessionManager: SessionManager.inMemory(),
-      systemPrompt,
-      cwd: opts.cwd,
-    } as Parameters<typeof createAgentSession>[0]);
-
-    const s = session as unknown as AgentSession;
-
-    // forkSession + resumeSessionId：从已有 session 复制消息数组（Pi 的 fork = 拷贝历史）
-    if (opts.forkSession && opts.resumeSessionId) {
-      const parent = this.sessions.get(opts.resumeSessionId);
-      if (parent) {
-        const parentMsgs = (
-          parent as unknown as { messages?: Array<{ role: string; content: string }> }
-        ).messages;
-        const childMsgs = (s as unknown as { messages?: Array<{ role: string; content: string }> })
-          .messages;
-        if (Array.isArray(parentMsgs) && Array.isArray(childMsgs)) {
-          childMsgs.push(...parentMsgs.map((m) => ({ ...m })));
-        }
-      }
-    }
-
-    this.sessions.set(s.sessionId, s);
-    return s.sessionId;
-  }
+  // ── 核心交互 ──
 
   async *prompt(
-    sessionId: string,
+    sessionId: string | null,
     message: ContentBlock[],
-    _opts?: { signal?: AbortSignal },
+    opts?: PromptOpts,
   ): AsyncIterable<SourceEvent> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      yield {
-        type: 'error',
-        message: `Session not found: ${sessionId}`,
-        code: 'session_not_found',
-        retryable: false,
-        source: { id: this.id, name: this.displayName },
-        suggestion: '会话可能已过期，请重新创建',
+    if (!this.initialized) throw SourceError.notInitialized(this.id, this.displayName);
+
+    // ourId 是源自己的会话标识（= 独立目录名），上层存入树以便重启恢复
+    const ourId = sessionId ?? randomUUID();
+
+    // 获取或创建 session：内存没有则从磁盘恢复（continueRecent：目录空则新建，有则续写）
+    let handle = this.sessions.get(ourId);
+    if (!handle) {
+      const { createAgentSession, SessionManager } =
+        await import('@earendil-works/pi-coding-agent');
+      let systemPrompt: string | undefined;
+      if (opts?.systemPrompt?.mode === 'override') systemPrompt = opts.systemPrompt.prompt;
+      if (opts?.systemPrompt?.mode === 'append') systemPrompt = opts.systemPrompt.additional;
+
+      const cwd = opts?.cwd || process.env.HOME || '/';
+      const dir = this.sessionDir(ourId);
+      await mkdir(dir, { recursive: true });
+      // 落盘持久化：重启后 continueRecent 从该目录的 JSONL 恢复完整上下文
+      const sessionManager = SessionManager.continueRecent(cwd, dir);
+
+      const result = await createAgentSession({
+        sessionManager,
+        systemPrompt,
+        cwd,
+      } as Parameters<typeof createAgentSession>[0]);
+
+      handle = {
+        session: result.session as unknown as AgentSession,
+        manager: sessionManager as unknown as PiSessionManager,
       };
-      return;
+      this.sessions.set(ourId, handle);
     }
+
+    const { session, manager } = handle;
+    const activeSessionId = ourId;
 
     const text = message.map((b) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
 
@@ -197,7 +208,9 @@ export class PiSource implements ISource {
         }
       }
       while (events.length > 0) yield events.shift()!;
-      yield { type: 'done' };
+      // 捕获最后一条消息的 Pi entry ID（fork 截断点，存入树节点 metadata）
+      const sourceMessageId = manager.getLeafId() ?? undefined;
+      yield { type: 'done', sessionId: activeSessionId, sourceMessageId };
     } catch (err) {
       yield {
         type: 'error',
@@ -213,13 +226,13 @@ export class PiSource implements ISource {
   }
 
   abort(sessionId: string): void {
-    this.sessions.get(sessionId)?.abort();
+    this.sessions.get(sessionId)?.session.abort();
   }
 
   destroySession(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.dispose();
+    const handle = this.sessions.get(sessionId);
+    if (handle) {
+      handle.session.dispose();
       this.sessions.delete(sessionId);
     }
     return Promise.resolve();
@@ -227,5 +240,44 @@ export class PiSource implements ISource {
 
   isSessionAlive(sessionId: string): boolean {
     return this.sessions.has(sessionId);
+  }
+
+  // ── 分支 ──
+
+  async forkSession(sessionId: string, atMessage?: string): Promise<string> {
+    const cwd = process.env.HOME || '/';
+    const parentDir = this.sessionDir(sessionId);
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+
+    const newId = randomUUID();
+    const newDir = this.sessionDir(newId);
+    await mkdir(newDir, { recursive: true });
+
+    if (atMessage) {
+      // 截断 fork：打开父 session，创建只含 root→atMessage 路径的新 session 文件
+      const parentManager = SessionManager.continueRecent(
+        cwd,
+        parentDir,
+      ) as unknown as PiSessionManager;
+      const branchedPath = parentManager.createBranchedSession(atMessage);
+      if (!branchedPath) {
+        throw new Error(`Cannot fork: entry ${atMessage} not found in session ${sessionId}`);
+      }
+      // createBranchedSession 写在父目录，移到新 session 的独立目录
+      await rename(branchedPath, join(newDir, basename(branchedPath)));
+    } else {
+      // 全量 fork：拷贝父会话完整历史
+      const files = await readdir(parentDir).catch(() => [] as string[]);
+      const parentFile = files.find((f) => f.endsWith('.jsonl'));
+      if (!parentFile) {
+        throw new Error(`Cannot fork: no persisted session for ${sessionId}`);
+      }
+      SessionManager.forkFrom(join(parentDir, parentFile), cwd, newDir);
+    }
+    return newId;
+  }
+
+  async renameSession(_sessionId: string, _title: string): Promise<void> {
+    // Pi 使用内存 session，无持久化标题，no-op
   }
 }

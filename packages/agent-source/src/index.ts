@@ -30,7 +30,7 @@ export type {
   ToolInfo,
   InjectToolsConfig,
   // Session
-  SessionCreateOpts,
+  PromptOpts,
   // 源接口
   ISource,
   SourceInfo,

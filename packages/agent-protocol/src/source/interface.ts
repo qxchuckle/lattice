@@ -1,5 +1,8 @@
 /**
- * 源接口 + 能力声明 + SystemPrompt 策略 + Session 配置
+ * 源接口 + 能力声明 + SystemPrompt 策略
+ *
+ * 对齐主流 Agent 模型：无显式 createSession，
+ * prompt 传 sessionId 则继续，传 null 则新建。
  */
 import type { SourceEvent } from './events.js';
 import type { ContentBlock } from './messages.js';
@@ -37,18 +40,14 @@ export type SystemPromptConfig =
   | { mode: 'override'; prompt: string }
   | { mode: 'append'; additional: string };
 
-// ── Session 配置 ──
+// ── Prompt 配置 ──
 
-export interface SessionCreateOpts {
-  model: string;
-  cwd: string;
+export interface PromptOpts {
+  model?: string;
+  cwd?: string;
   systemPrompt?: SystemPromptConfig;
   thinkingLevel?: 'none' | 'low' | 'medium' | 'high';
-  maxIterations?: number;
-  /** 从已有 session 恢复/分叉（源内部通过此 ID 获取历史上下文） */
-  resumeSessionId?: string;
-  /** 与 resumeSessionId 配合：fork 出新 session（不修改原 session） */
-  forkSession?: boolean;
+  signal?: AbortSignal;
 }
 
 // ── 源接口（核心契约） ──
@@ -78,16 +77,23 @@ export interface ISource {
   getBuiltinTools(): ToolInfo[];
   injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void;
 
-  // 核心交互
-  createSession(opts: SessionCreateOpts): Promise<string>;
+  // 核心交互：传 sessionId 继续对话，传 null 新建（done 事件返回新 sessionId）
   prompt(
-    sessionId: string,
+    sessionId: string | null,
     message: ContentBlock[],
-    opts?: { signal?: AbortSignal },
+    opts?: PromptOpts,
   ): AsyncIterable<SourceEvent>;
+
+  // 会话管理
   abort(sessionId: string): void;
   destroySession(sessionId: string): Promise<void>;
   isSessionAlive(sessionId: string): boolean;
+
+  // 分支：从已有 session 分叉，返回新 sessionId
+  forkSession(sessionId: string, atMessage?: string): Promise<string>;
+
+  // 重命名 session：同步标题到源内部存储
+  renameSession(sessionId: string, title: string): Promise<void>;
 }
 
 // ── 源描述信息（聚合查询用） ──

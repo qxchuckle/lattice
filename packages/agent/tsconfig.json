@@ -2,7 +2,24 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@qcqx/lattice-agent-protocol": [
+        "../agent-protocol/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-protocol/*": [
+        "../agent-protocol/src/*"
+      ],
+      "@qcqx/lattice-agent-source": [
+        "../agent-source/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-source/*": [
+        "../agent-source/src/*"
+      ]
+    }
   },
-  "include": ["src", "../../types"]
+  "include": [
+    "src",
+    "../../types"
+  ]
 }

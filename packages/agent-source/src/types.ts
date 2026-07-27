@@ -19,7 +19,7 @@ export type {
   SourceCapabilities,
   SystemPromptPolicy,
   SystemPromptConfig,
-  SessionCreateOpts,
+  PromptOpts,
   ISource,
   SourceInfo,
   SourceToolsMap,

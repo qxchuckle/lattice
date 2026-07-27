@@ -34,7 +34,7 @@ export type { LatticeAgentEvent } from './events/event-bus.js';
 
 // ── Session Manager ──
 export { SessionManager } from './session/session-manager.js';
-export type { SessionStorage } from './session/session-manager.js';
+export type { SessionStorage, StreamingState } from './session/session-manager.js';
 
 // ── Session Index ──
 export { SessionIndexManager } from './session/session-index.js';

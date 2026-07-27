@@ -39,7 +39,13 @@ export type SourceEvent =
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError?: boolean }
   | { type: 'file_edit'; path: string; diff: string }
   | { type: 'terminal'; command: string; output?: string }
-  | { type: 'done'; summary?: string; usage?: TokenUsage }
+  | {
+      type: 'done';
+      sessionId?: string;
+      summary?: string;
+      usage?: TokenUsage;
+      sourceMessageId?: string;
+    }
   | {
       type: 'error';
       message: string;
@@ -55,10 +61,11 @@ export interface SourceErrorContext {
   sourceName: string;
   operation:
     | 'init'
-    | 'createSession'
     | 'prompt'
     | 'abort'
     | 'destroySession'
+    | 'forkSession'
+    | 'renameSession'
     | 'listModels'
     | 'checkAuth';
   config?: {

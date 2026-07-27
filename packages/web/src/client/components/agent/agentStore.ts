@@ -115,6 +115,47 @@ export function abortStream(turnId?: string): void {
   if (!agentStore.sessionId) return;
   // turnId === requestId（submitFromNode 中复用）
   sendWs({ type: 'session.abort', sessionId: agentStore.sessionId, requestId: turnId });
+  // 立即更新 UI 状态为中断（不等 server 响应）
+  if (turnId) {
+    const turn = agentStore.turns.get(turnId);
+    if (turn && turn.status === 'streaming') {
+      turn.status = 'interrupted';
+      agentStore.version++;
+    }
+  }
+}
+
+// ── 继续（中断的对话接着生成，对齐 CC resume） ──
+
+export function continueTurn(turnId: string): void {
+  const turn = agentStore.turns.get(turnId);
+  if (!turn || !agentStore.sessionId) return;
+
+  // 构建 continuation prompt：包含部分回复内容，让模型接着说
+  const partialText = turn.blocks
+    .filter((b) => b.kind === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join('');
+  const prompt = partialText
+    ? `请从你上次中断的地方继续生成。你上次已经生成了以下内容：\n\n${partialText.slice(-500)}\n\n请从这里接着写，不要重复已有内容。`
+    : '继续';
+
+  // 重置当前节点状态为 streaming
+  turn.blocks = [];
+  turn.status = 'streaming';
+  agentStore.version++;
+
+  // 复用 turnId 作为 requestId，服务器侧会复用同一 source session（如果还活着）
+  setStreamingTarget(turnId, turnId);
+  sendWs({
+    type: 'session.send',
+    sessionId: agentStore.sessionId,
+    message: prompt,
+    parentNodeId: turn.parentTurnId,
+    requestId: turnId,
+    retry: true,
+    retryNodeId: turnId,
+  });
 }
 
 // ── 重试（在当前节点上重新发送，不创建新分支） ──

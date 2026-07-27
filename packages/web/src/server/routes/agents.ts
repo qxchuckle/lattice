@@ -30,10 +30,12 @@ import type {
   TokenUsage,
   ToolCallRecord,
   FileChange,
+  ConversationBranch,
 } from '@qcqx/lattice-agent-protocol';
 import { isClientMessage } from '@qcqx/lattice-agent-protocol';
 import { getUsername, isAuthEnabled, readWebAuth, getSessionsCacheDir } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
+import { randomUUID } from 'node:crypto';
 import { rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -143,8 +145,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   const sessionSourceMap = new Map<string, string>();
   const sessionTreeMap = new Map<string, string>(); // sessionId → treeId
   const requestAbortMap = new Map<string, AbortController>(); // requestId → AbortController
-  const branchSessionMap = new Map<string, string>(); // branchKey → source sessionId
-  const nodeBranchMap = new Map<string, string>(); // persisted nodeId → branchKey
+  const sessionSendQueue = new Map<string, Promise<void>>(); // sessionId → 串行锁（防止并行 send）
 
   async function getAgent(): Promise<LatticeAgent> {
     if (!agent) {
@@ -162,6 +163,278 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       });
     }
     return agent;
+  }
+
+  // ═══════════════════════════════════════════
+  // session.send 核心逻辑（由串行锁调度）
+  // ═══════════════════════════════════════════
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function handleSessionSend(
+    socket: any,
+    msg: Extract<ClientMessage, { type: 'session.send' }>,
+    latticeAgent: LatticeAgent,
+    socketRequestIds: Set<string>,
+  ): Promise<void> {
+    const sourceId = sessionSourceMap.get(msg.sessionId);
+    const source = sourceId ? latticeAgent.sources.registry.getSource(sourceId) : undefined;
+    if (!source) {
+      send(socket, {
+        type: 'session.error',
+        sessionId: msg.sessionId,
+        message: 'Session source not found',
+      });
+      return;
+    }
+
+    // 懒创建对话树（第一条消息时才创建，避免空历史）
+    if (!sessionTreeMap.has(msg.sessionId)) {
+      const tree = await latticeAgent.session.createTree({});
+      sessionTreeMap.set(msg.sessionId, tree.id);
+      send(socket, {
+        type: 'session.created',
+        sessionId: msg.sessionId,
+        treeId: tree.id,
+        agentId: sourceId ?? 'qoder',
+      });
+    }
+
+    // ══ 解析实际父节点 + 自动 fork ══
+    const treeId = sessionTreeMap.get(msg.sessionId);
+    const tree = treeId ? latticeAgent.session.getTree(treeId) : undefined;
+
+    // 解析新节点要挂的实际父节点（链接：若 parentNodeId 是 user 节点，找到它的 assistant 子节点）
+    let actualParentId: string | null = null;
+    if (treeId && msg.parentNodeId) {
+      const nodes = latticeAgent.session.getNodes(treeId);
+      const assistantChild = nodes.find(
+        (n) => n.parentId === msg.parentNodeId && n.role === 'assistant',
+      );
+      actualParentId = assistantChild?.id ?? msg.parentNodeId;
+    }
+
+    // 定位分支：优先用客户端显式指定的 branchId，否则从父节点解析
+    const actualParent =
+      treeId && actualParentId ? latticeAgent.session.getNode(treeId, actualParentId) : undefined;
+    const resolvedBranchId =
+      msg.branchId ??
+      actualParent?.branchId ??
+      (treeId && msg.parentNodeId
+        ? latticeAgent.session.getNode(treeId, msg.parentNodeId)?.branchId
+        : undefined);
+    let branch = tree?.branches.find((b) => b.id === (resolvedBranchId ?? tree?.defaultBranchId));
+    let sourceSessionId = branch?.sourceSessionId ?? null;
+
+    // 自动 fork 检测：未显式指定分支 + 实际父节点已有 user 子节点 + 不是 retry → 兄弟分支
+    let autoForked = false;
+    if (tree && actualParent && !msg.branchId && !msg.retry && sourceSessionId) {
+      const hasUserChild = latticeAgent.session
+        .getNodes(tree.id)
+        .some((n) => n.parentId === actualParent.id && n.role === 'user');
+      if (hasUserChild) {
+        const sourceId = sessionSourceMap.get(msg.sessionId);
+        const source = sourceId ? latticeAgent.sources.registry.getSource(sourceId) : undefined;
+        if (source) {
+          const atMessage = (actualParent.metadata as Record<string, unknown>)?.sourceMessageId as
+            | string
+            | undefined;
+          let newBranch: ConversationBranch | undefined;
+          try {
+            newBranch = await latticeAgent.session.fork(tree.id, actualParent.id);
+            const forkedSessionId = await source.forkSession(sourceSessionId, atMessage);
+            await latticeAgent.session.setBranchSession(tree.id, newBranch.id, forkedSessionId);
+            branch = newBranch;
+            sourceSessionId = forkedSessionId;
+            autoForked = true;
+          } catch {
+            // fork 失败：清理可能已创建的孤儿分支，继续使用原 session
+            if (newBranch) {
+              await latticeAgent.session.removeBranch(tree.id, newBranch.id).catch(() => {});
+            }
+          }
+        }
+      }
+    }
+
+    const requestId = msg.requestId;
+    if (requestId) socketRequestIds.add(requestId);
+
+    // ══ 持久化 user 节点（prompt 前，确保用户消息永不丢失） ══
+    let userNode: { id: string } | undefined;
+    if (treeId) {
+      const t = latticeAgent.session.getTree(treeId);
+
+      if (t && !t.title) {
+        t.title = msg.message.slice(0, 30) + (msg.message.length > 30 ? '...' : '');
+      }
+
+      // 重试：删除旧 assistant 子节点
+      let retryUserNode: { id: string } | undefined;
+      if (msg.retry && msg.retryNodeId) {
+        const nodes = latticeAgent.session.getNodes(treeId);
+        retryUserNode = nodes.find((n) => n.id === msg.retryNodeId);
+        if (retryUserNode) {
+          const oldAssistant = nodes.find(
+            (n) => n.parentId === retryUserNode!.id && n.role === 'assistant',
+          );
+          if (oldAssistant) {
+            await latticeAgent.session.deleteNodes(treeId, [oldAssistant.id]);
+          }
+        }
+      }
+
+      userNode =
+        retryUserNode ??
+        (await latticeAgent.session.addNode(treeId, {
+          id: requestId,
+          parentId: actualParentId,
+          role: 'user',
+          content: [{ type: 'text', text: msg.message }],
+          branchId: autoForked || msg.branchId ? branch?.id : undefined,
+        }));
+    }
+
+    // ══ 流式响应 + 每 delta 写入 streaming 文件（对齐 Claude Code） ══
+    const collectedEvents: SourceEvent[] = [];
+    const abortController = new AbortController();
+    if (requestId) requestAbortMap.set(requestId, abortController);
+
+    // 增量维护 content（O(1) 每个 delta，避免 buildPersistData 的 O(n) 重建）
+    const runningContent: NodeContent[] = [];
+    const streamStartedAt = Date.now();
+
+    const persistStreaming = async () => {
+      if (!treeId || !requestId || !userNode) return;
+      await latticeAgent.session.writeStreaming(treeId, {
+        requestId,
+        parentId: userNode.id,
+        role: 'assistant',
+        startedAt: streamStartedAt,
+        content: runningContent,
+      });
+    };
+
+    try {
+      for await (const event of source.prompt(
+        sourceSessionId,
+        [{ type: 'text', text: msg.message }],
+        { signal: abortController.signal },
+      )) {
+        collectedEvents.push(event);
+
+        // 增量更新 runningContent
+        switch (event.type) {
+          case 'text': {
+            const last = runningContent[runningContent.length - 1];
+            if (last && last.type === 'text') last.text += event.content;
+            else runningContent.push({ type: 'text', text: event.content });
+            break;
+          }
+          case 'thinking': {
+            const last = runningContent[runningContent.length - 1];
+            if (last && last.type === 'thinking') last.text += event.content;
+            else runningContent.push({ type: 'thinking', text: event.content });
+            break;
+          }
+          case 'tool_call':
+            runningContent.push({
+              type: 'tool_call',
+              toolId: event.id,
+              name: event.name,
+              args: event.args,
+              status: 'pending',
+            });
+            break;
+          case 'tool_result': {
+            const tc = runningContent.find((c) => c.type === 'tool_call' && c.toolId === event.id);
+            if (tc && tc.type === 'tool_call') tc.status = event.isError ? 'error' : 'success';
+            runningContent.push({
+              type: 'tool_result',
+              toolId: event.id,
+              name: event.name,
+              result: event.result,
+              isError: event.isError,
+            });
+            break;
+          }
+          case 'file_edit':
+            runningContent.push({ type: 'diff', text: event.diff, path: event.path });
+            break;
+          case 'terminal':
+            runningContent.push({ type: 'terminal', command: event.command, output: event.output });
+            break;
+          case 'error':
+            runningContent.push({
+              type: 'error',
+              message: event.message,
+              suggestion: event.suggestion,
+            });
+            break;
+          case 'done':
+            break;
+        }
+
+        // 每个 delta 写入 streaming 文件（崩溃时最多丢 1 个 delta）
+        await persistStreaming();
+        send(socket, { type: 'event', sessionId: msg.sessionId, event, requestId });
+      }
+    } catch (err) {
+      // 异常中断 → streaming 文件已包含到最后一个 delta 的内容
+      await persistStreaming();
+      send(socket, {
+        type: 'session.error',
+        sessionId: msg.sessionId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      if (requestId) {
+        requestAbortMap.delete(requestId);
+        socketRequestIds.delete(requestId);
+      }
+    }
+
+    // ══ 流结束 → 持久化 assistant 节点 ══
+    // 判定是否中断：未收到 done 事件 = 被 abort（手动停止 / 关闭页面 / 崩溃）
+    const doneEvent = collectedEvents.find((e) => e.type === 'done');
+    const wasInterrupted = abortController.signal.aborted || !doneEvent;
+
+    // 从 done 事件捕获源 sessionId（新建时源返回，续写时不变）并持久化
+    if (doneEvent && 'sessionId' in doneEvent && doneEvent.sessionId && branch && treeId) {
+      if (branch.sourceSessionId !== doneEvent.sessionId) {
+        await latticeAgent.session.setBranchSession(treeId, branch.id, doneEvent.sessionId);
+      }
+      branch.sourceSessionId = doneEvent.sessionId;
+    }
+
+    if (treeId) {
+      if (collectedEvents.length > 0) {
+        const data = buildPersistData(collectedEvents, sourceId ?? 'unknown');
+        const assistantNode = await latticeAgent.session.addNode(treeId, {
+          parentId: userNode!.id,
+          role: 'assistant',
+          content: data.content,
+          agentId: data.agentId,
+          metadata: {
+            ...data.metadata,
+            ...(wasInterrupted ? { interrupted: true } : {}),
+            // 持久化源消息 ID（fork 时需要传给源）
+            ...(doneEvent && 'sourceMessageId' in doneEvent && doneEvent.sourceMessageId
+              ? { sourceMessageId: doneEvent.sourceMessageId }
+              : {}),
+          },
+        });
+        // 只有正常完成才清理 streaming 文件（中断时保留，供崩溃恢复用）
+        if (!wasInterrupted && requestId) {
+          await latticeAgent.session.clearStreaming(treeId, requestId);
+        }
+        send(socket, { type: 'tree.updated', treeId, headNodeId: assistantNode.id, requestId });
+      } else {
+        if (!wasInterrupted && requestId) {
+          await latticeAgent.session.clearStreaming(treeId, requestId);
+        }
+        send(socket, { type: 'tree.updated', treeId, headNodeId: userNode?.id ?? null, requestId });
+      }
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -185,6 +458,9 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       }
 
       const latticeAgent = await getAgent();
+
+      // 跟踪该 socket 关联的进行中请求（断开时只 abort 自己的）
+      const socketRequestIds = new Set<string>();
 
       // 权限事件转发
       const unsubPermission = latticeAgent.events.on('permission:request', (event) => {
@@ -219,7 +495,6 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         switch (msg.type) {
           case 'session.create': {
             const sourceId = msg.agentId ?? 'qoder';
-            const cwd = msg.cwd ?? process.env.HOME ?? '/';
             const source = latticeAgent.sources.registry.getSource(sourceId);
             if (!source) {
               send(socket, {
@@ -230,7 +505,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
               return;
             }
 
-            const sessionId = await source.createSession({ model: 'auto', cwd });
+            // 生成客户端 session ID（源 session 在第一次 prompt 时懒创建）
+            const sessionId = randomUUID();
             sessionSourceMap.set(sessionId, sourceId);
 
             // 复用已有树（切换历史）或不创建（新对话等第一条消息时懒创建）
@@ -250,154 +526,21 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
           case 'session.send': {
             if (!msg.sessionId || !msg.message) return;
-            const sourceId = sessionSourceMap.get(msg.sessionId);
-            const source = sourceId ? latticeAgent.sources.registry.getSource(sourceId) : undefined;
-            if (!source) {
-              send(socket, {
-                type: 'session.error',
-                sessionId: msg.sessionId,
-                message: 'Session source not found',
-              });
-              return;
-            }
 
-            // 懒创建对话树（第一条消息时才创建，避免空历史）
-            if (!sessionTreeMap.has(msg.sessionId)) {
-              const tree = await latticeAgent.session.createTree({});
-              sessionTreeMap.set(msg.sessionId, tree.id);
-              send(socket, {
-                type: 'session.created',
-                sessionId: msg.sessionId,
-                treeId: tree.id,
-                agentId: sourceId ?? 'qoder',
-              });
-            }
-
-            // 计算分支标识（branchKey）
-            const treeIdForContext = sessionTreeMap.get(msg.sessionId);
-            let branchKey = msg.requestId ?? `root-${Date.now()}`;
-
-            if (treeIdForContext && msg.parentNodeId) {
-              const nodes = latticeAgent.session.getNodes(treeIdForContext);
-              let cursor: string | null = msg.parentNodeId;
-              let rootAncestor = msg.parentNodeId;
-              while (cursor) {
-                const node = nodes.find((n) => n.id === cursor);
-                if (!node) break;
-                rootAncestor = node.id;
-                cursor = node.parentId;
+            // 串行锁：同一 session 的 send 顺序执行，避免并行导致 tree 结构异常
+            const sessionId = msg.sessionId;
+            const prevSend = sessionSendQueue.get(sessionId) ?? Promise.resolve();
+            const sendDone = prevSend.then(() =>
+              handleSessionSend(socket, msg, latticeAgent, socketRequestIds),
+            );
+            const caught = sendDone.catch(() => {});
+            sessionSendQueue.set(sessionId, caught);
+            caught.finally(() => {
+              // 队列尾部清理：如果当前仍是队列末尾，删除条目避免内存泄漏
+              if (sessionSendQueue.get(sessionId) === caught) {
+                sessionSendQueue.delete(sessionId);
               }
-              branchKey = nodeBranchMap.get(rootAncestor) ?? rootAncestor;
-            }
-
-            // 分支 session 管理：同分支复用，新分支创建（带历史）
-            let sourceSessionId = branchSessionMap.get(branchKey);
-            if (!sourceSessionId || !source.isSessionAlive(sourceSessionId)) {
-              const newId = await source.createSession({
-                model: 'auto',
-                cwd: process.env.HOME ?? '/',
-              });
-              branchSessionMap.set(branchKey, newId);
-              sourceSessionId = newId;
-            }
-
-            // 流式响应
-            const collectedEvents: SourceEvent[] = [];
-            const requestId = msg.requestId;
-            const abortController = new AbortController();
-            if (requestId) requestAbortMap.set(requestId, abortController);
-
-            try {
-              for await (const event of source.prompt(
-                sourceSessionId,
-                [{ type: 'text', text: msg.message }],
-                {
-                  signal: abortController.signal,
-                },
-              )) {
-                collectedEvents.push(event);
-                send(socket, { type: 'event', sessionId: msg.sessionId, event, requestId });
-              }
-            } catch (err) {
-              send(socket, {
-                type: 'session.error',
-                sessionId: msg.sessionId,
-                message: err instanceof Error ? err.message : String(err),
-              });
-            } finally {
-              if (requestId) requestAbortMap.delete(requestId);
-            }
-
-            // 流结束 → server 持久化 user + assistant 节点
-            const treeId = sessionTreeMap.get(msg.sessionId);
-            if (treeId) {
-              const tree = latticeAgent.session.getTree(treeId);
-
-              // 确定 parentId：从 client 指定的父节点推导
-              // parentNodeId = null → 根级节点（兄弟）
-              // parentNodeId = userNodeId → 找该 user 的 assistant 子节点作为 parent
-              let parentId: string | null = null;
-              if (msg.parentNodeId) {
-                const nodes = latticeAgent.session.getNodes(treeId);
-                const assistantChild = nodes?.find(
-                  (n) => n.parentId === msg.parentNodeId && n.role === 'assistant',
-                );
-                parentId = assistantChild?.id ?? msg.parentNodeId;
-              }
-
-              // 自动生成会话标题（首次消息的前 30 字）
-              if (tree && !tree.title) {
-                tree.title = msg.message.slice(0, 30) + (msg.message.length > 30 ? '...' : '');
-              }
-
-              // 重试：按 retryNodeId 直接定位，删除其 assistant 子节点
-              let retryUserNode: { id: string } | undefined;
-              if (msg.retry && msg.retryNodeId) {
-                const nodes = latticeAgent.session.getNodes(treeId);
-                retryUserNode = nodes.find((n) => n.id === msg.retryNodeId);
-                if (retryUserNode) {
-                  const oldAssistant = nodes.find(
-                    (n) => n.parentId === retryUserNode!.id && n.role === 'assistant',
-                  );
-                  if (oldAssistant) {
-                    await latticeAgent.session.deleteNodes(treeId, [oldAssistant.id]);
-                  }
-                }
-              }
-
-              // 持久化 user 节点（用 client 的 requestId 作为节点 ID，全栈统一）
-              const userNode =
-                retryUserNode ??
-                (await latticeAgent.session.addNode(treeId, {
-                  id: requestId,
-                  parentId,
-                  role: 'user',
-                  content: [{ type: 'text', text: msg.message }],
-                }));
-              if (!retryUserNode) {
-                nodeBranchMap.set(userNode.id, branchKey);
-              }
-
-              // 持久化 assistant 节点
-              if (collectedEvents.length > 0) {
-                const data = buildPersistData(collectedEvents, sourceId ?? 'unknown');
-                const assistantNode = await latticeAgent.session.addNode(treeId, {
-                  parentId: userNode.id,
-                  role: 'assistant',
-                  content: data.content,
-                  agentId: data.agentId,
-                  metadata: data.metadata,
-                });
-                send(socket, {
-                  type: 'tree.updated',
-                  treeId,
-                  headNodeId: assistantNode.id,
-                  requestId,
-                });
-              } else {
-                send(socket, { type: 'tree.updated', treeId, headNodeId: userNode.id, requestId });
-              }
-            }
+            });
             break;
           }
 
@@ -408,12 +551,18 @@ export function registerAgentRoutes(app: FastifyInstance): void {
                 requestAbortMap.get(msg.requestId)!.abort();
                 requestAbortMap.delete(msg.requestId);
               } else {
-                // 中止整个 session
+                // 中止整个 session：精确 abort 该会话各分支的源 session
                 const sourceId = sessionSourceMap.get(msg.sessionId);
                 const source = sourceId
                   ? latticeAgent.sources.registry.getSource(sourceId)
                   : undefined;
-                source?.abort(msg.sessionId);
+                const abortTreeId = sessionTreeMap.get(msg.sessionId);
+                const abortTree = abortTreeId
+                  ? latticeAgent.session.getTree(abortTreeId)
+                  : undefined;
+                for (const b of abortTree?.branches ?? []) {
+                  if (b.sourceSessionId) source?.abort(b.sourceSessionId);
+                }
               }
             }
             break;
@@ -426,8 +575,20 @@ export function registerAgentRoutes(app: FastifyInstance): void {
                 ? latticeAgent.sources.registry.getSource(sourceId)
                 : undefined;
               await source?.destroySession(msg.sessionId);
+              // 清理关联的 streaming 文件（避免误判为中断）
+              const treeIdForCleanup = sessionTreeMap.get(msg.sessionId);
+              if (treeIdForCleanup) {
+                const interrupted =
+                  await latticeAgent.session.getInterruptedStreams(treeIdForCleanup);
+                for (const s of interrupted) {
+                  await latticeAgent.session.clearStreaming(treeIdForCleanup, s.requestId);
+                }
+              }
+              // 清理 source session
+              // （源内部自管历史，server 不需要清理映射）
               sessionSourceMap.delete(msg.sessionId);
               sessionTreeMap.delete(msg.sessionId);
+              sessionSendQueue.delete(msg.sessionId);
             }
             send(socket, { type: 'session.closed', sessionId: msg.sessionId });
             break;
@@ -436,6 +597,42 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           case 'tree.fork': {
             if (!msg.treeId || !msg.nodeId) return;
             const branch = await latticeAgent.session.fork(msg.treeId, msg.nodeId, msg.branchName);
+
+            // 源级别 fork：新分支获得独立的源 session（截断到 fork 点）
+            if (branch) {
+              // 找到对应的源（通过 treeId 反查 sessionId → sourceId）
+              let sourceId: string | undefined;
+              for (const [sid, tid] of sessionTreeMap) {
+                if (tid === msg.treeId) {
+                  sourceId = sessionSourceMap.get(sid);
+                  break;
+                }
+              }
+              const source = sourceId
+                ? latticeAgent.sources.registry.getSource(sourceId)
+                : undefined;
+              const tree = latticeAgent.session.getTree(msg.treeId);
+              const forkNode = latticeAgent.session.getNode(msg.treeId, msg.nodeId);
+              const parentBranch = tree?.branches.find((b) => b.id === forkNode?.branchId);
+              const parentSessionId = parentBranch?.sourceSessionId;
+              const atMessage = (forkNode?.metadata as Record<string, unknown>)?.sourceMessageId as
+                | string
+                | undefined;
+
+              if (source && parentSessionId) {
+                try {
+                  const forkedSessionId = await source.forkSession(parentSessionId, atMessage);
+                  await latticeAgent.session.setBranchSession(
+                    msg.treeId,
+                    branch.id,
+                    forkedSessionId,
+                  );
+                } catch {
+                  /* fork 失败时新分支从空白开始 */
+                }
+              }
+            }
+
             send(socket, { type: 'tree.updated', treeId: msg.treeId, branch });
             break;
           }
@@ -490,7 +687,18 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         }
       });
 
-      socket.on('close', () => unsubPermission());
+      socket.on('close', () => {
+        unsubPermission();
+        // 断开时 abort 该 socket 关联的进行中请求（不影响其他 tab）
+        for (const rid of socketRequestIds) {
+          const ctrl = requestAbortMap.get(rid);
+          if (ctrl) {
+            ctrl.abort();
+            requestAbortMap.delete(rid);
+          }
+        }
+        socketRequestIds.clear();
+      });
       socket.on('error', () => unsubPermission());
     },
   );
@@ -530,14 +738,16 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     };
   });
 
-  // 获取对话树
+  // 获取对话树（含中断检测）
   app.get('/api/agent/tree/:treeId', async (req) => {
     const { treeId } = req.params as { treeId: string };
     const latticeAgent = await getAgent();
     const tree = await latticeAgent.session.loadTree(treeId);
     if (!tree) return { error: 'not_found' as const };
     const nodes = latticeAgent.session.getNodes(treeId);
-    return { tree, nodes };
+    // 检测中断的 streaming（上次未完成的回复）
+    const interruptedStreams = await latticeAgent.session.getInterruptedStreams(treeId);
+    return { tree, nodes, interruptedStreams };
   });
 
   // 获取历史会话列表

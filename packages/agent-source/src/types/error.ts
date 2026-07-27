@@ -46,7 +46,7 @@ export class SourceError extends Error {
     return new SourceError('source_not_initialized', `${sourceName} 尚未初始化`, {
       sourceId,
       sourceName,
-      operation: 'createSession',
+      operation: 'init',
       suggestion: '请先调用 init() 或使用 createAgentSource() 工厂函数',
     });
   }

@@ -10,6 +10,7 @@ import {
   submitFromNode,
   abortStream,
   retryTurn,
+  continueTurn,
   getChildIds,
   getSiblings,
   MIN_NODE_WIDTH,
@@ -42,6 +43,7 @@ function ConversationNodeInner({ data }: NodeProps) {
   const height = ui?.height ?? 260;
   const isStreaming = turn?.status === 'streaming';
   const isError = turn?.status === 'error';
+  const isInterrupted = turn?.status === 'interrupted';
 
   // 流式自动滚动
   useEffect(() => {
@@ -126,7 +128,7 @@ function ConversationNodeInner({ data }: NodeProps) {
           width: '100%',
           height: '100%',
           borderRadius: 10,
-          border: `1.5px solid ${isStreaming ? 'var(--brand-color)' : isError ? '#ff4d4f' : 'var(--border)'}`,
+          border: `1.5px solid ${isStreaming ? 'var(--brand-color)' : isError ? '#ff4d4f' : isInterrupted ? '#fa8c16' : 'var(--border)'}`,
           background: 'var(--bg-secondary)',
           display: 'flex',
           flexDirection: 'column',
@@ -301,6 +303,40 @@ function ConversationNodeInner({ data }: NodeProps) {
                   }}>
                   ↻ 重试
                 </button>
+              )}
+
+              {/* 中断时显示继续按钮 */}
+              {isInterrupted && (
+                <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    onClick={() => continueTurn(turnId)}
+                    style={{
+                      padding: '3px 12px',
+                      fontSize: 10,
+                      borderRadius: 4,
+                      border: '1px solid #fa8c16',
+                      background: '#fa8c16',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                    }}>
+                    ▶ 继续
+                  </button>
+                  <button
+                    onClick={handleRetry}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: 10,
+                      borderRadius: 4,
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}>
+                    ↻ 重新生成
+                  </button>
+                  <span style={{ fontSize: 9, color: '#fa8c16' }}>↑ 上次中断</span>
+                </div>
               )}
             </div>
 

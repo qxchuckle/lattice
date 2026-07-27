@@ -21,6 +21,24 @@
       ],
       "@qcqx/lattice-core/*": [
         "../core/src/*"
+      ],
+      "@qcqx/lattice-agent": [
+        "../agent/src/index.ts"
+      ],
+      "@qcqx/lattice-agent/*": [
+        "../agent/src/*"
+      ],
+      "@qcqx/lattice-agent-protocol": [
+        "../agent-protocol/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-protocol/*": [
+        "../agent-protocol/src/*"
+      ],
+      "@qcqx/lattice-agent-source": [
+        "../agent-source/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-source/*": [
+        "../agent-source/src/*"
       ]
     }
   },

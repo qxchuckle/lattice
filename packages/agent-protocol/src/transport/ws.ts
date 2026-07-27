@@ -23,6 +23,8 @@ export interface SessionSendMessage {
   message: string;
   /** 父节点 ID（从哪个节点发起对话，null = 根节点） */
   parentNodeId?: string | null;
+  /** 意图分支 ID（显式 fork 后在该分支继续时传入，跳过自动 fork） */
+  branchId?: string;
   /** 客户端生成的请求 ID，用于并行流事件路由 */
   requestId?: string;
   /** 重试标志：server 先删除同 parent 的旧节点再重新持久化 */

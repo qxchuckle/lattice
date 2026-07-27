@@ -59,6 +59,8 @@ export interface ConversationNode {
     compacted?: boolean;
     /** compaction 摘要来源节点 ID 列表 */
     compactedFrom?: string[];
+    /** 流式生成被中断（手动停止 / 关闭页面 / 崩溃） */
+    interrupted?: boolean;
   };
 }
 
@@ -69,6 +71,8 @@ export interface ConversationBranch {
   isDefault: boolean;
   createdAt: number;
   description?: string;
+  /** 该分支的源 session ID（源自己生成，每个分支独立一个 session） */
+  sourceSessionId?: string;
   agentId?: string;
   mergedAt?: number;
 }

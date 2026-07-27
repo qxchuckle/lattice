@@ -23,8 +23,8 @@ export interface AgentSourceInstance {
  * });
  *
  * const pi = registry.getSource('pi')!;
- * const sid = await pi.createSession({ model: 'anthropic/claude-sonnet-4', cwd: '/project' });
- * for await (const event of pi.prompt(sid, 'Hello')) { ... }
+ * // 传 null 新建会话，传已有 sessionId 继续（done 事件返回 sessionId）
+ * for await (const event of pi.prompt(null, [{ type: 'text', text: 'Hello' }])) { ... }
  *
  * await dispose();
  * ```

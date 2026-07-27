@@ -2,7 +2,7 @@
  * SourceRegistry — 源注册表实现
  *
  * 职责：源注册/发现/聚合查询/工具注入/认证检测/生命周期。
- * 不代理运行时调用（createSession/prompt），上层直接操作源实例。
+ * 不代理运行时调用（prompt/forkSession），上层直接操作源实例。
  */
 import type {
   ISource,

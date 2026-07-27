@@ -8,7 +8,7 @@
  *   Level 2: loadBranchNodes — 按分支筛选
  *   Level 3: loadTree — 全量加载（兜底）
  */
-import { readFile, writeFile, appendFile, mkdir, readdir, open } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, readdir, open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -25,6 +25,15 @@ import type { SessionIndexEntry } from './session-index.js';
 export interface SessionStorage {
   baseDir: string; // ~/.lattice/.cache/sessions/
   indexPath?: string; // 索引文件路径（可选，不传则不启用索引）
+}
+
+/** streaming 中间态文件内容（持久化正在生成的 assistant 回复） */
+export interface StreamingState {
+  requestId: string;
+  parentId: string;
+  role: 'assistant';
+  startedAt: number;
+  content: NodeContent[];
 }
 
 export class SessionManager {
@@ -239,6 +248,8 @@ export class SessionManager {
       content: NodeContent[];
       agentId?: string;
       metadata?: ConversationNode['metadata'];
+      /** 显式指定分支（自动 fork 场景），否则从父节点继承 */
+      branchId?: string;
     },
   ): Promise<ConversationNode> {
     const tree = this.trees.get(treeId);
@@ -247,7 +258,7 @@ export class SessionManager {
     const node: ConversationNode = {
       id: opts.id ?? randomUUID(),
       parentId: opts.parentId,
-      branchId: this.resolveBranch(tree, opts.parentId),
+      branchId: opts.branchId ?? this.resolveBranch(tree, opts.parentId),
       role: opts.role,
       content: opts.content,
       timestamp: Date.now(),
@@ -325,6 +336,29 @@ export class SessionManager {
     if (!tree) throw new Error(`Tree not found: ${treeId}`);
     for (const b of tree.branches) b.isDefault = b.id === branchId;
     tree.defaultBranchId = branchId;
+    tree.updatedAt = Date.now();
+    await this.persistTree(tree);
+  }
+
+  /** 设置分支的源 session ID 并持久化（重启后恢复上下文用） */
+  async setBranchSession(treeId: string, branchId: string, sourceSessionId: string): Promise<void> {
+    const tree = this.trees.get(treeId);
+    if (!tree) throw new Error(`Tree not found: ${treeId}`);
+    const branch = tree.branches.find((b) => b.id === branchId);
+    if (!branch) throw new Error(`Branch not found: ${branchId}`);
+    branch.sourceSessionId = sourceSessionId;
+    tree.updatedAt = Date.now();
+    await this.persistTree(tree);
+  }
+
+  /** 删除一个分支并持久化（用于 fork 失败后清理孤儿分支）；默认分支不可删除，幂等 */
+  async removeBranch(treeId: string, branchId: string): Promise<void> {
+    const tree = this.trees.get(treeId);
+    if (!tree) throw new Error(`Tree not found: ${treeId}`);
+    const branch = tree.branches.find((b) => b.id === branchId);
+    if (!branch) return; // 幂等：分支不存在视为已删除
+    if (branch.isDefault) throw new Error(`Cannot remove default branch: ${branchId}`);
+    tree.branches = tree.branches.filter((b) => b.id !== branchId);
     tree.updatedAt = Date.now();
     await this.persistTree(tree);
   }
@@ -436,6 +470,46 @@ export class SessionManager {
     branch.mergedAt = Date.now();
     await this.persistTree(tree);
     return mergeNode;
+  }
+
+  // ── Streaming 中间态持久化 ──
+
+  /**
+   * 写入/覆写 streaming 中间态文件
+   * 每个 content block 完成时调用，记录当前已生成的内容
+   */
+  async writeStreaming(treeId: string, state: StreamingState): Promise<void> {
+    const dir = join(this.storage.baseDir, treeId, 'streaming');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, `${state.requestId}.json`), JSON.stringify(state), 'utf-8');
+  }
+
+  /** 删除 streaming 文件（流正常结束后调用） */
+  async clearStreaming(treeId: string, requestId: string): Promise<void> {
+    const filePath = join(this.storage.baseDir, treeId, 'streaming', `${requestId}.json`);
+    await rm(filePath, { force: true });
+  }
+
+  /** 扫描中断的 streaming 文件（加载时检测未完成回复） */
+  async getInterruptedStreams(treeId: string): Promise<StreamingState[]> {
+    const dir = join(this.storage.baseDir, treeId, 'streaming');
+    let files: string[];
+    try {
+      files = await readdir(dir);
+    } catch {
+      return [];
+    }
+    const results: StreamingState[] = [];
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const raw = await readFile(join(dir, f), 'utf-8');
+        results.push(JSON.parse(raw) as StreamingState);
+      } catch {
+        // 损坏文件跳过
+      }
+    }
+    return results;
   }
 
   // ── 内部方法 ──

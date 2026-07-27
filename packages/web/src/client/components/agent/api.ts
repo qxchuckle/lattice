@@ -1,7 +1,7 @@
 /**
  * REST API 调用（agent 相关端点）
  */
-import type { ConversationNode } from '@qcqx/lattice-agent-protocol';
+import type { ConversationNode, NodeContent } from '@qcqx/lattice-agent-protocol';
 import { authStore } from '../../store';
 import { agentStore, ensureUi } from './store';
 import type { TurnNode, StreamingBlock } from './types';
@@ -43,7 +43,11 @@ export async function loadTree(treeId: string): Promise<void> {
           parentTurnId,
           userMessage: userText,
           blocks: assistant ? buildBlocksFromNode(assistant) : [],
-          status: assistant?.content?.some((c) => c.type === 'error') ? 'error' : 'done',
+          status: assistant?.metadata?.interrupted
+            ? 'interrupted'
+            : assistant?.content?.some((c) => c.type === 'error')
+              ? 'error'
+              : 'done',
           timestamp: un.timestamp,
           sourceId: assistant?.agentId ?? 'qoder',
           modelId: assistant?.metadata?.model ?? '',
@@ -72,6 +76,22 @@ export async function loadTree(treeId: string): Promise<void> {
         ensureUi(turn.id);
       }
     }
+
+    // 处理中断的 streaming（上次未完成的回复）
+    const interruptedStreams = data.interruptedStreams as
+      | { requestId: string; parentId: string; content: NodeContent[] }[]
+      | undefined;
+    if (interruptedStreams?.length) {
+      for (const stream of interruptedStreams) {
+        const turn = agentStore.turns.get(stream.parentId);
+        if (turn && turn.blocks.length === 0) {
+          // 该 user 节点没有 assistant 回复 → 用部分回复填充
+          turn.blocks = buildBlocksFromContent(stream.content);
+          turn.status = 'interrupted';
+        }
+      }
+    }
+
     agentStore.version++;
   } catch {
     /* ignore */
@@ -79,8 +99,12 @@ export async function loadTree(treeId: string): Promise<void> {
 }
 
 function buildBlocksFromNode(node: ConversationNode): StreamingBlock[] {
+  return buildBlocksFromContent(node.content ?? []);
+}
+
+function buildBlocksFromContent(content: NodeContent[]): StreamingBlock[] {
   const blocks: StreamingBlock[] = [];
-  for (const c of node.content ?? []) {
+  for (const c of content) {
     switch (c.type) {
       case 'text':
         blocks.push({ kind: 'text', text: c.text });
