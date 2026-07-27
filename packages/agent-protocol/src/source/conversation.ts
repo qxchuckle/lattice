@@ -41,6 +41,9 @@ export interface FileChange {
   status: 'pending' | 'accepted' | 'rejected';
 }
 
+/** 节点状态（树形对话操作体系） */
+export type NodeStatus = 'active' | 'streaming' | 'interrupted' | 'undone' | 'hidden';
+
 export interface ConversationNode {
   id: string;
   parentId: string | null;
@@ -49,6 +52,8 @@ export interface ConversationNode {
   content: NodeContent[];
   timestamp: number;
   agentId?: string;
+  /** 节点状态（默认 active） */
+  status?: NodeStatus;
   metadata?: {
     toolCalls?: ToolCallRecord[];
     fileChanges?: FileChange[];
@@ -61,6 +66,8 @@ export interface ConversationNode {
     compactedFrom?: string[];
     /** 流式生成被中断（手动停止 / 关闭页面 / 崩溃） */
     interrupted?: boolean;
+    /** 源消息 ID（该节点对应源 session 中的消息 uuid，fork 截断点用） */
+    sourceMessageId?: string;
   };
 }
 

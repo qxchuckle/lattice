@@ -11,6 +11,8 @@ import {
   abortStream,
   retryTurn,
   continueTurn,
+  undoTurn,
+  deleteTurn,
   getChildIds,
   getSiblings,
   MIN_NODE_WIDTH,
@@ -44,6 +46,10 @@ function ConversationNodeInner({ data }: NodeProps) {
   const isStreaming = turn?.status === 'streaming';
   const isError = turn?.status === 'error';
   const isInterrupted = turn?.status === 'interrupted';
+  const isUndone = turn?.status === 'undone';
+  const isHidden = turn?.status === 'hidden';
+  // undone/hidden 节点为只读态，不可操作
+  const isReadOnly = isUndone || isHidden;
 
   // 流式自动滚动
   useEffect(() => {
@@ -84,6 +90,8 @@ function ConversationNodeInner({ data }: NodeProps) {
   );
 
   if (!turn) return null;
+  // hidden 节点不渲染
+  if (isHidden) return null;
 
   const childIds = getChildIds(turnId);
   const siblings = getSiblings(turnId);
@@ -128,13 +136,16 @@ function ConversationNodeInner({ data }: NodeProps) {
           width: '100%',
           height: '100%',
           borderRadius: 10,
-          border: `1.5px solid ${isStreaming ? 'var(--brand-color)' : isError ? '#ff4d4f' : isInterrupted ? '#fa8c16' : 'var(--border)'}`,
-          background: 'var(--bg-secondary)',
+          border: isUndone
+            ? '1.5px dashed #bfbfbf'
+            : `1.5px solid ${isStreaming ? 'var(--brand-color)' : isError ? '#ff4d4f' : isInterrupted ? '#fa8c16' : 'var(--border)'}`,
+          background: isUndone ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
           boxShadow: isStreaming ? '0 0 12px rgba(22,119,255,0.25)' : 'var(--shadow)',
-          color: 'var(--text)',
+          color: isUndone ? 'var(--text-secondary)' : 'var(--text)',
+          opacity: isUndone ? 0.6 : 1,
         }}>
         <Handle
           type='target'
@@ -200,8 +211,8 @@ function ConversationNodeInner({ data }: NodeProps) {
                     ⑂ {childIds.length}
                   </span>
                 )}
-                {/* Fork 按钮（hover 时显示） */}
-                {hovered && !isStreaming && (
+                {/* Fork / 撤销 / 删除 按钮（hover 时显示，只读态不显示） */}
+                {hovered && !isStreaming && !isReadOnly && (
                   <>
                     <button
                       onClick={() => submitFromNode(turn.parentTurnId, turn.userMessage)}
@@ -217,6 +228,34 @@ function ConversationNodeInner({ data }: NodeProps) {
                       }}
                       title='分支：从同一父节点重新提问'>
                       ⑂ 分支
+                    </button>
+                    <button
+                      onClick={() => undoTurn(turnId)}
+                      style={{
+                        padding: '0 4px',
+                        fontSize: 9,
+                        borderRadius: 3,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                      }}
+                      title='撤销：该节点及之后变为只读'>
+                      ↶ 撤销
+                    </button>
+                    <button
+                      onClick={() => deleteTurn(turnId)}
+                      style={{
+                        padding: '0 4px',
+                        fontSize: 9,
+                        borderRadius: 3,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-tertiary)',
+                        color: '#ff4d4f',
+                        cursor: 'pointer',
+                      }}
+                      title='删除：撤销并隐藏该节点'>
+                      ✕ 删除
                     </button>
                     <button
                       onClick={toggleCollapse}
@@ -340,8 +379,8 @@ function ConversationNodeInner({ data }: NodeProps) {
               )}
             </div>
 
-            {/* ── 底部输入框（追问） ── */}
-            {showBottom && (
+            {/* ── 底部输入框（追问，只读态不显示） ── */}
+            {showBottom && !isReadOnly && (
               <div
                 style={{
                   flexShrink: 0,

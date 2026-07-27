@@ -125,60 +125,70 @@ export function abortStream(turnId?: string): void {
   }
 }
 
-// ── 继续（中断的对话接着生成，对齐 CC resume） ──
+// ── 继续（对 interrupted 的 assistant 节点续写，不新增可见节点） ──
 
 export function continueTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
 
-  // 构建 continuation prompt：包含部分回复内容，让模型接着说
-  const partialText = turn.blocks
-    .filter((b) => b.kind === 'text')
-    .map((b) => (b as { text: string }).text)
-    .join('');
-  const prompt = partialText
-    ? `请从你上次中断的地方继续生成。你上次已经生成了以下内容：\n\n${partialText.slice(-500)}\n\n请从这里接着写，不要重复已有内容。`
-    : '继续';
-
-  // 重置当前节点状态为 streaming
-  turn.blocks = [];
+  // 重置状态为 streaming（在原节点上续写）
   turn.status = 'streaming';
   agentStore.version++;
 
-  // 复用 turnId 作为 requestId，服务器侧会复用同一 source session（如果还活着）
+  // 发送 session.continue，server 会在原节点上追加内容
   setStreamingTarget(turnId, turnId);
   sendWs({
-    type: 'session.send',
+    type: 'session.continue',
     sessionId: agentStore.sessionId,
-    message: prompt,
-    parentNodeId: turn.parentTurnId,
+    nodeId: turnId,
     requestId: turnId,
-    retry: true,
-    retryNodeId: turnId,
   });
 }
 
-// ── 重试（在当前节点上重新发送，不创建新分支） ──
+// ── 重试（对 user 节点丢弃后代并重新生成） ──
 
 export function retryTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
 
-  // 重置当前节点状态
+  // 重置 turn 以展示重新生成的流式内容（旧回复 server 会标记 undone）
   turn.blocks = [];
   turn.status = 'streaming';
   agentStore.version++;
-
-  // turnId 就是 persisted node ID（全栈统一），直接用作 retryNodeId
   setStreamingTarget(turnId, turnId);
+
+  // 发送 session.retry，server 会 fork 截断 + 重新 prompt
   sendWs({
-    type: 'session.send',
+    type: 'session.retry',
     sessionId: agentStore.sessionId,
-    message: turn.userMessage,
-    parentNodeId: turn.parentTurnId,
+    nodeId: turnId,
     requestId: turnId,
-    retry: true,
-    retryNodeId: turnId,
+  });
+}
+
+// ── 撤销（目标节点及后代标记为 undone，只读灰色） ──
+
+export function undoTurn(turnId: string): void {
+  const turn = agentStore.turns.get(turnId);
+  if (!turn || !agentStore.sessionId) return;
+
+  sendWs({
+    type: 'session.undo',
+    sessionId: agentStore.sessionId,
+    nodeId: turnId,
+  });
+}
+
+// ── 删除（撤销 + 隐藏） ──
+
+export function deleteTurn(turnId: string): void {
+  const turn = agentStore.turns.get(turnId);
+  if (!turn || !agentStore.sessionId) return;
+
+  sendWs({
+    type: 'session.delete',
+    sessionId: agentStore.sessionId,
+    nodeId: turnId,
   });
 }
 

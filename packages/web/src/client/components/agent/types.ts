@@ -27,7 +27,7 @@ export interface TurnNode {
   parentTurnId: string | null;
   userMessage: string;
   blocks: StreamingBlock[];
-  status: 'empty' | 'streaming' | 'done' | 'error' | 'interrupted';
+  status: 'empty' | 'streaming' | 'done' | 'error' | 'interrupted' | 'undone' | 'hidden';
   timestamp: number;
   sourceId: string;
   modelId: string;

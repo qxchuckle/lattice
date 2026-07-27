@@ -167,6 +167,8 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     }
     case 'tree.updated':
+      // 重载树（undo/delete/retry 后节点状态/结构变化，需刷新视图）
+      if (msg.treeId) loadTree(msg.treeId);
       loadConversations();
       break;
     case 'permission.request':

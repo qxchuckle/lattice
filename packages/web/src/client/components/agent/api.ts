@@ -29,7 +29,13 @@ export async function loadTree(treeId: string): Promise<void> {
     if (userNodes.length > 0) {
       // 新格式：user + assistant 配对
       for (const un of userNodes) {
-        const assistant = nodes.find((n) => n.role === 'assistant' && n.parentId === un.id);
+        // 一个 user 可能有多个 assistant 子节点（retry 后旧的被标记 undone），优先取 active 的
+        const assistantChildren = nodes.filter(
+          (n) => n.role === 'assistant' && n.parentId === un.id,
+        );
+        const assistant =
+          assistantChildren.find((n) => n.status !== 'undone' && n.status !== 'hidden') ??
+          assistantChildren[0];
         const userText = un.content?.find((c) => c.type === 'text')?.text ?? '';
 
         let parentTurnId: string | null = null;
@@ -38,16 +44,25 @@ export async function loadTree(treeId: string): Promise<void> {
           parentTurnId = parentAssistant?.parentId ?? un.parentId;
         }
 
+        // 节点状态：undone/hidden 优先（撤销/删除），其次 interrupted/error
+        const nodeStatus = un.status ?? assistant?.status;
+        const turnStatus: TurnNode['status'] =
+          nodeStatus === 'undone'
+            ? 'undone'
+            : nodeStatus === 'hidden'
+              ? 'hidden'
+              : assistant?.metadata?.interrupted
+                ? 'interrupted'
+                : assistant?.content?.some((c) => c.type === 'error')
+                  ? 'error'
+                  : 'done';
+
         const turn: TurnNode = {
           id: un.id,
           parentTurnId,
           userMessage: userText,
           blocks: assistant ? buildBlocksFromNode(assistant) : [],
-          status: assistant?.metadata?.interrupted
-            ? 'interrupted'
-            : assistant?.content?.some((c) => c.type === 'error')
-              ? 'error'
-              : 'done',
+          status: turnStatus,
           timestamp: un.timestamp,
           sourceId: assistant?.agentId ?? 'qoder',
           modelId: assistant?.metadata?.model ?? '',

@@ -27,10 +27,40 @@ export interface SessionSendMessage {
   branchId?: string;
   /** 客户端生成的请求 ID，用于并行流事件路由 */
   requestId?: string;
-  /** 重试标志：server 先删除同 parent 的旧节点再重新持久化 */
-  retry?: boolean;
-  /** 重试时指定要重新生成的 user 节点 ID */
-  retryNodeId?: string;
+}
+
+/** 继续：对 interrupted 的 assistant 节点续写（不新增可见节点） */
+export interface SessionContinueMessage {
+  type: 'session.continue';
+  sessionId: string;
+  /** 要续写的 assistant 节点 ID */
+  nodeId: string;
+  requestId?: string;
+}
+
+/** 重试：对 user 节点丢弃所有后代并重新生成 */
+export interface SessionRetryMessage {
+  type: 'session.retry';
+  sessionId: string;
+  /** 要重试的 user 节点 ID */
+  nodeId: string;
+  requestId?: string;
+}
+
+/** 撤销：目标节点及后代标记为 undone（只读灰色） */
+export interface SessionUndoMessage {
+  type: 'session.undo';
+  sessionId: string;
+  /** 要撤销的节点 ID */
+  nodeId: string;
+}
+
+/** 删除：撤销 + 隐藏（不渲染） */
+export interface SessionDeleteMessage {
+  type: 'session.delete';
+  sessionId: string;
+  /** 要删除的节点 ID */
+  nodeId: string;
 }
 
 export interface SessionAbortMessage {
@@ -87,6 +117,10 @@ export interface PermissionRespondMessage {
 export type ClientMessage =
   | SessionCreateMessage
   | SessionSendMessage
+  | SessionContinueMessage
+  | SessionRetryMessage
+  | SessionUndoMessage
+  | SessionDeleteMessage
   | SessionAbortMessage
   | SessionDestroyMessage
   | TreeForkMessage

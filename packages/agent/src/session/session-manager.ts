@@ -288,6 +288,29 @@ export class SessionManager {
     return this.nodes.get(treeId)?.get(nodeId);
   }
 
+  /** 更新节点字段（状态/内容/元数据）并持久化 */
+  async updateNode(
+    treeId: string,
+    nodeId: string,
+    updates: Partial<Pick<ConversationNode, 'content' | 'status' | 'metadata'>>,
+  ): Promise<void> {
+    const nodeMap = this.nodes.get(treeId);
+    const node = nodeMap?.get(nodeId);
+    if (!node) return;
+
+    if (updates.content !== undefined) node.content = updates.content;
+    if (updates.status !== undefined) node.status = updates.status;
+    if (updates.metadata !== undefined) node.metadata = updates.metadata;
+
+    // 持久化（重写 nodes.jsonl）
+    await this.rewriteNodes(treeId);
+    const tree = this.trees.get(treeId);
+    if (tree) {
+      tree.updatedAt = Date.now();
+      await this.persistTree(tree);
+    }
+  }
+
   getNodes(treeId: string): ConversationNode[] {
     return [...(this.nodes.get(treeId)?.values() ?? [])];
   }

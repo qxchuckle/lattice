@@ -8,6 +8,10 @@ export const PROTOCOL_VERSION = '1.0';
 export const ClientMessageType = {
   SessionCreate: 'session.create',
   SessionSend: 'session.send',
+  SessionContinue: 'session.continue',
+  SessionRetry: 'session.retry',
+  SessionUndo: 'session.undo',
+  SessionDelete: 'session.delete',
   SessionAbort: 'session.abort',
   SessionDestroy: 'session.destroy',
   TreeFork: 'tree.fork',
