@@ -10,6 +10,7 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useStore,
   type Node,
   type Edge,
   ReactFlowProvider,
@@ -19,6 +20,8 @@ import { useSnapshot } from 'valtio';
 import {
   agentStore,
   initAgent,
+  reportPresence,
+  stableNodeData,
   ROOT_INPUT_ID,
   type NodeUiState,
   type TurnNode,
@@ -41,6 +44,17 @@ function AgentCanvasInner() {
   useEffect(() => {
     initAgent();
   }, []);
+
+  // 选中节点变化 → 上报 focus presence（同树其他端可见"谁在看哪个节点"）
+  const selectedNodeId = useStore((s) => {
+    for (const [id, node] of s.nodeLookup) {
+      if (node.selected && node.type === 'conversation') return id;
+    }
+    return null as string | null;
+  });
+  useEffect(() => {
+    reportPresence({ focusNodeId: selectedNodeId });
+  }, [selectedNodeId]);
 
   const allTurns = useMemo(() => [...snap.turns.values()], [snap.version]);
 
@@ -99,7 +113,7 @@ function AgentCanvasInner() {
         id: t.id,
         type: 'conversation',
         position: positions.get(t.id) ?? { x: 0, y: 0 },
-        data: { turnId: t.id },
+        data: stableNodeData(t.id),
         style: { width: w, height: h },
         measured: { width: w, height: h },
         width: w,

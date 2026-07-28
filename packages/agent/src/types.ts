@@ -11,7 +11,6 @@ export type {
   MergeMode,
   PermissionLevel,
   PermissionRequest,
-  AgentSessionOpts,
 } from '@qcqx/lattice-agent-protocol';
 
 // ── Agent 事件（统一使用 protocol 的 SourceEvent） ──
@@ -85,10 +84,6 @@ export interface SlashCommand {
   template?: string;
   toolName?: string;
 }
-
-// ── Session 选项（从 protocol re-export） ──
-
-// SessionOpts 已在上方对话树段 re-export
 
 // ── Merge 模式（从 protocol re-export） ──
 

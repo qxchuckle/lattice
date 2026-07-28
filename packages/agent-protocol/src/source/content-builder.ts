@@ -135,11 +135,14 @@ export class StreamAccumulator {
     toolCalls?: ToolCallRecord[];
     fileChanges?: FileChange[];
     sourceMessageId?: string;
+    usage?: TokenUsage;
   } {
     return {
       ...(this.toolCalls.length > 0 ? { toolCalls: this.toolCalls } : {}),
       ...(this.fileChanges.length > 0 ? { fileChanges: this.fileChanges } : {}),
       ...(this.sourceMessageId ? { sourceMessageId: this.sourceMessageId } : {}),
+      // usage 落盘：reload 后仍能展示 token 用量/上下文占用（input ≈ 当前上下文）
+      ...(this.usage ? { usage: this.usage } : {}),
     };
   }
 }

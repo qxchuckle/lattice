@@ -3,7 +3,35 @@
  * 从 web/src/server/routes/agents.ts 提取 + 规范化
  */
 import type { SourceEvent } from '../source/events.js';
-import type { MergeMode } from '../source/conversation.js';
+import type {
+  MergeMode,
+  ConversationNode,
+  ConversationBranch,
+  NodeContent,
+} from '../source/conversation.js';
+
+// ═══════════════════════════════════════════
+// 多端同步：共享类型
+// ═══════════════════════════════════════════
+
+/** 单条持久化变更（tree.event 载荷）；均为 upsert/幂等语义，快照兼容 */
+export type TreeOp =
+  | { kind: 'node'; node: ConversationNode }
+  | { kind: 'nodes'; nodes: ConversationNode[] }
+  | { kind: 'branch'; branch: ConversationBranch }
+  | { kind: 'head'; headNodeId: string | null };
+
+/** 客户端在场状态（ephemeral，不持久化，不占 rev） */
+export interface PresenceState {
+  connectionId: string;
+  clientKind: string; // 'web' | 'app' | 'vscode' | ...
+  userId?: string;
+  displayName?: string;
+  focusNodeId?: string | null;
+  typing?: boolean;
+  /** 该连接发起的在途请求 ID（供其他端显示"谁在生成"） */
+  streamingRequestIds?: string[];
+}
 
 // ═══════════════════════════════════════════
 // Client → Server
@@ -29,6 +57,12 @@ export interface SessionSendMessage {
   requestId?: string;
   /** 指定模型（不传则用源默认） */
   model?: string;
+  /** 思考深度（取值由模型 tuning 规格约束；不传 = 源默认） */
+  thinkingLevel?: string;
+  /** 上下文窗口 tokens（取值由模型 tuning 规格约束；不传 = 源默认） */
+  contextWindow?: number;
+  /** 指定源（仅新第一层线程生效；追问时 server 沿祖先链解析线程源） */
+  sourceId?: string;
 }
 
 /** 继续：对 interrupted 的 assistant 节点续写（不新增可见节点） */
@@ -116,6 +150,35 @@ export interface PermissionRespondMessage {
   allowed: boolean;
 }
 
+// ── 多端同步（per-tree 订阅） ──
+
+/** 订阅一棵树；带 sinceRev 时 server 比对决定发快照或跳过 */
+export interface TreeSubscribeMessage {
+  type: 'tree.subscribe';
+  treeId: string;
+  sinceRev?: number;
+  clientKind?: string;
+}
+
+/** 退订（离开对话；仅退订阅，不拆树资源） */
+export interface TreeUnsubscribeMessage {
+  type: 'tree.unsubscribe';
+  treeId: string;
+}
+
+/** 上报本端 presence（节流发送） */
+export interface PresenceUpdateMessage {
+  type: 'presence.update';
+  treeId: string;
+  focusNodeId?: string | null;
+  typing?: boolean;
+}
+
+/** 心跳 ping（server 回 pong；证明连接存活） */
+export interface PingMessage {
+  type: 'ping';
+}
+
 export type ClientMessage =
   | SessionCreateMessage
   | SessionSendMessage
@@ -130,7 +193,11 @@ export type ClientMessage =
   | TreeMergeMessage
   | TreeSwitchHeadMessage
   | TreeSetDefaultMessage
-  | PermissionRespondMessage;
+  | PermissionRespondMessage
+  | TreeSubscribeMessage
+  | TreeUnsubscribeMessage
+  | PresenceUpdateMessage
+  | PingMessage;
 
 // ═══════════════════════════════════════════
 // Server → Client
@@ -189,6 +256,68 @@ export interface PermissionRequestMessage {
   level: 'allow' | 'ask' | 'deny';
 }
 
+// ── 多端同步（per-tree 广播） ──
+
+/** 全量快照（订阅时或 rev 缺口兼底） */
+export interface TreeSnapshotMessage {
+  type: 'tree.snapshot';
+  treeId: string;
+  rev: number;
+  nodes: ConversationNode[];
+  branches: ConversationBranch[];
+  headNodeId: string | null;
+  /** 在途流式中间态（迟到加入者补齐）：requestId → 已生成内容 */
+  streaming?: { requestId: string; parentId: string; content: NodeContent[] }[];
+  /** 该树的会话列表元数据（捎带，免客户端每次变更再走 REST 拉列表） */
+  conversation?: { treeId: string; title?: string; nodeCount: number; updatedAt: number };
+}
+
+/** 单条 live 持久化变更（带 rev） */
+export interface TreeEventMessage {
+  type: 'tree.event';
+  treeId: string;
+  rev: number;
+  op: TreeOp;
+}
+
+/** 命令被拒绝（只读守卫/并发冲突等）：发起端据此回滚乐观态或重拉 */
+export interface TreeRejectMessage {
+  type: 'tree.reject';
+  treeId?: string;
+  requestId: string;
+  reason: string;
+  /** 拒绝时服务端的 rev（供客户端判断是否基于过期状态，可选） */
+  rev?: number;
+}
+
+/** 流式 delta（ephemeral，不占 rev，按 requestId 路由，广播给全部订阅者） */
+export interface StreamEventMessage {
+  type: 'stream.event';
+  treeId: string;
+  requestId: string;
+  event: SourceEvent;
+}
+
+/** 流被中止（撤销/删除/显式停止/宽限到期） */
+export interface StreamAbortedMessage {
+  type: 'stream.aborted';
+  treeId: string;
+  requestId: string;
+  reason: string;
+}
+
+/** 全量 presence 列表（精简：每次发完整列表，人数少无需增量） */
+export interface PresenceStateMessage {
+  type: 'presence.state';
+  treeId: string;
+  peers: PresenceState[];
+}
+
+/** 心跳 pong */
+export interface PongMessage {
+  type: 'pong';
+}
+
 export type ServerMessage =
   | SessionCreatedMessage
   | AgentEventMessage
@@ -196,4 +325,11 @@ export type ServerMessage =
   | SessionClosedMessage
   | TreeUpdatedMessage
   | TreeErrorMessage
-  | PermissionRequestMessage;
+  | PermissionRequestMessage
+  | TreeSnapshotMessage
+  | TreeEventMessage
+  | TreeRejectMessage
+  | StreamEventMessage
+  | StreamAbortedMessage
+  | PresenceStateMessage
+  | PongMessage;

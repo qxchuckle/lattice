@@ -18,22 +18,69 @@ export {
   MIN_NODE_HEIGHT,
   ROOT_INPUT_ID,
 } from './types';
-export { agentStore, ensureUi, getChildIds, getSiblings, getTotalUsage } from './store';
+export {
+  agentStore,
+  ensureUi,
+  putTurn,
+  getChildIds,
+  getSiblings,
+  getTotalUsage,
+  stableNodeData,
+  clearNodeDataCache,
+} from './store';
 export { connectAgentWs } from './connection';
-export { loadSources, loadModels, loadConversations } from './api';
+export {
+  loadSources,
+  loadModels,
+  fetchModels,
+  fetchModelsCached,
+  clearModelListCache,
+  loadConversations,
+  loadAgentConfig,
+} from './api';
+export type { AgentClientConfig } from './api';
 
 // ── Actions（高层操作，组合 store + connection + api） ──
 
-import { agentStore, ensureUi } from './store';
-import { sendWs, isWsReady, connectAgentWs, setStreamingTarget } from './connection';
-import { loadModels, loadSources, loadConversations, deleteConversationApi } from './api';
+import { agentStore, ensureUi, putTurn, clearNodeDataCache } from './store';
+import {
+  sendWs,
+  isWsReady,
+  connectAgentWs,
+  setStreamingTarget,
+  unsubscribeTree,
+} from './connection';
+import { resetLastAppliedRev } from './sync';
+import {
+  loadModels,
+  loadSources,
+  loadConversations,
+  deleteConversationApi,
+  loadAgentConfig,
+} from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
 
 // ── 提交消息 ──
 
-export function submitFromNode(parentTurnId: string | null, message: string): string | null {
+export function submitFromNode(
+  parentTurnId: string | null,
+  message: string,
+  opts?: { model?: string },
+): string | null {
   if (!message.trim()) return null;
+
+  // 源/模型解析：新第一层线程用当前选择；追问继承父节点（源不可换，模型可按节点覆盖）
+  const parentTurn = parentTurnId ? agentStore.turns.get(parentTurnId) : undefined;
+  const sourceId = parentTurn ? parentTurn.sourceId : agentStore.activeSourceId;
+  const modelId = opts?.model ?? (parentTurn ? parentTurn.modelId : agentStore.activeModelId);
+  // 参数标注：root 用当前选择；追问继承父节点（server 侧同样规则，展示与实际一致）
+  const thinkingLevel = parentTurn
+    ? parentTurn.thinkingLevel
+    : agentStore.activeThinkingLevel || undefined;
+  const contextWindow = parentTurn
+    ? parentTurn.contextWindow
+    : agentStore.activeContextWindow || undefined;
 
   // 懒创建 session：新对话发消息时才连接
   if (!agentStore.sessionId) {
@@ -43,7 +90,7 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     // 发送 session.create 并等待响应
     sendWs({
       type: 'session.create',
-      agentId: agentStore.activeSourceId,
+      agentId: sourceId,
       treeId: agentStore.treeId ?? undefined,
     });
     // 等待 session 建立后重试（最多 5 次，每次 300ms）
@@ -51,7 +98,7 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     const waitForSession = () => {
       attempts++;
       if (agentStore.sessionId) {
-        submitFromNode(parentTurnId, message);
+        submitFromNode(parentTurnId, message, opts);
       } else if (attempts < 5) {
         setTimeout(waitForSession, 300);
       } else {
@@ -64,10 +111,10 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
           blocks: [{ type: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
           status: 'error',
           timestamp: Date.now(),
-          sourceId: agentStore.activeSourceId,
-          modelId: agentStore.activeModelId,
+          sourceId,
+          modelId,
         };
-        agentStore.turns.set(turnId, turn);
+        putTurn(turn);
         ensureUi(turnId);
         agentStore.version++;
       }
@@ -78,7 +125,7 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
 
   if (!isWsReady()) {
     connectAgentWs();
-    setTimeout(() => submitFromNode(parentTurnId, message), 500);
+    setTimeout(() => submitFromNode(parentTurnId, message, opts), 500);
     return null;
   }
 
@@ -91,10 +138,12 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     blocks: [],
     status: 'streaming',
     timestamp: Date.now(),
-    sourceId: agentStore.activeSourceId,
-    modelId: agentStore.activeModelId,
+    sourceId,
+    modelId,
+    thinkingLevel,
+    contextWindow,
   };
-  agentStore.turns.set(turnId, turn);
+  putTurn(turn);
   ensureUi(turnId);
   setStreamingTarget(turnId, requestId);
   agentStore.version++;
@@ -105,7 +154,12 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     message: message.trim(),
     parentNodeId: parentTurnId,
     requestId,
-    model: agentStore.activeModelId || undefined,
+    model: modelId || undefined,
+    // 参数：root 用全局选择；追问用节点参数（节点作用域编辑后的值，未编辑时等同线程继承值）
+    thinkingLevel: thinkingLevel || undefined,
+    contextWindow: contextWindow || undefined,
+    // 源仅对新第一层线程生效（server 对追问沿祖先链解析）
+    sourceId,
   });
   return turnId;
 }
@@ -172,6 +226,24 @@ export function retryTurn(turnId: string): void {
 
 // ── 撤销（目标节点及后代标记为 undone，只读灰色） ──
 
+/**
+ * 乐观标记本地子树状态（undo/delete 即时反馈，不等 server 往返）。
+ * 规则与 server markNodes 一致：undo 不复活已 hidden 的后代；
+ * server 处理完发 tree.updated → loadTree 校准最终状态。
+ */
+function markLocalSubtree(turnId: string, status: 'undone' | 'hidden'): void {
+  const mark = (id: string): void => {
+    const t = agentStore.turns.get(id);
+    if (!t) return;
+    if (!(status === 'undone' && t.status === 'hidden')) t.status = status;
+    for (const [cid, c] of agentStore.turns) {
+      if (c.parentTurnId === id) mark(cid);
+    }
+  };
+  mark(turnId);
+  agentStore.version++;
+}
+
 export function undoTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
@@ -181,6 +253,7 @@ export function undoTurn(turnId: string): void {
     sessionId: agentStore.sessionId,
     nodeId: turnId,
   });
+  markLocalSubtree(turnId, 'undone');
 }
 
 // ── 删除（撤销 + 隐藏） ──
@@ -194,6 +267,25 @@ export function deleteTurn(turnId: string): void {
     sessionId: agentStore.sessionId,
     nodeId: turnId,
   });
+  markLocalSubtree(turnId, 'hidden');
+}
+
+// ── presence（多端同步：本端在场状态上报，节流） ──
+
+let presenceTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPresence: { focusNodeId?: string | null; typing?: boolean } = {};
+
+/** 节流上报本端 presence（focus/typing）给同树其他端 */
+export function reportPresence(patch: { focusNodeId?: string | null; typing?: boolean }): void {
+  pendingPresence = { ...pendingPresence, ...patch };
+  if (presenceTimer) return;
+  presenceTimer = setTimeout(() => {
+    presenceTimer = null;
+    if (agentStore.treeId && agentStore.sessionId) {
+      sendWs({ type: 'presence.update', treeId: agentStore.treeId, ...pendingPresence });
+    }
+    pendingPresence = {};
+  }, 300);
 }
 
 // ── 节点尺寸 ──
@@ -216,33 +308,50 @@ export function setNodeSize(nodeId: string, width: number, height: number): void
 export function setSource(sourceId: string): void {
   agentStore.activeSourceId = sourceId;
   agentStore.activeModelId = '';
+  agentStore.activeThinkingLevel = '';
+  agentStore.activeContextWindow = 0;
   loadModels(sourceId);
 }
 
 export function setModel(modelId: string): void {
   agentStore.activeModelId = modelId;
+  // 参数选择随模型重置（回到该模型 tuning 规格的默认值）
+  agentStore.activeThinkingLevel = '';
+  agentStore.activeContextWindow = 0;
 }
 
 // ── 会话管理 ──
 
 export async function switchConversation(treeId: string): Promise<void> {
   if (agentStore.sessionId) sendWs({ type: 'session.destroy', sessionId: agentStore.sessionId });
+  if (agentStore.treeId) unsubscribeTree(agentStore.treeId); // 退订旧树（不拆树资源）
+  resetLastAppliedRev(); // 重置 rev 基线（新树从 0 计）
+  clearNodeDataCache();
   agentStore.sessionId = null;
   agentStore.turns.clear();
   agentStore.ui.clear();
+  agentStore.peers = [];
   agentStore.treeId = treeId;
   agentStore.version++;
 
-  // 直接发送 session.create（WS 已连接）
+  // WS 未就绪时发起连接：onopen 会按 treeId 兜底 session.create（避免消息丢失看不了历史）
+  if (!isWsReady()) {
+    connectAgentWs();
+    return;
+  }
   sendWs({ type: 'session.create', agentId: agentStore.activeSourceId, treeId });
 }
 
 export function newConversation(): void {
   // 纯前端假对话：不连接 WS，不创建 session，等发消息时才懒创建
+  if (agentStore.treeId) unsubscribeTree(agentStore.treeId); // 退订旧树（与 switchConversation 一致）
+  resetLastAppliedRev();
+  clearNodeDataCache();
   agentStore.sessionId = null;
   agentStore.treeId = null;
   agentStore.turns.clear();
   agentStore.ui.clear();
+  agentStore.peers = [];
   agentStore.version++;
 }
 
@@ -264,9 +373,18 @@ export async function initAgent(): Promise<void> {
   if (initializing) return;
   initializing = true;
   try {
-    await loadSources();
-    await loadModels(agentStore.activeSourceId);
+    // WS 最先连接：对话/历史不被源模型目录加载阻塞（首次动态目录需起 CLI，秒级）
     connectAgentWs();
+    await loadSources();
+    // 应用配置页的默认源/默认模型（local config agent 段）
+    const cfg = await loadAgentConfig();
+    if (cfg.defaultSource && agentStore.sources.some((s) => s.id === cfg.defaultSource)) {
+      agentStore.activeSourceId = cfg.defaultSource;
+    }
+    await loadModels(agentStore.activeSourceId);
+    if (cfg.defaultModel && agentStore.models.some((m) => m.id === cfg.defaultModel)) {
+      agentStore.activeModelId = cfg.defaultModel;
+    }
   } finally {
     initializing = false;
   }

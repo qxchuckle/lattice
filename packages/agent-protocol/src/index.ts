@@ -13,7 +13,7 @@ export type {
   SourceErrorContext,
 } from './source/events.js';
 
-export type { ModelInfo } from './source/models.js';
+export type { ModelInfo, ModelParamSpec, ModelTuning } from './source/models.js';
 
 export type { AuthRequirement, AuthStatus } from './source/auth.js';
 
@@ -49,7 +49,6 @@ export type {
   MergeMode,
   PermissionLevel,
   PermissionRequest,
-  AgentSessionOpts,
 } from './source/conversation.js';
 
 // ── Transport 契约 ──
@@ -73,6 +72,17 @@ export type {
   TreeUpdatedMessage,
   TreeErrorMessage,
   PermissionRequestMessage,
+  TreeSubscribeMessage,
+  TreeUnsubscribeMessage,
+  PresenceUpdateMessage,
+  TreeSnapshotMessage,
+  TreeEventMessage,
+  TreeRejectMessage,
+  StreamEventMessage,
+  StreamAbortedMessage,
+  PresenceStateMessage,
+  TreeOp,
+  PresenceState,
 } from './transport/ws.js';
 
 export type { SseProgress, SseDone } from './transport/sse.js';
@@ -113,6 +123,7 @@ export {
   canApplyOperation,
   shouldSkipDescendantMark,
   isBranchableChild,
+  computeNodeCapabilities,
   projectViewStatus,
 } from './source/node-state.js';
-export type { ViewStatus, NodeOperation } from './source/node-state.js';
+export type { ViewStatus, NodeOperation, NodeCapabilities } from './source/node-state.js';

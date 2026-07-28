@@ -28,7 +28,26 @@ export interface StreamingState {
 }
 
 export class SessionRepository {
+  /**
+   * nodes.jsonl 写操作 per-tree 串行锁：append 与全量 rewrite 并发交错会损坏 JSONL。
+   * 重复行（rewrite 已含节点后又 append 同节点）由加载时 Map 按 id 去重容忍。
+   */
+  private writeLocks = new Map<string, Promise<void>>();
+
   constructor(private readonly storage: SessionStorage) {}
+
+  private withWriteLock<T>(treeId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.writeLocks.get(treeId) ?? Promise.resolve();
+    const run = prev.then(fn, fn);
+    this.writeLocks.set(
+      treeId,
+      run.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return run;
+  }
 
   get baseDir(): string {
     return this.storage.baseDir;
@@ -98,16 +117,20 @@ export class SessionRepository {
   }
 
   async appendNode(treeId: string, node: ConversationNode): Promise<void> {
-    const dir = this.treeDir(treeId);
-    await mkdir(dir, { recursive: true });
-    await appendFile(join(dir, 'nodes.jsonl'), JSON.stringify(node) + '\n', 'utf-8');
+    await this.withWriteLock(treeId, async () => {
+      const dir = this.treeDir(treeId);
+      await mkdir(dir, { recursive: true });
+      await appendFile(join(dir, 'nodes.jsonl'), JSON.stringify(node) + '\n', 'utf-8');
+    });
   }
 
   async writeNodes(treeId: string, nodes: ConversationNode[]): Promise<void> {
-    const dir = this.treeDir(treeId);
-    await mkdir(dir, { recursive: true });
-    const content = nodes.map((n) => JSON.stringify(n)).join('\n') + '\n';
-    await writeFile(join(dir, 'nodes.jsonl'), content, 'utf-8');
+    await this.withWriteLock(treeId, async () => {
+      const dir = this.treeDir(treeId);
+      await mkdir(dir, { recursive: true });
+      const content = nodes.map((n) => JSON.stringify(n)).join('\n') + '\n';
+      await writeFile(join(dir, 'nodes.jsonl'), content, 'utf-8');
+    });
   }
 
   /** 尾部读取最近 N 个节点（避免全量加载） */

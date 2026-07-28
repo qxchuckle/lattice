@@ -20,6 +20,11 @@ export const ClientMessageType = {
   TreeSwitchHead: 'tree.switchHead',
   TreeSetDefault: 'tree.setDefault',
   PermissionRespond: 'permission.respond',
+  // 多端同步（per-tree 订阅模型）
+  TreeSubscribe: 'tree.subscribe',
+  TreeUnsubscribe: 'tree.unsubscribe',
+  PresenceUpdate: 'presence.update',
+  Ping: 'ping',
 } as const;
 
 /** Server → Client 消息类型 */
@@ -31,6 +36,14 @@ export const ServerMessageType = {
   TreeUpdated: 'tree.updated',
   TreeError: 'tree.error',
   PermissionRequest: 'permission.request',
+  // 多端同步（per-tree 广播模型）
+  TreeSnapshot: 'tree.snapshot',
+  TreeEvent: 'tree.event',
+  TreeReject: 'tree.reject',
+  StreamEvent: 'stream.event',
+  StreamAborted: 'stream.aborted',
+  PresenceState: 'presence.state',
+  Pong: 'pong',
 } as const;
 
 /** 协议级错误码（区别于 SourceEvent 中的 SourceErrorCode） */

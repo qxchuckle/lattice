@@ -6,6 +6,7 @@
 import { useEffect, useCallback } from 'react';
 import { useSnapshot } from 'valtio';
 import { AgentCanvas } from './AgentCanvas';
+import { AgentSettingsModal } from './AgentSettingsModal';
 import {
   agentStore,
   loadConversations,
@@ -90,6 +91,15 @@ export function AgentPanel() {
 
         <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{snap.turns.size} 节点</span>
 
+        {/* 同树其他在场端（多端同步 presence） */}
+        {snap.peers.length > 0 && (
+          <span
+            style={{ fontSize: 10, color: 'var(--brand-color)' }}
+            title={`其他在场端：${snap.peers.map((p) => p.clientKind).join('、')}`}>
+            👥 {snap.peers.length}
+          </span>
+        )}
+
         {(usage.input > 0 || usage.output > 0) && (
           <span style={{ fontSize: 9, color: 'var(--text-secondary)' }} title='会话累计 token'>
             ↑{fmtTok(usage.input)} ↓{fmtTok(usage.output)}
@@ -151,6 +161,30 @@ export function AgentPanel() {
                 : '2px solid transparent',
             }}>
             📋
+          </button>
+          {/* 设置按钮 */}
+          <button
+            onClick={() => {
+              agentStore.settingsOpen = true;
+            }}
+            title='Agent 设置'
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 6,
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              background: snap.settingsOpen ? 'rgba(22,119,255,0.15)' : 'transparent',
+              color: snap.settingsOpen ? 'var(--brand-color)' : 'var(--text-secondary)',
+              borderLeft: snap.settingsOpen
+                ? '2px solid var(--brand-color)'
+                : '2px solid transparent',
+            }}>
+            ⚙️
           </button>
         </div>
 
@@ -270,6 +304,9 @@ export function AgentPanel() {
           <AgentCanvas />
         </div>
       </div>
+
+      {/* Agent 设置（通用/模型两个 tab） */}
+      <AgentSettingsModal />
     </div>
   );
 }

@@ -48,6 +48,55 @@ export function isBranchableChild(status: NodeStatus | undefined): boolean {
   return !isReadOnly(status);
 }
 
+// ── 节点能力投影（驱动客户端渲染的单一真相） ──
+
+/**
+ * 节点可操作能力（视图层）。
+ * 客户端按钮/输入区渲染与交互入口一律从本对象读取，禁止在组件内重新推导；
+ * server 端对应操作守卫走 canApplyOperation（持久化状态，纵深防御）。
+ */
+export interface NodeCapabilities {
+  /** 分支：从同一父节点重新提问 */
+  canBranch: boolean;
+  /** 撤销：节点及后代标记只读 */
+  canUndo: boolean;
+  /** 删除：撤销 + 隐藏（undone→hidden 合法） */
+  canDelete: boolean;
+  /** 重试/重新生成 */
+  canRetry: boolean;
+  /** 继续：对中断回复续写 */
+  canContinue: boolean;
+  /** 底部追问输入（模型可换，源跟随线程） */
+  canFollowup: boolean;
+  /** 中止流式 */
+  canAbort: boolean;
+}
+
+/**
+ * 从视图状态投影节点能力（与 canApplyOperation 语义一致：
+ * undone/hidden 只读；delete 对 undone 合法；流式中禁止结构操作）。
+ * streaming 是客户端瞬时态，故本函数基于 ViewStatus 而非持久化状态。
+ */
+export function computeNodeCapabilities(viewStatus: ViewStatus): NodeCapabilities {
+  const streaming = viewStatus === 'streaming';
+  // ViewStatus 的 undone/hidden 与持久化状态同名同义，其余视图态均映射自活跃节点
+  const persisted: NodeStatus =
+    viewStatus === 'undone' || viewStatus === 'hidden'
+      ? viewStatus
+      : viewStatus === 'interrupted'
+        ? 'interrupted'
+        : 'active';
+  return {
+    canBranch: !streaming && !isReadOnly(persisted),
+    canUndo: !streaming && canApplyOperation('undo', persisted),
+    canDelete: !streaming && canApplyOperation('delete', persisted),
+    canRetry: viewStatus === 'error' || viewStatus === 'interrupted',
+    canContinue: viewStatus === 'interrupted',
+    canFollowup: !isReadOnly(persisted),
+    canAbort: streaming,
+  };
+}
+
 /**
  * 视图投影优先级：undone > hidden > error(内容) > interrupted > done。
  * streaming 为客户端流式瞬时态，不参与本投影（由连接层单独设置）。

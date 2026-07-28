@@ -30,6 +30,92 @@ export interface QoderSourceConfig {
   permissionMode?: PermissionMode;
 }
 
+/**
+ * 静态兜底模型目录：SDK 动态获取失败（未登录/CLI 不可用/超时）时使用。
+ * 动态路径见 listModels → fetchModelsFromSdk（get_models 控制请求，与 IDE 同一份目录）。
+ */
+const FALLBACK_THINKING = {
+  options: ['low', 'medium', 'high', 'xhigh', 'max'],
+  default: 'high',
+  toggleable: true,
+};
+
+const FALLBACK_MODELS: ModelInfo[] = [
+  {
+    id: 'auto',
+    displayName: 'Auto (智能路由)',
+    capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
+    contextWindow: 200000,
+    maxOutputTokens: 16384,
+    costFactor: 1.0,
+    costLabel: '1.0x',
+    // auto 智能路由：参数由路由决策，不开放调节（无 tuning = web 不渲染编辑入口）
+  },
+  {
+    id: 'ultimate',
+    displayName: 'Ultimate',
+    capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
+    contextWindow: 1000000,
+    maxOutputTokens: 16384,
+    costFactor: 1.6,
+    costLabel: '1.6x',
+    tuning: {
+      contextWindow: { options: [200000, 400000, 1000000], default: 200000 },
+      thinking: FALLBACK_THINKING,
+    },
+  },
+  {
+    id: 'performance',
+    displayName: 'Performance',
+    capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
+    contextWindow: 200000,
+    maxOutputTokens: 16384,
+    costFactor: 1.1,
+    costLabel: '1.1x',
+    tuning: { thinking: FALLBACK_THINKING },
+  },
+  {
+    id: 'efficient',
+    displayName: 'Efficient',
+    capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    costFactor: 0.3,
+    costLabel: '0.3x',
+  },
+  {
+    id: 'lite',
+    displayName: 'Lite',
+    capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+    contextWindow: 64000,
+    maxOutputTokens: 4096,
+    costFactor: 0,
+    costLabel: '0.0x',
+  },
+];
+
+/** 动态模型目录缓存 TTL（每次获取需起 CLI 控制通道，成本高） */
+const MODEL_CACHE_TTL_MS = 60_000;
+/** get_models 控制请求整体超时（含 CLI 启动握手） */
+const MODEL_FETCH_TIMEOUT_MS = 8_000;
+
+/** 思考深度按强度排序（server 返回 Record 键序不稳定）；未知等级排末尾 */
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
+function sortEfforts(efforts: string[]): string[] {
+  return [...efforts].sort((a, b) => {
+    const ia = EFFORT_ORDER.indexOf(a);
+    const ib = EFFORT_ORDER.indexOf(b);
+    return (ia === -1 ? EFFORT_ORDER.length : ia) - (ib === -1 ? EFFORT_ORDER.length : ib);
+  });
+}
+
+/** 积分倍率展示文本（1 → '1.0x'，0.49998 → '0.5x'，2.56 → '2.56x'） */
+function factorLabel(factor: number | undefined): string | undefined {
+  if (factor == null) return undefined;
+  const f = parseFloat(factor.toFixed(2));
+  return `${Number.isInteger(f) ? f.toFixed(1) : f}x`;
+}
+
 export class QoderSource implements ISource {
   readonly id = 'qoder';
   readonly displayName = 'Qoder';
@@ -56,6 +142,10 @@ export class QoderSource implements ISource {
   private injectedTools: ToolDefinition[] = [];
   private config: QoderSourceConfig;
   private initialized = false;
+  /** 动态模型目录缓存（TTL 内复用，避免频繁起 CLI 控制通道） */
+  private modelCache: { at: number; models: ModelInfo[] } | null = null;
+  /** 在途刷新去重（stale-while-revalidate 后台任务单飞） */
+  private modelFetchInFlight = false;
 
   constructor(config?: QoderSourceConfig) {
     this.config = { authMode: 'cli', permissionMode: 'acceptEdits', ...config };
@@ -63,6 +153,8 @@ export class QoderSource implements ISource {
 
   async init(): Promise<void> {
     this.initialized = true;
+    // 后台预热动态模型目录（首次 get_models 需起 CLI 握手，数秒级），不阻塞启动
+    this.refreshModelCache();
   }
 
   async dispose(): Promise<void> {
@@ -71,48 +163,107 @@ export class QoderSource implements ISource {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return [
-      {
-        id: 'auto',
-        displayName: 'Auto (智能路由)',
-        capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
-        contextWindow: 200000,
-        maxOutputTokens: 16384,
-        costFactor: 1.0,
-      },
-      {
-        id: 'ultimate',
-        displayName: 'Ultimate',
-        capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
-        contextWindow: 1000000,
-        maxOutputTokens: 16384,
-        costFactor: 1.6,
-      },
-      {
-        id: 'performance',
-        displayName: 'Performance',
-        capabilities: { streaming: true, toolCalling: true, vision: true, reasoning: true },
-        contextWindow: 200000,
-        maxOutputTokens: 16384,
-        costFactor: 1.1,
-      },
-      {
-        id: 'efficient',
-        displayName: 'Efficient',
-        capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
-        contextWindow: 128000,
-        maxOutputTokens: 8192,
-        costFactor: 0.3,
-      },
-      {
-        id: 'lite',
-        displayName: 'Lite',
-        capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
-        contextWindow: 64000,
-        maxOutputTokens: 4096,
-        costFactor: 0,
-      },
-    ];
+    // stale-while-revalidate：永不阻塞——缓存新鲜直接用；过期/缺失则后台刷新，
+    // 本次立即返回旧缓存或静态兜底（动态目录就绪后下次请求自然拿到）
+    const now = Date.now();
+    if (this.modelCache && now - this.modelCache.at < MODEL_CACHE_TTL_MS) {
+      return this.modelCache.models;
+    }
+    this.refreshModelCache();
+    return this.modelCache?.models ?? FALLBACK_MODELS;
+  }
+
+  /** 后台刷新动态目录（单飞：已有在途请求则跳过） */
+  private refreshModelCache(): void {
+    if (this.modelFetchInFlight) return;
+    this.modelFetchInFlight = true;
+    void this.fetchModelsFromSdk()
+      .then((models) => {
+        if (models.length > 0) this.modelCache = { at: Date.now(), models };
+      })
+      .catch(() => {
+        /* 未登录/CLI 不可用/超时 → 继续用静态兜底 */
+      })
+      .finally(() => {
+        this.modelFetchInFlight = false;
+      });
+  }
+
+  /**
+   * 通过 SDK 控制通道获取实时模型目录（query.getAvailableModels → CLI get_models）。
+   * streaming-input 模式不产出任何用户消息，仅建控制通道，取完即 close。
+   */
+  private async fetchModelsFromSdk(): Promise<ModelInfo[]> {
+    const { query, qodercliAuth, accessTokenFromEnv } = await import('@qoder-ai/qoder-agent-sdk');
+    const auth = this.config.authMode === 'env' ? accessTokenFromEnv() : qodercliAuth();
+
+    // 挂起的空输入流：不发消息，close 时结束
+    let releaseInput!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseInput = r;
+    });
+    async function* emptyInput(): AsyncGenerator<never> {
+      await gate;
+      // 永不 yield：仅维持 streaming-input 通道直到 close
+      yield* [] as never[];
+    }
+
+    const q = query({
+      prompt: emptyInput(),
+      options: { auth, cwd: process.env.HOME || '/' },
+    });
+    try {
+      const sdkModels = await Promise.race([
+        q.getAvailableModels({ fetchStrategy: 'cache' }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('get_models timeout')), MODEL_FETCH_TIMEOUT_MS),
+        ),
+      ]);
+      return sdkModels
+        .filter((m) => m.isEnabled !== false)
+        .map((m): ModelInfo => {
+          const ctxOptions = m.availableContextWindows ?? [];
+          const efforts = m.efforts ?? [];
+          const tuning: NonNullable<ModelInfo['tuning']> = {
+            // 多档位才开放调节（单档位无选择意义）
+            ...(ctxOptions.length > 1
+              ? {
+                  contextWindow: {
+                    options: ctxOptions,
+                    default: m.defaultContextWindow ?? ctxOptions[0],
+                  },
+                }
+              : {}),
+            ...(efforts.length > 0
+              ? {
+                  thinking: {
+                    options: sortEfforts(efforts),
+                    default: m.defaultEffort ?? efforts[0],
+                    toggleable: m.supportsDisabled === true,
+                  },
+                }
+              : {}),
+          };
+          return {
+            id: m.value,
+            displayName: m.displayName + (m.isNew ? '（新）' : ''),
+            capabilities: {
+              streaming: true,
+              toolCalling: true,
+              vision: m.isVl === true,
+              reasoning: m.isReasoning === true,
+            },
+            contextWindow: m.defaultContextWindow ?? m.maxInputTokens ?? 200000,
+            maxOutputTokens: m.maxOutputTokens ?? 16384,
+            costFactor: m.priceFactor,
+            costLabel: factorLabel(m.priceFactor),
+            ...(Object.keys(tuning).length > 0 ? { tuning } : {}),
+          };
+        });
+    } finally {
+      releaseInput();
+      await q.close().catch(() => {});
+    }
   }
 
   getAuthRequirements(): AuthRequirement[] {
@@ -194,6 +345,9 @@ export class QoderSource implements ISource {
         allowedTools: [...this.capabilities.builtinTools, ...this.injectedTools.map((t) => t.name)],
         includePartialMessages: true,
         abortController: controller,
+        // 模型可调参数（tuning 规格约束取值）：SDK 支持时生效，不支持则忽略
+        ...(opts?.thinkingLevel ? { thinkingLevel: opts.thinkingLevel } : {}),
+        ...(opts?.contextWindow ? { contextWindow: opts.contextWindow } : {}),
         ...(mcpServers ? { mcpServers: mcpServers as Record<string, McpServerConfig> } : {}),
       };
 

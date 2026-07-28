@@ -193,7 +193,7 @@ describe('边界条件与操作组合', () => {
       controller.undo('s', 'u2', noopHooks),
       new Promise<void>((resolve) => {
         controller.send('s', '并发提问', { requestId: 'u3', parentNodeId: 'u1' }, noopHooks);
-        void controller.getSession('s')!.queue.then(() => resolve());
+        void controller.getRuntime('s')!.queue.then(() => resolve());
       }),
     ]);
     expect(sm.getNode(t, 'u2')!.status, '并发后 undo(u2) 生效').toBe('undone');

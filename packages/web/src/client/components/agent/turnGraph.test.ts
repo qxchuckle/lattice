@@ -20,7 +20,13 @@ import type { TurnNode } from './types';
 function node(
   id: string,
   role: 'user' | 'assistant',
-  opts: { parentId?: string | null; status?: NodeStatus; text?: string } = {},
+  opts: {
+    parentId?: string | null;
+    status?: NodeStatus;
+    text?: string;
+    agentId?: string;
+    metadata?: ConversationNode['metadata'];
+  } = {},
 ): ConversationNode {
   return {
     id,
@@ -30,6 +36,8 @@ function node(
     content: [{ type: 'text', text: opts.text ?? id }],
     timestamp: Number(id.replace(/\D/g, '')) || 0,
     status: opts.status,
+    agentId: opts.agentId,
+    metadata: opts.metadata,
   };
 }
 
@@ -96,6 +104,45 @@ describe('buildTurnsFromNodes（nodes→turns 重建）', () => {
     const turns = buildTurnsFromNodes([node('a1', 'assistant', { text: '旧回复' })]);
     expect(turns.size).toBe(1);
     expect(turns.get('a1')!.status).toBe('done');
+  });
+
+  it('元数据重建：源/模型/参数/usage 从 assistant 优先，回退 user', () => {
+    const turns = buildTurnsFromNodes([
+      node('u1', 'user', {
+        agentId: 'qoder',
+        metadata: { model: 'ultimate', thinkingLevel: 'high', contextWindow: 400000 },
+      }),
+      node('a1', 'assistant', {
+        parentId: 'u1',
+        agentId: 'qoder',
+        metadata: {
+          model: 'ultimate',
+          thinkingLevel: 'high',
+          contextWindow: 400000,
+          usage: { input: 100, output: 50 },
+        },
+      }),
+    ]);
+    const t = turns.get('u1')!;
+    expect(t.sourceId).toBe('qoder');
+    expect(t.modelId).toBe('ultimate');
+    expect(t.thinkingLevel, 'thinkingLevel 重建').toBe('high');
+    expect(t.contextWindow, 'contextWindow 重建').toBe(400000);
+    expect(t.usage?.input, 'usage 重建（reload 后上下文指示可用）').toBe(100);
+  });
+
+  it('元数据重建：assistant 缺失时回退 user 节点落盘值', () => {
+    const turns = buildTurnsFromNodes([
+      node('u1', 'user', {
+        agentId: 'pi',
+        metadata: { model: 'claude', thinkingLevel: 'low', contextWindow: 128000 },
+      }),
+    ]);
+    const t = turns.get('u1')!;
+    expect(t.sourceId, 'sourceId 回退 user.agentId').toBe('pi');
+    expect(t.modelId, 'modelId 回退 user.metadata').toBe('claude');
+    expect(t.thinkingLevel).toBe('low');
+    expect(t.contextWindow).toBe(128000);
   });
 });
 

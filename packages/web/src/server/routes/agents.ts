@@ -22,9 +22,14 @@ import {
   type AgentSourceInstance,
   type ConversationHooks,
 } from '@qcqx/lattice-agent';
-import type { ClientMessage, ServerMessage } from '@qcqx/lattice-agent-protocol';
+import type { ClientMessage, ServerMessage, PresenceState } from '@qcqx/lattice-agent-protocol';
 import { isClientMessage } from '@qcqx/lattice-agent-protocol';
-import { isAuthEnabled, readWebAuth, getSessionsCacheDir } from '@qcqx/lattice-core';
+import {
+  isAuthEnabled,
+  readWebAuth,
+  getSessionsCacheDir,
+  readLocalConfig,
+} from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
 import { randomUUID } from 'node:crypto';
 
@@ -38,6 +43,16 @@ function send(ws: { send: (data: string) => void }, msg: ServerMessage): void {
   }
 }
 
+/** 读 local config 中某源的自定义模型列表（agent.customModels.<sourceId>） */
+async function readCustomModels(sourceId: string): Promise<string[]> {
+  const config = (await readLocalConfig()) as Record<string, unknown> | null;
+  const agentCfg = config?.agent as { customModels?: Record<string, unknown> } | undefined;
+  const list = agentCfg?.customModels?.[sourceId];
+  return Array.isArray(list)
+    ? list.filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    : [];
+}
+
 /** WebSocket 连接最小类型（传输层仅依赖这些方法，不绑定具体 ws 实现） */
 interface WsSocket {
   send(data: string): void;
@@ -46,11 +61,76 @@ interface WsSocket {
   on(event: 'close' | 'error', handler: () => void): void;
 }
 
+/** 一个 WS 连接（订阅者）：可订多棵树；一棵树可被多连接订阅 */
+interface AgentConn {
+  id: string;
+  socket: WsSocket;
+  clientKind: string;
+  subscribed: Set<string>;
+}
+
 // ── 路由注册 ──
 
 export function registerAgentRoutes(app: FastifyInstance): void {
   let agent: LatticeAgent | null = null;
   let sourcesInstance: AgentSourceInstance | null = null;
+
+  // 多端同步：per-tree 订阅表 + presence（跨连接共享，整个路由层唯一）
+  const treeSubscribers = new Map<string, Set<AgentConn>>();
+  const treePresence = new Map<string, Map<string, PresenceState>>();
+  // 订阅者归零后的停流宽限计时器（防重连抖动误杀在途流）
+  const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const STREAM_GRACE_MS = 30000;
+
+  /** 向一棵树的全部订阅者广播（可排除发起连接） */
+  function broadcastTree(treeId: string, msg: ServerMessage, exceptConnId?: string): void {
+    const subs = treeSubscribers.get(treeId);
+    if (!subs) return;
+    for (const c of subs) {
+      if (exceptConnId && c.id === exceptConnId) continue;
+      send(c.socket, msg);
+    }
+  }
+
+  /** 广播该树当前全量 presence 列表 */
+  function broadcastPresence(treeId: string): void {
+    const peers = [...(treePresence.get(treeId)?.values() ?? [])];
+    broadcastTree(treeId, { type: 'presence.state', treeId, peers });
+  }
+
+  /** 退订：仅移除订阅 + presence，不拆树资源（流/源会话归属树不随连接断开而中止） */
+  function unsubscribeConn(conn: AgentConn, treeId: string): void {
+    treeSubscribers.get(treeId)?.delete(conn);
+    conn.subscribed.delete(treeId);
+    if (treePresence.get(treeId)?.delete(conn.id)) broadcastPresence(treeId);
+    void maybeStartGrace(treeId);
+  }
+
+  /** 订阅者归零 → 起宽限计时器；到期仍无人观看则中止该树在途流（停烧 token） */
+  async function maybeStartGrace(treeId: string): Promise<void> {
+    const subs = treeSubscribers.get(treeId);
+    if (subs && subs.size > 0) return;
+    if (graceTimers.has(treeId)) return;
+    graceTimers.set(
+      treeId,
+      setTimeout(() => {
+        graceTimers.delete(treeId);
+        const s = treeSubscribers.get(treeId);
+        if (s && s.size > 0) return; // 宽限期内有人重新订阅 → 不停
+        const ag = agent;
+        if (ag) ag.conversation.abortTreeStreams(treeId);
+      }, STREAM_GRACE_MS),
+    );
+  }
+
+  /** 取消宽限计时器（有人订阅时） */
+  function cancelGrace(treeId: string): void {
+    const t = graceTimers.get(treeId);
+    if (t) {
+      clearTimeout(t);
+      graceTimers.delete(treeId);
+    }
+  }
 
   async function getAgent(): Promise<LatticeAgent> {
     if (!agent) {
@@ -91,10 +171,54 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       const latticeAgent = await getAgent();
       const { conversation, session, sources, permission, events } = latticeAgent;
 
+      // 本连接（订阅者）身份
+      const conn: AgentConn = {
+        id: randomUUID(),
+        socket,
+        clientKind: 'web',
+        subscribed: new Set(),
+      };
+
+      // 构建一棵树的全量快照（订阅时下发 / 提交后广播给其他订阅者）
+      const buildSnapshot = async (treeId: string): Promise<ServerMessage | null> => {
+        const tree = await session.loadTree(treeId);
+        if (!tree) return null;
+        const interrupted = await session.getInterruptedStreams(treeId);
+        const nodes = session.getNodes(treeId);
+        return {
+          type: 'tree.snapshot',
+          treeId,
+          rev: tree.rev ?? 0,
+          nodes,
+          branches: tree.branches,
+          headNodeId: tree.headNodeId,
+          streaming: interrupted.map((s) => ({
+            requestId: s.requestId,
+            parentId: s.parentId,
+            content: s.content,
+          })),
+          // 会话列表元数据捎带：客户端增量更新列表，免每次变更走 REST 拉列表
+          conversation: {
+            treeId,
+            title: tree.title,
+            nodeCount: nodes.length,
+            updatedAt: tree.updatedAt,
+          },
+        };
+      };
+
+      /** 向该树全部订阅者广播当前快照（结构变更后的权威同步；客户端按 rev 守卫应用） */
+      const broadcastSnapshot = (treeId: string): void => {
+        void buildSnapshot(treeId).then((snap) => {
+          if (snap) broadcastTree(treeId, snap);
+        });
+      };
+
       // 本 socket 进行中的请求（断开时只 abort 自己的，不影响其他 tab）
       const socketRequestIds = new Set<string>();
 
       // 构建单次操作的 hooks：controller 回调 → WS 消息，并跟踪请求生命周期
+      // legacy 消息发给发起端（现客户端）；同时向该树其他订阅者广播新协议消息（多端同步）
       const makeHooks = (sessionId: string, trackRid: string | undefined): ConversationHooks => {
         const sourceId = conversation.getSession(sessionId)?.sourceId ?? 'qoder';
         if (trackRid) socketRequestIds.add(trackRid);
@@ -102,18 +226,46 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           if (trackRid) socketRequestIds.delete(trackRid);
         };
         return {
-          onEvent: (event, rid) =>
-            send(socket, { type: 'event', sessionId, event, requestId: rid }),
+          onEvent: (event, rid) => {
+            send(socket, { type: 'event', sessionId, event, requestId: rid });
+            const tid = conversation.getSession(sessionId)?.treeId;
+            if (tid)
+              broadcastTree(
+                tid,
+                { type: 'stream.event', treeId: tid, requestId: rid, event },
+                conn.id,
+              );
+          },
           onError: (message, rid) => {
             untrack();
             send(socket, { type: 'session.error', sessionId, message, requestId: rid });
+            const tid = conversation.getSession(sessionId)?.treeId;
+            if (tid && rid)
+              broadcastTree(
+                tid,
+                { type: 'stream.aborted', treeId: tid, requestId: rid, reason: message },
+                conn.id,
+              );
           },
           onTreeUpdated: (treeId, headNodeId, rid) => {
             untrack();
             send(socket, { type: 'tree.updated', treeId, headNodeId, requestId: rid });
+            // 快照广播给全部订阅者（含发起端）：统一以快照为权威重建路径，
+            // 不再依赖客户端 REST 重载（消除 REST/WS 双路径丢失更新竞态）
+            broadcastSnapshot(treeId);
           },
           onTreeCreated: (treeId) =>
             send(socket, { type: 'session.created', sessionId, treeId, agentId: sourceId }),
+          onReject: (rid, reason) => {
+            const sess = conversation.getSession(sessionId);
+            const tid = sess?.treeId ?? undefined;
+            const rev = tid ? (session.getTree(tid)?.rev ?? 0) : undefined;
+            send(socket, { type: 'tree.reject', treeId: tid, requestId: rid ?? '', reason, rev });
+          },
+          onStreamAborted: (tid, rid, reason) => {
+            // 广播给该树全部订阅者（含发起端）：撤销/删除中止了在途流
+            broadcastTree(tid, { type: 'stream.aborted', treeId: tid, requestId: rid, reason });
+          },
         };
       };
 
@@ -147,6 +299,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
         switch (msg.type) {
           case 'session.create': {
+            // 源是第一层线程属性（session.send 携带/沿祖先链解析），这里仅作 session 默认源
             const sourceId = msg.agentId ?? 'qoder';
             if (!sources.registry.getSource(sourceId)) {
               send(socket, {
@@ -180,6 +333,9 @@ export function registerAgentRoutes(app: FastifyInstance): void {
                 branchId: msg.branchId,
                 requestId,
                 model: msg.model,
+                thinkingLevel: msg.thinkingLevel,
+                contextWindow: msg.contextWindow,
+                sourceId: msg.sourceId,
               },
               makeHooks(msg.sessionId, requestId),
             );
@@ -223,7 +379,18 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           }
 
           case 'session.abort': {
-            if (msg.sessionId) conversation.abort(msg.sessionId, msg.requestId);
+            if (msg.sessionId) {
+              const tid = conversation.getSession(msg.sessionId)?.treeId;
+              conversation.abort(msg.sessionId, msg.requestId);
+              // 显式停止：广播给他端立即停渲染（不等快照对齐）
+              if (tid && msg.requestId)
+                broadcastTree(tid, {
+                  type: 'stream.aborted',
+                  treeId: tid,
+                  requestId: msg.requestId,
+                  reason: 'aborted',
+                });
+            }
             break;
           }
 
@@ -237,6 +404,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
             if (!msg.treeId || !msg.nodeId) return;
             const branch = await conversation.fork(msg.treeId, msg.nodeId, msg.branchName);
             send(socket, { type: 'tree.updated', treeId: msg.treeId, branch });
+            broadcastSnapshot(msg.treeId);
             break;
           }
 
@@ -252,6 +420,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
               treeId: msg.treeId,
               headNodeId: session.getTree(msg.treeId)?.headNodeId,
             });
+            broadcastSnapshot(msg.treeId);
             break;
           }
 
@@ -259,6 +428,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
             if (!msg.treeId || !msg.branchId || !msg.targetNodeId) return;
             await session.merge(msg.treeId, msg.branchId, msg.targetNodeId, msg.mode ?? 'squash');
             send(socket, { type: 'tree.updated', treeId: msg.treeId });
+            broadcastSnapshot(msg.treeId);
             break;
           }
 
@@ -266,6 +436,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
             if (!msg.treeId || !msg.nodeId) return;
             await session.switchHead(msg.treeId, msg.nodeId);
             send(socket, { type: 'tree.updated', treeId: msg.treeId, headNodeId: msg.nodeId });
+            broadcastSnapshot(msg.treeId);
             break;
           }
 
@@ -273,11 +444,58 @@ export function registerAgentRoutes(app: FastifyInstance): void {
             if (!msg.treeId || !msg.branchId) return;
             await session.setDefaultBranch(msg.treeId, msg.branchId);
             send(socket, { type: 'tree.updated', treeId: msg.treeId });
+            broadcastSnapshot(msg.treeId);
             break;
           }
 
           case 'permission.respond': {
             if (msg.requestId) permission.respond(msg.requestId, msg.allowed);
+            break;
+          }
+
+          // ── 多端同步（per-tree 订阅） ──
+
+          case 'tree.subscribe': {
+            if (!msg.treeId) return;
+            let subs = treeSubscribers.get(msg.treeId);
+            if (!subs) {
+              subs = new Set();
+              treeSubscribers.set(msg.treeId, subs);
+            }
+            subs.add(conn);
+            conn.subscribed.add(msg.treeId);
+            cancelGrace(msg.treeId); // 有人观看 → 取消停流宽限
+            if (msg.clientKind) conn.clientKind = msg.clientKind;
+            const snap = await buildSnapshot(msg.treeId);
+            if (snap) send(socket, snap);
+            broadcastPresence(msg.treeId);
+            break;
+          }
+
+          case 'tree.unsubscribe': {
+            if (msg.treeId) unsubscribeConn(conn, msg.treeId);
+            break;
+          }
+
+          case 'presence.update': {
+            if (!msg.treeId) return;
+            let pm = treePresence.get(msg.treeId);
+            if (!pm) {
+              pm = new Map();
+              treePresence.set(msg.treeId, pm);
+            }
+            pm.set(conn.id, {
+              connectionId: conn.id,
+              clientKind: conn.clientKind,
+              focusNodeId: msg.focusNodeId,
+              typing: msg.typing,
+            });
+            broadcastPresence(msg.treeId);
+            break;
+          }
+
+          case 'ping': {
+            send(socket, { type: 'pong' });
             break;
           }
         }
@@ -288,6 +506,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         // 断开时 abort 该 socket 关联的进行中请求（不影响其他 tab）
         for (const rid of socketRequestIds) conversation.abortByRequestId(rid);
         socketRequestIds.clear();
+        // 退出本连接订阅的全部树（仅退订 + presence，不拆树资源）
+        for (const treeId of [...conn.subscribed]) unsubscribeConn(conn, treeId);
       });
       socket.on('error', () => unsubPermission());
     },
@@ -306,26 +526,53 @@ export function registerAgentRoutes(app: FastifyInstance): void {
         id: s.id,
         displayName: s.displayName,
         version: s.version,
+        modelPolicy: s.modelPolicy,
         available: s.available,
         modelCount: s.modelCount,
       })),
     };
   });
 
-  // 获取模型列表（可按源过滤）
+  // 获取模型列表（可按源过滤）：源提供的模型 + 用户自定义模型（仅 hybrid/open 源）
   app.get('/api/agent/models', async (req) => {
     const { sourceId } = req.query as { sourceId?: string };
     const latticeAgent = await getAgent();
-    const models = latticeAgent.sources.registry.listModels(sourceId);
-    return {
-      models: models.map((m) => ({
-        id: m.id,
-        displayName: m.displayName,
-        sourceId: sourceId ?? 'all',
-        contextWindow: m.contextWindow,
-        maxOutputTokens: m.maxOutputTokens,
-      })),
-    };
+    const registry = latticeAgent.sources.registry;
+    const models = await registry.listModelsAsync(sourceId);
+    const items = models.map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      sourceId: m.sourceId,
+      contextWindow: m.contextWindow,
+      maxOutputTokens: m.maxOutputTokens,
+      costFactor: m.costFactor,
+      costLabel: m.costLabel,
+      tuning: m.tuning,
+    }));
+    // 合并自定义模型（catalog 源不支持）；参数规格全 freeform（模型未知，由用户自行设定）
+    const targetIds = sourceId ? [sourceId] : registry.listSources().map((s) => s.id);
+    for (const id of targetIds) {
+      const source = registry.getSource(id);
+      if (!source || source.modelPolicy === 'catalog') continue;
+      for (const modelId of await readCustomModels(id)) {
+        if (items.some((m) => m.sourceId === id && m.id === modelId)) continue;
+        items.push({
+          id: modelId,
+          displayName: modelId,
+          sourceId: id,
+          contextWindow: 0,
+          maxOutputTokens: 0,
+          costFactor: undefined,
+          costLabel: undefined,
+          custom: true,
+          tuning: {
+            contextWindow: { options: [], freeform: true },
+            thinking: { options: ['low', 'medium', 'high'], toggleable: true, freeform: true },
+          },
+        } as (typeof items)[number] & { custom: boolean });
+      }
+    }
+    return { models: items };
   });
 
   // 获取对话树（含中断检测）
@@ -351,6 +598,10 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     const { treeId } = req.params as { treeId: string };
     try {
       await (await getAgent()).session.deleteTree(treeId);
+      // 清理该树的同步状态（订阅/presence/宽限计时），防泄漏与悬空订阅
+      cancelGrace(treeId);
+      treeSubscribers.delete(treeId);
+      treePresence.delete(treeId);
       return { ok: true };
     } catch (err) {
       reply.code(500);

@@ -26,7 +26,13 @@ export interface MockState {
 }
 
 export interface MockCalls {
-  prompts: { sessionId: string | null; text: string }[];
+  prompts: {
+    sessionId: string | null;
+    text: string;
+    model?: string;
+    thinkingLevel?: string;
+    contextWindow?: number;
+  }[];
   forks: { sessionId: string; atMessage?: string }[];
   aborts: string[];
 }
@@ -64,10 +70,21 @@ export function makeMockSource(state: MockState, calls: MockCalls): ISource {
     async *prompt(
       sessionId: string | null,
       message: ContentBlock[],
-      opts: { signal?: AbortSignal },
+      opts: {
+        signal?: AbortSignal;
+        model?: string;
+        thinkingLevel?: string;
+        contextWindow?: number;
+      },
     ): AsyncIterable<SourceEvent> {
       const text = (message[0] as { text?: string })?.text ?? '';
-      calls.prompts.push({ sessionId, text });
+      calls.prompts.push({
+        sessionId,
+        text,
+        model: opts.model,
+        thinkingLevel: opts.thinkingLevel,
+        contextWindow: opts.contextWindow,
+      });
       if (state.hangBeforeYield) {
         await new Promise<void>((resolve) => {
           if (opts.signal?.aborted) return resolve();
@@ -90,6 +107,7 @@ export function makeMockSource(state: MockState, calls: MockCalls): ISource {
           type: 'done',
           sessionId: sessionId ?? `sess-${msgCounter}`,
           sourceMessageId: `msg-${msgCounter}`,
+          usage: { input: 100, output: 50, total: 150 },
         };
       }
     },
@@ -137,9 +155,15 @@ export async function setup(emitDone = true): Promise<TestContext> {
   return { baseDir, sm, state, calls, controller };
 }
 
-/** 等待 session 写队列排空 */
-export const flush = (controller: ConversationController, sid: string) =>
-  controller.getSession(sid)!.queue;
+/** 等待 session 结构队列 + 全部分支流队列排空（锁域 per-tree；首发后 bootstrap→tree 迁移，每轮重取 runtime） */
+export const flush = async (controller: ConversationController, sid: string): Promise<void> => {
+  for (let i = 0; i < 3; i++) {
+    const rt = controller.getRuntime(sid);
+    if (!rt) return;
+    await rt.queue;
+    await Promise.all([...rt.streamQueues.values()]);
+  }
+};
 
 /** 取某 user 节点下的 assistant 子节点 */
 export const asstOf = (sm: SessionManager, treeId: string, parentId: string) =>

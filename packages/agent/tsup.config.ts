@@ -8,4 +8,7 @@ export default defineConfig({
   clean: true,
   target: 'node20',
   outDir: 'dist',
+  // 兄弟包显式 external：tsconfig paths 指向其源码（类型检查/dev 用），
+  // 打包时不内联，保持 import 从 node_modules 解析
+  external: ['@qcqx/lattice-agent-protocol', '@qcqx/lattice-agent-source', '@qcqx/lattice-core'],
 });

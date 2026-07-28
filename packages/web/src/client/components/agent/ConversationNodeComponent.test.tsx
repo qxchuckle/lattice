@@ -24,7 +24,8 @@ vi.mock('./agentStore', async (importOriginal) => {
   };
 });
 
-import { agentStore, continueTurn, retryTurn, abortStream } from './agentStore';
+import { agentStore, putTurn, continueTurn, retryTurn, abortStream } from './agentStore';
+import { applyStreamEvent } from './turnGraph';
 import { ConversationNodeComponent } from './ConversationNodeComponent';
 import type { TurnNode } from './types';
 
@@ -43,7 +44,8 @@ function makeTurn(status: TurnNode['status'], blocks: TurnNode['blocks'] = []): 
 
 function renderNode(turn: TurnNode) {
   agentStore.turns.clear();
-  agentStore.turns.set(turn.id, turn);
+  // 与真实链路一致：turn 经 putTurn 包 proxy 入 Map（组件内 useSnapshot 要求 proxy）
+  putTurn(turn);
   const props = {
     id: turn.id,
     data: { turnId: turn.id },
@@ -141,5 +143,25 @@ describe('ConversationNodeComponent 操作调用', () => {
     renderNode(makeTurn('error', [{ type: 'error', message: 'e' }]));
     fireEvent.click(btn(/重试/));
     expect(vi.mocked(retryTurn)).toHaveBeenCalledWith('t1');
+  });
+});
+
+describe('ConversationNodeComponent 流式渲染', () => {
+  beforeEach(() => {
+    cleanup();
+    agentStore.turns.clear();
+    vi.clearAllMocks();
+  });
+
+  it('流式 delta 无需 version bump 即逐步渲染（turn 级 proxy 响应式）', async () => {
+    renderNode(makeTurn('streaming', []));
+    const turnProxy = agentStore.turns.get('t1')!;
+
+    // 模拟 handleSourceEvent 的中间 delta：只改 blocks，不碰 agentStore.version
+    applyStreamEvent(turnProxy, { type: 'text', content: '第一段' });
+    expect(await screen.findByText(/第一段/)).toBeInTheDocument();
+
+    applyStreamEvent(turnProxy, { type: 'text', content: '，第二段' });
+    expect(await screen.findByText(/第一段，第二段/)).toBeInTheDocument();
   });
 });

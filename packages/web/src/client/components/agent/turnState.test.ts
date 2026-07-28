@@ -11,6 +11,7 @@ import {
   canApplyOperation,
   shouldSkipDescendantMark,
   isBranchableChild,
+  computeNodeCapabilities,
   projectViewStatus,
 } from '@qcqx/lattice-agent-protocol';
 import type { ConversationNode, NodeContent } from '@qcqx/lattice-agent-protocol';
@@ -121,5 +122,40 @@ describe('共享状态机（protocol/node-state）', () => {
     expect(projectViewStatus('interrupted', true)).toBe('error');
     expect(projectViewStatus('interrupted', false)).toBe('interrupted');
     expect(projectViewStatus(undefined, false)).toBe('done');
+  });
+
+  it('computeNodeCapabilities：能力投影与状态机一致', () => {
+    // done：可结构操作 + 追问，无重试/继续/中止
+    expect(computeNodeCapabilities('done')).toEqual({
+      canBranch: true,
+      canUndo: true,
+      canDelete: true,
+      canRetry: false,
+      canContinue: false,
+      canFollowup: true,
+      canAbort: false,
+    });
+    // streaming：仅可中止，禁止结构操作
+    const streaming = computeNodeCapabilities('streaming');
+    expect(streaming.canAbort).toBe(true);
+    expect(streaming.canBranch).toBe(false);
+    expect(streaming.canUndo).toBe(false);
+    expect(streaming.canDelete).toBe(false);
+    // error：可重试
+    expect(computeNodeCapabilities('error').canRetry).toBe(true);
+    expect(computeNodeCapabilities('error').canContinue).toBe(false);
+    // interrupted：可继续 + 可重试
+    expect(computeNodeCapabilities('interrupted').canContinue).toBe(true);
+    expect(computeNodeCapabilities('interrupted').canRetry).toBe(true);
+    // undone：只读，但 undone→hidden 删除合法（与 canApplyOperation 一致）
+    const undone = computeNodeCapabilities('undone');
+    expect(undone.canBranch).toBe(false);
+    expect(undone.canUndo).toBe(false);
+    expect(undone.canFollowup).toBe(false);
+    expect(undone.canDelete).toBe(true);
+    // hidden：全关
+    const hidden = computeNodeCapabilities('hidden');
+    expect(hidden.canDelete).toBe(false);
+    expect(hidden.canFollowup).toBe(false);
   });
 });

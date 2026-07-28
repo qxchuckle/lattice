@@ -22,7 +22,6 @@ export type {
   ContextLayer,
   BuiltContext,
   SlashCommand,
-  AgentSessionOpts,
   MergeMode,
 } from './types.js';
 

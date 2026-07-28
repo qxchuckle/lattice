@@ -183,7 +183,7 @@ describe('场景 7: 显式 tree.fork（源级 fork）', () => {
 });
 
 describe('场景 8: 崩溃恢复（streaming 中间态文件）', () => {
-  it('检测中断 streaming；destroySession 清理', async () => {
+  it('检测中断 streaming；destroySession 仅移除 session 绑定（不拆树资源）', async () => {
     const { sm, controller } = await setup();
     const tree = await sm.createTree({});
     await sm.addNode(tree.id, {
@@ -205,13 +205,18 @@ describe('场景 8: 崩溃恢复（streaming 中间态文件）', () => {
     expect(interrupted[0].requestId).toBe('crash-req');
     expect(interrupted[0].content[0].type, 'streaming 内容可恢复').toBe('text');
 
-    // session 销毁应清理 streaming 文件
+    // 连接级销毁：仅移除 session 绑定，streaming 文件归属树（多端共享，他端可能在途）不清理
     controller.createSession('s8', 'mock', tree.id);
     await controller.destroySession('s8');
-    expect((await sm.getInterruptedStreams(tree.id)).length, 'destroySession 清理 streaming').toBe(
-      0,
-    );
     expect(controller.getSession('s8'), 'destroySession 移除 session').toBeUndefined();
+    expect(
+      (await sm.getInterruptedStreams(tree.id)).length,
+      'destroySession 不清理树级 streaming 文件',
+    ).toBe(1);
+
+    // 树级删除才回收 streaming 文件
+    await sm.deleteTree(tree.id);
+    expect((await sm.getInterruptedStreams(tree.id)).length, 'deleteTree 清理 streaming').toBe(0);
   });
 });
 

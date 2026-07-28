@@ -2,6 +2,7 @@
  * 对话树数据模型（跨层传输的持久化数据结构）
  * 从 agent 包迁入：web client / server / agent 三方消费
  */
+import type { TokenUsage } from './events.js';
 
 export type NodeRole = 'user' | 'assistant' | 'tool' | 'system' | 'merge-summary' | 'aggregation';
 
@@ -58,8 +59,12 @@ export interface ConversationNode {
     toolCalls?: ToolCallRecord[];
     fileChanges?: FileChange[];
     tokensUsed?: number;
+    /** 本轮 token 用量（done 事件落盘；input ≈ 当前上下文占用，reload 后展示用） */
+    usage?: TokenUsage;
     model?: string;
     thinkingLevel?: string;
+    /** 本轮选择的上下文窗口档位（tokens，tuning 规格约束） */
+    contextWindow?: number;
     /** 已被 compaction 压缩（加载时可跳过，用 aggregation 摘要替代） */
     compacted?: boolean;
     /** compaction 摘要来源节点 ID 列表 */
@@ -91,6 +96,8 @@ export interface ConversationTree {
   defaultBranchId: string;
   createdAt: number;
   updatedAt: number;
+  /** 单调修订号：每次持久化结构/内容变更自增，多端同步用于对账/新鲜度判定（缺省视为 0） */
+  rev?: number;
 }
 
 /** 分支合并模式 */
@@ -106,14 +113,4 @@ export interface PermissionRequest {
   args: Record<string, unknown>;
   level: PermissionLevel;
   timestamp: number;
-}
-
-// ── 会话配置（UI 层构建） ──
-
-export interface AgentSessionOpts {
-  agentId: string;
-  cwd: string;
-  taskId?: string;
-  model?: string;
-  thinkingLevel?: 'low' | 'medium' | 'high';
 }

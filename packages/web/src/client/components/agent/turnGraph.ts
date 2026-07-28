@@ -22,9 +22,7 @@ export function buildTurnsFromNodes(nodes: ConversationNode[]): Map<string, Turn
   if (userNodes.length > 0) {
     for (const un of userNodes) {
       // 一个 user 可能有多个 assistant 子节点（retry 后旧的被标记 undone），优先取 active 的
-      const assistantChildren = nodes.filter(
-        (n) => n.role === 'assistant' && n.parentId === un.id,
-      );
+      const assistantChildren = nodes.filter((n) => n.role === 'assistant' && n.parentId === un.id);
       const assistant =
         assistantChildren.find((n) => !isReadOnly(n.status)) ?? assistantChildren[0];
       const userText = un.content?.find((c) => c.type === 'text')?.text ?? '';
@@ -43,9 +41,12 @@ export function buildTurnsFromNodes(nodes: ConversationNode[]): Map<string, Turn
         blocks: assistant?.content ?? [],
         status: deriveTurnStatus(un, assistant),
         timestamp: un.timestamp,
-        sourceId: assistant?.agentId ?? 'qoder',
-        modelId: assistant?.metadata?.model ?? '',
-        usage: undefined,
+        // 源/模型/参数标注：assistant 优先（实际回答方），回退 user 节点（prompt 前已落盘）
+        sourceId: assistant?.agentId ?? un.agentId ?? 'qoder',
+        modelId: assistant?.metadata?.model ?? un.metadata?.model ?? '',
+        thinkingLevel: assistant?.metadata?.thinkingLevel ?? un.metadata?.thinkingLevel,
+        contextWindow: assistant?.metadata?.contextWindow ?? un.metadata?.contextWindow,
+        usage: assistant?.metadata?.usage,
       };
       turns.set(turn.id, turn);
     }
@@ -62,7 +63,7 @@ export function buildTurnsFromNodes(nodes: ConversationNode[]): Map<string, Turn
         timestamp: an.timestamp,
         sourceId: an.agentId ?? 'qoder',
         modelId: an.metadata?.model ?? '',
-        usage: undefined,
+        usage: an.metadata?.usage,
       };
       turns.set(turn.id, turn);
     }

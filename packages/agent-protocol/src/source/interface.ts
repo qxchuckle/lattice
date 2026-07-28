@@ -46,7 +46,10 @@ export interface PromptOpts {
   model?: string;
   cwd?: string;
   systemPrompt?: SystemPromptConfig;
-  thinkingLevel?: 'none' | 'low' | 'medium' | 'high';
+  /** 思考深度（取值由模型 tuning 规格约束，freeform 模型可为任意字符串） */
+  thinkingLevel?: string;
+  /** 上下文窗口 tokens（取值由模型 tuning 规格约束） */
+  contextWindow?: number;
   signal?: AbortSignal;
 }
 

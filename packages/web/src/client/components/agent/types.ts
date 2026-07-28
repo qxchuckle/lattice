@@ -16,6 +16,9 @@ export interface TurnNode {
   timestamp: number;
   sourceId: string;
   modelId: string;
+  /** 本轮参数（'' = 源默认；'none' = 关闭思考；0 = 默认档位） */
+  thinkingLevel?: string;
+  contextWindow?: number;
   usage?: TokenUsage;
 }
 

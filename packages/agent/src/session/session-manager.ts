@@ -186,6 +186,8 @@ export class SessionManager {
       status?: ConversationNode['status'];
       /** 显式指定分支（自动 fork 场景），否则从父节点继承 */
       branchId?: string;
+      /** 是否推进 head 到新节点（默认 true；流式期间父节点被撤销后的只读落盘传 false） */
+      advanceHead?: boolean;
     },
   ): Promise<ConversationNode> {
     const tree = this.trees.get(treeId);
@@ -204,8 +206,8 @@ export class SessionManager {
     };
 
     this.nodes.get(treeId)!.set(node.id, node);
-    tree.headNodeId = node.id;
-    tree.updatedAt = Date.now();
+    if (opts.advanceHead !== false) tree.headNodeId = node.id;
+    this.touch(tree);
 
     await this.repo.appendNode(treeId, node);
     await this.repo.writeTree(tree);
@@ -240,7 +242,7 @@ export class SessionManager {
     await this.rewriteNodes(treeId);
     const tree = this.trees.get(treeId);
     if (tree) {
-      tree.updatedAt = Date.now();
+      this.touch(tree);
       await this.repo.writeTree(tree);
     }
   }
@@ -284,7 +286,12 @@ export class SessionManager {
 
   // ── 分支操作 ──
 
-  async fork(treeId: string, nodeId: string, name?: string): Promise<ConversationBranch> {
+  async fork(
+    treeId: string,
+    nodeId: string,
+    name?: string,
+    agentId?: string,
+  ): Promise<ConversationBranch> {
     const tree = this.trees.get(treeId);
     if (!tree) throw new Error(`Tree not found: ${treeId}`);
 
@@ -294,10 +301,11 @@ export class SessionManager {
       forkPointId: nodeId,
       isDefault: false,
       createdAt: Date.now(),
+      ...(agentId ? { agentId } : {}),
     };
 
     tree.branches.push(branch);
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
     return branch;
   }
@@ -307,7 +315,7 @@ export class SessionManager {
     if (!tree) throw new Error(`Tree not found: ${treeId}`);
     for (const b of tree.branches) b.isDefault = b.id === branchId;
     tree.defaultBranchId = branchId;
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
   }
 
@@ -318,7 +326,7 @@ export class SessionManager {
     const branch = tree.branches.find((b) => b.id === branchId);
     if (!branch) throw new Error(`Branch not found: ${branchId}`);
     branch.sourceSessionId = sourceSessionId;
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
   }
 
@@ -330,7 +338,7 @@ export class SessionManager {
     if (!branch) return; // 幂等：分支不存在视为已删除
     if (branch.isDefault) throw new Error(`Cannot remove default branch: ${branchId}`);
     tree.branches = tree.branches.filter((b) => b.id !== branchId);
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
   }
 
@@ -339,7 +347,7 @@ export class SessionManager {
     if (!tree) throw new Error(`Tree not found: ${treeId}`);
     if (!this.nodes.get(treeId)?.has(nodeId)) throw new Error(`Node not found: ${nodeId}`);
     tree.headNodeId = nodeId;
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
   }
 
@@ -375,7 +383,7 @@ export class SessionManager {
       (b) => b.isDefault || this.getNodes(treeId).some((n) => n.branchId === b.id),
     );
 
-    tree.updatedAt = Date.now();
+    this.touch(tree);
     await this.repo.writeTree(tree);
     await this.rewriteNodes(treeId);
   }
@@ -453,6 +461,12 @@ export class SessionManager {
   }
 
   // ── 内部方法 ──
+
+  /** 统一触碰树：bump 单调 rev + updatedAt（所有持久化 mutation 唯一入口） */
+  private touch(tree: ConversationTree): void {
+    tree.rev = (tree.rev ?? 0) + 1;
+    tree.updatedAt = Date.now();
+  }
 
   private resolveBranch(tree: ConversationTree, parentId: string | null): string {
     if (!parentId) return tree.defaultBranchId;

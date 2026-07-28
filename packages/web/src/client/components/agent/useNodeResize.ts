@@ -14,16 +14,19 @@ export function useNodeResize(nodeId: string) {
     (_e: unknown, params: { x: number; y: number; width: number; height: number }) => {
       liveResizeNode(nodeId, params.width, params.height);
 
-      const layoutNodes: LayoutNode[] = [...agentStore.turns.values()].map((t) => {
-        const u = agentStore.ui.get(t.id);
-        return {
-          id: t.id,
-          parentId: t.parentTurnId,
-          width: u?.width ?? 340,
-          height: u?.height ?? 260,
-          childIds: getChildIds(t.id),
-        };
-      });
+      // 与画布布局同口径：排除 hidden（已删除不参与布局），否则重布局位置会偏移
+      const layoutNodes: LayoutNode[] = [...agentStore.turns.values()]
+        .filter((t) => t.status !== 'hidden')
+        .map((t) => {
+          const u = agentStore.ui.get(t.id);
+          return {
+            id: t.id,
+            parentId: t.parentTurnId,
+            width: u?.width ?? 340,
+            height: u?.height ?? 260,
+            childIds: getChildIds(t.id),
+          };
+        });
       const { positions } = layoutTree(layoutNodes);
       const dagrePos = positions.get(nodeId);
       if (!dagrePos) return;

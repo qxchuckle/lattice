@@ -4,7 +4,14 @@
  */
 import { useState, useCallback, useRef, useLayoutEffect, useEffect, memo } from 'react';
 import { Handle, Position, NodeResizer, useStoreApi, type NodeProps } from '@xyflow/react';
-import { useSnapshot } from 'valtio';
+import { proxy, useSnapshot } from 'valtio';
+import { Popover } from 'antd';
+import { DatabaseOutlined } from '@ant-design/icons';
+import type { ModelListItem } from '@qcqx/lattice-agent-protocol';
+import { computeNodeCapabilities } from '@qcqx/lattice-agent-protocol';
+import { fmtTokens } from './ModelTuningModal';
+import { ChatInputBox, ModelMenuChip } from './ChatInputBar';
+import { MISSING_TURN } from './store';
 import {
   agentStore,
   submitFromNode,
@@ -15,6 +22,7 @@ import {
   deleteTurn,
   getChildIds,
   getSiblings,
+  fetchModelsCached,
   MIN_NODE_WIDTH,
   MIN_NODE_HEIGHT,
   type TurnNode,
@@ -28,28 +36,39 @@ interface NodeData {
   [key: string]: unknown;
 }
 
+/** 稳定空 ui 兑底（useSnapshot 不可条件调用） */
+const EMPTY_UI = proxy<NodeUiState>({ width: 340, height: 260 });
+
 function ConversationNodeInner({ data }: NodeProps) {
   const { turnId } = data as NodeData;
-  const snap = useSnapshot(agentStore);
-  const turn = snap.turns.get(turnId) as TurnNode | undefined;
-  const ui = snap.ui.get(turnId) as NodeUiState | undefined;
+  // turn 级订阅（turns Map 不被 valtio 代理，见 store.putTurn）：
+  // 流式 delta 改 blocks 只重渲染本节点，无需等 done 时的 version bump
+  const turnProxy = agentStore.turns.get(turnId);
+  const turnSnap = useSnapshot(turnProxy ?? MISSING_TURN) as TurnNode;
+  const turn = turnProxy ? turnSnap : undefined;
+  // ui 级订阅（见 store.ensureUi）：缩放/折叠只重渲染本节点，不订阅整个 store（避免 version 广播全节点重渲染）
+  const uiProxy = agentStore.ui.get(turnId);
+  const ui = useSnapshot(uiProxy ?? EMPTY_UI) as NodeUiState;
   const store = useStoreApi();
   const nodeElRef = useRef<HTMLDivElement>(null);
-  const [input, setInput] = useState('');
+  // hovered 仅驱动 NodeResizer 手柄显隐（输入框/操作按钮已改为常驻）
   const [hovered, setHovered] = useState(false);
-  const [inputFocused, setInputFocused] = useState(false);
+  // 追问模型：null = 继承本节点模型；选项按节点所在线程的源拉取（源不可换，模型可换）
+  const [followupModel, setFollowupModel] = useState<string | null>(null);
+  const [threadModels, setThreadModels] = useState<ModelListItem[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const { onResize, onResizeEnd } = useNodeResize(turnId);
 
   const width = ui?.width ?? 340;
   const height = ui?.height ?? 260;
+  // 能力投影（protocol 单一真相）：按钮/输入区的可用性一律从 caps 读，禁止组件内推导
+  const caps = computeNodeCapabilities(turn?.status ?? 'done');
+  // 以下仅作样式映射（边框/配色/占位），不参与交互入口判断
   const isStreaming = turn?.status === 'streaming';
   const isError = turn?.status === 'error';
   const isInterrupted = turn?.status === 'interrupted';
   const isUndone = turn?.status === 'undone';
   const isHidden = turn?.status === 'hidden';
-  // undone/hidden 节点为只读态，不可操作
-  const isReadOnly = isUndone || isHidden;
 
   // 流式自动滚动
   useEffect(() => {
@@ -66,28 +85,30 @@ function ConversationNodeInner({ data }: NodeProps) {
       .updateNodeInternals(new Map([[turnId, { id: turnId, nodeElement: el, force: true }]]));
   }, [width, height, turnId, store]);
 
-  const handleSubmit = useCallback(() => {
-    const text = input.trim();
-    if (!text) return;
-    submitFromNode(turnId, text);
-    setInput('');
-  }, [input, turnId]);
+  // 按节点源拉模型列表（模块级缓存，hover 展开输入区时才需要，但提前拉取成本低）
+  const sourceIdForModels = turn?.sourceId;
+  useEffect(() => {
+    if (!sourceIdForModels) return;
+    let cancelled = false;
+    fetchModelsCached(sourceIdForModels).then((ms) => {
+      if (!cancelled) setThreadModels(ms);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceIdForModels]);
+
+  const handleFollowupSubmit = useCallback(
+    (text: string) => {
+      submitFromNode(turnId, text, followupModel ? { model: followupModel } : undefined);
+    },
+    [turnId, followupModel],
+  );
 
   const handleRetry = useCallback(() => {
     if (!turn) return;
     retryTurn(turnId);
   }, [turn, turnId]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      e.stopPropagation();
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    [handleSubmit],
-  );
 
   const toggleCollapse = useCallback(() => {
     const u = agentStore.ui.get(turnId);
@@ -102,11 +123,44 @@ function ConversationNodeInner({ data }: NodeProps) {
   // hidden 节点不渲染
   if (isHidden) return null;
 
+  // 上下文指示（只查看）：已用 = 本轮 usage.input（≈ prompt 占用）；容量 = 本轮档位选择或模型默认
+  const threadModel = threadModels.find((m) => m.id === turn.modelId);
+  const ctxCapacity = turn.contextWindow || threadModel?.contextWindow || 0;
+  const ctxUsed = turn.usage?.input ?? 0;
+  const ctxPct =
+    ctxCapacity && ctxUsed ? Math.min(100, Math.round((ctxUsed / ctxCapacity) * 100)) : null;
+  const thinkingLabel =
+    turn.thinkingLevel === 'none'
+      ? '已关闭'
+      : turn.thinkingLevel || threadModel?.tuning?.thinking?.default || '源默认';
+  const contextPopover = (
+    <div style={{ fontSize: 12, minWidth: 200 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>
+          {ctxPct !== null ? `${ctxPct}%` : '—'}
+        </span>
+        <span style={{ color: 'var(--text-secondary)' }}>
+          {ctxUsed ? fmtTokens(ctxUsed) : '—'} / {ctxCapacity ? fmtTokens(ctxCapacity) : '—'}{' '}
+          已用上下文
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px' }}>
+        <span style={{ color: 'var(--text-secondary)' }}>源</span>
+        <span>{turn.sourceId}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>模型</span>
+        <span>{threadModel?.displayName ?? turn.modelId ?? '默认模型'}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>思考深度</span>
+        <span>{thinkingLabel}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>上下文窗口</span>
+        <span>{ctxCapacity ? fmtTokens(ctxCapacity) : '源默认'}</span>
+      </div>
+    </div>
+  );
+
   const childIds = getChildIds(turnId);
   const siblings = getSiblings(turnId);
   const siblingIndex = siblings.indexOf(turnId);
   const isCollapsed = ui?.collapsed ?? false;
-  const showBottom = hovered || inputFocused || input.trim().length > 0;
 
   return (
     <div
@@ -211,13 +265,17 @@ function ConversationNodeInner({ data }: NodeProps) {
                     ⑂ {childIds.length}
                   </span>
                 )}
-                {/* Fork / 撤销 / 删除 按钮（hover 时显示，只读态不显示） */}
-                {hovered && !isStreaming && !isReadOnly && (
-                  <>
+                {/* Fork / 撤销 / 删除 按钮（常驻，可用性由能力投影决定） */}
+                <span
+                  style={{
+                    marginLeft: childIds.length > 0 ? 4 : 'auto',
+                    display: 'flex',
+                    gap: 4,
+                  }}>
+                  {caps.canBranch && (
                     <button
                       onClick={() => submitFromNode(turn.parentTurnId, turn.userMessage)}
                       style={{
-                        marginLeft: childIds.length > 0 ? 4 : 'auto',
                         padding: '0 4px',
                         fontSize: 9,
                         borderRadius: 3,
@@ -229,6 +287,8 @@ function ConversationNodeInner({ data }: NodeProps) {
                       title='分支：从同一父节点重新提问'>
                       ⑂ 分支
                     </button>
+                  )}
+                  {caps.canUndo && (
                     <button
                       onClick={() => undoTurn(turnId)}
                       style={{
@@ -243,6 +303,8 @@ function ConversationNodeInner({ data }: NodeProps) {
                       title='撤销：该节点及之后变为只读'>
                       ↶ 撤销
                     </button>
+                  )}
+                  {caps.canDelete && (
                     <button
                       onClick={() => deleteTurn(turnId)}
                       style={{
@@ -257,22 +319,22 @@ function ConversationNodeInner({ data }: NodeProps) {
                       title='删除：撤销并隐藏该节点'>
                       ✕ 删除
                     </button>
-                    <button
-                      onClick={toggleCollapse}
-                      style={{
-                        padding: '0 4px',
-                        fontSize: 9,
-                        borderRadius: 3,
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg-tertiary)',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                      }}
-                      title='折叠节点'>
-                      ▲
-                    </button>
-                  </>
-                )}
+                  )}
+                  <button
+                    onClick={toggleCollapse}
+                    style={{
+                      padding: '0 4px',
+                      fontSize: 9,
+                      borderRadius: 3,
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                    title='折叠节点'>
+                    ▲
+                  </button>
+                </span>
               </div>
               <div style={{ fontSize: 12, lineHeight: 1.3, wordBreak: 'break-word' }}>
                 {turn.userMessage}
@@ -284,8 +346,9 @@ function ConversationNodeInner({ data }: NodeProps) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                 <span style={{ fontSize: 10 }}>🤖</span>
                 <span style={{ fontSize: 10, color: '#722ed1', fontWeight: 600 }}>Agent</span>
+                {/* 节点源/模型标注 */}
                 <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>
-                  · {turn.sourceId}
+                  · {turn.sourceId} · {turn.modelId || '默认模型'}
                 </span>
                 {isStreaming && (
                   <span style={{ fontSize: 9, color: 'var(--brand-color)', marginLeft: 'auto' }}>
@@ -293,7 +356,7 @@ function ConversationNodeInner({ data }: NodeProps) {
                   </span>
                 )}
                 {/* 中止按钮 */}
-                {isStreaming && (
+                {caps.canAbort && (
                   <button
                     onClick={() => abortStream(turnId)}
                     style={{
@@ -321,7 +384,7 @@ function ConversationNodeInner({ data }: NodeProps) {
               <UsageFooter usage={turn.usage} model={turn.modelId || undefined} />
 
               {/* 错误时显示重试按钮 */}
-              {isError && (
+              {isError && caps.canRetry && (
                 <button
                   onClick={handleRetry}
                   style={{
@@ -339,7 +402,7 @@ function ConversationNodeInner({ data }: NodeProps) {
               )}
 
               {/* 中断时显示继续按钮 */}
-              {isInterrupted && (
+              {caps.canContinue && (
                 <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
                   <button
                     onClick={() => continueTurn(turnId)}
@@ -373,58 +436,57 @@ function ConversationNodeInner({ data }: NodeProps) {
               )}
             </div>
 
-            {/* ── 底部输入框（追问，只读态不显示） ── */}
-            {showBottom && !isReadOnly && (
+            {/* ── 底部输入区（常驻，能力投影控制）：与虚拟初始节点同布局，仅无源选择 ── */}
+            {caps.canFollowup && (
               <div
                 style={{
                   flexShrink: 0,
                   borderTop: '1px solid var(--border)',
-                  padding: '4px 8px 6px',
+                  padding: '6px 8px',
                 }}>
-                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end' }}>
-                  <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onFocus={() => setInputFocused(true)}
-                    onBlur={() => setInputFocused(false)}
-                    placeholder='继续追问...'
-                    rows={1}
-                    className='nowheel'
-                    style={{
-                      flex: 1,
-                      resize: 'none',
-                      padding: '5px 8px',
-                      background: 'var(--bg-tertiary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 5,
-                      color: 'var(--text)',
-                      fontSize: 11,
-                      lineHeight: 1.3,
-                      outline: 'none',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!input.trim() || isStreaming}
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 6,
-                      border: 'none',
-                      fontSize: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background:
-                        input.trim() && !isStreaming ? 'var(--brand-color)' : 'var(--bg-tertiary)',
-                      color: input.trim() && !isStreaming ? '#fff' : 'var(--text-secondary)',
-                      cursor: input.trim() && !isStreaming ? 'pointer' : 'default',
-                    }}>
-                    ↑
-                  </button>
-                </div>
+                <ChatInputBox
+                  placeholder='继续追问...'
+                  canSubmit={!isStreaming}
+                  onSubmit={handleFollowupSubmit}
+                  controls={
+                    <ModelMenuChip
+                      models={threadModels}
+                      value={followupModel ?? turn.modelId}
+                      onChange={setFollowupModel}
+                      onEdit={(id) => {
+                        // 与虚拟根同款：编辑即选中该模型，参数作用于本节点（节点作用域）
+                        if ((followupModel ?? turn.modelId) !== id) setFollowupModel(id);
+                        agentStore.tuningModelId = id;
+                        agentStore.tuningTargetTurnId = turnId;
+                      }}
+                    />
+                  }
+                  trailing={
+                    /* 上下文查看（仅展示：用量/容量 + 本线程配置） */
+                    <Popover content={contextPopover} trigger='click' placement='topRight'>
+                      <button
+                        type='button'
+                        title='上下文与配置'
+                        style={{
+                          height: 26,
+                          padding: '0 6px',
+                          borderRadius: 4,
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-tertiary)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontSize: 9,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          flexShrink: 0,
+                        }}>
+                        <DatabaseOutlined style={{ fontSize: 10 }} />
+                        {ctxPct !== null ? `${ctxPct}%` : ''}
+                      </button>
+                    </Popover>
+                  }
+                />
               </div>
             )}
             {/* 展开态内容结束后关闭 fragment */}
