@@ -5,6 +5,7 @@
 import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { EventBus } from './events/event-bus.js';
 import { SessionManager, type SessionStorage } from './session/session-manager.js';
+import { ConversationController } from './conversation/conversation-controller.js';
 import { ToolRegistry } from './tools/tool-registry.js';
 import { PermissionGuard } from './permission/permission-guard.js';
 import { ContextEngine, type ContextEngineConfig } from './context/context-engine.js';
@@ -21,6 +22,8 @@ export interface LatticeAgentDeps {
 export interface LatticeAgent {
   events: EventBus;
   session: SessionManager;
+  /** 会话编排核心（send/continue/retry/undo/delete/fork/abort） */
+  conversation: ConversationController;
   tools: ToolRegistry;
   permission: PermissionGuard;
   /** 统一源抽象实例（替代原 AgentCore） */
@@ -34,6 +37,7 @@ export interface LatticeAgent {
 export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
   const events = new EventBus();
   const session = new SessionManager(deps.storage);
+  const conversation = new ConversationController({ session, sources: deps.sources });
   const tools = new ToolRegistry(events);
   const permission = new PermissionGuard(events);
   const context = new ContextEngine(events, deps.contextConfig);
@@ -42,6 +46,7 @@ export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
   return {
     events,
     session,
+    conversation,
     tools,
     permission,
     sources: deps.sources,

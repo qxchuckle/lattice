@@ -4,7 +4,9 @@
 import type { ConversationNode, NodeContent } from '@qcqx/lattice-agent-protocol';
 import { authStore } from '../../store';
 import { agentStore, ensureUi } from './store';
-import type { TurnNode, StreamingBlock } from './types';
+import type { TurnNode } from './types';
+import { deriveTurnStatus } from './turnState';
+import { isReadOnly } from '@qcqx/lattice-agent-protocol';
 
 function getHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -22,6 +24,18 @@ export async function loadTree(treeId: string): Promise<void> {
     if (data.error || !data.nodes?.length) return;
 
     const nodes = data.nodes as ConversationNode[];
+
+    // 保留正在流式中的 turn 的实时内容：
+    // 并行回答时某个 turn 完成会触发整树重载，但其他在途 turn 的 assistant 节点尚未落盘，
+    // 全量重建会冲掉它们正在累积的内容，故先捕获、重建后恢复
+    const liveStreaming = new Map<string, NodeContent[]>();
+    for (const [id, t] of agentStore.turns) {
+      // 只要处于流式态就捕获（包括尚未收到首 token、blocks 为空的，避免重载后误判为 done 空节点）
+      if (t.status === 'streaming') {
+        liveStreaming.set(id, t.blocks);
+      }
+    }
+
     agentStore.turns.clear();
 
     const userNodes = nodes.filter((n) => n.role === 'user');
@@ -34,8 +48,7 @@ export async function loadTree(treeId: string): Promise<void> {
           (n) => n.role === 'assistant' && n.parentId === un.id,
         );
         const assistant =
-          assistantChildren.find((n) => n.status !== 'undone' && n.status !== 'hidden') ??
-          assistantChildren[0];
+          assistantChildren.find((n) => !isReadOnly(n.status)) ?? assistantChildren[0];
         const userText = un.content?.find((c) => c.type === 'text')?.text ?? '';
 
         let parentTurnId: string | null = null;
@@ -44,24 +57,14 @@ export async function loadTree(treeId: string): Promise<void> {
           parentTurnId = parentAssistant?.parentId ?? un.parentId;
         }
 
-        // 节点状态：undone/hidden 优先（撤销/删除），其次 interrupted/error
-        const nodeStatus = un.status ?? assistant?.status;
-        const turnStatus: TurnNode['status'] =
-          nodeStatus === 'undone'
-            ? 'undone'
-            : nodeStatus === 'hidden'
-              ? 'hidden'
-              : assistant?.metadata?.interrupted
-                ? 'interrupted'
-                : assistant?.content?.some((c) => c.type === 'error')
-                  ? 'error'
-                  : 'done';
+        // 节点状态投影（状态机单一真相，见 turnState.ts）
+        const turnStatus = deriveTurnStatus(un, assistant);
 
         const turn: TurnNode = {
           id: un.id,
           parentTurnId,
           userMessage: userText,
-          blocks: assistant ? buildBlocksFromNode(assistant) : [],
+          blocks: assistant?.content ?? [],
           status: turnStatus,
           timestamp: un.timestamp,
           sourceId: assistant?.agentId ?? 'qoder',
@@ -80,7 +83,7 @@ export async function loadTree(treeId: string): Promise<void> {
           id: an.id,
           parentTurnId: an.parentId,
           userMessage: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
-          blocks: buildBlocksFromNode(an),
+          blocks: an.content ?? [],
           status: 'done',
           timestamp: an.timestamp,
           sourceId: an.agentId ?? 'qoder',
@@ -89,6 +92,20 @@ export async function loadTree(treeId: string): Promise<void> {
         };
         agentStore.turns.set(turn.id, turn);
         ensureUi(turn.id);
+      }
+    }
+
+    // 恢复在途流式 turn 的内容（server 端尚未落盘，客户端实时累积为准）
+    for (const [id, blocks] of liveStreaming) {
+      const turn = agentStore.turns.get(id);
+      if (
+        turn &&
+        turn.blocks.length === 0 &&
+        turn.status !== 'undone' &&
+        turn.status !== 'hidden'
+      ) {
+        turn.blocks = [...blocks];
+        turn.status = 'streaming';
       }
     }
 
@@ -101,7 +118,7 @@ export async function loadTree(treeId: string): Promise<void> {
         const turn = agentStore.turns.get(stream.parentId);
         if (turn && turn.blocks.length === 0) {
           // 该 user 节点没有 assistant 回复 → 用部分回复填充
-          turn.blocks = buildBlocksFromContent(stream.content);
+          turn.blocks = stream.content;
           turn.status = 'interrupted';
         }
       }
@@ -111,52 +128,6 @@ export async function loadTree(treeId: string): Promise<void> {
   } catch {
     /* ignore */
   }
-}
-
-function buildBlocksFromNode(node: ConversationNode): StreamingBlock[] {
-  return buildBlocksFromContent(node.content ?? []);
-}
-
-function buildBlocksFromContent(content: NodeContent[]): StreamingBlock[] {
-  const blocks: StreamingBlock[] = [];
-  for (const c of content) {
-    switch (c.type) {
-      case 'text':
-        blocks.push({ kind: 'text', text: c.text });
-        break;
-      case 'thinking':
-        blocks.push({ kind: 'thinking', text: c.text });
-        break;
-      case 'diff':
-        blocks.push({ kind: 'file_edit', path: c.path, diff: c.text });
-        break;
-      case 'tool_call':
-        blocks.push({
-          kind: 'tool_call',
-          id: c.toolId,
-          name: c.name,
-          args: c.args,
-          status: (c.status as 'done' | 'error') ?? 'done',
-        });
-        break;
-      case 'tool_result':
-        blocks.push({
-          kind: 'tool_result',
-          id: c.toolId,
-          name: c.name,
-          result: c.result,
-          isError: c.isError,
-        });
-        break;
-      case 'terminal':
-        blocks.push({ kind: 'terminal', command: c.command, output: c.output });
-        break;
-      case 'error':
-        blocks.push({ kind: 'error', message: c.message, suggestion: c.suggestion });
-        break;
-    }
-  }
-  return blocks;
 }
 
 // ── 源/模型 ──

@@ -36,6 +36,18 @@ export type { LatticeAgentEvent } from './events/event-bus.js';
 export { SessionManager } from './session/session-manager.js';
 export type { SessionStorage, StreamingState } from './session/session-manager.js';
 
+// ── Session Repository（持久化层） ──
+export { SessionRepository } from './session/session-repository.js';
+
+// ── Conversation Controller（会话编排核心） ──
+export { ConversationController } from './conversation/conversation-controller.js';
+export type {
+  SessionContext,
+  ConversationHooks,
+  SendOpts,
+  ConversationControllerDeps,
+} from './conversation/conversation-controller.js';
+
 // ── Session Index ──
 export { SessionIndexManager } from './session/session-index.js';
 export type { SessionIndex, SessionIndexEntry } from './session/session-index.js';

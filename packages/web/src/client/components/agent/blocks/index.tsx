@@ -1,17 +1,12 @@
 /**
  * 块渲染组件集 — CC/Codex 风格线性块流
- * 每种 StreamingBlock / 历史内容块对应一个轻量组件
+ *
+ * 唯一渲染入口 ContentRenderer，直接消费协议 NodeContent（历史与流式同一类型）。
  */
 import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { StreamingBlock } from '../agentStore';
-import type {
-  NodeContent,
-  ToolCallRecord,
-  FileChange,
-  TokenUsage,
-} from '@qcqx/lattice-agent-protocol';
+import type { NodeContent, TokenUsage } from '@qcqx/lattice-agent-protocol';
 
 // ── 通用折叠容器 ──
 
@@ -179,9 +174,11 @@ function ThinkingBlock({ text }: { text: string }) {
   );
 }
 
-function ToolCallBlock({ block }: { block: Extract<StreamingBlock, { kind: 'tool_call' }> }) {
+function ToolCallBlock({ block }: { block: Extract<NodeContent, { type: 'tool_call' }> }) {
+  const status =
+    block.status === 'success' ? 'done' : block.status === 'error' ? 'error' : 'running';
   return (
-    <Collapsible label={block.name} icon='🔧' status={block.status}>
+    <Collapsible label={block.name} icon='🔧' status={status}>
       <pre
         style={{
           margin: 0,
@@ -196,7 +193,7 @@ function ToolCallBlock({ block }: { block: Extract<StreamingBlock, { kind: 'tool
   );
 }
 
-function ToolResultBlock({ block }: { block: Extract<StreamingBlock, { kind: 'tool_result' }> }) {
+function ToolResultBlock({ block }: { block: Extract<NodeContent, { type: 'tool_result' }> }) {
   return (
     <Collapsible
       label={`${block.name} 结果`}
@@ -278,26 +275,41 @@ function ErrorBlock({ message, suggestion }: { message: string; suggestion?: str
   );
 }
 
-// ── 流式块分发 ──
+// ── 内容块分发（唯一渲染入口，消费 NodeContent） ──
 
-export function StreamingBlockRenderer({
-  block,
-  isLast,
-}: {
-  block: StreamingBlock;
-  isLast?: boolean;
-}) {
-  switch (block.kind) {
+function ContentBlockRenderer({ block, streaming }: { block: NodeContent; streaming?: boolean }) {
+  switch (block.type) {
     case 'text':
-      return <TextBlock text={block.text} streaming={isLast} />;
+      return <TextBlock text={block.text} streaming={streaming} />;
+    case 'code':
+      return (
+        <pre
+          style={{
+            fontSize: 10,
+            padding: 6,
+            background: 'var(--bg-tertiary)',
+            borderRadius: 4,
+            overflow: 'auto',
+          }}>
+          {block.text}
+        </pre>
+      );
     case 'thinking':
       return <ThinkingBlock text={block.text} />;
     case 'tool_call':
       return <ToolCallBlock block={block} />;
     case 'tool_result':
       return <ToolResultBlock block={block} />;
-    case 'file_edit':
-      return <FileEditBlock path={block.path} diff={block.diff} />;
+    case 'diff':
+      return <FileEditBlock path={block.path} diff={block.text} />;
+    case 'image':
+      return (
+        <img
+          src={`data:${block.mimeType};base64,${block.data}`}
+          alt='image'
+          style={{ maxWidth: '100%', borderRadius: 4, margin: '4px 0' }}
+        />
+      );
     case 'terminal':
       return <TerminalBlock command={block.command} output={block.output} />;
     case 'error':
@@ -305,56 +317,22 @@ export function StreamingBlockRenderer({
   }
 }
 
-// ── 历史节点内容渲染（从 ConversationNode.content + metadata） ──
-
-export function HistoryContentRenderer({
+/** 渲染一组 NodeContent（历史回复与流式生成共用） */
+export function ContentRenderer({
   content,
-  toolCalls,
-  fileChanges,
+  streaming,
 }: {
   content: NodeContent[];
-  toolCalls?: ToolCallRecord[];
-  fileChanges?: FileChange[];
+  streaming?: boolean;
 }) {
   return (
     <>
-      {content.map((block, i) => {
-        switch (block.type) {
-          case 'text':
-            return <TextBlock key={i} text={block.text ?? ''} />;
-          case 'code':
-            return (
-              <pre
-                key={i}
-                style={{
-                  fontSize: 10,
-                  padding: 6,
-                  background: 'var(--bg-tertiary)',
-                  borderRadius: 4,
-                  overflow: 'auto',
-                }}>
-                {block.text}
-              </pre>
-            );
-          case 'diff':
-            return <FileEditBlock key={i} path={block.path ?? ''} diff={block.text ?? ''} />;
-          default:
-            return null;
-        }
-      })}
-      {toolCalls?.map((tc) => (
-        <Collapsible
-          key={tc.toolId}
-          label={tc.toolId}
-          icon='🔧'
-          status={tc.status === 'success' ? 'done' : tc.status === 'error' ? 'error' : undefined}>
-          <pre style={{ margin: 0, fontSize: 10, color: 'var(--text-secondary)' }}>
-            {JSON.stringify(tc.args, null, 2)}
-          </pre>
-        </Collapsible>
-      ))}
-      {fileChanges?.map((fc, i) => (
-        <FileEditBlock key={i} path={fc.path} diff={fc.diff} />
+      {content.map((block, i) => (
+        <ContentBlockRenderer
+          key={i}
+          block={block}
+          streaming={streaming && i === content.length - 1}
+        />
       ))}
     </>
   );

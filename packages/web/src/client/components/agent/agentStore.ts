@@ -10,7 +10,7 @@
 
 // ── Re-exports（外部消费方统一从 './agentStore' 导入） ──
 
-export type { StreamingBlock, TurnNode, NodeUiState, ConversationEntry } from './types';
+export type { TurnNode, NodeUiState, ConversationEntry } from './types';
 export {
   DEFAULT_NODE_WIDTH,
   DEFAULT_NODE_HEIGHT,
@@ -61,7 +61,7 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
           id: turnId,
           parentTurnId,
           userMessage: message.trim(),
-          blocks: [{ kind: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
+          blocks: [{ type: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
           status: 'error',
           timestamp: Date.now(),
           sourceId: agentStore.activeSourceId,
@@ -105,6 +105,7 @@ export function submitFromNode(parentTurnId: string | null, message: string): st
     message: message.trim(),
     parentNodeId: parentTurnId,
     requestId,
+    model: agentStore.activeModelId || undefined,
   });
   return turnId;
 }
@@ -117,6 +118,8 @@ export function abortStream(turnId?: string): void {
   sendWs({ type: 'session.abort', sessionId: agentStore.sessionId, requestId: turnId });
   // 立即更新 UI 状态为中断（不等 server 响应）
   if (turnId) {
+    // 清除流式路由映射：避免后续延迟事件/错误覆盖中断态，也防止残留映射
+    setStreamingTarget(null, turnId);
     const turn = agentStore.turns.get(turnId);
     if (turn && turn.status === 'streaming') {
       turn.status = 'interrupted';
@@ -155,7 +158,8 @@ export function retryTurn(turnId: string): void {
   turn.blocks = [];
   turn.status = 'streaming';
   agentStore.version++;
-  setStreamingTarget(turnId, turnId);
+  // contentOnly=false：retry 会标记后代 undone（结构性变化），完成后必须重载以同步后代状态
+  setStreamingTarget(turnId, turnId, false);
 
   // 发送 session.retry，server 会 fork 截断 + 重新 prompt
   sendWs({

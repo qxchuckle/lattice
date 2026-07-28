@@ -27,6 +27,8 @@ export interface SessionSendMessage {
   branchId?: string;
   /** 客户端生成的请求 ID，用于并行流事件路由 */
   requestId?: string;
+  /** 指定模型（不传则用源默认） */
+  model?: string;
 }
 
 /** 继续：对 interrupted 的 assistant 节点续写（不新增可见节点） */
@@ -153,6 +155,8 @@ export interface SessionErrorMessage {
   type: 'session.error';
   sessionId: string;
   message: string;
+  /** 关联的请求 ID（用于路由到对应 turn） */
+  requestId?: string;
 }
 
 export interface SessionClosedMessage {

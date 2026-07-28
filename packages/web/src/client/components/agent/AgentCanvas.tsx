@@ -45,11 +45,17 @@ function AgentCanvasInner() {
   const allTurns = useMemo(() => [...snap.turns.values()], [snap.version]);
 
   useEffect(() => {
+    // 排除 hidden（已删除）节点：delete = 树形对话中不展示（子树连同隐藏）
+    const visibleTurns = allTurns.filter((t) => t.status !== 'hidden');
+    const isVisible = (id: string): boolean =>
+      (agentStore.turns.get(id) as TurnNode | undefined)?.status !== 'hidden';
+    const visibleChildIds = (id: string): string[] => getChildIds(id).filter(isVisible);
+
     // 构建 LayoutNode[]（root + turns）
     const layoutNodes: LayoutNode[] = [];
 
     // root input 节点
-    const rootChildren = allTurns.filter((t) => t.parentTurnId === null).map((t) => t.id);
+    const rootChildren = visibleTurns.filter((t) => t.parentTurnId === null).map((t) => t.id);
     layoutNodes.push({
       id: ROOT_INPUT_ID,
       parentId: null,
@@ -59,14 +65,14 @@ function AgentCanvasInner() {
     });
 
     // turn 节点
-    for (const t of allTurns) {
+    for (const t of visibleTurns) {
       const ui = agentStore.ui.get(t.id) as NodeUiState | undefined;
       layoutNodes.push({
         id: t.id,
         parentId: t.parentTurnId ?? ROOT_INPUT_ID,
         width: ui?.width ?? 340,
         height: ui?.height ?? 260,
-        childIds: getChildIds(t.id),
+        childIds: visibleChildIds(t.id),
       });
     }
 
@@ -87,7 +93,7 @@ function AgentCanvasInner() {
     });
 
     // turns
-    for (const t of allTurns) {
+    for (const t of visibleTurns) {
       const ui = agentStore.ui.get(t.id) as NodeUiState | undefined;
       const w = ui?.width ?? 340;
       const h = ui?.height ?? 260;
@@ -107,7 +113,7 @@ function AgentCanvasInner() {
     // Edges
     const flowEdges: Edge[] = [];
     // root → 顶级 turns
-    for (const t of allTurns.filter((t) => t.parentTurnId === null)) {
+    for (const t of visibleTurns.filter((t) => t.parentTurnId === null)) {
       flowEdges.push({
         id: `root-${t.id}`,
         source: ROOT_INPUT_ID,
@@ -117,8 +123,8 @@ function AgentCanvasInner() {
       });
     }
     // turn → children
-    for (const t of allTurns) {
-      for (const childId of getChildIds(t.id)) {
+    for (const t of visibleTurns) {
+      for (const childId of visibleChildIds(t.id)) {
         const childTurn = agentStore.turns.get(childId) as TurnNode | undefined;
         flowEdges.push({
           id: `${t.id}-${childId}`,

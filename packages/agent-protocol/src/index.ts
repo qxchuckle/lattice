@@ -40,6 +40,7 @@ export type {
 export type {
   NodeRole,
   NodeContent,
+  NodeStatus,
   ToolCallRecord,
   FileChange,
   ConversationNode,
@@ -102,3 +103,16 @@ export type { ProtocolErrorCode } from './constants.js';
 
 // ── Guards ──
 export { isClientMessage, isServerMessage, isSourceEvent } from './guards.js';
+
+// ── 事件→内容转换（唯一实现，server/client 共用） ──
+export { StreamAccumulator, applyEventToContent } from './source/content-builder.js';
+
+// ── 节点状态机（跨层共享单一真相，server/client 复用） ──
+export {
+  isReadOnly,
+  canApplyOperation,
+  shouldSkipDescendantMark,
+  isBranchableChild,
+  projectViewStatus,
+} from './source/node-state.js';
+export type { ViewStatus, NodeOperation } from './source/node-state.js';

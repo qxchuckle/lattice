@@ -1,33 +1,18 @@
 /**
  * Agent 模块类型定义 + 常量
  */
-import type { TokenUsage } from '@qcqx/lattice-agent-protocol';
-
-// ── 流式渲染块 ──
-
-export type StreamingBlock =
-  | { kind: 'text'; text: string }
-  | { kind: 'thinking'; text: string }
-  | {
-      kind: 'tool_call';
-      id: string;
-      name: string;
-      args: Record<string, unknown>;
-      status: 'running' | 'done' | 'error';
-    }
-  | { kind: 'tool_result'; id: string; name: string; result: unknown; isError?: boolean }
-  | { kind: 'file_edit'; path: string; diff: string }
-  | { kind: 'terminal'; command: string; output?: string }
-  | { kind: 'error'; message: string; suggestion?: string };
+import type { TokenUsage, NodeContent, ViewStatus } from '@qcqx/lattice-agent-protocol';
 
 // ── 画布节点模型（一轮对话 = 一个节点） ──
+// blocks 直接用协议 NodeContent（与 server 持久化/流式转换同一类型，无平行块模型）
+// status 直接用协议 ViewStatus（视图状态类型单一真相，见 node-state.ts）
 
 export interface TurnNode {
   id: string;
   parentTurnId: string | null;
   userMessage: string;
-  blocks: StreamingBlock[];
-  status: 'empty' | 'streaming' | 'done' | 'error' | 'interrupted' | 'undone' | 'hidden';
+  blocks: NodeContent[];
+  status: ViewStatus;
   timestamp: number;
   sourceId: string;
   modelId: string;

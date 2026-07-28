@@ -64,8 +64,6 @@ export interface ConversationNode {
     compacted?: boolean;
     /** compaction 摘要来源节点 ID 列表 */
     compactedFrom?: string[];
-    /** 流式生成被中断（手动停止 / 关闭页面 / 崩溃） */
-    interrupted?: boolean;
     /** 源消息 ID（该节点对应源 session 中的消息 uuid，fork 截断点用） */
     sourceMessageId?: string;
   };

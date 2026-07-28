@@ -21,7 +21,7 @@ import {
   type NodeUiState,
 } from './agentStore';
 import { useNodeResize } from './useNodeResize';
-import { StreamingBlockRenderer, UsageFooter } from './blocks';
+import { ContentRenderer, UsageFooter } from './blocks';
 
 interface NodeData {
   turnId: string;
@@ -89,6 +89,15 @@ function ConversationNodeInner({ data }: NodeProps) {
     [handleSubmit],
   );
 
+  const toggleCollapse = useCallback(() => {
+    const u = agentStore.ui.get(turnId);
+    if (u) {
+      u.collapsed = !u.collapsed;
+      u.height = u.collapsed ? 60 : 260;
+      agentStore.version++;
+    }
+  }, [turnId]);
+
   if (!turn) return null;
   // hidden 节点不渲染
   if (isHidden) return null;
@@ -98,15 +107,6 @@ function ConversationNodeInner({ data }: NodeProps) {
   const siblingIndex = siblings.indexOf(turnId);
   const isCollapsed = ui?.collapsed ?? false;
   const showBottom = hovered || inputFocused || input.trim().length > 0;
-
-  const toggleCollapse = useCallback(() => {
-    const u = agentStore.ui.get(turnId);
-    if (u) {
-      u.collapsed = !u.collapsed;
-      u.height = u.collapsed ? 60 : 260;
-      agentStore.version++;
-    }
-  }, [turnId]);
 
   return (
     <div
@@ -312,13 +312,7 @@ function ConversationNodeInner({ data }: NodeProps) {
                 )}
               </div>
 
-              {turn.blocks.map((block, i) => (
-                <StreamingBlockRenderer
-                  key={i}
-                  block={block}
-                  isLast={isStreaming && i === turn.blocks.length - 1}
-                />
-              ))}
+              <ContentRenderer content={turn.blocks} streaming={isStreaming} />
 
               {turn.blocks.length === 0 && isStreaming && (
                 <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>...</div>
