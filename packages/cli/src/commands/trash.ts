@@ -65,6 +65,7 @@ export function registerTrashCommand(program: Command): void {
         const match = await resolveTrashById(id);
         if (!match) {
           logger.raw(chalk.yellow(`垃圾桶中未找到条目：${id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -131,6 +132,7 @@ export function registerTrashCommand(program: Command): void {
           const match = await resolveTrashById(id);
           if (!match) {
             logger.raw(chalk.yellow(`垃圾桶中未找到条目：${id}`));
+            process.exitCode = 1;
             return;
           }
 

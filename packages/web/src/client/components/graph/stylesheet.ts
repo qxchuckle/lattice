@@ -1,7 +1,7 @@
 import type cytoscape from 'cytoscape';
 
 /** Cytoscape 样式表：节点/边/Focus+Context/脉冲动效 */
-export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
+export function buildStylesheet(isDark: boolean): cytoscape.StylesheetStyle[] {
   const bg = isDark ? '#32323C' : '#F7F7F5';
   const txt = isDark ? '#EAEAF0' : '#2A2A32';
   const ec = isDark ? '#44444F' : '#D8D8D6';

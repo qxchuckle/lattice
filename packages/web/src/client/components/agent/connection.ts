@@ -2,10 +2,10 @@
  * WebSocket 连接管理 + SourceEvent 流式处理
  */
 import type { SourceEvent, ServerMessage } from '@qcqx/lattice-agent-protocol';
-import { applyEventToContent } from '@qcqx/lattice-agent-protocol';
 import { authStore } from '../../store';
 import { agentStore } from './store';
 import { loadTree, loadConversations } from './api';
+import { applyStreamEvent } from './turnGraph';
 
 // ── 流式状态（按 requestId 路由，支持并行） ──
 
@@ -44,7 +44,7 @@ function consumeSelfRequest(requestId?: string): boolean {
   return selfRequestIds.delete(requestId);
 }
 
-// ── SourceEvent → TurnNode.blocks（与 server 共用 applyEventToContent） ──
+// ── SourceEvent → TurnNode（数据逻辑见 turnGraph.applyStreamEvent，可独立测试） ──
 
 export function handleSourceEvent(event: SourceEvent, requestId?: string): void {
   const turnId = requestId ? streamingMap.get(requestId) : undefined;
@@ -52,18 +52,12 @@ export function handleSourceEvent(event: SourceEvent, requestId?: string): void 
   const turn = agentStore.turns.get(turnId);
   if (!turn) return;
 
-  // 内容累积：直接作用于 valtio proxy 数组（响应式），转换逻辑与 server 唯一实现一致
-  applyEventToContent(turn.blocks, event);
+  // 内容累积 + 终态转换（纯函数，与 server 共用 applyEventToContent）
+  applyStreamEvent(turn, event);
 
   // 仅终态（done/error）才 bump version 触发画布结构/边刷新；
   // 内容 delta 不 bump——节点内容经 valtio 响应式更新，避免每个 delta 重建整画布
-  if (event.type === 'done') {
-    turn.status = 'done';
-    turn.usage = event.usage;
-    if (requestId) streamingMap.delete(requestId);
-    agentStore.version++;
-  } else if (event.type === 'error') {
-    turn.status = 'error';
+  if (event.type === 'done' || event.type === 'error') {
     if (requestId) streamingMap.delete(requestId);
     agentStore.version++;
   }

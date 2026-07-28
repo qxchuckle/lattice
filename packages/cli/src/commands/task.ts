@@ -313,6 +313,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -320,6 +321,7 @@ export function registerTaskCommand(program: Command): void {
 
         if (!meta) {
           logger.raw(chalk.yellow(`未找到任务：${match.id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -401,6 +403,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           closeDb();
           return;
         }
@@ -420,6 +423,7 @@ export function registerTaskCommand(program: Command): void {
         if (opts.status) {
           if (!TASK_STATUSES.includes(opts.status as TaskStatus)) {
             logger.raw(chalk.yellow(`无效状态：${opts.status}`));
+            process.exitCode = 1;
             logger.raw(chalk.dim(`可选值：${TASK_STATUSES.join(' / ')}`));
             closeDb();
             return;
@@ -524,6 +528,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已开始`));
         } else {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -545,6 +550,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已完成`));
         } else {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -566,6 +572,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已归档`));
         } else {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -587,6 +594,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已重新打开`));
         } else {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -607,6 +615,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -616,6 +625,7 @@ export function registerTaskCommand(program: Command): void {
 
         if (!tree) {
           logger.raw(chalk.yellow(`未找到任务树：${match.id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -645,12 +655,14 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           return;
         }
 
         const lineage = await getTaskLineage(username, match.id);
         if (!lineage) {
           logger.raw(chalk.yellow(`未找到任务链路：${match.id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -681,6 +693,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           closeDb();
           return;
         }
@@ -714,12 +727,14 @@ export function registerTaskCommand(program: Command): void {
         if (!match) {
           closeDb();
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           return;
         }
 
         if (!CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
           closeDb();
           logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
+          process.exitCode = 1;
           logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
           return;
         }
@@ -778,6 +793,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           return;
         }
 
@@ -786,6 +802,7 @@ export function registerTaskCommand(program: Command): void {
           const entry = await getCheckpoint(username, match.id, opts.id);
           if (!entry) {
             logger.raw(chalk.yellow(`未找到检查点：${opts.id}`));
+            process.exitCode = 1;
             return;
           }
           if (opts.json) {
@@ -803,6 +820,7 @@ export function registerTaskCommand(program: Command): void {
         // 列表
         if (opts.type && !CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
           logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
+          process.exitCode = 1;
           logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
           return;
         }
@@ -884,6 +902,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           logger.raw(chalk.yellow(`未找到任务：${id}`));
+          process.exitCode = 1;
           closeDb();
           return;
         }
@@ -1013,6 +1032,7 @@ export function registerTaskCommand(program: Command): void {
           closeDb();
           logger.raw(chalk.yellow(`未找到任务：${taskId}`));
           process.exitCode = 1;
+          process.exitCode = 1;
           return;
         }
         const result = await addSpecRefs(username, resolved.id, specInputs, { projectId });
@@ -1046,6 +1066,7 @@ export function registerTaskCommand(program: Command): void {
         if (!resolved) {
           closeDb();
           logger.raw(chalk.yellow(`未找到任务：${taskId}`));
+          process.exitCode = 1;
           process.exitCode = 1;
           return;
         }

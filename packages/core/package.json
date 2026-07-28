@@ -46,7 +46,8 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.2",
     "tsup": "^8.5.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
   },
   "publishConfig": {
     "access": "public"

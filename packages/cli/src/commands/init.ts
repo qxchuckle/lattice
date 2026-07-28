@@ -101,6 +101,10 @@ export function registerInitCommand(program: Command): void {
     .option('--registry-template <urls>', '自定义 spec 模板仓库地址（逗号分隔）')
     .option('--download-model', '初始化后立即下载并预热 embedding 模型')
     .option(
+      '--no-download-model',
+      '跳过 embedding 模型下载（离线/测试环境用，优先于 -f 的默认下载）',
+    )
+    .option(
       '--builtin-spec-templates <names>',
       '初始化时导入内置 spec 模板（逗号分隔，默认 all）',
       'all',
@@ -214,9 +218,9 @@ export function registerInitCommand(program: Command): void {
           }
         }
 
-        // 7. 检测 AI 工具
+        // 7. 检测 AI 工具（-f 时不弹交互多选，自动注入已检测到的工具）
         logger.raw(chalk.blue('正在检测已安装的 AI 工具...'));
-        await detectAndConfigureAITools();
+        await detectAndConfigureAITools(shouldSkipConfirm(opts));
 
         // 8. 拉取模板仓库
         if (registryTemplates?.length) {
@@ -266,8 +270,10 @@ export function registerInitCommand(program: Command): void {
         }
 
         const modelInstalled = await isModelInstalled();
-        let shouldDownloadModel = opts.downloadModel === true || shouldSkipConfirm(opts);
-        if (!shouldDownloadModel) {
+        // --no-download-model 显式跳过（离线/测试环境）；否则 --download-model 或 -f 默认下载
+        let shouldDownloadModel =
+          opts.downloadModel !== false && (opts.downloadModel === true || shouldSkipConfirm(opts));
+        if (!shouldDownloadModel && opts.downloadModel !== false) {
           shouldDownloadModel = await confirm({
             message: modelInstalled
               ? '检测到 embedding 模型已安装，是否重新下载并预热？'
@@ -531,7 +537,7 @@ async function deployCommandsAsSkills(
   return deployed;
 }
 
-async function detectAndConfigureAITools(): Promise<void> {
+async function detectAndConfigureAITools(nonInteractive = false): Promise<void> {
   const home = homedir();
 
   const tools: AIToolConfig[] = [
@@ -674,17 +680,20 @@ async function detectAndConfigureAITools(): Promise<void> {
     }
   }
 
-  const selectedToolIds = await checkbox({
-    message: '请选择要注入的 AI 工具（可多选）：',
-    choices: tools.map((tool) => {
-      const detected = detectedToolIds.has(tool.id);
-      return {
-        name: detected ? `${tool.name}（已检测）` : `${tool.name}（未检测）`,
-        value: tool.id,
-        checked: detected || tool.defaultChecked === true,
-      };
-    }),
-  });
+  // 非交互模式（-f）：自动选择已检测到的工具，不弹多选框
+  const selectedToolIds = nonInteractive
+    ? tools.filter((tool) => detectedToolIds.has(tool.id)).map((tool) => tool.id)
+    : await checkbox({
+        message: '请选择要注入的 AI 工具（可多选）：',
+        choices: tools.map((tool) => {
+          const detected = detectedToolIds.has(tool.id);
+          return {
+            name: detected ? `${tool.name}（已检测）` : `${tool.name}（未检测）`,
+            value: tool.id,
+            checked: detected || tool.defaultChecked === true,
+          };
+        }),
+      });
 
   if (selectedToolIds.length === 0) {
     logger.raw(chalk.yellow('  已跳过 AI 工具注入。'));

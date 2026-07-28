@@ -4,6 +4,9 @@ node_modules
 *.tsbuildinfo
 .pnpm-store/
 
+# test coverage 报告（pnpm test:coverage 自动生成）
+coverage/
+
 # OS
 .DS_Store
 Thumbs.db

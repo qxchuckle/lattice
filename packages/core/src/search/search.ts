@@ -102,17 +102,19 @@ function decodeProjectIds(value?: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeText(value: string): string {
+// ─── 以下打分/归一化纯函数带 export 供单元测试使用（不经 index barrel 暴露，非公共 API）───
+
+export function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
 }
 
-function extractKeywords(query: string): string[] {
+export function extractKeywords(query: string): string[] {
   return Array.from(query.matchAll(/[\p{Script=Han}A-Za-z0-9]+/gu), (match) => match[0]).filter(
     (token) => token.length >= 2,
   );
 }
 
-function buildChineseNgrams(query: string): string[] {
+export function buildChineseNgrams(query: string): string[] {
   const grams: string[] = [];
   const compact = query.replace(/\s+/g, '');
   const segments = compact.match(/\p{Script=Han}+/gu) ?? [];
@@ -165,7 +167,7 @@ function buildSignalTerms(query: string): string[] {
  * - 2-字 ngram 仍在 signalTerms 中参与 rerankBoost，不影响微词语义信号。
  * - 多词查询额外生成 AND 变体（所有关键词必须出现），提升召回。
  */
-function buildLexicalQueries(query: string): string[] {
+export function buildLexicalQueries(query: string): string[] {
   const longGrams = buildChineseNgrams(query).filter((gram) => gram.length >= 3);
   const keywords = extractKeywords(query);
   // 多词查询：生成 AND 变体（FTS5 语法：所有关键词必须出现在文档中）
@@ -186,7 +188,7 @@ function buildLexicalQueries(query: string): string[] {
  *
  * fallback (LIKE) 走另一条路径，无需此处理。
  */
-function wrapFtsColumnQuery(variant: string): string {
+export function wrapFtsColumnQuery(variant: string): string {
   const trimmed = variant.trim();
   if (!trimmed) return trimmed;
 
@@ -235,7 +237,7 @@ function mergeLexicalResults(
  * - 用户级 spec：含 `/users/<u>/spec/` 但不在 projects 下
  * - 全局级 spec：不含 `/users/`（在 ~/.lattice/spec 下）
  */
-function inferScopeWeight(filePath: string, type: SearchDocumentType): number {
+export function inferScopeWeight(filePath: string, type: SearchDocumentType): number {
   if (type !== 'spec') return 1;
   const normalized = filePath.replace(/\\/g, '/');
   if (normalized.includes('/projects/') && normalized.includes('/spec/')) {
@@ -247,7 +249,7 @@ function inferScopeWeight(filePath: string, type: SearchDocumentType): number {
   return SCOPE_WEIGHT_GLOBAL;
 }
 
-function getTypeWeight(type: SearchDocumentType): number {
+export function getTypeWeight(type: SearchDocumentType): number {
   return TYPE_WEIGHT[type] ?? 1;
 }
 
@@ -258,7 +260,7 @@ function getTypeWeight(type: SearchDocumentType): number {
  * - 去除所有标点与符号字符
  * 不会丢掉中文、字母、数字。
  */
-function normalizeTitleForGrouping(title: string): string {
+export function normalizeTitleForGrouping(title: string): string {
   return title
     .toLowerCase()
     .replace(/\s+/g, '')
@@ -281,7 +283,7 @@ interface DuplicateRecord {
  * - 同名不同 ID 项目（如多个 demo-app）
  * - 不同项目下同名 spec 文件（如不同项目下的 component-guidelines.md）
  */
-function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
+export function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
   const groups = new Map<string, SearchResult>();
   const order: string[] = [];
   for (const r of results) {
@@ -317,7 +319,7 @@ function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
   });
 }
 
-function getTitleBoost(query: string, title: string): number {
+export function getTitleBoost(query: string, title: string): number {
   const normalizedQuery = normalizeText(query);
   const normalizedTitle = normalizeText(title);
   if (!normalizedQuery || !normalizedTitle) return 0;

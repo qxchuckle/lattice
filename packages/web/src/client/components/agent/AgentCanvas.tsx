@@ -19,12 +19,12 @@ import { useSnapshot } from 'valtio';
 import {
   agentStore,
   initAgent,
-  getChildIds,
   ROOT_INPUT_ID,
   type NodeUiState,
   type TurnNode,
 } from './agentStore';
 import { layoutTree, type LayoutNode } from './agentLayout';
+import { getVisibleTurns, getVisibleChildIds } from './turnGraph';
 import { ConversationNodeComponent } from './ConversationNodeComponent';
 import { RootInputNode } from './RootInputNode';
 
@@ -45,11 +45,9 @@ function AgentCanvasInner() {
   const allTurns = useMemo(() => [...snap.turns.values()], [snap.version]);
 
   useEffect(() => {
-    // 排除 hidden（已删除）节点：delete = 树形对话中不展示（子树连同隐藏）
-    const visibleTurns = allTurns.filter((t) => t.status !== 'hidden');
-    const isVisible = (id: string): boolean =>
-      (agentStore.turns.get(id) as TurnNode | undefined)?.status !== 'hidden';
-    const visibleChildIds = (id: string): string[] => getChildIds(id).filter(isVisible);
+    // 可见性过滤（纯函数，见 turnGraph.ts）：排除 hidden（已删除）节点
+    const visibleTurns = getVisibleTurns(allTurns);
+    const visibleChildIds = (id: string): string[] => getVisibleChildIds(allTurns, id);
 
     // 构建 LayoutNode[]（root + turns）
     const layoutNodes: LayoutNode[] = [];
