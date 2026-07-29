@@ -2,6 +2,7 @@
  * REST API 请求/响应 schema 类型（Agent 相关端点）
  */
 import type { ConversationTree, ConversationNode } from '../source/conversation.js';
+import type { SourceResourceInfo } from '../source/resources.js';
 
 // ── GET /api/agent/tree/:treeId ──
 
@@ -51,7 +52,7 @@ export interface GetSourcesResponse {
 
 // ── GET /api/agent/models ──
 
-import type { ModelTuning } from '../source/models.js';
+import type { ModelTuning, ModelCapabilities } from '../source/models.js';
 
 export interface ModelListItem {
   id: string;
@@ -59,6 +60,8 @@ export interface ModelListItem {
   sourceId: string;
   contextWindow: number;
   maxOutputTokens: number;
+  /** 能力声明（源提供）：vision 门控图片输入入口 */
+  capabilities?: ModelCapabilities;
   /** 费率（costFactor 数值供排序/计算；costLabel 源生成展示文本，web 直接渲染） */
   costFactor?: number;
   costLabel?: string;
@@ -82,4 +85,18 @@ export interface AuthStatusItem {
 
 export interface GetAuthStatusResponse {
   auth: AuthStatusItem[];
+}
+
+// ── GET /api/agent/resources?sourceId=&cwd=&kinds= ──
+
+/** 聚合资源项：源级发现 + 编排层本地注册，壳层拿统一列表渲染菜单 */
+export interface ResourceListItem extends SourceResourceInfo {
+  /** local=编排层注册（lattice 模板等） / source=源级发现 */
+  origin: 'local' | 'source';
+  /** origin='source' 时的源 ID */
+  sourceId?: string;
+}
+
+export interface GetResourcesResponse {
+  resources: ResourceListItem[];
 }

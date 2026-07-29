@@ -15,6 +15,9 @@ import type {
   SourceToolsMap,
   AuthStatus,
   AuthStatusMap,
+  SourceResourceInfo,
+  SourceResourceQuery,
+  SourceResourcesMap,
 } from './types.js';
 
 export class SourceRegistry implements ISourceRegistry {
@@ -110,6 +113,30 @@ export class SourceRegistry implements ISourceRegistry {
       }
     }
     return results;
+  }
+
+  /** 聚合资源发现：未实现/失败的源 = []（契约：不抛错） */
+  async listResources(
+    sourceId?: string,
+    query?: SourceResourceQuery,
+  ): Promise<SourceResourcesMap | SourceResourceInfo[]> {
+    const enumerate = async (source: ISource): Promise<SourceResourceInfo[]> => {
+      if (!source.listResources) return [];
+      try {
+        return await source.listResources(query);
+      } catch {
+        return [];
+      }
+    };
+    if (sourceId) {
+      const source = this.sources.get(sourceId);
+      return source ? enumerate(source) : [];
+    }
+    const map: SourceResourcesMap = {};
+    for (const [id, source] of this.sources) {
+      map[id] = await enumerate(source);
+    }
+    return map;
   }
 
   injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void {

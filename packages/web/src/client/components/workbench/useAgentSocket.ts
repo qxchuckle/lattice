@@ -3,12 +3,8 @@
  */
 import { useEffect, useRef, useCallback } from 'react';
 import type { ConversationTree, ConversationNode, AgentEvent } from '@qcqx/lattice-agent';
-import {
-  workbenchStore,
-  setTreeData,
-  setStreaming,
-  resetStreaming,
-} from './store';
+import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
+import { workbenchStore, setTreeData, setStreaming, resetStreaming } from './store';
 import { authStore } from '../../store';
 
 export function useAgentSocket() {
@@ -34,7 +30,9 @@ export function useAgentSocket() {
       try {
         const msg = JSON.parse(event.data);
         handleMessage(msg);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
   }, []);
 
@@ -83,63 +81,78 @@ export function useAgentSocket() {
       if (authStore.token) headers.Authorization = `Bearer ${authStore.token}`;
       const res = await fetch(`/api/agent/tree/${treeId}`, { headers });
       if (!res.ok) return;
-      const data = await res.json() as { tree: ConversationTree; nodes: ConversationNode[] };
+      const data = (await res.json()) as { tree: ConversationTree; nodes: ConversationNode[] };
       setTreeData(data.tree, data.nodes);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // ── 发送方法 ──
 
   const createSession = useCallback((opts?: { taskId?: string; cwd?: string }) => {
-    wsRef.current?.send(JSON.stringify({
-      type: 'session.create',
-      agentId: 'qoder',
-      cwd: opts?.cwd,
-      taskId: opts?.taskId,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: 'session.create',
+        agentId: 'qoder',
+        cwd: opts?.cwd,
+        taskId: opts?.taskId,
+      }),
+    );
     workbenchStore.agentStatus = 'connecting';
   }, []);
 
-  const sendMessage = useCallback((message: string) => {
+  const sendMessage = useCallback((message: string, segments?: PromptSegment[]) => {
     if (!wsRef.current || !workbenchStore.sessionId) return;
     workbenchStore.agentStatus = 'running';
     resetStreaming();
-    wsRef.current.send(JSON.stringify({
-      type: 'session.send',
-      sessionId: workbenchStore.sessionId,
-      treeId: workbenchStore.treeId,
-      message,
-    }));
+    wsRef.current.send(
+      JSON.stringify({
+        type: 'session.send',
+        sessionId: workbenchStore.sessionId,
+        treeId: workbenchStore.treeId,
+        message,
+        segments,
+      }),
+    );
   }, []);
 
   const fork = useCallback((nodeId: string, branchName?: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: 'tree.fork',
-      treeId: workbenchStore.treeId,
-      nodeId,
-      branchName,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: 'tree.fork',
+        treeId: workbenchStore.treeId,
+        nodeId,
+        branchName,
+      }),
+    );
   }, []);
 
   const deleteNodes = useCallback((nodeIds: string[]) => {
-    wsRef.current?.send(JSON.stringify({
-      type: 'tree.delete',
-      treeId: workbenchStore.treeId,
-      nodeIds,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: 'tree.delete',
+        treeId: workbenchStore.treeId,
+        nodeIds,
+      }),
+    );
   }, []);
 
   const switchHead = useCallback((nodeId: string) => {
-    wsRef.current?.send(JSON.stringify({
-      type: 'tree.switchHead',
-      treeId: workbenchStore.treeId,
-      nodeId,
-    }));
+    wsRef.current?.send(
+      JSON.stringify({
+        type: 'tree.switchHead',
+        treeId: workbenchStore.treeId,
+        nodeId,
+      }),
+    );
   }, []);
 
   useEffect(() => {
     connect();
-    return () => { wsRef.current?.close(); };
+    return () => {
+      wsRef.current?.close();
+    };
   }, [connect]);
 
   return { createSession, sendMessage, fork, deleteNodes, switchHead };

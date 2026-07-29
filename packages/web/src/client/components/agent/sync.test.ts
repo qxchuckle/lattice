@@ -197,6 +197,15 @@ describe('sync.handleStreamEvent', () => {
     expect(agentStore.turns.get('u1')!.status).toBe('done');
   });
 
+  it('快照重建的 done turn 收到他端流 delta → 提升为 streaming', () => {
+    // 快照先到（user 节点无 assistant 子 → 投影 done），他端流随后到
+    applySnapshot(snapshot([userNode('u1')]));
+    expect(agentStore.turns.get('u1')!.status).toBe('done');
+    handleStreamEvent(evt('u1', '他端流'));
+    expect(agentStore.turns.get('u1')!.status, '他端流式期间应为 streaming').toBe('streaming');
+    expect((agentStore.turns.get('u1')!.blocks[0] as { text: string }).text).toBe('他端流');
+  });
+
   it('只读 turn 丢弃迟到流事件（防 done 复活已删节点）', () => {
     putTurn({
       id: 'u1',

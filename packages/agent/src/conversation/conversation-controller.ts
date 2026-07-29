@@ -19,6 +19,8 @@ import type {
   ISource,
   ISourceRegistry,
   NodeContent,
+  PromptSegment,
+  ContentBlock,
 } from '@qcqx/lattice-agent-protocol';
 import {
   StreamAccumulator,
@@ -28,6 +30,8 @@ import {
   isReadOnly,
 } from '@qcqx/lattice-agent-protocol';
 import type { SessionManager } from '../session/session-manager.js';
+import { composePrompt } from '../prompt/prompt-composer.js';
+import type { PromptComposerDeps } from '../prompt/prompt-composer.js';
 
 /** 每个 WS session 的运行时状态（轻量：连接身份 + 当前树）；锁域在 TreeRuntime */
 export interface SessionContext {
@@ -72,12 +76,18 @@ export interface SendOpts {
   contextWindow?: number;
   /** 指定源（仅新第一层线程生效；追问时沿祖先链解析线程源） */
   sourceId?: string;
+  /** 结构化输入段（chip 编辑器）；提供时编排层展开，message 作 displayText 兜底 */
+  segments?: PromptSegment[];
 }
 
 export interface ConversationControllerDeps {
   session: SessionManager;
   /** 仅依赖源注册表抽象（protocol），不绑定具体源包 */
   sources: { registry: ISourceRegistry };
+  /** 结构化输入展开依赖（本地命令模板/引用解析；缺省：命令透传 slash 文本、引用保留显示文本） */
+  promptDeps?: PromptComposerDeps;
+  /** 按线程源生成 system prompt 追加段（skills 可用清单等，渐进披露）；undefined/空串 = 不追加 */
+  systemPromptAppendix?: (sourceId: string) => Promise<string | undefined>;
 }
 
 export class ConversationController {
@@ -346,6 +356,17 @@ export class ConversationController {
       return;
     }
 
+    // 结构化输入展开（编排层唯一展开点：源只收纯内容）：
+    // promptBlocks 落盘 + 传源（retry/continue 重发当时展开结果，保证可重现；text+image 保序）；
+    // displayText 供树标题；原始 segments 存节点 metadata 供 UI 回显 chip
+    let promptBlocks: ContentBlock[] = [{ type: 'text', text: message }];
+    let displayText = message;
+    if (opts.segments?.length) {
+      const composed = await composePrompt(opts.segments, this.deps.promptDeps);
+      promptBlocks = composed.blocks;
+      displayText = composed.displayText || message;
+    }
+
     // 定位分支：显式 branchId > 父节点分支 > 默认分支
     const actualParent = actualParentId
       ? this.deps.session.getNode(treeId, actualParentId)
@@ -400,10 +421,10 @@ export class ConversationController {
       }
     }
 
-    // 首条消息设置树标题
+    // 首条消息设置树标题（用户可见形式，非展开后模板全文）
     const t = this.deps.session.getTree(treeId);
     if (t && !t.title) {
-      t.title = message.slice(0, 30) + (message.length > 30 ? '...' : '');
+      t.title = displayText.slice(0, 30) + (displayText.length > 30 ? '...' : '');
     }
 
     // 追问未显式指定思考深度/上下文档位时继承线程上一轮（assistant 落盘参数）；模型继承由 client 完成
@@ -411,18 +432,20 @@ export class ConversationController {
     const resolvedContextWindow = opts.contextWindow ?? actualParent?.metadata?.contextWindow;
 
     // 持久化 user 节点（prompt 前，确保用户消息永不丢失）；记录线程源 + 本次模型/参数
+    // ContentBlock text/image 与 NodeContent 同构（composer 不产 file 块）
     const userNode = await this.deps.session.addNode(treeId, {
       id: opts.requestId,
       parentId: actualParentId,
       role: 'user',
-      content: [{ type: 'text', text: message }],
+      content: promptBlocks.filter((b) => b.type !== 'file') as NodeContent[],
       agentId: resolvedSourceId,
       metadata:
-        opts.model || resolvedThinking || resolvedContextWindow
+        opts.model || resolvedThinking || resolvedContextWindow || opts.segments?.length
           ? {
               ...(opts.model ? { model: opts.model } : {}),
               ...(resolvedThinking ? { thinkingLevel: resolvedThinking } : {}),
               ...(resolvedContextWindow ? { contextWindow: resolvedContextWindow } : {}),
+              ...(opts.segments?.length ? { promptSegments: opts.segments } : {}),
             }
           : undefined,
       branchId: autoForked || opts.branchId || newThreadBranch ? branch?.id : undefined,
@@ -433,7 +456,7 @@ export class ConversationController {
       this.runPrompt(
         ctx,
         {
-          message,
+          blocks: promptBlocks,
           userNodeId: userNode.id,
           branch,
           sourceSessionId,
@@ -503,7 +526,7 @@ export class ConversationController {
         ctx,
         source,
         sourceSessionId,
-        'Continue',
+        [{ type: 'text', text: 'Continue' }],
         requestId,
         undefined,
         hooks,
@@ -598,16 +621,17 @@ export class ConversationController {
     }
 
     // 4. 复用原 user 节点重新 prompt（只新建 assistant 子节点）；流式调度到分支队列
-    const originalMessage = userNode.content
-      .filter((c): c is Extract<NodeContent, { type: 'text' }> => c.type === 'text')
-      .map((c) => c.text)
-      .join('\n');
+    // 重发当时展开结果：text + image 全部内容块（图片重试不丢）
+    const originalBlocks = userNode.content.filter(
+      (c): c is Extract<NodeContent, { type: 'text' | 'image' }> =>
+        c.type === 'text' || c.type === 'image',
+    );
 
     this.scheduleStream(ctx, branch?.id, () =>
       this.runPrompt(
         ctx,
         {
-          message: originalMessage,
+          blocks: originalBlocks,
           userNodeId: userNode.id,
           branch,
           sourceSessionId: retrySessionId,
@@ -723,7 +747,7 @@ export class ConversationController {
   private async runPrompt(
     ctx: SessionContext,
     opts: {
-      message: string;
+      blocks: ContentBlock[];
       userNodeId: string;
       branch: ConversationBranch | undefined;
       sourceSessionId: string | null;
@@ -768,11 +792,16 @@ export class ConversationController {
       ctx,
       source,
       sourceSessionId,
-      opts.message,
+      opts.blocks,
       opts.requestId,
       opts.userNodeId,
       hooks,
-      { model: opts.model, thinkingLevel: opts.thinkingLevel, contextWindow: opts.contextWindow },
+      {
+        model: opts.model,
+        thinkingLevel: opts.thinkingLevel,
+        contextWindow: opts.contextWindow,
+        systemPromptAppendix: await this.deps.systemPromptAppendix?.(sourceId),
+      },
     );
 
     // 捕获新 sessionId（新建时源返回，续写时不变）+ 同步分支源标记
@@ -828,11 +857,17 @@ export class ConversationController {
     ctx: SessionContext,
     source: ISource,
     sourceSessionId: string | null,
-    message: string,
+    blocks: ContentBlock[],
     requestId: string,
     persistParentId: string | undefined,
     hooks: ConversationHooks,
-    promptOpts?: { model?: string; thinkingLevel?: string; contextWindow?: number },
+    promptOpts?: {
+      model?: string;
+      thinkingLevel?: string;
+      contextWindow?: number;
+      /** system prompt 追加段（skills 清单等）；空 = 不传，源用自己的默认 prompt */
+      systemPromptAppendix?: string;
+    },
   ): Promise<{ accumulator: StreamAccumulator; interrupted: boolean }> {
     const accumulator = new StreamAccumulator();
     const abortController = new AbortController();
@@ -857,12 +892,27 @@ export class ConversationController {
       // 进入源前归一化为不传——所有源看到的要么是有效等级要么完全缺省（协议约定）
       const thinkingLevel =
         promptOpts?.thinkingLevel === 'none' ? undefined : promptOpts?.thinkingLevel;
-      for await (const event of source.prompt(sourceSessionId, [{ type: 'text', text: message }], {
+      // 工具语义表：源层声明的 name → semantic（壳层按语义渲染，不认工具名）
+      const semanticMap = new Map(source.getBuiltinTools().map((t) => [t.name, t.category]));
+      for await (const rawEvent of source.prompt(sourceSessionId, blocks, {
         signal: abortController.signal,
         model: promptOpts?.model,
         thinkingLevel,
         contextWindow: promptOpts?.contextWindow,
+        ...(promptOpts?.systemPromptAppendix
+          ? {
+              systemPrompt: {
+                mode: 'append' as const,
+                additional: promptOpts.systemPromptAppendix,
+              },
+            }
+          : {}),
       })) {
+        // 时间统一由编排层打点（源层不打点）：内容块吸收 ts，保证 live/reload/多端同一套时间
+        const event = { ...rawEvent, ts: Date.now() };
+        if (event.type === 'tool_call' && !event.semantic) {
+          event.semantic = semanticMap.get(event.name) ?? 'other';
+        }
         accumulator.apply(event);
         await persistStreaming();
         hooks.onEvent(event, requestId);

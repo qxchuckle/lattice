@@ -9,6 +9,7 @@ import type {
   ConversationBranch,
   NodeContent,
 } from '../source/conversation.js';
+import type { PromptSegment } from '../source/prompt-input.js';
 
 // ═══════════════════════════════════════════
 // 多端同步：共享类型
@@ -49,6 +50,8 @@ export interface SessionSendMessage {
   type: 'session.send';
   sessionId: string;
   message: string;
+  /** 结构化输入段（chip 编辑器）；提供时编排层展开生成最终 prompt，message 作为 displayText 兜底 */
+  segments?: PromptSegment[];
   /** 父节点 ID（从哪个节点发起对话，null = 根节点） */
   parentNodeId?: string | null;
   /** 意图分支 ID（显式 fork 后在该分支继续时传入，跳过自动 fork） */

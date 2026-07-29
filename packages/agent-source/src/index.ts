@@ -21,6 +21,11 @@ export type {
   AuthStatus,
   // 能力
   SourceCapabilities,
+  // 资源发现
+  SourceResourceKind,
+  SourceResourceInfo,
+  SourceResourceQuery,
+  SourceResourcesMap,
   // SystemPrompt
   SystemPromptPolicy,
   SystemPromptConfig,

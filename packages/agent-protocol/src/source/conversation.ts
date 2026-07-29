@@ -3,6 +3,8 @@
  * 从 agent 包迁入：web client / server / agent 三方消费
  */
 import type { TokenUsage } from './events.js';
+import type { PromptSegment } from './prompt-input.js';
+import type { SourceToolSemantic } from './tools.js';
 
 export type NodeRole = 'user' | 'assistant' | 'tool' | 'system' | 'merge-summary' | 'aggregation';
 
@@ -13,19 +15,41 @@ export type NodeRole = 'user' | 'assistant' | 'tool' | 'system' | 'merge-summary
 export type NodeContent =
   | { type: 'text'; text: string }
   | { type: 'code'; text: string; language?: string }
-  | { type: 'diff'; text: string; path: string }
+  | {
+      type: 'diff';
+      /** diff 正文（源不一定返回，缺失时仅凭 path 呈现改动事实） */
+      text?: string;
+      path: string;
+      kind?: 'create' | 'edit' | 'delete';
+    }
   | { type: 'image'; data: string; mimeType: string }
-  | { type: 'thinking'; text: string }
+  | {
+      type: 'thinking';
+      text: string;
+      /** 首 delta 时间（来自事件 ts，非 UI 计时——reload 后不丢） */
+      startedAt?: number;
+      /** 末 delta 时间（有值 = 思考完成） */
+      endedAt?: number;
+    }
   | {
       type: 'tool_call';
       toolId: string;
       name: string;
       args: Record<string, unknown>;
       status?: 'pending' | 'success' | 'error';
+      /** 工具语义（壳层按此渲染图标/卡片形态，不认识工具名） */
+      semantic?: SourceToolSemantic;
+      startedAt?: number;
+      /** tool_result 到达时回填 */
+      endedAt?: number;
     }
   | { type: 'tool_result'; toolId: string; name: string; result?: unknown; isError?: boolean }
   | { type: 'terminal'; command: string; output?: string }
-  | { type: 'error'; message: string; suggestion?: string };
+  | { type: 'error'; message: string; suggestion?: string }
+  /** 源内部上下文压缩标记（随流落盘，live/reload 呈现一致） */
+  | { type: 'compaction'; trigger: 'auto' | 'manual'; preTokens?: number; summary?: string }
+  /** 非致命提示（不影响节点状态投影，区别于 error 块） */
+  | { type: 'notice'; level: 'info' | 'warning'; text: string };
 
 export interface ToolCallRecord {
   toolId: string;
@@ -71,6 +95,8 @@ export interface ConversationNode {
     compactedFrom?: string[];
     /** 源消息 ID（该节点对应源 session 中的消息 uuid，fork 截断点用） */
     sourceMessageId?: string;
+    /** 展开前的结构化输入（user 节点；UI 回显 chip 用，content 存展开后内容） */
+    promptSegments?: PromptSegment[];
   };
 }
 

@@ -13,13 +13,29 @@
 import type { SourceEvent, TokenUsage } from './events.js';
 import type { NodeContent, ToolCallRecord, FileChange } from './conversation.js';
 
-/** 合并连续同类型文本块（text/thinking） */
-function appendMerge(content: NodeContent[], type: 'text' | 'thinking', text: string): void {
+/** 合并连续同类型文本块（text/thinking）；thinking 额外吸收事件 ts 为 startedAt/endedAt */
+function appendMerge(
+  content: NodeContent[],
+  type: 'text' | 'thinking',
+  text: string,
+  ts?: number,
+): void {
   const last = content[content.length - 1];
   if (last && last.type === type) {
-    (last as { type: 'text' | 'thinking'; text: string }).text += text;
+    const block = last as { type: 'text' | 'thinking'; text: string; endedAt?: number };
+    block.text += text;
+    // 末 delta 时间：每个 thinking delta 刷新，流结束即定格（纯函数不打点，只消费事件 ts）
+    if (type === 'thinking' && ts !== undefined) block.endedAt = ts;
   } else {
-    content.push({ type, text });
+    content.push(
+      type === 'thinking'
+        ? {
+            type,
+            text,
+            ...(ts !== undefined ? { startedAt: ts, endedAt: ts } : {}),
+          }
+        : { type, text },
+    );
   }
 }
 
@@ -33,7 +49,7 @@ export function applyEventToContent(content: NodeContent[], event: SourceEvent):
       appendMerge(content, 'text', event.content);
       break;
     case 'thinking':
-      appendMerge(content, 'thinking', event.content);
+      appendMerge(content, 'thinking', event.content, event.ts);
       break;
     case 'tool_call':
       content.push({
@@ -42,11 +58,17 @@ export function applyEventToContent(content: NodeContent[], event: SourceEvent):
         name: event.name,
         args: event.args,
         status: 'pending',
+        ...(event.semantic ? { semantic: event.semantic } : {}),
+        ...(event.ts !== undefined ? { startedAt: event.ts } : {}),
       });
       break;
     case 'tool_result': {
       const tc = content.find((c) => c.type === 'tool_call' && c.toolId === event.id);
-      if (tc && tc.type === 'tool_call') tc.status = event.isError ? 'error' : 'success';
+      if (tc && tc.type === 'tool_call') {
+        tc.status = event.isError ? 'error' : 'success';
+        // 耗时回填到调用块：一次调用 = 一个视觉单元（视图层按 toolId 配对渲染）
+        if (event.ts !== undefined) tc.endedAt = event.ts;
+      }
       content.push({
         type: 'tool_result',
         toolId: event.id,
@@ -57,13 +79,30 @@ export function applyEventToContent(content: NodeContent[], event: SourceEvent):
       break;
     }
     case 'file_edit':
-      content.push({ type: 'diff', text: event.diff, path: event.path });
+      content.push({
+        type: 'diff',
+        text: event.diff,
+        path: event.path,
+        ...(event.kind ? { kind: event.kind } : {}),
+      });
       break;
     case 'terminal':
       content.push({ type: 'terminal', command: event.command, output: event.output });
       break;
     case 'error':
       content.push({ type: 'error', message: event.message, suggestion: event.suggestion });
+      break;
+    case 'compaction':
+      // 压缩标记随内容落盘：reload 后仍能呈现"此处发生压缩"（live/reload 一致）
+      content.push({
+        type: 'compaction',
+        trigger: event.trigger,
+        ...(event.preTokens !== undefined ? { preTokens: event.preTokens } : {}),
+        ...(event.summary ? { summary: event.summary } : {}),
+      });
+      break;
+    case 'notice':
+      content.push({ type: 'notice', level: event.level, text: event.message });
       break;
     case 'done':
       break;
@@ -92,14 +131,15 @@ export class StreamAccumulator {
 
   apply(event: SourceEvent): void {
     applyEventToContent(this.content, event);
-    // 元数据级跟踪（仅持久化需要）
+    // 元数据级跟踪（仅持久化需要）：时间优先用事件 ts（编排层注入），
+    // 缺失时 server 端 Date.now() 兜底（ToolCallRecord.startedAt 为必填字段）
     switch (event.type) {
       case 'tool_call':
         this.toolCalls.push({
           toolId: event.id,
           args: event.args,
           status: 'pending',
-          startedAt: Date.now(),
+          startedAt: event.ts ?? Date.now(),
         });
         break;
       case 'tool_result': {
@@ -107,12 +147,16 @@ export class StreamAccumulator {
         if (rec) {
           rec.result = event.result;
           rec.status = event.isError ? 'error' : 'success';
-          rec.endedAt = Date.now();
+          rec.endedAt = event.ts ?? Date.now();
         }
         break;
       }
       case 'file_edit':
-        this.fileChanges.push({ path: event.path, diff: event.diff, status: 'pending' });
+        this.fileChanges.push({
+          path: event.path,
+          diff: event.diff ?? '',
+          status: 'pending',
+        });
         break;
       case 'done':
         this.done = true;

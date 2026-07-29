@@ -7,7 +7,7 @@ import { Handle, Position, NodeResizer, useStoreApi, type NodeProps } from '@xyf
 import { proxy, useSnapshot } from 'valtio';
 import { Popover } from 'antd';
 import { DatabaseOutlined } from '@ant-design/icons';
-import type { ModelListItem } from '@qcqx/lattice-agent-protocol';
+import type { ModelListItem, PromptSegment } from '@qcqx/lattice-agent-protocol';
 import { computeNodeCapabilities } from '@qcqx/lattice-agent-protocol';
 import { fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip } from './ChatInputBar';
@@ -29,7 +29,7 @@ import {
   type NodeUiState,
 } from './agentStore';
 import { useNodeResize } from './useNodeResize';
-import { ContentRenderer, UsageFooter } from './blocks';
+import { ContentRenderer, UsageFooter, FileChangeSummary } from './blocks';
 
 interface NodeData {
   turnId: string;
@@ -99,8 +99,11 @@ function ConversationNodeInner({ data }: NodeProps) {
   }, [sourceIdForModels]);
 
   const handleFollowupSubmit = useCallback(
-    (text: string) => {
-      submitFromNode(turnId, text, followupModel ? { model: followupModel } : undefined);
+    (text: string, segments?: PromptSegment[]) => {
+      submitFromNode(turnId, text, {
+        ...(followupModel ? { model: followupModel } : {}),
+        ...(segments ? { segments } : {}),
+      });
     },
     [turnId, followupModel],
   );
@@ -381,6 +384,9 @@ function ConversationNodeInner({ data }: NodeProps) {
                 <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>...</div>
               )}
 
+              {/* 回合末改动文件汇总（非 streaming 且有改动时渲染） */}
+              <FileChangeSummary blocks={turn.blocks} streaming={isStreaming} />
+
               <UsageFooter usage={turn.usage} model={turn.modelId || undefined} />
 
               {/* 错误时显示重试按钮 */}
@@ -448,6 +454,10 @@ function ConversationNodeInner({ data }: NodeProps) {
                   placeholder='继续追问...'
                   canSubmit={!isStreaming}
                   onSubmit={handleFollowupSubmit}
+                  allowImages={
+                    threadModels.find((m) => m.id === (followupModel ?? turn.modelId))?.capabilities
+                      ?.vision === true
+                  }
                   controls={
                     <ModelMenuChip
                       models={threadModels}

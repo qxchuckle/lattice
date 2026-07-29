@@ -13,11 +13,17 @@ export type {
   SourceErrorContext,
 } from './source/events.js';
 
-export type { ModelInfo, ModelParamSpec, ModelTuning } from './source/models.js';
+export type { ModelInfo, ModelParamSpec, ModelTuning, ModelCapabilities } from './source/models.js';
 
 export type { AuthRequirement, AuthStatus } from './source/auth.js';
 
-export type { ToolDefinition, ToolResult, ToolInfo, InjectToolsConfig } from './source/tools.js';
+export type {
+  ToolDefinition,
+  ToolResult,
+  ToolInfo,
+  InjectToolsConfig,
+  SourceToolSemantic,
+} from './source/tools.js';
 
 export type { ContentBlock, StandardMessage } from './source/messages.js';
 
@@ -29,6 +35,16 @@ export type {
   ISource,
   SourceInfo,
 } from './source/interface.js';
+
+export type {
+  SourceResourceKind,
+  SourceResourceInfo,
+  SourceResourceQuery,
+  SourceResourcesMap,
+} from './source/resources.js';
+
+export type { PromptSegment } from './source/prompt-input.js';
+export { segmentsToDisplayText } from './source/prompt-input.js';
 
 export type {
   SourceToolsMap,
@@ -99,6 +115,8 @@ export type {
   GetModelsResponse,
   AuthStatusItem,
   GetAuthStatusResponse,
+  ResourceListItem,
+  GetResourcesResponse,
 } from './transport/rest.js';
 
 // ── 常量 ──

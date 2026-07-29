@@ -109,8 +109,14 @@ export function handleStreamEvent(msg: StreamEventMessage): void {
     return;
   }
   if (turn.status === 'undone' || turn.status === 'hidden') return;
-  applyEventToContent(turn.blocks, msg.event as SourceEvent);
   const ev = msg.event as SourceEvent;
+  // 他端流 delta 到达时提升为 streaming：快照重建的 turn 默认 'done'（assistant 未落盘），
+  // 不提升会导致他端流式期间思考块不展开/无实时计时、无光标、无停止按钮
+  if (ev.type !== 'done' && ev.type !== 'error' && turn.status !== 'streaming') {
+    turn.status = 'streaming';
+    agentStore.version++;
+  }
+  applyEventToContent(turn.blocks, ev);
   if (ev.type === 'done') {
     turn.status = 'done';
     turn.usage = ev.usage;

@@ -2,82 +2,20 @@
  * 块渲染组件集 — CC/Codex 风格线性块流
  *
  * 唯一渲染入口 ContentRenderer，直接消费协议 NodeContent（历史与流式同一类型）。
+ * 渲染前经 groupToolBlocks 视图层配对：一次工具调用 = 一个视觉单元（call + result 合并）。
+ * 拆分结构：Collapsible（外壳）/ ThinkingBlock（计时）/ ToolBlock（合并卡片 + subagent）/
+ *           FileChangeSummary（回合末汇总）/ 其余块在本文件。
  */
 import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { NodeContent, TokenUsage } from '@qcqx/lattice-agent-protocol';
+import { groupToolBlocks } from '../turnSummary';
+import { Collapsible } from './Collapsible';
+import { ThinkingBlock } from './ThinkingBlock';
+import { ToolGroupBlock } from './ToolBlock';
 
-// ── 通用折叠容器 ──
-
-function Collapsible({
-  label,
-  icon,
-  status,
-  defaultOpen = false,
-  children,
-}: {
-  label: string;
-  icon: string;
-  status?: 'running' | 'done' | 'error';
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div
-      style={{
-        margin: '4px 0',
-        borderRadius: 6,
-        border: '1px solid var(--border)',
-        overflow: 'hidden',
-      }}>
-      <div
-        onClick={() => setOpen(!open)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 8px',
-          cursor: 'pointer',
-          fontSize: 11,
-          background: 'var(--bg-tertiary)',
-          userSelect: 'none',
-        }}>
-        <span
-          style={{
-            fontSize: 10,
-            opacity: 0.6,
-            transform: open ? 'rotate(90deg)' : 'none',
-            transition: 'transform 0.15s',
-          }}>
-          ▶
-        </span>
-        <span>{icon}</span>
-        <span
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            color: 'var(--text)',
-          }}>
-          {label}
-        </span>
-        {status === 'running' && (
-          <span style={{ color: 'var(--brand-color)', fontSize: 10 }}>●</span>
-        )}
-        {status === 'done' && <span style={{ color: '#52c41a', fontSize: 10 }}>✓</span>}
-        {status === 'error' && <span style={{ color: '#ff4d4f', fontSize: 10 }}>✗</span>}
-      </div>
-      {open && (
-        <div style={{ padding: '6px 8px', fontSize: 11, borderTop: '1px solid var(--border)' }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
+export { FileChangeSummary } from './FileChangeSummary';
 
 // ── 流式块渲染 ──
 
@@ -157,81 +95,46 @@ function CodeBlockWithCopy({ children }: { children?: React.ReactNode }) {
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
-  const lines = text.split('\n').length;
-  return (
-    <Collapsible label={`Thinking（${lines}行）`} icon='💭'>
-      <div
-        style={{
-          fontStyle: 'italic',
-          color: 'var(--text-secondary)',
-          whiteSpace: 'pre-wrap',
-          fontSize: 11,
-        }}>
-        {text}
-      </div>
-    </Collapsible>
-  );
-}
+const DIFF_KIND_LABEL: Record<string, string> = {
+  create: '新建',
+  edit: '编辑',
+  delete: '删除',
+};
 
-function ToolCallBlock({ block }: { block: Extract<NodeContent, { type: 'tool_call' }> }) {
-  const status =
-    block.status === 'success' ? 'done' : block.status === 'error' ? 'error' : 'running';
+function FileEditBlock({
+  path,
+  diff,
+  kind,
+}: {
+  path: string;
+  diff?: string;
+  kind?: 'create' | 'edit' | 'delete';
+}) {
+  const lines = diff ? diff.split('\n').length : 0;
+  const label = diff
+    ? `${path}（${lines}行变更）`
+    : `${path}${kind ? `（${DIFF_KIND_LABEL[kind]}）` : ''}`;
   return (
-    <Collapsible label={block.name} icon='🔧' status={status}>
-      <pre
-        style={{
-          margin: 0,
-          fontSize: 10,
-          color: 'var(--text-secondary)',
-          overflow: 'auto',
-          maxHeight: 120,
-        }}>
-        {JSON.stringify(block.args, null, 2)}
-      </pre>
-    </Collapsible>
-  );
-}
-
-function ToolResultBlock({ block }: { block: Extract<NodeContent, { type: 'tool_result' }> }) {
-  return (
-    <Collapsible
-      label={`${block.name} 结果`}
-      icon={block.isError ? '❌' : '📋'}
-      status={block.isError ? 'error' : 'done'}>
-      <pre
-        style={{
-          margin: 0,
-          fontSize: 10,
-          color: 'var(--text-secondary)',
-          overflow: 'auto',
-          maxHeight: 120,
-        }}>
-        {typeof block.result === 'string' ? block.result : JSON.stringify(block.result, null, 2)}
-      </pre>
-    </Collapsible>
-  );
-}
-
-function FileEditBlock({ path, diff }: { path: string; diff: string }) {
-  const lines = diff.split('\n').length;
-  return (
-    <Collapsible label={`${path}（${lines}行变更）`} icon='📝'>
-      <pre style={{ margin: 0, fontSize: 10, overflow: 'auto', maxHeight: 150, lineHeight: 1.4 }}>
-        {diff.split('\n').map((line, i) => (
-          <div
-            key={i}
-            style={{
-              color: line.startsWith('+')
-                ? '#52c41a'
-                : line.startsWith('-')
-                  ? '#ff4d4f'
-                  : 'var(--text-secondary)',
-            }}>
-            {line}
-          </div>
-        ))}
-      </pre>
+    <Collapsible label={label} icon='📝'>
+      {diff ? (
+        <pre style={{ margin: 0, fontSize: 10, overflow: 'auto', maxHeight: 150, lineHeight: 1.4 }}>
+          {diff.split('\n').map((line, i) => (
+            <div
+              key={i}
+              style={{
+                color: line.startsWith('+')
+                  ? '#52c41a'
+                  : line.startsWith('-')
+                    ? '#ff4d4f'
+                    : 'var(--text-secondary)',
+              }}>
+              {line}
+            </div>
+          ))}
+        </pre>
+      ) : (
+        <span style={{ color: 'var(--text-secondary)' }}>无 diff 详情</span>
+      )}
     </Collapsible>
   );
 }
@@ -277,6 +180,71 @@ function ErrorBlock({ message, suggestion }: { message: string; suggestion?: str
 
 // ── 内容块分发（唯一渲染入口，消费 NodeContent） ──
 
+/** 源上下文压缩分隔标记：此处之前的历史已被源摘要替代 */
+function CompactionBlock({
+  trigger,
+  preTokens,
+  summary,
+}: {
+  trigger: 'auto' | 'manual';
+  preTokens?: number;
+  summary?: string;
+}) {
+  const label = `上下文已压缩${trigger === 'manual' ? '（手动）' : ''}${
+    preTokens ? ` · 压缩前 ${Math.round(preTokens / 1000)}k tokens` : ''
+  }`;
+  return (
+    <div style={{ margin: '6px 0', fontSize: 10 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          color: 'var(--text-secondary)',
+        }}>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border-color, #444)' }} />
+        <span>🗜 {label}</span>
+        <div style={{ flex: 1, borderTop: '1px dashed var(--border-color, #444)' }} />
+      </div>
+      {summary && (
+        <Collapsible label='压缩摘要' icon='📄' status='done'>
+          <pre
+            style={{
+              margin: 0,
+              fontSize: 10,
+              color: 'var(--text-secondary)',
+              whiteSpace: 'pre-wrap',
+              maxHeight: 160,
+              overflow: 'auto',
+            }}>
+            {summary}
+          </pre>
+        </Collapsible>
+      )}
+    </div>
+  );
+}
+
+/** 非致命提示（不影响节点状态，区别于 ErrorBlock） */
+function NoticeBlock({ level, text }: { level: 'info' | 'warning'; text: string }) {
+  const color = level === 'warning' ? '#faad14' : 'var(--text-secondary)';
+  return (
+    <div
+      style={{
+        margin: '4px 0',
+        padding: '4px 8px',
+        borderRadius: 6,
+        borderLeft: `3px solid ${color}`,
+        background: level === 'warning' ? 'rgba(250,173,20,0.06)' : 'var(--bg-tertiary)',
+        fontSize: 11,
+        color,
+      }}>
+      {level === 'warning' ? '⚠ ' : ''}
+      {text}
+    </div>
+  );
+}
+
 function ContentBlockRenderer({ block, streaming }: { block: NodeContent; streaming?: boolean }) {
   switch (block.type) {
     case 'text':
@@ -295,13 +263,16 @@ function ContentBlockRenderer({ block, streaming }: { block: NodeContent; stream
         </pre>
       );
     case 'thinking':
-      return <ThinkingBlock text={block.text} />;
-    case 'tool_call':
-      return <ToolCallBlock block={block} />;
-    case 'tool_result':
-      return <ToolResultBlock block={block} />;
+      return (
+        <ThinkingBlock
+          text={block.text}
+          startedAt={block.startedAt}
+          endedAt={block.endedAt}
+          active={streaming}
+        />
+      );
     case 'diff':
-      return <FileEditBlock path={block.path} diff={block.text} />;
+      return <FileEditBlock path={block.path} diff={block.text} kind={block.kind} />;
     case 'image':
       return (
         <img
@@ -314,10 +285,24 @@ function ContentBlockRenderer({ block, streaming }: { block: NodeContent; stream
       return <TerminalBlock command={block.command} output={block.output} />;
     case 'error':
       return <ErrorBlock message={block.message} suggestion={block.suggestion} />;
+    case 'compaction':
+      return (
+        <CompactionBlock
+          trigger={block.trigger}
+          preTokens={block.preTokens}
+          summary={block.summary}
+        />
+      );
+    case 'notice':
+      return <NoticeBlock level={block.level} text={block.text} />;
   }
 }
 
-/** 渲染一组 NodeContent（历史回复与流式生成共用） */
+/**
+ * 渲染一组 NodeContent（历史回复与流式生成共用）
+ * 渲染前经 groupToolBlocks 配对：tool_call + tool_result 合并为一个卡片，
+ * 孤儿 tool_result（无对应 call）原样渲染兜底。
+ */
 export function ContentRenderer({
   content,
   streaming,
@@ -325,15 +310,23 @@ export function ContentRenderer({
   content: NodeContent[];
   streaming?: boolean;
 }) {
+  const renderBlocks = groupToolBlocks(content);
   return (
     <>
-      {content.map((block, i) => (
-        <ContentBlockRenderer
-          key={i}
-          block={block}
-          streaming={streaming && i === content.length - 1}
-        />
-      ))}
+      {renderBlocks.map((block, i) => {
+        const isLast = i === renderBlocks.length - 1;
+        if (block.type === 'tool-group') {
+          // 稳定 key：配对后位置不随 result 到达而漂移，避免卡片重挂载丢状态
+          return <ToolGroupBlock key={`tg-${block.call.toolId}`} group={block} />;
+        }
+        return (
+          <ContentBlockRenderer
+            key={`${block.type}-${i}`}
+            block={block}
+            streaming={streaming && isLast}
+          />
+        );
+      })}
     </>
   );
 }

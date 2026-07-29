@@ -6,7 +6,7 @@
  * api.ts 的 loadTree 是调用这些纯函数 + 读写 store 的薄壳。
  */
 import type { ConversationNode, NodeContent, SourceEvent } from '@qcqx/lattice-agent-protocol';
-import { isReadOnly, applyEventToContent } from '@qcqx/lattice-agent-protocol';
+import { isReadOnly, applyEventToContent, segmentsToDisplayText } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode } from './types';
 import { deriveTurnStatus } from './turnState';
 
@@ -25,7 +25,12 @@ export function buildTurnsFromNodes(nodes: ConversationNode[]): Map<string, Turn
       const assistantChildren = nodes.filter((n) => n.role === 'assistant' && n.parentId === un.id);
       const assistant =
         assistantChildren.find((n) => !isReadOnly(n.status)) ?? assistantChildren[0];
-      const userText = un.content?.find((c) => c.type === 'text')?.text ?? '';
+      // 回显用户可见形式：有结构化输入时用 segments 重建 displayText
+      //（content 存的是展开后文本，直接显示会把命令模板全文暴露给用户）
+      const segments = un.metadata?.promptSegments;
+      const userText = segments?.length
+        ? segmentsToDisplayText([...segments])
+        : (un.content?.find((c) => c.type === 'text')?.text ?? '');
 
       // 父 turn = 父 assistant 的父 user（user→assistant→user 链）
       let parentTurnId: string | null = null;

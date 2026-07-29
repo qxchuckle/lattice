@@ -5,6 +5,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useSnapshot } from 'valtio';
 import { ReactFlowProvider } from '@xyflow/react';
+import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 import { ConversationTreeCanvas } from './ConversationTreeCanvas';
 import { AgentInputPanel } from './AgentInputPanel';
 import { MonacoEditorPanel } from './MonacoEditorPanel';
@@ -29,13 +30,19 @@ export function WorkbenchPage() {
     }
   }, [snap.sessionId, snap.wsConnected, createSession]);
 
-  const handleSend = useCallback((message: string) => {
-    sendMessage(message);
-  }, [sendMessage]);
+  const handleSend = useCallback(
+    (message: string, segments?: PromptSegment[]) => {
+      sendMessage(message, segments);
+    },
+    [sendMessage],
+  );
 
-  const handleNodeClick = useCallback((nodeId: string) => {
-    switchHead(nodeId);
-  }, [switchHead]);
+  const handleNodeClick = useCallback(
+    (nodeId: string) => {
+      switchHead(nodeId);
+    },
+    [switchHead],
+  );
 
   const handleFork = useCallback(() => {
     const targetId = workbenchStore.selectedNodeId ?? workbenchStore.headNodeId;
@@ -49,37 +56,51 @@ export function WorkbenchPage() {
     openForkDialog(nodeId);
   }, []);
 
-  const handleMerge = useCallback((branchId: string, targetNodeId: string, mode: string, summary: string) => {
-    // 通过 WS 发送 merge 请求
-    sendMessage(`__merge__:${branchId}:${targetNodeId}:${mode}:${summary}`);
-  }, [sendMessage]);
+  const handleMerge = useCallback(
+    (branchId: string, targetNodeId: string, mode: string, summary: string) => {
+      // 通过 WS 发送 merge 请求
+      sendMessage(`__merge__:${branchId}:${targetNodeId}:${mode}:${summary}`);
+    },
+    [sendMessage],
+  );
 
-  const handleDeleteExecute = useCallback((ids: string[]) => {
-    // 通过 WS 发送删除请求
-    for (const id of ids) {
-      sendMessage(`__delete__:${id}`);
-    }
-    setDeleteIds([]);
-  }, [sendMessage]);
+  const handleDeleteExecute = useCallback(
+    (ids: string[]) => {
+      // 通过 WS 发送删除请求
+      for (const id of ids) {
+        sendMessage(`__delete__:${id}`);
+      }
+      setDeleteIds([]);
+    },
+    [sendMessage],
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', background: '#12121e' }}>
-      {/* 顶栏 */}
-      <div style={{
-        height: 40,
+    <div
+      style={{
         display: 'flex',
-        alignItems: 'center',
-        padding: '0 12px',
-        borderBottom: '1px solid #333',
-        gap: 12,
-        fontSize: 13,
-        color: '#ccc',
-        flexShrink: 0,
+        flexDirection: 'column',
+        height: '100vh',
+        width: '100%',
+        background: '#12121e',
       }}>
+      {/* 顶栏 */}
+      <div
+        style={{
+          height: 40,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 12px',
+          borderBottom: '1px solid #333',
+          gap: 12,
+          fontSize: 13,
+          color: '#ccc',
+          flexShrink: 0,
+        }}>
         <strong style={{ color: '#fff' }}>Lattice Workbench</strong>
         <span style={{ color: '#555' }}>|</span>
         <span style={{ color: '#888' }}>
-          {snap.tree ? snap.tree.title ?? snap.tree.id.slice(0, 8) : '未连接'}
+          {snap.tree ? (snap.tree.title ?? snap.tree.id.slice(0, 8)) : '未连接'}
         </span>
 
         {/* 布局切换 */}
@@ -89,12 +110,14 @@ export function WorkbenchPage() {
               key={m}
               onClick={() => setLayout(m)}
               style={{
-                padding: '3px 10px', fontSize: 11, border: '1px solid #444',
+                padding: '3px 10px',
+                fontSize: 11,
+                border: '1px solid #444',
                 background: layout === m ? '#1677ff' : 'transparent',
                 color: layout === m ? '#fff' : '#888',
-                borderRadius: 3, cursor: 'pointer',
-              }}
-            >
+                borderRadius: 3,
+                cursor: 'pointer',
+              }}>
               {m === 'tree' ? '🌳 Tree' : m === 'split' ? '◫ Split' : '📝 Code'}
             </button>
           ))}
@@ -119,7 +142,15 @@ export function WorkbenchPage() {
                   />
                 </ReactFlowProvider>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#555', fontSize: 14 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    color: '#555',
+                    fontSize: 14,
+                  }}>
                   {snap.wsConnected ? '发送消息开始对话...' : '正在连接 Agent...'}
                 </div>
               )}
@@ -131,7 +162,13 @@ export function WorkbenchPage() {
         {/* Split 模式：左树右编辑器 */}
         {layout === 'split' && (
           <>
-            <div style={{ width: '45%', display: 'flex', flexDirection: 'column', borderRight: '1px solid #333' }}>
+            <div
+              style={{
+                width: '45%',
+                display: 'flex',
+                flexDirection: 'column',
+                borderRight: '1px solid #333',
+              }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <ReactFlowProvider>
                   <ConversationTreeCanvas
@@ -158,7 +195,13 @@ export function WorkbenchPage() {
             <div style={{ flex: 1 }}>
               <MonacoEditorPanel />
             </div>
-            <div style={{ width: 280, borderLeft: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
+            <div
+              style={{
+                width: 280,
+                borderLeft: '1px solid #333',
+                display: 'flex',
+                flexDirection: 'column',
+              }}>
               <div style={{ flex: 1, position: 'relative' }}>
                 <ReactFlowProvider>
                   <ConversationTreeCanvas

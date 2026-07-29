@@ -246,6 +246,45 @@ describe('场景 9: 持久化重载一致性（新 SessionManager 从磁盘恢�
   });
 });
 
+describe('源内部压缩透传：compaction/notice 事件 → 内容块落盘 → reload 一致', () => {
+  it('compaction/notice 随流落盘 assistant 内容，不影响状态与 resume 链，重载后仍在', async () => {
+    const { baseDir, sm, state, calls, controller } = await setup();
+    state.emitCompaction = true;
+    controller.createSession('s10', 'mock', null);
+    controller.send('s10', '触发压缩的提问', { requestId: 'c1' }, noopHooks);
+    await flush(controller, 's10');
+    const tid = controller.getSession('s10')!.treeId!;
+    const asst = sm.getNodes(tid).find((n) => n.role === 'assistant' && n.parentId === 'c1')!;
+
+    const compaction = asst.content.find((c) => c.type === 'compaction');
+    expect(compaction, 'compaction 块落盘 assistant 内容').toBeTruthy();
+    expect((compaction as { trigger: string }).trigger).toBe('auto');
+    expect((compaction as { preTokens?: number }).preTokens).toBe(37418);
+    const notice = asst.content.find((c) => c.type === 'notice');
+    expect(notice, 'notice 块落盘').toBeTruthy();
+    expect(asst.status, '压缩/提示不改变节点状态（done 正常收尾）').toBeUndefined();
+
+    // 压缩后追问：resume 同一 session（压缩不改变 resume 语义）
+    state.emitCompaction = false;
+    controller.send('s10', '压缩后追问', { requestId: 'c2', parentNodeId: 'c1' }, noopHooks);
+    await flush(controller, 's10');
+    expect(calls.prompts.at(-1)!.sessionId, '压缩后仍 resume 原 session').toBe('sess-1');
+
+    // 重载：压缩标记持久化（live/reload 一致）
+    const sm2 = new SessionManager({ baseDir });
+    await sm2.loadTree(tid);
+    const reloaded = sm2.getNode(tid, asst.id)!;
+    expect(
+      reloaded.content.some((c) => c.type === 'compaction'),
+      '重载后 compaction 块仍在',
+    ).toBe(true);
+    expect(
+      reloaded.content.some((c) => c.type === 'notice'),
+      '重载后 notice 块仍在',
+    ).toBe(true);
+  });
+});
+
 describe('场景 10: 中止（abort 进行中的流）', () => {
   it('abort → interrupted + 部分内容保留', async () => {
     const { sm, state, controller } = await setup();

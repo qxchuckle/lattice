@@ -22,15 +22,27 @@ import {
   type AgentSourceInstance,
   type ConversationHooks,
 } from '@qcqx/lattice-agent';
-import type { ClientMessage, ServerMessage, PresenceState } from '@qcqx/lattice-agent-protocol';
+import type {
+  ClientMessage,
+  ServerMessage,
+  PresenceState,
+  ResourceListItem,
+  SourceResourceInfo,
+  SourceResourceQuery,
+} from '@qcqx/lattice-agent-protocol';
 import { isClientMessage } from '@qcqx/lattice-agent-protocol';
 import {
   isAuthEnabled,
   readWebAuth,
   getSessionsCacheDir,
   readLocalConfig,
+  getUsername,
+  listProjects,
 } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
+import { isPathSafe, resolveFilePath } from './shared';
+import { readFile, readdir } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 // ── 类型安全发送 ──
@@ -145,6 +157,19 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       agent = createLatticeAgent({
         storage: { baseDir: getSessionsCacheDir() },
         sources: sourcesInstance,
+        promptDeps: {
+          // 引用展开：spec 正文 / task PRD（后端安全解析路径，不接受前端传路径）；file 留 P2
+          resolveRef: async (refType, id) => {
+            if (refType === 'file') return null;
+            try {
+              const username = await getUsername();
+              const path = await resolveFilePath(refType === 'spec' ? 'spec' : 'prd', id, username);
+              return path ? await readFile(path, 'utf-8') : null;
+            } catch {
+              return null;
+            }
+          },
+        },
       });
     }
     return agent;
@@ -331,6 +356,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
               {
                 parentNodeId: msg.parentNodeId,
                 branchId: msg.branchId,
+                segments: msg.segments,
                 requestId,
                 model: msg.model,
                 thinkingLevel: msg.thinkingLevel,
@@ -545,6 +571,7 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       sourceId: m.sourceId,
       contextWindow: m.contextWindow,
       maxOutputTokens: m.maxOutputTokens,
+      capabilities: m.capabilities, // vision 门控图片输入（能力由源提供）
       costFactor: m.costFactor,
       costLabel: m.costLabel,
       tuning: m.tuning,
@@ -562,6 +589,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           sourceId: id,
           contextWindow: 0,
           maxOutputTokens: 0,
+          // 自定义模型能力未知：保守关闭 vision（不开图片入口），其余按通用能力置 true
+          capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
           costFactor: undefined,
           costLabel: undefined,
           custom: true,
@@ -573,6 +602,100 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       }
     }
     return { models: items };
+  });
+
+  // 资源发现：本地（lattice 命令/skill）+ 源级（产品自带）聚合，壳层拿统一列表渲染菜单
+  app.get('/api/agent/resources', async (req) => {
+    const q = req.query as { sourceId?: string; cwd?: string; kinds?: string };
+    const latticeAgent = await getAgent();
+    const kinds = q.kinds
+      ? (q.kinds.split(',').filter(Boolean) as SourceResourceQuery['kinds'])
+      : undefined;
+    // cwd 是客户端传入路径：必须 isPathSafe 守卫，不安全则忽略（退化为仅全局/用户级资源）
+    let cwd: string | undefined;
+    if (q.cwd) {
+      const username = await getUsername();
+      if (await isPathSafe(q.cwd, username)) cwd = q.cwd;
+    }
+
+    const resources: ResourceListItem[] = [];
+    // 本地：重扫（含项目级 <cwd>/.lattice/commands）后取列表
+    latticeAgent.workflow.loadLocalCommands(cwd);
+    for (const r of latticeAgent.workflow.listLocalResources()) {
+      if (kinds?.length && !kinds.includes(r.kind)) continue;
+      resources.push({ ...r, origin: 'local' });
+    }
+    // 源级：registry 聚合（未实现/失败的源 = []）
+    const query: SourceResourceQuery = { ...(cwd ? { cwd } : {}), ...(kinds ? { kinds } : {}) };
+    const result = await latticeAgent.sources.registry.listResources(q.sourceId, query);
+    if (Array.isArray(result)) {
+      for (const r of result) resources.push({ ...r, origin: 'source', sourceId: q.sourceId });
+    } else {
+      for (const [sid, list] of Object.entries(result)) {
+        for (const r of list as SourceResourceInfo[]) {
+          resources.push({ ...r, origin: 'source', sourceId: sid });
+        }
+      }
+    }
+    return { resources };
+  });
+
+  // @ 文件引用搜索：在全部注册项目范围内按文件名模糊匹配（浅层遍历，上限 20 条）
+  app.get('/api/agent/file-search', async (req) => {
+    const { q } = req.query as { q?: string };
+    const kw = (q ?? '').trim().toLowerCase();
+    if (!kw) return { files: [] };
+
+    const IGNORED = new Set([
+      'node_modules',
+      '.git',
+      'dist',
+      '.next',
+      '__pycache__',
+      '.pnpm-store',
+      'coverage',
+      'build',
+    ]);
+    const MAX_RESULTS = 20;
+    const MAX_DEPTH = 6;
+    const results: Array<{ path: string; name: string; root: string }> = [];
+
+    const projects = listProjects(await getUsername());
+    const roots: string[] = [];
+    for (const p of projects) {
+      try {
+        const paths = JSON.parse(p.local_path) as string[];
+        if (Array.isArray(paths)) roots.push(...paths.filter((x) => typeof x === 'string'));
+      } catch {
+        /* 脏数据跳过 */
+      }
+    }
+
+    const walk = async (dir: string, root: string, depth: number): Promise<void> => {
+      if (results.length >= MAX_RESULTS || depth > MAX_DEPTH) return;
+      let entries;
+      try {
+        entries = await readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (results.length >= MAX_RESULTS) return;
+        if (entry.name.startsWith('.') || IGNORED.has(entry.name)) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full, root, depth + 1);
+        } else if (entry.name.toLowerCase().includes(kw)) {
+          results.push({ path: full, name: entry.name, root: relative(root, full) });
+        }
+      }
+    };
+
+    for (const root of roots) {
+      if (results.length >= MAX_RESULTS) break;
+      await walk(root, root, 0);
+    }
+    return { files: results };
   });
 
   // 获取对话树（含中断检测）

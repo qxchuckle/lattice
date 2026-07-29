@@ -4,6 +4,7 @@
 import type { ModelInfo } from './models.js';
 import type { AuthStatus } from './auth.js';
 import type { ToolInfo, ToolDefinition, InjectToolsConfig } from './tools.js';
+import type { SourceResourceInfo, SourceResourceQuery, SourceResourcesMap } from './resources.js';
 import type { ISource, SourceInfo } from './interface.js';
 
 /** 按源分组的工具映射 */
@@ -22,6 +23,12 @@ export interface ISourceRegistry {
   listModels(sourceId?: string): ModelInfo[];
   getBuiltinTools(sourceId?: string): SourceToolsMap | ToolInfo[];
   checkAuth(sourceId?: string): AuthStatusMap | AuthStatus;
+
+  /** 聚合资源发现：指定源返回该源列表，不指定返回按源分组映射（未实现/失败的源 = []） */
+  listResources(
+    sourceId?: string,
+    query?: SourceResourceQuery,
+  ): Promise<SourceResourcesMap | SourceResourceInfo[]>;
 
   injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void;
 

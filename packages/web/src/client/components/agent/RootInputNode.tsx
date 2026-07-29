@@ -79,7 +79,8 @@ function RootInputInner() {
         <ChatInputBox
           placeholder='输入消息开始对话...'
           canSubmit
-          onSubmit={(text) => submitFromNode(null, text)}
+          onSubmit={(text, segments) => submitFromNode(null, text, { segments })}
+          allowImages={activeModel?.capabilities?.vision === true}
           onFocusChange={setFocused}
           controls={
             <>

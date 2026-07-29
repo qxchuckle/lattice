@@ -11,7 +11,13 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    projects: ['packages/core', 'packages/cli', 'packages/agent', 'packages/web'],
+    projects: [
+      'packages/core',
+      'packages/cli',
+      'packages/agent',
+      'packages/agent-source',
+      'packages/web',
+    ],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**'],

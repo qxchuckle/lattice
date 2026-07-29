@@ -60,13 +60,14 @@ import {
 } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
+import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 
 // ── 提交消息 ──
 
 export function submitFromNode(
   parentTurnId: string | null,
   message: string,
-  opts?: { model?: string },
+  opts?: { model?: string; segments?: PromptSegment[] },
 ): string | null {
   if (!message.trim()) return null;
 
@@ -152,6 +153,7 @@ export function submitFromNode(
     type: 'session.send',
     sessionId: agentStore.sessionId,
     message: message.trim(),
+    segments: opts?.segments,
     parentNodeId: parentTurnId,
     requestId,
     model: modelId || undefined,

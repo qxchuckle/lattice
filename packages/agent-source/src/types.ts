@@ -16,6 +16,7 @@ export type {
   ToolResult,
   ToolInfo,
   InjectToolsConfig,
+  SourceToolSemantic,
   SourceCapabilities,
   SystemPromptPolicy,
   SystemPromptConfig,
@@ -26,6 +27,10 @@ export type {
   AuthStatusMap,
   ISourceRegistry,
   AgentSourceConfig,
+  SourceResourceKind,
+  SourceResourceInfo,
+  SourceResourceQuery,
+  SourceResourcesMap,
 } from './types/index.js';
 
 export { SourceError } from './types/index.js';

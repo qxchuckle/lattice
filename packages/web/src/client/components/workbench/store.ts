@@ -2,7 +2,12 @@
  * Workbench Store — 对话树 + Agent 会话状态管理
  */
 import { proxy } from 'valtio';
-import type { ConversationNode, ConversationBranch, ConversationTree, AgentEvent } from '@qcqx/lattice-agent';
+import type {
+  ConversationNode,
+  ConversationBranch,
+  ConversationTree,
+  AgentEvent,
+} from '@qcqx/lattice-agent';
 
 // ── 对话树状态 ──
 
@@ -46,13 +51,20 @@ export const workbenchStore = proxy({
   /** 当前激活 tab 索引 */
   activeTabIndex: -1,
   /** 文件树数据 */
-  fileTree: [] as { name: string; path: string; type: 'file' | 'directory'; children?: unknown[] }[],
+  fileTree: [] as {
+    name: string;
+    path: string;
+    type: 'file' | 'directory';
+    children?: unknown[];
+  }[],
   /** workspace 根路径列表 */
   workspaceRoots: [] as string[],
   /** 当前任务 ID（驱动 workspace） */
   activeTaskId: null as string | null,
   /** diff 视图 */
   diffView: null as { path: string; original: string; modified: string; nodeId: string } | null,
+  /** 编辑器当前选区（@selection 引用用；text 为空 = 无选区） */
+  editorSelection: null as { text: string; display: string } | null,
 
   // ── WebSocket ──
   wsConnected: false,
@@ -135,7 +147,9 @@ export function markDirty(path: string, dirty: boolean) {
   if (tab) tab.isDirty = dirty;
 }
 
-export function setFileTree(tree: { name: string; path: string; type: 'file' | 'directory'; children?: unknown[] }[]) {
+export function setFileTree(
+  tree: { name: string; path: string; type: 'file' | 'directory'; children?: unknown[] }[],
+) {
   workbenchStore.fileTree = tree;
 }
 

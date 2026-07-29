@@ -205,6 +205,21 @@ describe('applyStreamEvent（事件→turn）', () => {
     expect(t.status).toBe('error');
     expect(t.blocks.some((b) => b.type === 'error')).toBe(true);
   });
+
+  it('compaction 事件 → 块入 blocks，不改变流式状态（源压缩透传观察）', () => {
+    const t = turn({ id: 'u1', userMessage: 'q', status: 'streaming' });
+    applyStreamEvent(t, { type: 'compaction', trigger: 'auto', preTokens: 37418 });
+    expect(t.status, '压缩不终止流式').toBe('streaming');
+    expect(t.blocks[0]).toEqual({ type: 'compaction', trigger: 'auto', preTokens: 37418 });
+  });
+
+  it('notice 事件 → 块入 blocks，不影响状态（resume 降级警告非 error）', () => {
+    const t = turn({ id: 'u1', userMessage: 'q', status: 'streaming' });
+    applyStreamEvent(t, { type: 'notice', level: 'warning', message: '会话恢复失败' });
+    applyStreamEvent(t, { type: 'done' });
+    expect(t.status, 'notice 不改变终态投影').toBe('done');
+    expect(t.blocks[0]).toEqual({ type: 'notice', level: 'warning', text: '会话恢复失败' });
+  });
 });
 
 describe('getVisibleTurns / getVisibleChildIds（可见性）', () => {

@@ -47,6 +47,10 @@ export type {
   ConversationControllerDeps,
 } from './conversation/conversation-controller.js';
 
+// ── Prompt Composer（结构化输入展开） ──
+export { composePrompt } from './prompt/prompt-composer.js';
+export type { PromptComposerDeps, ComposedPrompt } from './prompt/prompt-composer.js';
+
 // ── Session Index ──
 export { SessionIndexManager } from './session/session-index.js';
 export type { SessionIndex, SessionIndexEntry } from './session/session-index.js';
@@ -77,7 +81,7 @@ export { ContextEngine } from './context/context-engine.js';
 export type { ContextEngineConfig, ContextSource } from './context/context-engine.js';
 
 // ── Workflow Engine ──
-export { WorkflowEngine } from './workflow/workflow-engine.js';
+export { WorkflowEngine, formatSkillsAppendix } from './workflow/workflow-engine.js';
 export type { WorkflowConfig, TriggerResult, SkillDefinition } from './workflow/workflow-engine.js';
 
 // ── 工厂函数 ──

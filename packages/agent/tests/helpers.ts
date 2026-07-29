@@ -23,6 +23,8 @@ export interface MockState {
   hangUntilAbort: boolean;
   /** 首 token 前就挂起（模拟未出首 token 即中止） */
   hangBeforeYield: boolean;
+  /** done 前追发 compaction+notice 事件（模拟源内部自动压缩/resume 降级警告） */
+  emitCompaction?: boolean;
 }
 
 export interface MockCalls {
@@ -50,6 +52,8 @@ export function makeMockSource(state: MockState, calls: MockCalls): ISource {
       sessionResume: true,
       mcpSupport: false,
       maxConcurrentSessions: 0,
+      compaction: 'none',
+      slashCommands: 'none',
     },
     systemPromptPolicy: { hasBuiltin: false, canOverride: true, canAppend: true },
     async init() {},
@@ -100,6 +104,10 @@ export function makeMockSource(state: MockState, calls: MockCalls): ISource {
           opts.signal?.addEventListener('abort', () => resolve());
         });
         throw new Error('aborted');
+      }
+      if (state.emitCompaction) {
+        yield { type: 'compaction', trigger: 'auto', preTokens: 37418 };
+        yield { type: 'notice', level: 'warning', message: '会话恢复失败，已新建会话继续' };
       }
       if (state.emitDone) {
         msgCounter++;

@@ -27,6 +27,8 @@ const SOURCE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'tool_result',
   'file_edit',
   'terminal',
+  'compaction',
+  'notice',
   'done',
   'error',
 ]);

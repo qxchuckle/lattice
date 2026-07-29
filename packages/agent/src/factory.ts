@@ -6,10 +6,15 @@ import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { EventBus } from './events/event-bus.js';
 import { SessionManager, type SessionStorage } from './session/session-manager.js';
 import { ConversationController } from './conversation/conversation-controller.js';
+import type { PromptComposerDeps } from './prompt/prompt-composer.js';
 import { ToolRegistry } from './tools/tool-registry.js';
 import { PermissionGuard } from './permission/permission-guard.js';
 import { ContextEngine, type ContextEngineConfig } from './context/context-engine.js';
-import { WorkflowEngine, type WorkflowConfig } from './workflow/workflow-engine.js';
+import {
+  WorkflowEngine,
+  formatSkillsAppendix,
+  type WorkflowConfig,
+} from './workflow/workflow-engine.js';
 
 export interface LatticeAgentDeps {
   storage: SessionStorage;
@@ -17,6 +22,9 @@ export interface LatticeAgentDeps {
   sources: AgentSourceInstance;
   contextConfig?: ContextEngineConfig;
   workflowConfig?: WorkflowConfig;
+  /** 结构化输入展开依赖：resolveRef 由壳层注入（spec/task 读取需 core）；
+   *  resolveCommandTemplate 缺省接 WorkflowEngine 本地命令模板 */
+  promptDeps?: PromptComposerDeps;
 }
 
 export interface LatticeAgent {
@@ -37,11 +45,37 @@ export interface LatticeAgent {
 export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
   const events = new EventBus();
   const session = new SessionManager(deps.storage);
-  const conversation = new ConversationController({ session, sources: deps.sources });
+  const workflow = new WorkflowEngine(events, deps.workflowConfig);
+  workflow.loadLocalCommands(); // 用户级命令模板；项目级由上层带 cwd 重扫
+  const conversation = new ConversationController({
+    session,
+    sources: deps.sources,
+    promptDeps: {
+      resolveCommandTemplate: (name) => workflow.getCommandTemplate(name),
+      ...deps.promptDeps,
+    },
+    // skills 可用清单注入（本地 + 源级去重合并）：模型知道有哪些 skill 可调用，正文按需加载
+    systemPromptAppendix: async (sourceId) => {
+      const skills = new Map<string, { name: string; description?: string }>();
+      for (const s of workflow.getSkills()) {
+        skills.set(s.name, { name: s.name, description: s.description });
+      }
+      // 源已自行注入 skills 清单（如 Pi buildSystemPrompt）时不重复拉取源级 skills，避免双重清单
+      const source = deps.sources.registry.getSource(sourceId);
+      if (!source?.capabilities.nativeSkillInjection) {
+        const sourceSkills = await deps.sources.registry.listResources(sourceId, {
+          kinds: ['skill'],
+        });
+        for (const r of Array.isArray(sourceSkills) ? sourceSkills : []) {
+          if (!skills.has(r.name)) skills.set(r.name, { name: r.name, description: r.description });
+        }
+      }
+      return formatSkillsAppendix([...skills.values()]);
+    },
+  });
   const tools = new ToolRegistry(events);
   const permission = new PermissionGuard(events);
   const context = new ContextEngine(events, deps.contextConfig);
-  const workflow = new WorkflowEngine(events, deps.workflowConfig);
 
   return {
     events,

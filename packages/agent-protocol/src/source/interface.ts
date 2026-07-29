@@ -9,6 +9,7 @@ import type { ContentBlock } from './messages.js';
 import type { ModelInfo } from './models.js';
 import type { AuthRequirement, AuthStatus } from './auth.js';
 import type { ToolInfo, ToolDefinition, InjectToolsConfig } from './tools.js';
+import type { SourceResourceInfo, SourceResourceQuery } from './resources.js';
 
 // ── 源能力声明 ──
 
@@ -24,6 +25,13 @@ export interface SourceCapabilities {
   mcpSupport: boolean;
   /** 并发会话上限（0 = 无限制） */
   maxConcurrentSessions: number;
+  /** 源内部上下文压缩：auto=源自动压缩并发 compaction 事件；none=源不压缩（溢出即报错） */
+  compaction: 'auto' | 'none';
+  /** 源是否原生解释 prompt 文本中的 slash 命令：
+   *  native=透传 '/cmd args' 由源展开；none=编排层必须自行展开 */
+  slashCommands: 'native' | 'none';
+  /** 源是否已自行将 skills 可用清单注入 system prompt（true 时编排层不再重复注入，避免双重清单） */
+  nativeSkillInjection?: boolean;
 }
 
 // ── SystemPrompt 策略 ──
@@ -79,6 +87,12 @@ export interface ISource {
   // 工具
   getBuiltinTools(): ToolInfo[];
   injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void;
+
+  /** 枚举源环境可发现资源（命令/子 agent/skill/rules）。
+   *  实现手段（SDK API / 产品约定目录扫描）是源层私有知识；
+   *  query.cwd 缺省 = 用户主目录（仅全局/用户级资源）；
+   *  失败返回 []，不抛错；未实现 = 源无可发现资源 */
+  listResources?(query?: SourceResourceQuery): Promise<SourceResourceInfo[]>;
 
   // 核心交互：传 sessionId 继续对话，传 null 新建（done 事件返回新 sessionId）
   prompt(

@@ -112,6 +112,22 @@ describe('ConversationNodeComponent 状态呈现', () => {
     expect(screen.queryByText('已删除')).toBeNull();
     expect(screen.queryByText('你好')).toBeNull();
   });
+
+  it('compaction/notice 块：渲染压缩标记与警告，不影响 done 状态呈现', () => {
+    renderNode(
+      makeTurn('done', [
+        { type: 'compaction', trigger: 'auto', preTokens: 37418 },
+        { type: 'notice', level: 'warning', text: '会话恢复失败，已新建会话继续' },
+        { type: 'text', text: '压缩后回答' },
+      ]),
+    );
+    expect(screen.getByText(/上下文已压缩/)).toBeInTheDocument();
+    expect(screen.getByText(/压缩前 37k tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/会话恢复失败/)).toBeInTheDocument();
+    expect(screen.getByText('压缩后回答')).toBeInTheDocument();
+    // 非 error 块 → 不出现重试按钮
+    noBtn(/重试/);
+  });
 });
 
 describe('ConversationNodeComponent 操作调用', () => {

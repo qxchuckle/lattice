@@ -72,6 +72,15 @@ describe('deriveTurnStatus 视图投影优先级', () => {
   it('interrupted 空内容（首 token 前中止）→ interrupted', () => {
     expect(deriveTurnStatus(user, makeNode('interrupted', []))).toBe('interrupted');
   });
+
+  it('compaction/notice 块不触发 error 投影（非 error 块）', () => {
+    const blocks: NodeContent[] = [
+      { type: 'text', text: 'hi' },
+      { type: 'compaction', trigger: 'auto', preTokens: 1000 },
+      { type: 'notice', level: 'warning', text: '会话恢复失败' },
+    ];
+    expect(deriveTurnStatus(user, makeNode(undefined, blocks))).toBe('done');
+  });
 });
 
 describe('共享状态机（protocol/node-state）', () => {

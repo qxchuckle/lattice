@@ -29,15 +29,18 @@ export interface ModelTuning {
   thinking?: ModelParamSpec<string> & { toggleable?: boolean };
 }
 
+/** 模型能力声明（源提供；vision 门控图片输入等 UI 行为） */
+export interface ModelCapabilities {
+  streaming: boolean;
+  toolCalling: boolean;
+  vision: boolean;
+  reasoning: boolean;
+}
+
 export interface ModelInfo {
   id: string;
   displayName: string;
-  capabilities: {
-    streaming: boolean;
-    toolCalling: boolean;
-    vision: boolean;
-    reasoning: boolean;
-  };
+  capabilities: ModelCapabilities;
   contextWindow: number;
   maxOutputTokens: number;
   costFactor?: number;
