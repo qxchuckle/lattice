@@ -292,3 +292,58 @@ describe('sync.handlePresenceState', () => {
     expect(agentStore.peers.length).toBe(0);
   });
 });
+
+describe('sync 会话切换竞态防护（treeId 守卫贯穿全部入口）', () => {
+  beforeEach(() => {
+    resetLastAppliedRev();
+    agentStore.turns.clear();
+    agentStore.peers = [];
+  });
+
+  /** 构造指定 treeId 的快照（snapshot() 默认 treeId=TREE，竞态测试需自定义） */
+  const snapFor = (
+    treeId: string,
+    nodes: ConversationNode[],
+    rev: number,
+  ): TreeSnapshotMessage => ({
+    type: 'tree.snapshot',
+    treeId,
+    rev,
+    nodes,
+    branches: [],
+    headNodeId: null,
+  });
+
+  it('切树后旧树的快照/流式/中止/presence 全部被丢弃', () => {
+    agentStore.treeId = 'Y';
+
+    // 旧树 X 的在途消息迟到 → 不得污染当前树 Y
+    applySnapshot(snapFor('X', [userNode('old')], 99), true);
+    handleStreamEvent({
+      type: 'stream.event',
+      treeId: 'X',
+      requestId: 'old',
+      event: { type: 'text', content: 'x' },
+    });
+    handleStreamAborted({ type: 'stream.aborted', treeId: 'X', requestId: 'old', reason: 'undo' });
+    handlePresenceState({
+      type: 'presence.state',
+      treeId: 'X',
+      peers: [{ connectionId: 'c', clientKind: 'web' }],
+    });
+
+    expect(agentStore.turns.size, '旧树快照/流式不写入当前树').toBe(0);
+    expect(agentStore.peers.length, '旧树 presence 不写入').toBe(0);
+  });
+
+  it('当前树的消息正常应用（守卫按当前 treeId 动态判定）', () => {
+    agentStore.treeId = 'Y';
+    applySnapshot(snapFor('Y', [userNode('y1')], 1), true);
+    expect(agentStore.turns.has('y1'), '当前树快照应用').toBe(true);
+
+    // 切到 X 后 Y 的消息变“旧树”被丢弃
+    agentStore.treeId = 'X';
+    applySnapshot(snapFor('Y', [userNode('y2')], 2), true);
+    expect(agentStore.turns.has('y2'), '切走后旧树快照被丢弃').toBe(false);
+  });
+});
