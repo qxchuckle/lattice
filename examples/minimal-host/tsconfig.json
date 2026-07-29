@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@qcqx/lattice-agent-protocol": [
+        "../../packages/agent-protocol/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-protocol/*": [
+        "../../packages/agent-protocol/src/*"
+      ],
+      "@qcqx/lattice-agent-source": [
+        "../../packages/agent-source/src/index.ts"
+      ],
+      "@qcqx/lattice-agent-source/testing": [
+        "../../packages/agent-source/src/testing/index.ts"
+      ],
+      "@qcqx/lattice-agent-pipeline": [
+        "../../packages/agent-pipeline/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "tests"
+  ]
+}

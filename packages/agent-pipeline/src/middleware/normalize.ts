@@ -1,0 +1,101 @@
+/**
+ * normalize 相位：把宿主意图归一化为源可接受形态
+ *
+ * 只做「无损或明示降级」的整形，绝不静默丢信息：
+ * - 源不接受图片（prompt.images=false）→ 图片块替换为占位文本 + onNotice 回调
+ * - systemPrompt 请求按能力落到正确通道（append/override/内联兜底）
+ *
+ * middleware 无法自行发事件（事件流在其后才产生），故降级提示走 onNotice 回调，
+ * 由宿主决定呈现方式（UI toast / notice 事件 / 日志）。
+ */
+import type {
+  ContentBlock,
+  SourceCapabilities,
+  SourceMiddleware,
+  PromptPayload,
+} from '@qcqx/lattice-agent-protocol';
+import { planSystemPrompt, type SystemPromptRequest } from '../strategies/system-prompt.js';
+import { PipelineError } from '../errors.js';
+
+export interface PipelineNotice {
+  code: 'images_dropped' | 'system_prompt_inlined' | 'tools_dropped' | 'fork_approximated';
+  message: string;
+}
+
+export interface NormalizeOptions {
+  capabilities: SourceCapabilities;
+  /** 降级提示回调（宿主决定呈现方式） */
+  onNotice?: (notice: PipelineNotice) => void;
+}
+
+/** 图片块 → 占位文本（源不支持图片时；诚实告知模型有图但读不到） */
+function stripImages(message: ContentBlock[]): { blocks: ContentBlock[]; dropped: number } {
+  let dropped = 0;
+  const blocks: ContentBlock[] = [];
+  for (const block of message) {
+    if (block.type !== 'image') {
+      blocks.push(block);
+      continue;
+    }
+    dropped += 1;
+    blocks.push({ type: 'text', text: '[图片：当前源不支持图片输入，已省略]' });
+  }
+  return { blocks, dropped };
+}
+
+/**
+ * 创建 normalize middleware。
+ * systemPrompt 的 inline-fallback 会把附加指令并入消息首块（源不支持 append/override 时）。
+ */
+export function createNormalizeMiddleware(options: NormalizeOptions): SourceMiddleware {
+  const { capabilities: caps, onNotice } = options;
+  return {
+    name: 'normalize',
+    phase: 'normalize',
+    async transformPrompt(payload: PromptPayload): Promise<PromptPayload> {
+      let message = payload.message;
+      let opts = payload.opts;
+
+      if (!caps.prompt.images) {
+        const { blocks, dropped } = stripImages(message);
+        if (dropped > 0) {
+          message = blocks;
+          onNotice?.({
+            code: 'images_dropped',
+            message: `当前源不支持图片输入，已省略 ${dropped} 张图片`,
+          });
+        }
+      }
+
+      if (opts.systemPrompt) {
+        const req: SystemPromptRequest =
+          opts.systemPrompt.mode === 'append'
+            ? { kind: 'append', additional: opts.systemPrompt.additional }
+            : opts.systemPrompt.mode === 'override'
+              ? { kind: 'override', prompt: opts.systemPrompt.prompt }
+              : { kind: 'source-default' };
+        const plan = planSystemPrompt(caps.prompt.systemPrompt, req);
+        switch (plan.kind) {
+          case 'pass-through':
+            opts = { ...opts, systemPrompt: plan.config };
+            break;
+          case 'inline-fallback': {
+            const { systemPrompt: _dropped, ...rest } = opts;
+            opts = rest;
+            message = plan.text
+              ? [{ type: 'text', text: plan.text } as ContentBlock, ...message]
+              : message;
+            onNotice?.({ code: 'system_prompt_inlined', message: plan.notice });
+            break;
+          }
+          case 'reject':
+            throw PipelineError.unsupportedOption(plan.capabilityPath, plan.reason);
+        }
+      }
+
+      return message === payload.message && opts === payload.opts
+        ? payload
+        : { ...payload, message, opts };
+    },
+  };
+}

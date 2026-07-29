@@ -1,0 +1,22 @@
+{
+  "name": "@qcqx/lattice-example-minimal-host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "验收件：protocol + source + pipeline 三包 + 百行 session 管理 = 完整 agent host",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "@qcqx/lattice-agent-pipeline": "workspace:*",
+    "@qcqx/lattice-agent-protocol": "workspace:*",
+    "@qcqx/lattice-agent-source": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  }
+}

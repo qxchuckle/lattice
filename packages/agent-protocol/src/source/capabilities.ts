@@ -41,7 +41,9 @@ export interface SessionCapability {
 // ── prompt：提示词面能力 ──
 
 export interface SystemPromptCapability {
-  /** 源内置 system prompt：none=无内置 / readable=有且可读（driver 提供 getBuiltinSystemPrompt）/ opaque=有但不可读 */
+  /** 源内置 system prompt：none=无内置 / readable=有且可读 / opaque=有但不可读。
+   *  注：readable 的读取通道尚未进入 ISource 表面（当前无源声明 readable），
+   *  消费层按 opaque 同等对待——声明轴先立，通道待需求出现时再补。 */
   builtin: 'none' | 'readable' | 'opaque';
   override: boolean;
   append: boolean;
