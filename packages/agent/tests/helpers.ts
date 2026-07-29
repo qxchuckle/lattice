@@ -1,12 +1,12 @@
 /**
  * agent 测试共享工具
  *
- * 由 scripts/verify-*.mts 迁移而来：统一 mock source（可控 done/挂起/调用记录）、
- * noop hooks、mkdtemp 隔离的 setup、链式建树等公共能力。
+ * mock source 基于 agent-source 的 driver 形态 + defineSource 工厂（真实事件泵/守卫/握手），
+ * 不再手写 ISource——测试跑在与生产一致的链路上。
  *
  * mock source 行为约定：
- * - prompt 固定分两段 yield 文本 `回复[` + `<text>]`（用于验证连续 text 事件合并）
- * - emitDone=true 时发 done，sessionId 缺省为 `sess-<n>`（n 按 done 次数递增），
+ * - prompt 固定分两段 emit 文本 `回复[` + `<text>]`（用于验证连续 text 事件合并）
+ * - emitDone=true 时工厂发 done，sessionId 缺省为 `sess-<n>`（n 按轮次递增），
  *   sourceMessageId 为 `msg-<n>`
  * - forkSession 返回 `<sessionId>-fork<k>`（k 按 fork 次数递增）
  */
@@ -14,8 +14,16 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager, ConversationController } from '../src/index.js';
-import type { ConversationHooks, SourceEvent, AgentSourceInstance } from '../src/index.js';
-import type { ISource, ContentBlock } from '@qcqx/lattice-agent-protocol';
+import type { ConversationHooks, AgentSourceInstance } from '../src/index.js';
+import type { ISource, ContentBlock, PromptOpts } from '@qcqx/lattice-agent-protocol';
+import { defineSource } from '@qcqx/lattice-agent-source';
+import { createScriptedDriver } from '@qcqx/lattice-agent-source/testing';
+import type {
+  SourceDriver,
+  DriverSessionHandle,
+  DriverEmit,
+  DriverPromptOutcome,
+} from '@qcqx/lattice-agent-source';
 
 export interface MockState {
   emitDone: boolean;
@@ -41,97 +49,97 @@ export interface MockCalls {
 
 export function makeMockSource(state: MockState, calls: MockCalls): ISource {
   let msgCounter = 0;
-  return {
+  const base = createScriptedDriver({
     id: 'mock',
-    displayName: 'Mock',
-    version: '1.0.0',
-    modelPolicy: 'open',
     capabilities: {
-      executionMode: 'delegated',
-      builtinTools: [],
-      sessionResume: true,
-      mcpSupport: false,
-      maxConcurrentSessions: 0,
-      compaction: 'none',
-      slashCommands: 'none',
-    },
-    systemPromptPolicy: { hasBuiltin: false, canOverride: true, canAppend: true },
-    async init() {},
-    async dispose() {},
-    async listModels() {
-      return [];
-    },
-    getAuthRequirements() {
-      return [];
-    },
-    async checkAuth() {
-      return { status: 'authenticated' as const };
-    },
-    getBuiltinTools() {
-      return [];
-    },
-    injectTools() {},
-    async *prompt(
-      sessionId: string | null,
-      message: ContentBlock[],
-      opts: {
-        signal?: AbortSignal;
-        model?: string;
-        thinkingLevel?: string;
-        contextWindow?: number;
+      execution: { mode: 'delegated', contextOwnership: 'source' },
+      session: {
+        resume: true,
+        fork: { atMessage: true },
+        rename: true,
+        maxConcurrentSessions: 'unlimited',
       },
-    ): AsyncIterable<SourceEvent> {
+      prompt: {
+        images: false,
+        systemPrompt: { builtin: 'none', override: true, append: true },
+        slashCommands: false,
+        permissionModes: false,
+      },
+    },
+  });
+
+  const driver: SourceDriver = {
+    ...base,
+
+    async connect(sessionId: string | null): Promise<DriverSessionHandle> {
+      // 无状态语义：真实会话 ID 由 prompt 回填（对齐 Qoder 形态）
+      const id = sessionId ?? 'pending';
+      return {
+        id,
+        abort: () => {
+          calls.aborts.push(id);
+        },
+      };
+    },
+
+    async prompt(
+      session: DriverSessionHandle,
+      message: ContentBlock[],
+      opts: PromptOpts,
+      emit: DriverEmit,
+    ): Promise<DriverPromptOutcome> {
       const text = (message[0] as { text?: string })?.text ?? '';
+      const incoming = session.id === 'pending' ? null : session.id;
       calls.prompts.push({
-        sessionId,
+        sessionId: incoming,
         text,
         model: opts.model,
         thinkingLevel: opts.thinkingLevel,
         contextWindow: opts.contextWindow,
       });
+
+      const waitAbort = () =>
+        new Promise<void>((resolve) => {
+          if (opts.signal?.aborted) return resolve();
+          opts.signal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+
       if (state.hangBeforeYield) {
-        await new Promise<void>((resolve) => {
-          if (opts.signal?.aborted) return resolve();
-          opts.signal?.addEventListener('abort', () => resolve());
-        });
-        throw new Error('aborted');
+        await waitAbort();
+        // 中止是正常结局（driver 铁律）：不抛错，返回已知会话
+        return { sessionId: incoming ?? undefined };
       }
-      yield { type: 'text', content: '回复[' };
-      yield { type: 'text', content: `${text}]` };
+      emit({ type: 'text', content: '回复[' });
+      emit({ type: 'text', content: `${text}]` });
       if (state.hangUntilAbort) {
-        await new Promise<void>((resolve) => {
-          if (opts.signal?.aborted) return resolve();
-          opts.signal?.addEventListener('abort', () => resolve());
-        });
-        throw new Error('aborted');
+        await waitAbort();
+        return { sessionId: incoming ?? undefined };
       }
       if (state.emitCompaction) {
-        yield { type: 'compaction', trigger: 'auto', preTokens: 37418 };
-        yield { type: 'notice', level: 'warning', message: '会话恢复失败，已新建会话继续' };
+        emit({ type: 'compaction', trigger: 'auto', preTokens: 37418 });
+        emit({ type: 'notice', level: 'warning', message: '会话恢复失败，已新建会话继续' });
       }
-      if (state.emitDone) {
-        msgCounter++;
-        yield {
-          type: 'done',
-          sessionId: sessionId ?? `sess-${msgCounter}`,
-          sourceMessageId: `msg-${msgCounter}`,
-          usage: { input: 100, output: 50, total: 150 },
-        };
+      if (!state.emitDone) {
+        // 无 done 语义：流未正常结束（模拟源异常断流）
+        throw new Error('stream ended without done');
       }
+      msgCounter++;
+      return {
+        sessionId: incoming ?? `sess-${msgCounter}`,
+        sourceMessageId: `msg-${msgCounter}`,
+        usage: { input: 100, output: 50, total: 150 },
+      };
     },
-    abort(sessionId: string) {
-      calls.aborts.push(sessionId);
-    },
-    async destroySession() {},
-    isSessionAlive() {
-      return true;
-    },
-    async forkSession(sessionId: string, atMessage?: string) {
+
+    async forkNative(sessionId: string, atMessage?: string) {
       calls.forks.push({ sessionId, atMessage });
       return `${sessionId}-fork${calls.forks.length}`;
     },
-    async renameSession() {},
-  } as unknown as ISource;
+
+    async renameNative() {},
+  };
+
+  return defineSource(driver);
 }
 
 export const noopHooks: ConversationHooks = {
@@ -156,8 +164,12 @@ export async function setup(emitDone = true): Promise<TestContext> {
   const state: MockState = { emitDone, hangUntilAbort: false, hangBeforeYield: false };
   const calls: MockCalls = { prompts: [], forks: [], aborts: [] };
   const source = makeMockSource(state, calls);
+  await source.init();
   const sources = {
-    registry: { getSource: (id: string) => (id === 'mock' ? source : undefined) },
+    registry: {
+      getSource: (id: string) => (id === 'mock' ? source : undefined),
+      getManifest: () => undefined,
+    },
   } as unknown as AgentSourceInstance;
   const controller = new ConversationController({ session: sm, sources });
   return { baseDir, sm, state, calls, controller };

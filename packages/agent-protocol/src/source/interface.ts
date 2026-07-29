@@ -1,52 +1,43 @@
 /**
- * 源接口 + 能力声明 + SystemPrompt 策略
+ * 源接口（核心契约）— ISource 最终表面（设计轴十三 D5 总账）
  *
- * 对齐主流 Agent 模型：无显式 createSession，
- * prompt 传 sessionId 则继续，传 null 则新建。
+ * 原子化铁律：ISource 只提供原子操作；组合行为（retry=fork+prompt、continue、undo 树操作）
+ * 永远在消费层。能力差异走三层机制：声明（capabilities）→ 类型（策略表）→ 错误（兜底）。
+ *
+ * 相比旧版删除的表面（去向）：
+ * - abort(sessionId)        → PromptOpts.signal 是唯一取消真相（driver 内部映射 SDK abort）
+ * - injectTools(...)        → SessionToolsConfig 随 prompt 会话建立传入（消灭源级可变状态）
+ * - getBuiltinTools()       → capabilities.tools.builtin（声明即数据）
+ * - isSessionAlive()        → 句柄状态是 driver 内部事
+ * - systemPromptPolicy 字段 → capabilities.prompt.systemPrompt
+ * - modelPolicy 字段        → capabilities.models.policy
+ *
+ * 无显式 createSession：prompt 传 sessionId 继续，传 null 新建（PromptResult 返回新 ID）。
  */
-import type { SourceEvent } from './events.js';
+import type { SourceEventStream } from './event-stream.js';
 import type { ContentBlock } from './messages.js';
 import type { ModelInfo } from './models.js';
-import type { AuthRequirement, AuthStatus } from './auth.js';
-import type { ToolInfo, ToolDefinition, InjectToolsConfig } from './tools.js';
+import type { AuthStatus } from './auth.js';
+import type { ToolDefinition } from './tools.js';
 import type { SourceResourceInfo, SourceResourceQuery } from './resources.js';
+import type { SourceManifest, ResolvedManifest } from './manifest.js';
+import type { PermissionRequestHandler } from './permission.js';
 
-// ── 源能力声明 ──
-
-export interface SourceCapabilities {
-  /** local: 源只跑 loop，上层提供工具/上下文/权限（Pi）
-   *  delegated: 源自己跑完整 loop（Qoder/CC） */
-  executionMode: 'local' | 'delegated';
-  /** 源内置的工具名列表 */
-  builtinTools: string[];
-  /** 是否支持会话恢复（resume） */
-  sessionResume: boolean;
-  /** 能否注入 MCP 工具 */
-  mcpSupport: boolean;
-  /** 并发会话上限（0 = 无限制） */
-  maxConcurrentSessions: number;
-  /** 源内部上下文压缩：auto=源自动压缩并发 compaction 事件；none=源不压缩（溢出即报错） */
-  compaction: 'auto' | 'none';
-  /** 源是否原生解释 prompt 文本中的 slash 命令：
-   *  native=透传 '/cmd args' 由源展开；none=编排层必须自行展开 */
-  slashCommands: 'native' | 'none';
-  /** 源是否已自行将 skills 可用清单注入 system prompt（true 时编排层不再重复注入，避免双重清单） */
-  nativeSkillInjection?: boolean;
-}
-
-// ── SystemPrompt 策略 ──
-
-export interface SystemPromptPolicy {
-  hasBuiltin: boolean;
-  canOverride: boolean;
-  canAppend: boolean;
-  getBuiltin?(): Promise<string>;
-}
+// ── SystemPrompt 配置（prompt 期传入；能力门槛见 capabilities.prompt.systemPrompt） ──
 
 export type SystemPromptConfig =
   | { mode: 'source-default' }
   | { mode: 'override'; prompt: string }
   | { mode: 'append'; additional: string };
+
+// ── 会话工具装配（取代源级 injectTools 可变状态） ──
+
+/** 宿主工具随会话建立装配：仅在该源会话生效，跨会话/跨宿主互不污染 */
+export interface SessionToolsConfig {
+  tools: ToolDefinition[];
+  /** 同名时是否覆盖源内置工具 */
+  override?: boolean;
+}
 
 // ── Prompt 配置 ──
 
@@ -58,71 +49,64 @@ export interface PromptOpts {
   thinkingLevel?: string;
   /** 上下文窗口 tokens（取值由模型 tuning 规格约束） */
   contextWindow?: number;
+  /** 唯一取消真相：中止本次 prompt（在途流终止并发 done/error 收尾） */
   signal?: AbortSignal;
+  /** 宿主工具装配（会话首次建立时生效；对已存在会话，新增工具是否生效由源语义决定） */
+  tools?: SessionToolsConfig;
+  /** 权限模式（取值由 capabilities.prompt.permissionModes.available 约束） */
+  permissionMode?: string;
+  /** 反向权限问答通道；缺省 → driver 按 permissionModes.default 策略执行 */
+  onPermissionRequest?: PermissionRequestHandler;
 }
 
-// ── 源接口（核心契约） ──
+// ── 源接口 ──
 
 export interface ISource {
+  /** 源 ID（LatticeSourceMap 声明合并的 key） */
   readonly id: string;
-  readonly displayName: string;
-  readonly version: string;
-  /** catalog=只能从列表选 / open=任意字符串 / hybrid=推荐+自定义 */
-  readonly modelPolicy: 'catalog' | 'open' | 'hybrid';
-  readonly capabilities: SourceCapabilities;
-  readonly systemPromptPolicy: SystemPromptPolicy;
 
   // 生命周期
   init(config?: Record<string, unknown>): Promise<void>;
   dispose(): Promise<void>;
 
-  // 模型发现
+  // 声明与握手（信任链前半段）
+  /** 静态自述，无 I/O：info + declared capabilities */
+  describe(): SourceManifest;
+  /** 实探握手：SDK/CLI 版本、auth、（ACP）initialize；失败不抛错，落 available:false */
+  handshake(): Promise<ResolvedManifest>;
+
+  // 动态通道（快照之外的权威事实）
   listModels(): Promise<ModelInfo[]>;
-
-  // 认证
-  getAuthRequirements(): AuthRequirement[];
   checkAuth(): Promise<AuthStatus>;
-  getAuthConfigPath?(): string;
 
-  // 工具
-  getBuiltinTools(): ToolInfo[];
-  injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void;
+  /** 枚举源环境可发现资源（command/agent/skill/rule）。
+   *  实现手段是源层私有知识；query.cwd 缺省 = 用户主目录；
+   *  失败返回 []，不抛错；capabilities.resources=false 的源恒返 [] */
+  listResources(query?: SourceResourceQuery): Promise<SourceResourceInfo[]>;
 
-  /** 枚举源环境可发现资源（命令/子 agent/skill/rules）。
-   *  实现手段（SDK API / 产品约定目录扫描）是源层私有知识；
-   *  query.cwd 缺省 = 用户主目录（仅全局/用户级资源）；
-   *  失败返回 []，不抛错；未实现 = 源无可发现资源 */
-  listResources?(query?: SourceResourceQuery): Promise<SourceResourceInfo[]>;
+  // 核心交互：传 sessionId 继续对话，传 null 新建
+  prompt(sessionId: string | null, message: ContentBlock[], opts?: PromptOpts): SourceEventStream;
 
-  // 核心交互：传 sessionId 继续对话，传 null 新建（done 事件返回新 sessionId）
-  prompt(
-    sessionId: string | null,
-    message: ContentBlock[],
-    opts?: PromptOpts,
-  ): AsyncIterable<SourceEvent>;
-
-  // 会话管理
-  abort(sessionId: string): void;
-  destroySession(sessionId: string): Promise<void>;
-  isSessionAlive(sessionId: string): boolean;
-
-  // 分支：从已有 session 分叉，返回新 sessionId
+  // 会话原子操作（能力缺口时抛 unsupported_operation / unsupported_option，纵深防御）
   forkSession(sessionId: string, atMessage?: string): Promise<string>;
-
-  // 重命名 session：同步标题到源内部存储
   renameSession(sessionId: string, title: string): Promise<void>;
+  destroySession(sessionId: string): Promise<void>;
 }
 
-// ── 源描述信息（聚合查询用） ──
+// ── 声明合并源表（typed getSource：源包各自 merge 注入，源 ID 编译期收紧） ──
 
-export interface SourceInfo {
-  id: string;
-  displayName: string;
-  version: string;
-  modelPolicy: 'catalog' | 'open' | 'hybrid';
-  capabilities: SourceCapabilities;
-  available: boolean;
-  authStatus?: AuthStatus;
-  builtinToolCount: number;
-  modelCount: number;
-}
+/**
+ * @example 源包内声明合并：
+ * ```ts
+ * declare module '@qcqx/lattice-agent-protocol' {
+ *   interface LatticeSourceMap { pi: PiSource }
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface LatticeSourceMap {}
+
+/** 已注册源 ID（无声明合并时退化为 string） */
+export type KnownSourceId = keyof LatticeSourceMap extends never
+  ? string
+  : keyof LatticeSourceMap & string;

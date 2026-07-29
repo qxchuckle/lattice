@@ -6,7 +6,11 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import type { SourceResourceInfo, SourceResourceQuery, SourceResourceKind } from '../types.js';
+import type {
+  SourceResourceInfo,
+  SourceResourceQuery,
+  SourceResourceKind,
+} from '@qcqx/lattice-agent-protocol';
 
 type Scope = NonNullable<SourceResourceInfo['scope']>;
 

@@ -8,7 +8,7 @@ import { proxy, useSnapshot } from 'valtio';
 import { Popover } from 'antd';
 import { DatabaseOutlined } from '@ant-design/icons';
 import type { ModelListItem, PromptSegment } from '@qcqx/lattice-agent-protocol';
-import { computeNodeCapabilities } from '@qcqx/lattice-agent-protocol';
+import { projectNodeCapabilities } from '@qcqx/lattice-agent-protocol';
 import { fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip } from './ChatInputBar';
 import { MISSING_TURN } from './store';
@@ -62,7 +62,7 @@ function ConversationNodeInner({ data }: NodeProps) {
   const width = ui?.width ?? 340;
   const height = ui?.height ?? 260;
   // 能力投影（protocol 单一真相）：按钮/输入区的可用性一律从 caps 读，禁止组件内推导
-  const caps = computeNodeCapabilities(turn?.status ?? 'done');
+  const caps = projectNodeCapabilities(turn?.status ?? 'done');
   // 以下仅作样式映射（边框/配色/占位），不参与交互入口判断
   const isStreaming = turn?.status === 'streaming';
   const isError = turn?.status === 'error';

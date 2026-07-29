@@ -37,7 +37,7 @@ export function DeleteConfirmDialog({ nodeIds, onConfirm, onCancel }: Props) {
           {nodesToDelete.map((n) => (
             <div key={n.id} style={{ fontSize: 12, color: '#888', padding: '2px 0' }}>
               · {n.role}:{' '}
-              {n.content[0] && 'text' in n.content[0]
+              {n.content[0] && 'text' in n.content[0] && n.content[0].text
                 ? n.content[0].text.slice(0, 50)
                 : n.id.slice(0, 12)}
             </div>

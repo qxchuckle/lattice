@@ -1,20 +1,27 @@
 import type { FastifyInstance } from 'fastify';
-import { getUsername, updateProjectMeta, unregisterProject, upsertRelationFile, deleteRelationFile, mergeProjects } from '@qcqx/lattice-core';
+import {
+  getUsername,
+  updateProjectMeta,
+  unregisterProject,
+  upsertRelationFile,
+  deleteRelationFile,
+  mergeProjects,
+} from '@qcqx/lattice-core';
 
 export function registerProjectManagementRoutes(app: FastifyInstance): void {
-  app.post<{ Params: { id: string }; Body: { name?: string; description?: string; groups?: string[]; tags?: string[] } }>(
-    '/api/projects/:id/update',
-    async (req) => {
-      const username = await getUsername();
-      const updates: Record<string, unknown> = {};
-      if (req.body.name !== undefined) updates.name = req.body.name;
-      if (req.body.description !== undefined) updates.description = req.body.description;
-      if (req.body.groups !== undefined) updates.groups = req.body.groups;
-      if (req.body.tags !== undefined) updates.tags = req.body.tags;
-      await updateProjectMeta(username, req.params.id, updates);
-      return { success: true };
-    },
-  );
+  app.post<{
+    Params: { id: string };
+    Body: { name?: string; description?: string; groups?: string[]; tags?: string[] };
+  }>('/api/projects/:id/update', async (req) => {
+    const username = await getUsername();
+    const updates: Record<string, unknown> = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.groups !== undefined) updates.groups = req.body.groups;
+    if (req.body.tags !== undefined) updates.tags = req.body.tags;
+    await updateProjectMeta(username, req.params.id, updates);
+    return { success: true };
+  });
 
   app.post<{ Params: { id: string } }>('/api/projects/:id/remove', async (req) => {
     const username = await getUsername();

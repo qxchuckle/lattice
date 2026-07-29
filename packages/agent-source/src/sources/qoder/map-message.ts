@@ -1,7 +1,7 @@
 /**
  * Qoder 消息 → SourceEvent 映射（纯函数）
  */
-import type { SourceEvent } from '../../types.js';
+import type { DriverEvent } from '../../driver.js';
 
 /** 从工具参数提取文件路径（Qoder 写入类工具用 `file_path` 参数） */
 function extractPath(args: Record<string, unknown>): string | undefined {
@@ -10,7 +10,7 @@ function extractPath(args: Record<string, unknown>): string | undefined {
 }
 
 /** 写入类工具调用 → 额外映射出 file_edit 事件（壳层凭此汇总改动文件，不认工具名） */
-function mapFileWrite(name: string, args: Record<string, unknown>): SourceEvent | null {
+function mapFileWrite(name: string, args: Record<string, unknown>): DriverEvent | null {
   const kind = name === 'Write' ? 'create' : name === 'Edit' ? 'edit' : null;
   const path = extractPath(args);
   if (!kind || !path) return null;
@@ -20,8 +20,8 @@ function mapFileWrite(name: string, args: Record<string, unknown>): SourceEvent 
 export function mapQoderMessage(
   msg: Record<string, unknown>,
   source: { id: string; name: string },
-): SourceEvent[] {
-  const events: SourceEvent[] = [];
+): DriverEvent[] {
+  const events: DriverEvent[] = [];
   const type = msg.type as string;
 
   if (type === 'assistant') {

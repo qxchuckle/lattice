@@ -2,7 +2,7 @@
  * Pi 事件 → SourceEvent 映射（纯函数）
  * 返回数组：一个 SDK 事件可映射出多个标准事件（如写入类工具调用 → tool_call + file_edit）
  */
-import type { SourceEvent } from '../../types.js';
+import type { DriverEvent } from '../../driver.js';
 
 /** 从工具参数提取文件路径（Pi 写入类工具统一用 `path` 参数） */
 function extractPath(args: Record<string, unknown>): string | undefined {
@@ -11,7 +11,7 @@ function extractPath(args: Record<string, unknown>): string | undefined {
 }
 
 /** 写入类工具调用 → 额外映射出 file_edit 事件（壳层凭此汇总改动文件，不认工具名） */
-function mapFileWrite(name: string, args: Record<string, unknown>): SourceEvent | null {
+function mapFileWrite(name: string, args: Record<string, unknown>): DriverEvent | null {
   const kind = name === 'write' ? 'create' : name === 'edit' ? 'edit' : null;
   const path = extractPath(args);
   if (!kind || !path) return null;
@@ -21,7 +21,7 @@ function mapFileWrite(name: string, args: Record<string, unknown>): SourceEvent 
 export function mapPiEvent(
   event: Record<string, unknown>,
   source: { id: string; name: string },
-): SourceEvent[] {
+): DriverEvent[] {
   const type = event.type as string;
 
   switch (type) {
@@ -42,7 +42,7 @@ export function mapPiEvent(
       };
       const name = e.toolCall?.name ?? 'unknown';
       const args = e.toolCall?.arguments ?? {};
-      const events: SourceEvent[] = [{ type: 'tool_call', id: e.toolCall?.id ?? '', name, args }];
+      const events: DriverEvent[] = [{ type: 'tool_call', id: e.toolCall?.id ?? '', name, args }];
       const fileEdit = mapFileWrite(name, args);
       if (fileEdit) events.push(fileEdit);
       return events;

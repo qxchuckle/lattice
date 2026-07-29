@@ -6,7 +6,11 @@
  * api.ts 的 loadTree 是调用这些纯函数 + 读写 store 的薄壳。
  */
 import type { ConversationNode, NodeContent, SourceEvent } from '@qcqx/lattice-agent-protocol';
-import { isReadOnly, applyEventToContent, segmentsToDisplayText } from '@qcqx/lattice-agent-protocol';
+import {
+  isReadOnly,
+  applyEventToContent,
+  segmentsToDisplayText,
+} from '@qcqx/lattice-agent-protocol';
 import type { TurnNode } from './types';
 import { deriveTurnStatus } from './turnState';
 

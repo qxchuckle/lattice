@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import type { SourceEvent } from '../src/types.js';
+import type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 
 // ── PiSource：mock pi SDK + homedir（避免污染真实 ~/.lattice） ──
 
@@ -110,8 +110,8 @@ vi.mock('@qoder-ai/qoder-agent-sdk', () => ({
   },
 }));
 
-import { PiSource } from '../src/sources/pi/index.js';
-import { QoderSource } from '../src/sources/qoder/index.js';
+import { createPiSource } from '../src/sources/pi/index.js';
+import { createQoderSource } from '../src/sources/qoder/index.js';
 
 async function collect(iter: AsyncIterable<SourceEvent>): Promise<SourceEvent[]> {
   const out: SourceEvent[] = [];
@@ -142,7 +142,7 @@ describe('PiSource 事件循环终止时序（agent_settled）', () => {
       },
       { type: 'agent_settled' },
     );
-    const source = new PiSource();
+    const source = createPiSource();
     await source.init();
     const events = await collect(source.prompt(null, [{ type: 'text', text: '你好' }]));
 
@@ -157,7 +157,7 @@ describe('PiSource 事件循环终止时序（agent_settled）', () => {
     piMocks.promptImpl = async () => {
       throw new Error('no model selected');
     };
-    const source = new PiSource();
+    const source = createPiSource();
     await source.init();
     const events = await collect(source.prompt(null, [{ type: 'text', text: '你好' }]));
     expect(events.some((e) => e.type === 'error' && e.message.includes('no model selected'))).toBe(
@@ -174,7 +174,7 @@ describe('QoderSource resume 42 降级', () => {
 
   it('resume 失败（错误码 42）→ 先发 notice warning，再降级新建完成对话', async () => {
     qoderMocks.failFirstResumeWith = 'CLI exited with code 42';
-    const source = new QoderSource();
+    const source = createQoderSource();
     await source.init();
     const events = await collect(source.prompt('stale-sess', [{ type: 'text', text: '继续' }]));
 
@@ -194,7 +194,7 @@ describe('QoderSource resume 42 降级', () => {
   });
 
   it('resume 正常 → 无 notice', async () => {
-    const source = new QoderSource();
+    const source = createQoderSource();
     await source.init();
     const events = await collect(source.prompt('live-sess', [{ type: 'text', text: '继续' }]));
     expect(events.some((e) => e.type === 'notice')).toBe(false);

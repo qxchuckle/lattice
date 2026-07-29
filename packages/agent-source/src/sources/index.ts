@@ -1,3 +1,4 @@
-export { PiSource } from './pi/index.js';
-export { QoderSource } from './qoder/index.js';
-export type { QoderSourceConfig } from './qoder/index.js';
+export { createPiSource } from './pi/index.js';
+export type { PiSourceOptions } from './pi/index.js';
+export { createQoderSource } from './qoder/index.js';
+export type { QoderSourceOptions } from './qoder/index.js';

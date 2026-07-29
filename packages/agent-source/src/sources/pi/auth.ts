@@ -1,7 +1,7 @@
 /**
  * Pi 认证检测 + 模型发现
  */
-import type { AuthStatus, ModelInfo } from '../../types.js';
+import type { AuthStatus, ModelInfo } from '@qcqx/lattice-agent-protocol';
 
 export async function checkPiAuth(): Promise<AuthStatus> {
   try {

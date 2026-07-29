@@ -6,6 +6,12 @@ import type { SourceErrorCode, SourceErrorContext } from '@qcqx/lattice-agent-pr
 
 export type { SourceErrorCode, SourceErrorContext };
 
+/** 错误构造器里只需身份两字段（对齐 protocol SourceInfo 子集） */
+interface SourceIdentity {
+  id: string;
+  displayName: string;
+}
+
 // ── 错误类（操作级 throw） ──
 
 const RETRYABLE_CODES: Set<SourceErrorCode> = new Set(['network', 'rate_limited', 'timeout']);
@@ -48,6 +54,54 @@ export class SourceError extends Error {
       sourceName,
       operation: 'init',
       suggestion: '请先调用 init() 或使用 createAgentSource() 工厂函数',
+    });
+  }
+
+  /** 能力缺口（该源版本永久性）——纵深防御：正确用法是查声明而非 catch */
+  static unsupportedOperation(
+    operation: SourceErrorContext['operation'],
+    capabilityPath: string,
+    source: SourceIdentity,
+  ): SourceError {
+    return new SourceError('unsupported_operation', `${source.displayName} 不支持 ${operation}`, {
+      sourceId: source.id,
+      sourceName: source.displayName,
+      operation,
+      suggestion: `查声明 capabilities.${capabilityPath}（调用前应据此门控）`,
+    });
+  }
+
+  /** 操作支持但选项不支持（如 fork 无 atMessage） */
+  static unsupportedOption(
+    operation: SourceErrorContext['operation'],
+    option: string,
+    capabilityPath: string,
+    source: SourceIdentity,
+  ): SourceError {
+    return new SourceError(
+      'unsupported_option',
+      `${source.displayName} 的 ${operation} 不支持选项 ${option}`,
+      {
+        sourceId: source.id,
+        sourceName: source.displayName,
+        operation,
+        suggestion: `查声明 capabilities.${capabilityPath}（选项粒度能力）`,
+      },
+    );
+  }
+
+  /** 时序前置条件不满足（状态非能力，声明层表达不了；消费层可排队重试） */
+  static invalidState(
+    operation: SourceErrorContext['operation'],
+    message: string,
+    source: SourceIdentity,
+    suggestion?: string,
+  ): SourceError {
+    return new SourceError('invalid_state', message, {
+      sourceId: source.id,
+      sourceName: source.displayName,
+      operation,
+      suggestion,
     });
   }
 }

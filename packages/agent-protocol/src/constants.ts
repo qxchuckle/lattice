@@ -4,6 +4,14 @@
 
 export const PROTOCOL_VERSION = '1.0';
 
+/**
+ * 契约版本（单调整数，破坏性契约变更时递增）。
+ * 五包独立发 npm 的版本偏斜防线：defineSource/握手时校验 manifest.contractVersion，
+ * 不等 → 类型化错误（区别于 PROTOCOL_VERSION：那是 WS 传输层版本）。
+ * v2：本次破坏性重构（能力八组化/握手/ISource 表面改版）。
+ */
+export const CONTRACT_VERSION = 2;
+
 /** Client → Server 消息类型 */
 export const ClientMessageType = {
   SessionCreate: 'session.create',

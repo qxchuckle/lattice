@@ -10,31 +10,76 @@ export type {
   SourceEvent,
   TokenUsage,
   SourceErrorCode,
+  SourceErrorCategory,
   SourceErrorContext,
 } from './source/events.js';
+export { errorCategory } from './source/events.js';
 
 export type { ModelInfo, ModelParamSpec, ModelTuning, ModelCapabilities } from './source/models.js';
 
 export type { AuthRequirement, AuthStatus } from './source/auth.js';
 
-export type {
-  ToolDefinition,
-  ToolResult,
-  ToolInfo,
-  InjectToolsConfig,
-  SourceToolSemantic,
-} from './source/tools.js';
+export type { ToolDefinition, ToolResult, SourceToolSemantic } from './source/tools.js';
 
 export type { ContentBlock, StandardMessage } from './source/messages.js';
 
 export type {
-  SourceCapabilities,
-  SystemPromptPolicy,
   SystemPromptConfig,
+  SessionToolsConfig,
   PromptOpts,
   ISource,
-  SourceInfo,
+  LatticeSourceMap,
+  KnownSourceId,
 } from './source/interface.js';
+
+// 能力声明（八组结构化）
+export type {
+  SourceCapabilities,
+  ExecutionCapability,
+  SessionCapability,
+  ForkCapability,
+  PromptCapability,
+  SystemPromptCapability,
+  SlashCommandsCapability,
+  PermissionModesCapability,
+  ToolsCapability,
+  BuiltinToolDecl,
+  ToolInjectionCapability,
+  ContextCapability,
+  CompactionCapability,
+  ModelsCapability,
+  ResourcesCapability,
+  SkillsCapability,
+} from './source/capabilities.js';
+
+// 声明与握手
+export type {
+  SourceInfo,
+  SourceManifest,
+  ResolvedManifest,
+  CapabilityDowngrade,
+  JsonValue,
+} from './source/manifest.js';
+
+// 反向权限通道
+export type {
+  SourcePermissionRequest,
+  PermissionDecision,
+  PermissionRequestHandler,
+} from './source/permission.js';
+
+// 事件流（共享纯工具）
+export { EventStream, SourceEventStream } from './source/event-stream.js';
+export type { PromptResult } from './source/event-stream.js';
+
+// middleware 契约（runner 在 @qcqx/lattice-agent-pipeline）
+export { MIDDLEWARE_PHASES } from './source/middleware.js';
+export type {
+  SourceMiddleware,
+  MiddlewarePhase,
+  PromptPayload,
+  MiddlewareContext,
+} from './source/middleware.js';
 
 export type {
   SourceResourceKind,
@@ -46,12 +91,7 @@ export type {
 export type { PromptSegment } from './source/prompt-input.js';
 export { segmentsToDisplayText } from './source/prompt-input.js';
 
-export type {
-  SourceToolsMap,
-  AuthStatusMap,
-  ISourceRegistry,
-  AgentSourceConfig,
-} from './source/registry.js';
+export type { ISourceRegistry, AgentSourceConfig } from './source/registry.js';
 
 export type {
   NodeRole,
@@ -122,6 +162,7 @@ export type {
 // ── 常量 ──
 export {
   PROTOCOL_VERSION,
+  CONTRACT_VERSION,
   ClientMessageType,
   ServerMessageType,
   CLIENT_MESSAGE_TYPES,
@@ -141,7 +182,12 @@ export {
   canApplyOperation,
   shouldSkipDescendantMark,
   isBranchableChild,
-  computeNodeCapabilities,
+  projectNodeCapabilities,
   projectViewStatus,
 } from './source/node-state.js';
-export type { ViewStatus, NodeOperation, NodeCapabilities } from './source/node-state.js';
+export type {
+  ViewStatus,
+  NodeOperation,
+  NodeCapabilities,
+  NodeCapabilityContext,
+} from './source/node-state.js';

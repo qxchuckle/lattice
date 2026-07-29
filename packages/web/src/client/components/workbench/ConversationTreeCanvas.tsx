@@ -97,13 +97,14 @@ export function ConversationTreeCanvas({ onNodeClick, onNodeContextMenu }: Props
   const snap = useSnapshot(workbenchStore);
 
   const flowNodes = useMemo(
-    () => layoutNodes(
-      snap.nodes as ConversationNode[],
-      snap.headNodeId,
-      snap.selectedNodeId,
-      snap.streamingText,
-      snap.agentStatus,
-    ),
+    () =>
+      layoutNodes(
+        snap.nodes as ConversationNode[],
+        snap.headNodeId,
+        snap.selectedNodeId,
+        snap.streamingText,
+        snap.agentStatus,
+      ),
     [snap.nodes, snap.headNodeId, snap.selectedNodeId, snap.streamingText, snap.agentStatus],
   );
 
@@ -112,15 +113,21 @@ export function ConversationTreeCanvas({ onNodeClick, onNodeContextMenu }: Props
   const [rfNodes, , onNodesChange] = useNodesState(flowNodes);
   const [rfEdges, , onEdgesChange] = useEdgesState(flowEdges);
 
-  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    selectNode(node.id);
-    onNodeClick?.(node.id);
-  }, [onNodeClick]);
+  const handleNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      selectNode(node.id);
+      onNodeClick?.(node.id);
+    },
+    [onNodeClick],
+  );
 
-  const handleNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
-    e.preventDefault();
-    onNodeContextMenu?.(node.id, e);
-  }, [onNodeContextMenu]);
+  const handleNodeContextMenu = useCallback(
+    (e: React.MouseEvent, node: Node) => {
+      e.preventDefault();
+      onNodeContextMenu?.(node.id, e);
+    },
+    [onNodeContextMenu],
+  );
 
   const handleSelectionChange = useCallback((params: OnSelectionChangeParams) => {
     if (params.nodes.length > 1) {
@@ -144,12 +151,11 @@ export function ConversationTreeCanvas({ onNodeClick, onNodeContextMenu }: Props
         minZoom={0.1}
         maxZoom={2}
         selectionOnDrag
-        panOnDrag={[1, 2]}
-      >
+        panOnDrag={[1, 2]}>
         <Background gap={20} size={1} />
-        <Controls position="bottom-left" />
+        <Controls position='bottom-left' />
         <MiniMap
-          position="bottom-right"
+          position='bottom-right'
           nodeStrokeWidth={3}
           nodeColor={(n) => {
             const data = n.data as { isHead?: boolean };

@@ -61,9 +61,13 @@ export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
         skills.set(s.name, { name: s.name, description: s.description });
       }
       // 源已自行注入 skills 清单（如 Pi buildSystemPrompt）时不重复拉取源级 skills，避免双重清单
-      const source = deps.sources.registry.getSource(sourceId);
-      if (!source?.capabilities.nativeSkillInjection) {
-        const sourceSkills = await deps.sources.registry.listResources(sourceId, {
+      // 能力读 manifest（握手 verified），未握手退 describe 的 declared
+      const registry = deps.sources.registry;
+      const caps =
+        registry.getManifest(sourceId)?.capabilities ??
+        registry.getSource(sourceId)?.describe().capabilities;
+      if (!caps?.skills.nativeInjection) {
+        const sourceSkills = await registry.listResources(sourceId, {
           kinds: ['skill'],
         });
         for (const r of Array.isArray(sourceSkills) ? sourceSkills : []) {

@@ -18,7 +18,14 @@ interface FileEntry {
 }
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '__pycache__', '.pnpm-store']);
+const IGNORED_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  '.next',
+  '__pycache__',
+  '.pnpm-store',
+]);
 
 async function listDir(dirPath: string, depth: number): Promise<FileEntry[]> {
   const entries = await readdir(dirPath, { withFileTypes: true });
@@ -34,13 +41,21 @@ async function listDir(dirPath: string, depth: number): Promise<FileEntry[]> {
       if (depth > 0) {
         try {
           item.children = await listDir(fullPath, depth - 1);
-        } catch { /* 权限不足等 */ }
+        } catch {
+          /* 权限不足等 */
+        }
       }
       result.push(item);
     } else {
       try {
         const s = await stat(fullPath);
-        result.push({ name: entry.name, path: fullPath, type: 'file', size: s.size, mtime: s.mtime.toISOString() });
+        result.push({
+          name: entry.name,
+          path: fullPath,
+          type: 'file',
+          size: s.size,
+          mtime: s.mtime.toISOString(),
+        });
       } catch {
         result.push({ name: entry.name, path: fullPath, type: 'file' });
       }
@@ -88,7 +103,9 @@ export function registerFilesystemRoutes(app: FastifyInstance): void {
       try {
         const entries = await listDir(p, 1);
         result.push({ root: p, entries });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
     return { trees: result };
   });
@@ -118,7 +135,8 @@ export function registerFilesystemRoutes(app: FastifyInstance): void {
   // 写文件
   app.post('/api/fs/write', async (req, reply) => {
     const { path: filePath, content } = req.body as { path?: string; content?: string };
-    if (!filePath || content === undefined) return reply.code(400).send({ error: 'path and content required' });
+    if (!filePath || content === undefined)
+      return reply.code(400).send({ error: 'path and content required' });
 
     const username = await getUsername();
     if (!(await isPathSafe(filePath, username))) {

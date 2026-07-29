@@ -13,9 +13,21 @@ interface FileEntry {
 }
 
 const FILE_ICONS: Record<string, string> = {
-  ts: '📘', tsx: '⚛️', js: '📒', jsx: '⚛️', json: '📋', md: '📝',
-  css: '🎨', less: '🎨', html: '🌐', yaml: '⚙️', yml: '⚙️',
-  py: '🐍', go: '🔵', rs: '🦀', sh: '💻',
+  ts: '📘',
+  tsx: '⚛️',
+  js: '📒',
+  jsx: '⚛️',
+  json: '📋',
+  md: '📝',
+  css: '🎨',
+  less: '🎨',
+  html: '🌐',
+  yaml: '⚙️',
+  yml: '⚙️',
+  py: '🐍',
+  go: '🔵',
+  rs: '🦀',
+  sh: '💻',
 };
 
 function getFileIcon(name: string): string {
@@ -37,16 +49,18 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
             cursor: 'pointer',
             fontSize: 12,
             color: '#ccc',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}
-        >
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}>
           <span style={{ fontSize: 10 }}>{expanded ? '▼' : '▶'}</span>
           <span>📁</span>
           <span>{entry.name}</span>
         </div>
-        {expanded && entry.children?.map((child) => (
-          <TreeNode key={child.path} entry={child} depth={depth + 1} />
-        ))}
+        {expanded &&
+          entry.children?.map((child) => (
+            <TreeNode key={child.path} entry={child} depth={depth + 1} />
+          ))}
       </div>
     );
   }
@@ -60,9 +74,10 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
         cursor: 'pointer',
         fontSize: 12,
         color: '#aaa',
-        display: 'flex', alignItems: 'center', gap: 4,
-      }}
-    >
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+      }}>
       <span>{getFileIcon(entry.name)}</span>
       <span>{entry.name}</span>
     </div>
@@ -75,19 +90,39 @@ export function FileTreePanel() {
   const loadTree = useCallback(async () => {
     if (snap.workspaceRoots.length === 0) return;
     try {
-      const res = await fetch(`/api/fs/tree?root=${encodeURIComponent(snap.workspaceRoots[0])}&depth=3`);
+      const res = await fetch(
+        `/api/fs/tree?root=${encodeURIComponent(snap.workspaceRoots[0])}&depth=3`,
+      );
       if (res.ok) {
         const data = await res.json();
         setFileTree(data.entries ?? []);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [snap.workspaceRoots]);
 
-  useEffect(() => { loadTree(); }, [loadTree]);
+  useEffect(() => {
+    loadTree();
+  }, [loadTree]);
 
   return (
-    <div style={{ width: 220, borderRight: '1px solid #333', overflow: 'auto', background: '#1a1a2e', height: '100%' }}>
-      <div style={{ padding: '8px 10px', fontSize: 11, color: '#888', fontWeight: 600, textTransform: 'uppercase' }}>
+    <div
+      style={{
+        width: 220,
+        borderRight: '1px solid #333',
+        overflow: 'auto',
+        background: '#1a1a2e',
+        height: '100%',
+      }}>
+      <div
+        style={{
+          padding: '8px 10px',
+          fontSize: 11,
+          color: '#888',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+        }}>
         资源管理器
       </div>
       {snap.workspaceRoots.length > 0 && (

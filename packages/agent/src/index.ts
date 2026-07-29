@@ -70,11 +70,17 @@ export type { PermissionRule, ScopeConfig } from './permission/permission-guard.
 // ── Agent Source（re-export 供 web 等消费方使用） ──
 export {
   createAgentSource,
-  PiSource,
-  QoderSource,
+  createPiSource,
+  createQoderSource,
   SourceRegistry,
+  defineSource,
 } from '@qcqx/lattice-agent-source';
-export type { AgentSourceInstance, QoderSourceConfig } from '@qcqx/lattice-agent-source';
+export type {
+  AgentSourceInstance,
+  PiSourceOptions,
+  QoderSourceOptions,
+  SourceDriver,
+} from '@qcqx/lattice-agent-source';
 
 // ── Context Engine ──
 export { ContextEngine } from './context/context-engine.js';

@@ -16,8 +16,10 @@ export interface ToolResult {
 }
 
 /**
- * 工具语义分类（源层声明，壳层按语义渲染——壳层不认识具体工具名）
- * 工具名（Write/write/Task…）是源私有知识，跨层只传语义
+ * 工具类型分类（源层声明，壳层按语义渲染——壳层不认识具体工具名）
+ * 工具名（Write/write/Task…）是源私有知识，跨层只传语义。
+ * 内置工具的声明形态见 capabilities.ts 的 BuiltinToolDecl（声明即数据，
+ * 取代旧 getBuiltinTools()/ToolInfo 运行时查询面）。
  */
 export type SourceToolSemantic =
   | 'terminal' // 命令执行
@@ -27,17 +29,3 @@ export type SourceToolSemantic =
   | 'code-intel' // LSP 等代码智能
   | 'subagent' // 子代理委派
   | 'other';
-
-export interface ToolInfo {
-  name: string;
-  description: string;
-  category: SourceToolSemantic;
-  source: 'builtin' | 'injected';
-}
-
-export interface InjectToolsConfig {
-  /** 目标源 ID，不传 = 所有源 */
-  target?: string;
-  /** 同名工具是否覆盖内置的 */
-  override?: boolean;
-}

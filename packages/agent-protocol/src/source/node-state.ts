@@ -10,6 +10,7 @@
  *   （streaming 仅类型保留，不落盘——流式是客户端瞬时态）
  */
 import type { NodeStatus } from './conversation.js';
+import type { ForkCapability } from './capabilities.js';
 
 /** 客户端视图状态（含流式瞬时态 streaming 与 error 派生态） */
 export type ViewStatus = 'streaming' | 'done' | 'error' | 'interrupted' | 'undone' | 'hidden';
@@ -73,11 +74,29 @@ export interface NodeCapabilities {
 }
 
 /**
- * 从视图状态投影节点能力（与 canApplyOperation 语义一致：
- * undone/hidden 只读；delete 对 undone 合法；流式中禁止结构操作）。
- * streaming 是客户端瞬时态，故本函数基于 ViewStatus 而非持久化状态。
+ * 能力投影上下文：节点状态之外的源能力维度（来自 ResolvedManifest）。
+ * server 计算时必传；client 仅在 streaming 瞬时态本地过渡时可缺省（宽松默认）。
  */
-export function computeNodeCapabilities(viewStatus: ViewStatus): NodeCapabilities {
+export interface NodeCapabilityContext {
+  /** 该节点所属线程源的 fork 能力（影响 canBranch/canRetry：非头部重问需要 fork） */
+  fork: ForkCapability;
+}
+
+/** ctx 缺省时的宽松默认（等价旧行为：不按源能力收紧） */
+const PERMISSIVE_CTX: NodeCapabilityContext = { fork: { atMessage: true } };
+
+/**
+ * 从视图状态 + 源能力投影节点能力（与 canApplyOperation 语义一致：
+ * undone/hidden 只读；delete 对 undone 合法；流式中禁止结构操作）。
+ * streaming 是客户端瞬时态，故基于 ViewStatus 而非持久化状态。
+ *
+ * 单一真相链路：server 用本函数计算并随 wire DTO 下发（派生数据不落盘），
+ * server 命令入口用同一函数守卫——接口行为 ≡ 视图。
+ */
+export function projectNodeCapabilities(
+  viewStatus: ViewStatus,
+  ctx: NodeCapabilityContext = PERMISSIVE_CTX,
+): NodeCapabilities {
   const streaming = viewStatus === 'streaming';
   // ViewStatus 的 undone/hidden 与持久化状态同名同义，其余视图态均映射自活跃节点
   const persisted: NodeStatus =
@@ -86,11 +105,13 @@ export function computeNodeCapabilities(viewStatus: ViewStatus): NodeCapabilitie
       : viewStatus === 'interrupted'
         ? 'interrupted'
         : 'active';
+  // 分支/重试 = 从锚点重问，需要源具备 fork 能力（形态粒度由策略层消化，这里只门 false）
+  const forkable = ctx.fork !== false;
   return {
-    canBranch: !streaming && !isReadOnly(persisted),
+    canBranch: !streaming && !isReadOnly(persisted) && forkable,
     canUndo: !streaming && canApplyOperation('undo', persisted),
     canDelete: !streaming && canApplyOperation('delete', persisted),
-    canRetry: viewStatus === 'error' || viewStatus === 'interrupted',
+    canRetry: (viewStatus === 'error' || viewStatus === 'interrupted') && forkable,
     canContinue: viewStatus === 'interrupted',
     canFollowup: !isReadOnly(persisted),
     canAbort: streaming,

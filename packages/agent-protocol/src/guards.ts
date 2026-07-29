@@ -20,7 +20,7 @@ export function isServerMessage(data: unknown): data is ServerMessage {
   return typeof type === 'string' && SERVER_MESSAGE_TYPES.has(type);
 }
 
-const SOURCE_EVENT_TYPES: ReadonlySet<string> = new Set([
+const SOURCE_EVENT_TYPE_LIST = [
   'text',
   'thinking',
   'tool_call',
@@ -31,7 +31,15 @@ const SOURCE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'notice',
   'done',
   'error',
-]);
+  // 双向编译期钉死（方向一）：清单中不得出现 SourceEvent 之外的 type
+] as const satisfies readonly SourceEvent['type'][];
+
+// 双向编译期钉死（方向二）：SourceEvent 新增变体而清单未补 → 此处编译报错
+type _MissingEventTypes = Exclude<SourceEvent['type'], (typeof SOURCE_EVENT_TYPE_LIST)[number]>;
+const _assertNoMissingEventTypes: _MissingEventTypes extends never ? true : never = true;
+void _assertNoMissingEventTypes;
+
+const SOURCE_EVENT_TYPES: ReadonlySet<string> = new Set(SOURCE_EVENT_TYPE_LIST);
 
 /** 校验是否为合法的 SourceEvent（检查 type 字段） */
 export function isSourceEvent(data: unknown): data is SourceEvent {

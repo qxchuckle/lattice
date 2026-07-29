@@ -1,27 +1,22 @@
 /**
  * SourceRegistry — 源注册表实现
  *
- * 职责：源注册/发现/聚合查询/工具注入/认证检测/生命周期。
- * 不代理运行时调用（prompt/forkSession），上层直接操作源实例。
+ * 职责：注册/发现/manifest 聚合/生命周期。不代理运行时调用（prompt/fork），
+ * 消费层直接操作源实例。可用性是数据（ResolvedManifest.available）而非硬编码。
  */
 import type {
   ISource,
   ISourceRegistry,
-  SourceInfo,
-  ModelInfo,
-  ToolInfo,
-  ToolDefinition,
-  InjectToolsConfig,
-  SourceToolsMap,
-  AuthStatus,
-  AuthStatusMap,
+  LatticeSourceMap,
+  ResolvedManifest,
   SourceResourceInfo,
   SourceResourceQuery,
   SourceResourcesMap,
-} from './types.js';
+} from '@qcqx/lattice-agent-protocol';
 
 export class SourceRegistry implements ISourceRegistry {
   private sources = new Map<string, ISource>();
+  private manifests = new Map<string, ResolvedManifest>();
 
   register(source: ISource): void {
     if (this.sources.has(source.id)) {
@@ -32,87 +27,30 @@ export class SourceRegistry implements ISourceRegistry {
 
   unregister(id: string): void {
     this.sources.delete(id);
+    this.manifests.delete(id);
   }
 
+  getSource<K extends keyof LatticeSourceMap & string>(id: K): LatticeSourceMap[K] | undefined;
+  getSource(id: string): ISource | undefined;
   getSource(id: string): ISource | undefined {
     return this.sources.get(id);
   }
 
-  listSources(): SourceInfo[] {
-    return [...this.sources.values()].map((s) => ({
-      id: s.id,
-      displayName: s.displayName,
-      version: s.version,
-      modelPolicy: s.modelPolicy,
-      capabilities: s.capabilities,
-      available: true, // init 后可用；未 init 时由上层判断
-      builtinToolCount: s.getBuiltinTools().length,
-      modelCount: 0, // 异步，需要时调 listModels
-    }));
+  listManifests(): ResolvedManifest[] {
+    return [...this.manifests.values()];
   }
 
-  listModels(sourceId?: string): ModelInfo[] {
-    // 同步缓存版本：源 init 后可缓存模型列表
-    // 当前简单实现：返回空，上层应直接调 source.listModels()（异步）
-    if (sourceId) {
-      const source = this.sources.get(sourceId);
-      if (!source) return [];
-      // 注意：listModels 是异步的，这里无法同步返回
-      // 上层应直接 await source.listModels()
-      return [];
-    }
-    return [];
+  getManifest(id: string): ResolvedManifest | undefined {
+    return this.manifests.get(id);
   }
 
-  getBuiltinTools(sourceId?: string): SourceToolsMap | ToolInfo[] {
-    if (sourceId) {
-      const source = this.sources.get(sourceId);
-      return source ? source.getBuiltinTools() : [];
-    }
-    const map: SourceToolsMap = {};
-    for (const [id, source] of this.sources) {
-      map[id] = source.getBuiltinTools();
-    }
-    return map;
-  }
-
-  checkAuth(sourceId?: string): AuthStatusMap | AuthStatus {
-    // 注意：checkAuth 是异步的，这里提供同步骨架
-    // 上层应直接 await source.checkAuth()
-    if (sourceId) {
-      return { status: 'missing', message: 'Use async checkAuth on source directly' };
-    }
-    return {};
-  }
-
-  /** 异步版本：检测所有源认证状态 */
-  async checkAuthAsync(sourceId?: string): Promise<AuthStatusMap | AuthStatus> {
-    if (sourceId) {
-      const source = this.sources.get(sourceId);
-      if (!source) return { status: 'error', message: `Source "${sourceId}" not found` };
-      return source.checkAuth();
-    }
-    const map: AuthStatusMap = {};
-    for (const [id, source] of this.sources) {
-      map[id] = await source.checkAuth();
-    }
-    return map;
-  }
-
-  /** 异步版本：获取所有源的模型列表 */
-  async listModelsAsync(sourceId?: string): Promise<Array<ModelInfo & { sourceId: string }>> {
-    const results: Array<ModelInfo & { sourceId: string }> = [];
-    const targets = sourceId
-      ? ([this.sources.get(sourceId)].filter(Boolean) as ISource[])
-      : [...this.sources.values()];
-
-    for (const source of targets) {
-      const models = await source.listModels();
-      for (const model of models) {
-        results.push({ ...model, sourceId: source.id });
-      }
-    }
-    return results;
+  /** 重新握手（登录态变更/SDK 升级后调用），更新缓存并返回新 manifest */
+  async rehandshake(id: string): Promise<ResolvedManifest> {
+    const source = this.sources.get(id);
+    if (!source) throw new Error(`Source "${id}" not found`);
+    const manifest = await source.handshake();
+    this.manifests.set(id, manifest);
+    return manifest;
   }
 
   /** 聚合资源发现：未实现/失败的源 = []（契约：不抛错） */
@@ -120,47 +58,56 @@ export class SourceRegistry implements ISourceRegistry {
     sourceId?: string,
     query?: SourceResourceQuery,
   ): Promise<SourceResourcesMap | SourceResourceInfo[]> {
-    const enumerate = async (source: ISource): Promise<SourceResourceInfo[]> => {
-      if (!source.listResources) return [];
-      try {
-        return await source.listResources(query);
-      } catch {
-        return [];
-      }
-    };
-    if (sourceId) {
+    const enumerate = (source: ISource): Promise<SourceResourceInfo[]> =>
+      source.listResources(query).catch(() => []);
+    if (sourceId !== undefined) {
       const source = this.sources.get(sourceId);
       return source ? enumerate(source) : [];
     }
     const map: SourceResourcesMap = {};
-    for (const [id, source] of this.sources) {
-      map[id] = await enumerate(source);
-    }
+    await Promise.all(
+      [...this.sources.entries()].map(async ([id, source]) => {
+        map[id] = await enumerate(source);
+      }),
+    );
     return map;
   }
 
-  injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void {
-    const target = config?.target;
-    if (target) {
-      const source = this.sources.get(target);
-      if (!source) throw new Error(`Source "${target}" not found`);
-      source.injectTools(config, tools);
-    } else {
-      for (const source of this.sources.values()) {
-        source.injectTools(config, tools);
-      }
-    }
-  }
-
+  /**
+   * init + handshake 全部源：并行，单源失败不炸整体——
+   * init 抛错的源落为 available:false + handshake-failed（describe 兜出 manifest 骨架）。
+   */
   async initAll(): Promise<void> {
-    for (const source of this.sources.values()) {
-      await source.init();
-    }
+    await Promise.allSettled(
+      [...this.sources.values()].map(async (source) => {
+        try {
+          await source.init();
+          this.manifests.set(source.id, await source.handshake());
+        } catch (err) {
+          // handshake() 内部自兜不抛；能走到这里的是 init 失败
+          const declared = source.describe();
+          this.manifests.set(source.id, {
+            info: declared.info,
+            capabilities: declared.capabilities,
+            available: false,
+            unavailableReason: {
+              code: 'handshake-failed',
+              message: err instanceof Error ? err.message : String(err),
+            },
+            authSnapshot: {
+              status: 'error',
+              message: err instanceof Error ? err.message : String(err),
+            },
+            downgrades: [],
+            resolvedAt: Date.now(),
+          });
+        }
+      }),
+    );
   }
 
   async disposeAll(): Promise<void> {
-    for (const source of this.sources.values()) {
-      await source.dispose();
-    }
+    await Promise.allSettled([...this.sources.values()].map((s) => s.dispose()));
+    this.manifests.clear();
   }
 }

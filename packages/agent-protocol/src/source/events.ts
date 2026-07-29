@@ -23,8 +23,40 @@ export type SourceErrorCode =
   | 'source_not_initialized'
   | 'session_not_found'
   | 'session_expired'
+  // 能力契约（三层机制的错误兜底层，见 capabilities.ts）
+  | 'unsupported_operation' // 能力缺口（该源版本永久性），suggestion 指向对应 capability 字段
+  | 'unsupported_option' // 操作支持但选项不支持（如 fork 无 atMessage）
+  | 'invalid_state' // 时序前置条件不满足（如 fork 需首 turn 落盘）——状态非能力，声明层表达不了
   // 其他
   | 'unknown';
+
+/** 错误大类（消费层按类别决定重试/降级/引导） */
+export type SourceErrorCategory = 'auth' | 'capability' | 'state' | 'transient' | 'input';
+
+const ERROR_CATEGORY: Record<SourceErrorCode, SourceErrorCategory> = {
+  auth_missing: 'auth',
+  auth_invalid: 'auth',
+  auth_insufficient: 'auth',
+  model_not_found: 'input',
+  model_unavailable: 'transient',
+  context_overflow: 'input',
+  network: 'transient',
+  rate_limited: 'transient',
+  timeout: 'transient',
+  aborted: 'transient',
+  source_not_initialized: 'state',
+  session_not_found: 'state',
+  session_expired: 'state',
+  unsupported_operation: 'capability',
+  unsupported_option: 'capability',
+  invalid_state: 'state',
+  unknown: 'transient',
+};
+
+/** code → 大类（Record 穷尽：新增 code 编译期强制归类） */
+export function errorCategory(code: SourceErrorCode): SourceErrorCategory {
+  return ERROR_CATEGORY[code];
+}
 
 export interface TokenUsage {
   input: number;
@@ -102,13 +134,14 @@ export interface SourceErrorContext {
   sourceName: string;
   operation:
     | 'init'
+    | 'handshake'
     | 'prompt'
-    | 'abort'
     | 'destroySession'
     | 'forkSession'
     | 'renameSession'
     | 'listModels'
-    | 'checkAuth';
+    | 'checkAuth'
+    | 'listResources';
   config?: {
     model?: string;
     cwd?: string;

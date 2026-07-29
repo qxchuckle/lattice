@@ -16,8 +16,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   createLatticeAgent,
   createAgentSource,
-  PiSource,
-  QoderSource,
+  createPiSource,
+  createQoderSource,
   type LatticeAgent,
   type AgentSourceInstance,
   type ConversationHooks,
@@ -29,6 +29,7 @@ import type {
   ResourceListItem,
   SourceResourceInfo,
   SourceResourceQuery,
+  ModelInfo,
 } from '@qcqx/lattice-agent-protocol';
 import { isClientMessage } from '@qcqx/lattice-agent-protocol';
 import {
@@ -149,8 +150,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       if (!sourcesInstance) {
         sourcesInstance = await createAgentSource({
           sources: [
-            new PiSource(),
-            new QoderSource({ authMode: 'cli', permissionMode: 'acceptEdits' }),
+            createPiSource(),
+            createQoderSource({ authMode: 'cli', permissionMode: 'acceptEdits' }),
           ],
         });
       }
@@ -543,18 +544,18 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   // REST
   // ═══════════════════════════════════════════
 
-  // 获取可用源列表
+  // 获取可用源列表（数据驱动：可用性/能力/降准全部来自握手 manifest）
   app.get('/api/agent/sources', async () => {
     const latticeAgent = await getAgent();
-    const sourceInfos = latticeAgent.sources.registry.listSources();
+    const manifests = latticeAgent.sources.registry.listManifests();
     return {
-      sources: sourceInfos.map((s) => ({
-        id: s.id,
-        displayName: s.displayName,
-        version: s.version,
-        modelPolicy: s.modelPolicy,
-        available: s.available,
-        modelCount: s.modelCount,
+      sources: manifests.map((m) => ({
+        id: m.info.id,
+        displayName: m.info.displayName,
+        version: m.info.version,
+        modelPolicy: m.capabilities.models.policy,
+        available: m.available,
+        modelCount: m.modelsSnapshot?.length ?? 0,
       })),
     };
   });
@@ -564,7 +565,17 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     const { sourceId } = req.query as { sourceId?: string };
     const latticeAgent = await getAgent();
     const registry = latticeAgent.sources.registry;
-    const models = await registry.listModelsAsync(sourceId);
+    const manifests = registry.listManifests();
+    const sourceIds = sourceId ? [sourceId] : manifests.map((m) => m.info.id);
+    // 动态通道聚合（listModels 是权威来源；manifest 快照仅展示用途）
+    const models: Array<ModelInfo & { sourceId: string }> = [];
+    for (const id of sourceIds) {
+      const source = registry.getSource(id);
+      if (!source) continue;
+      for (const m of await source.listModels().catch(() => [])) {
+        models.push({ ...m, sourceId: id });
+      }
+    }
     const items = models.map((m) => ({
       id: m.id,
       displayName: m.displayName,
@@ -577,10 +588,10 @@ export function registerAgentRoutes(app: FastifyInstance): void {
       tuning: m.tuning,
     }));
     // 合并自定义模型（catalog 源不支持）；参数规格全 freeform（模型未知，由用户自行设定）
-    const targetIds = sourceId ? [sourceId] : registry.listSources().map((s) => s.id);
+    const targetIds = sourceIds;
     for (const id of targetIds) {
-      const source = registry.getSource(id);
-      if (!source || source.modelPolicy === 'catalog') continue;
+      const policy = registry.getManifest(id)?.capabilities.models.policy;
+      if (!policy || policy === 'catalog') continue;
       for (const modelId of await readCustomModels(id)) {
         if (items.some((m) => m.sourceId === id && m.id === modelId)) continue;
         items.push({

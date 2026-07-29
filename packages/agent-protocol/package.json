@@ -1,7 +1,7 @@
 {
   "name": "@qcqx/lattice-agent-protocol",
   "version": "0.1.0",
-  "description": "Lattice Agent 契约层：源接口、事件、传输消息格式，零依赖纯类型 + 轻量 guards",
+  "description": "Lattice Agent 契约层：源接口、事件、传输消息格式。根出口运行时零依赖（纯类型 + 共享纯函数），/schemas 子出口承载 zod 运行时校验",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,6 +10,12 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./schemas": {
+      "import": {
+        "types": "./dist/schemas.d.ts",
+        "default": "./dist/schemas.js"
       }
     }
   },
@@ -25,6 +31,9 @@
   ],
   "engines": {
     "node": ">=20.19"
+  },
+  "dependencies": {
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

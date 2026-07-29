@@ -1,7 +1,7 @@
 /**
  * 工具注入 → MCP Server 构建
  */
-import type { ToolDefinition } from '../../types.js';
+import type { ToolDefinition } from '@qcqx/lattice-agent-protocol';
 
 /**
  * 将 ToolDefinition[] 包装为 Qoder SDK 的 MCP Server 配置

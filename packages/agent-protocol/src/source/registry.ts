@@ -1,28 +1,28 @@
 /**
  * 注册表接口 + 工厂配置
+ *
+ * Registry 职责：注册/发现/manifest 聚合/生命周期。不代理运行时调用（prompt/fork），
+ * 消费层直接操作源实例。旧同步僵尸 API（listModels/checkAuth/getBuiltinTools 同步版）已删除：
+ * 动态事实走源实例的异步通道，静态声明走 manifest。
  */
-import type { ModelInfo } from './models.js';
-import type { AuthStatus } from './auth.js';
-import type { ToolInfo, ToolDefinition, InjectToolsConfig } from './tools.js';
 import type { SourceResourceInfo, SourceResourceQuery, SourceResourcesMap } from './resources.js';
-import type { ISource, SourceInfo } from './interface.js';
-
-/** 按源分组的工具映射 */
-export type SourceToolsMap = Record<string, ToolInfo[]>;
-
-/** 按源分组的认证状态 */
-export type AuthStatusMap = Record<string, AuthStatus>;
+import type { ISource, LatticeSourceMap } from './interface.js';
+import type { ResolvedManifest } from './manifest.js';
 
 export interface ISourceRegistry {
   register(source: ISource): void;
   unregister(id: string): void;
 
-  listSources(): SourceInfo[];
+  /** typed getSource：声明合并后源 ID 编译期收紧 + 返回精确类型；未知 ID 回退 ISource */
+  getSource<K extends keyof LatticeSourceMap & string>(id: K): LatticeSourceMap[K] | undefined;
   getSource(id: string): ISource | undefined;
 
-  listModels(sourceId?: string): ModelInfo[];
-  getBuiltinTools(sourceId?: string): SourceToolsMap | ToolInfo[];
-  checkAuth(sourceId?: string): AuthStatusMap | AuthStatus;
+  /** 全部源的握手产物（含 available:false 的失败源）；未握手的源不在列 */
+  listManifests(): ResolvedManifest[];
+  /** 单源 manifest（握手缓存） */
+  getManifest(id: string): ResolvedManifest | undefined;
+  /** 重新握手（登录态变更/SDK 升级后调用），返回新 manifest 并更新缓存 */
+  rehandshake(id: string): Promise<ResolvedManifest>;
 
   /** 聚合资源发现：指定源返回该源列表，不指定返回按源分组映射（未实现/失败的源 = []） */
   listResources(
@@ -30,8 +30,7 @@ export interface ISourceRegistry {
     query?: SourceResourceQuery,
   ): Promise<SourceResourcesMap | SourceResourceInfo[]>;
 
-  injectTools(config: InjectToolsConfig | undefined, tools: ToolDefinition[]): void;
-
+  /** init + handshake 全部源：并行（allSettled），单源失败落 manifest.available=false，不炸整体 */
   initAll(): Promise<void>;
   disposeAll(): Promise<void>;
 }

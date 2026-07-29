@@ -225,12 +225,12 @@ export class ConversationController {
       }
       return;
     }
-    // 中止整个 session：abort 各分支的源 session（树可混源，按分支源解析）
-    const tree = ctx.treeId ? this.deps.session.getTree(ctx.treeId) : undefined;
-    for (const b of tree?.branches ?? []) {
-      if (!b.sourceSessionId) continue;
-      const source = this.deps.sources.registry.getSource(b.agentId ?? ctx.sourceId);
-      source?.abort(b.sourceSessionId);
+    // 中止整个 session：signal 是唯一取消真相——中止本树全部在途请求
+    //（每个在途 prompt 的 signal 已接线到源，abort 即终止对应源会话生成）
+    const rt = this.rtOf(ctx);
+    for (const [rid, ctrl] of rt.abortControllers) {
+      ctrl.abort();
+      rt.abortControllers.delete(rid);
     }
   }
 
@@ -887,13 +887,19 @@ export class ConversationController {
       });
     };
 
+    // 能力与身份：声明即数据（manifest 优先，未握手退 describe）；catch 分支也需 sourceName
+    const sourceCaps =
+      this.deps.sources.registry.getManifest(source.id)?.capabilities ??
+      source.describe().capabilities;
+    const sourceName = source.describe().info.displayName;
+
     try {
       // 'none' 是"关闭思考"哨兵值（落盘保留以供 retry/continue 复用），
       // 进入源前归一化为不传——所有源看到的要么是有效等级要么完全缺省（协议约定）
       const thinkingLevel =
         promptOpts?.thinkingLevel === 'none' ? undefined : promptOpts?.thinkingLevel;
-      // 工具语义表：源层声明的 name → semantic（壳层按语义渲染，不认工具名）
-      const semanticMap = new Map(source.getBuiltinTools().map((t) => [t.name, t.category]));
+      // 工具语义表：壳层按语义渲染，不认工具名
+      const semanticMap = new Map(sourceCaps.tools.builtin.map((t) => [t.name, t.semantic]));
       for await (const rawEvent of source.prompt(sourceSessionId, blocks, {
         signal: abortController.signal,
         model: promptOpts?.model,
@@ -908,8 +914,8 @@ export class ConversationController {
             }
           : {}),
       })) {
-        // 时间统一由编排层打点（源层不打点）：内容块吸收 ts，保证 live/reload/多端同一套时间
-        const event = { ...rawEvent, ts: Date.now() };
+        // ts 由源边缘（defineSource 工厂）统一打点，宿主无关；缺失时兜底补齐
+        const event = { ...rawEvent, ts: rawEvent.ts ?? Date.now() };
         if (event.type === 'tool_call' && !event.semantic) {
           event.semantic = semanticMap.get(event.name) ?? 'other';
         }
@@ -928,7 +934,7 @@ export class ConversationController {
           message: errMsg,
           code: 'unknown',
           retryable: false,
-          source: { id: source.id, name: source.displayName },
+          source: { id: source.id, name: sourceName },
         });
         hooks.onError(errMsg, requestId);
       }
