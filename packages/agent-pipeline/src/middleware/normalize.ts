@@ -4,6 +4,8 @@
  * 只做「无损或明示降级」的整形，绝不静默丢信息：
  * - 源不接受图片（prompt.images=false）→ 图片块替换为占位文本 + onNotice 回调
  * - systemPrompt 请求按能力落到正确通道（append/override/内联兜底）
+ * - thinkingLevel 哨兵值 `'none'`（关闭思考）→ 不传（协议约定：源永不应看到 'none'）
+ *   —— 哨兵值存在是为了落盘保留用户选择（retry/continue 复用），归一化属编排层职责
  *
  * middleware 无法自行发事件（事件流在其后才产生），故降级提示走 onNotice 回调，
  * 由宿主决定呈现方式（UI toast / notice 事件 / 日志）。
@@ -27,6 +29,9 @@ export interface NormalizeOptions {
   /** 降级提示回调（宿主决定呈现方式） */
   onNotice?: (notice: PipelineNotice) => void;
 }
+
+/** 关闭思考的哨兵值（客户端表达 + 落盘保留，不得进源） */
+const THINKING_OFF = 'none';
 
 /** 图片块 → 占位文本（源不支持图片时；诚实告知模型有图但读不到） */
 function stripImages(message: ContentBlock[]): { blocks: ContentBlock[]; dropped: number } {
@@ -55,6 +60,12 @@ export function createNormalizeMiddleware(options: NormalizeOptions): SourceMidd
     async transformPrompt(payload: PromptPayload): Promise<PromptPayload> {
       let message = payload.message;
       let opts = payload.opts;
+
+      // 思考开关哨兵归一化：源看到的要么是有效等级、要么完全缺省
+      if (opts.thinkingLevel === THINKING_OFF) {
+        const { thinkingLevel: _off, ...rest } = opts;
+        opts = rest;
+      }
 
       if (!caps.prompt.images) {
         const { blocks, dropped } = stripImages(message);

@@ -29,9 +29,11 @@ import {
   isBranchableChild,
   isReadOnly,
 } from '@qcqx/lattice-agent-protocol';
+import { runPrompt } from '@qcqx/lattice-agent-pipeline';
 import type { SessionManager } from '../session/session-manager.js';
 import { composePrompt } from '../prompt/prompt-composer.js';
 import type { PromptComposerDeps } from '../prompt/prompt-composer.js';
+import type { SourceProfileProvider } from './source-profiles.js';
 
 /** 每个 WS session 的运行时状态（轻量：连接身份 + 当前树）；锁域在 TreeRuntime */
 export interface SessionContext {
@@ -86,8 +88,9 @@ export interface ConversationControllerDeps {
   sources: { registry: ISourceRegistry };
   /** 结构化输入展开依赖（本地命令模板/引用解析；缺省：命令透传 slash 文本、引用保留显示文本） */
   promptDeps?: PromptComposerDeps;
-  /** 按线程源生成 system prompt 追加段（skills 可用清单等，渐进披露）；undefined/空串 = 不追加 */
-  systemPromptAppendix?: (sourceId: string) => Promise<string | undefined>;
+  /** 能力消费层（agent-pipeline）：按源提供策略与 middleware 管线。
+   *  宿主側的能力差异消化（skills 注入 / 图片降级 / 哨兵归一化 / 工具语义回填 / 守卫）全走它 */
+  profiles: SourceProfileProvider;
 }
 
 export class ConversationController {
@@ -800,7 +803,6 @@ export class ConversationController {
         model: opts.model,
         thinkingLevel: opts.thinkingLevel,
         contextWindow: opts.contextWindow,
-        systemPromptAppendix: await this.deps.systemPromptAppendix?.(sourceId),
       },
     );
 
@@ -865,8 +867,6 @@ export class ConversationController {
       model?: string;
       thinkingLevel?: string;
       contextWindow?: number;
-      /** system prompt 追加段（skills 清单等）；空 = 不传，源用自己的默认 prompt */
-      systemPromptAppendix?: string;
     },
   ): Promise<{ accumulator: StreamAccumulator; interrupted: boolean }> {
     const accumulator = new StreamAccumulator();
@@ -887,38 +887,29 @@ export class ConversationController {
       });
     };
 
-    // 能力与身份：声明即数据（manifest 优先，未握手退 describe）；catch 分支也需 sourceName
-    const sourceCaps =
-      this.deps.sources.registry.getManifest(source.id)?.capabilities ??
-      source.describe().capabilities;
+    // 身份：catch 分支也需 sourceName（能力消费已下沉到 pipeline 管线）
     const sourceName = source.describe().info.displayName;
+    // 管线：哨兵归一化 / skills 注入 / 图片降级 / 工具语义回填 / 能力守卫全在其中
+    const middlewares = this.deps.profiles.get(source.id)?.middlewares ?? [];
 
     try {
-      // 'none' 是"关闭思考"哨兵值（落盘保留以供 retry/continue 复用），
-      // 进入源前归一化为不传——所有源看到的要么是有效等级要么完全缺省（协议约定）
-      const thinkingLevel =
-        promptOpts?.thinkingLevel === 'none' ? undefined : promptOpts?.thinkingLevel;
-      // 工具语义表：壳层按语义渲染，不认工具名
-      const semanticMap = new Map(sourceCaps.tools.builtin.map((t) => [t.name, t.semantic]));
-      for await (const rawEvent of source.prompt(sourceSessionId, blocks, {
-        signal: abortController.signal,
-        model: promptOpts?.model,
-        thinkingLevel,
-        contextWindow: promptOpts?.contextWindow,
-        ...(promptOpts?.systemPromptAppendix
-          ? {
-              systemPrompt: {
-                mode: 'append' as const,
-                additional: promptOpts.systemPromptAppendix,
-              },
-            }
-          : {}),
-      })) {
-        // ts 由源边缘（defineSource 工厂）统一打点，宿主无关；缺失时兜底补齐
-        const event = { ...rawEvent, ts: rawEvent.ts ?? Date.now() };
-        if (event.type === 'tool_call' && !event.semantic) {
-          event.semantic = semanticMap.get(event.name) ?? 'other';
-        }
+      const stream = await runPrompt({
+        source,
+        payload: {
+          sessionId: sourceSessionId,
+          message: blocks,
+          opts: {
+            signal: abortController.signal,
+            model: promptOpts?.model,
+            thinkingLevel: promptOpts?.thinkingLevel,
+            contextWindow: promptOpts?.contextWindow,
+          },
+        },
+        middlewares,
+      });
+      for await (const rawEvent of stream) {
+        // ts 由源边缘（defineSource 工厂）统一打点；第三方源实现未打点时兜底补齐
+        const event = rawEvent.ts === undefined ? { ...rawEvent, ts: Date.now() } : rawEvent;
         accumulator.apply(event);
         await persistStreaming();
         hooks.onEvent(event, requestId);

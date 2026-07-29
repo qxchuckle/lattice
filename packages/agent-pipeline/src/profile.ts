@@ -29,6 +29,7 @@ import {
   createSkillsInjectionMiddleware,
   type SkillDescriptor,
 } from './middleware/skills-injection.js';
+import { createToolSemanticMiddleware } from './middleware/tool-semantic.js';
 import { createCapabilityGuardMiddleware } from './middleware/capability-guard.js';
 
 export interface SourcePlans {
@@ -36,6 +37,9 @@ export interface SourcePlans {
   compaction: CompactionPlan;
   slash: SlashPlan;
   toolInjection: ToolInjectionPlan;
+  /** skills 清单策略：宿主枚举清单时是否需把源级 skills 也罗列进去
+   *  （源已原生注入自己的 skills → false，否则双份清单） */
+  skills: { includeSourceSkills: boolean };
 }
 
 export interface SourceProfile {
@@ -60,6 +64,8 @@ export interface ResolveProfileOptions {
   commandLabel?: string;
   /** 可用 skill 清单；缺省 = 不装配 skills 注入 */
   listSkills?: () => Promise<SkillDescriptor[]>;
+  /** skills 清单文案覆写（宿主提示词风格） */
+  formatSkills?: (skills: readonly SkillDescriptor[]) => string;
   /** 模型目录（guard 的 catalog 校验用；缺省跳过） */
   catalog?: ModelInfo[];
   /** 降级/丢弃提示回调 */
@@ -68,9 +74,10 @@ export interface ResolveProfileOptions {
 
 /**
  * 解析 profile。装配规则：
- * - normalize / capability-guard：全源通用（前者归一化 + 明示降级，后者纵深防御）
+ * - normalize / tool-semantic / capability-guard：全源通用
+ *   （归一化与明示降级 / 事件语义富化 / 纵深防御）
  * - slash-expansion：仅 slash 计划为 host-expand 且宿主提供了模板解析器
- * - skills-injection：仅源未原生注入且宿主提供了清单（工厂内部再判一次，返回 null 即跳过）
+ * - skills-injection：宿主提供了清单就装（nativeInjection 只影响清单内容，不影响是否注入）
  */
 export function resolveSourceProfile(
   manifest: ResolvedManifest,
@@ -82,10 +89,12 @@ export function resolveSourceProfile(
     compaction: planCompaction(caps.context.compaction),
     slash: planSlash(caps.prompt.slashCommands),
     toolInjection: planToolInjection(caps.tools.injection),
+    skills: { includeSourceSkills: !caps.skills.nativeInjection },
   };
 
   const middlewares: SourceMiddleware[] = [
     createNormalizeMiddleware({ capabilities: caps, onNotice: options.onNotice }),
+    createToolSemanticMiddleware(caps),
   ];
 
   if (plans.slash.kind === 'host-expand' && options.resolveCommandTemplate) {
@@ -98,12 +107,15 @@ export function resolveSourceProfile(
   }
 
   if (options.listSkills) {
-    const skillsMw = createSkillsInjectionMiddleware({
-      capabilities: caps,
-      listSkills: options.listSkills,
-      onNotice: options.onNotice,
-    });
-    if (skillsMw) middlewares.push(skillsMw);
+    // 总是装配：宿主清单与源自带清单是两件事（见 skills-injection 文件头易错点）
+    middlewares.push(
+      createSkillsInjectionMiddleware({
+        capabilities: caps,
+        listSkills: options.listSkills,
+        format: options.formatSkills,
+        onNotice: options.onNotice,
+      }),
+    );
   }
 
   middlewares.push(

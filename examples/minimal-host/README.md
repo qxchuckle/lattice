@@ -15,7 +15,19 @@
 | 能力差异消化（fork 锚点缺失 / 无压缩面 / 不可 append） | agent-pipeline 策略表 |
 | slash 展开、skills 清单注入（源不支持时） | agent-pipeline polyfill middleware |
 | 能力守卫（模型目录、权限模式、图片、工具注入） | agent-pipeline `capability-guard` |
+| 反向权限问答（源问→宿主答） | agent-pipeline `createPermissionGate` → `PromptOpts.onPermissionRequest` |
 | 节点操作能力投影（UI 与接口同一判定） | protocol `projectNodeCapabilities` |
+
+权限闸门由谁传：`send()` 的 `opts` 直通源，宿主把编译好的裁决器放进去即可（默认拒绝，不默认放行）：
+
+```ts
+const decide = createPermissionGate({
+  rules: [{ kind: 'terminal', decision: { behavior: 'deny', message: '本宿主不允许执行命令' } }],
+  fallback: 'ask',
+  ask: async (req) => askUserInUI(req), // 宿主自己的 UI
+});
+await host.send('t1', [{ type: 'text', text: '改一下配置' }], { onPermissionRequest: decide });
+```
 
 ## 关键验收点
 
@@ -24,7 +36,7 @@
 
 ```
 富能力源 → [normalize, capability-guard]
-贫瘠源   → [normalize, slash-expansion, skills-injection, capability-guard]
+贫瘠源   → [normalize, tool-semantic, slash-expansion, skills-injection, capability-guard]
 ```
 
 ## 运行

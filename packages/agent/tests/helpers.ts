@@ -15,7 +15,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager, ConversationController } from '../src/index.js';
 import type { ConversationHooks, AgentSourceInstance } from '../src/index.js';
-import type { ISource, ContentBlock, PromptOpts } from '@qcqx/lattice-agent-protocol';
+import { createSourceProfileProvider } from '../src/conversation/source-profiles.js';
+import type {
+  ISource,
+  ContentBlock,
+  PromptOpts,
+  ResolvedManifest,
+} from '@qcqx/lattice-agent-protocol';
 import { defineSource } from '@qcqx/lattice-agent-source';
 import { createScriptedDriver } from '@qcqx/lattice-agent-source/testing';
 import type {
@@ -168,11 +174,30 @@ export async function setup(emitDone = true): Promise<TestContext> {
   const sources = {
     registry: {
       getSource: (id: string) => (id === 'mock' ? source : undefined),
-      getManifest: () => undefined,
+      getManifest: (id: string) => (id === 'mock' ? mockManifest(source) : undefined),
+      listResources: async () => [],
     },
   } as unknown as AgentSourceInstance;
-  const controller = new ConversationController({ session: sm, sources });
+  // 能力消费层真走 pipeline（与生产一致）：管线、守卫、归一化均生效
+  const profiles = createSourceProfileProvider({
+    registry: sources.registry,
+    listLocalSkills: () => [],
+  });
+  const controller = new ConversationController({ session: sm, sources, profiles });
   return { baseDir, sm, state, calls, controller };
+}
+
+/** mock 源的握手产物（declared 能力即 verified，无降准） */
+function mockManifest(source: ISource): ResolvedManifest {
+  const declared = source.describe();
+  return {
+    info: declared.info,
+    capabilities: declared.capabilities,
+    available: true,
+    authSnapshot: { status: 'configured' },
+    downgrades: [],
+    resolvedAt: 0,
+  };
 }
 
 /** 等待 session 结构队列 + 全部分支流队列排空（锁域 per-tree；首发后 bootstrap→tree 迁移，每轮重取 runtime） */

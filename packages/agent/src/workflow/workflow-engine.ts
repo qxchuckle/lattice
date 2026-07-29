@@ -34,25 +34,6 @@ export interface SkillDefinition {
   command?: string;
 }
 
-/**
- * skills 可用清单 → system prompt 追加段（渐进披露：只给 name+description，正文由模型自行 read）。
- * 格式对齐 Agent Skills 标准（与 pi formatSkillsForPrompt 同构）。空清单返回 undefined（不追加）。
- */
-export function formatSkillsAppendix(
-  skills: Array<{ name: string; description?: string }>,
-): string | undefined {
-  if (skills.length === 0) return undefined;
-  const lines = skills.map((s) => `- name: ${s.name}\n  description: ${s.description ?? ''}`);
-  return [
-    'The following skills provide specialized instructions for specific tasks.',
-    'Use the read tool to load a skill file when the task matches its description.',
-    '',
-    '<available_skills>',
-    ...lines,
-    '</available_skills>',
-  ].join('\n');
-}
-
 export class WorkflowEngine {
   private commands = new Map<string, SlashCommand>();
   private skills: SkillDefinition[] = [];

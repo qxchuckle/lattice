@@ -40,6 +40,11 @@ export { SessionRepository } from './session/session-repository.js';
 
 // ── Conversation Controller（会话编排核心） ──
 export { ConversationController } from './conversation/conversation-controller.js';
+export { createSourceProfileProvider } from './conversation/source-profiles.js';
+export type {
+  SourceProfileProvider,
+  SourceProfileProviderDeps,
+} from './conversation/source-profiles.js';
 export type {
   SessionContext,
   ConversationHooks,
@@ -87,7 +92,7 @@ export { ContextEngine } from './context/context-engine.js';
 export type { ContextEngineConfig, ContextSource } from './context/context-engine.js';
 
 // ── Workflow Engine ──
-export { WorkflowEngine, formatSkillsAppendix } from './workflow/workflow-engine.js';
+export { WorkflowEngine } from './workflow/workflow-engine.js';
 export type { WorkflowConfig, TriggerResult, SkillDefinition } from './workflow/workflow-engine.js';
 
 // ── 工厂函数 ──

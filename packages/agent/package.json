@@ -27,6 +27,7 @@
     "node": ">=20.19"
   },
   "dependencies": {
+    "@qcqx/lattice-agent-pipeline": "workspace:*",
     "@qcqx/lattice-agent-protocol": "workspace:*",
     "@qcqx/lattice-agent-source": "workspace:*",
     "@qcqx/lattice-core": "workspace:*"

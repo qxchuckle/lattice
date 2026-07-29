@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "paths": {
+      "@qcqx/lattice-agent-pipeline": ["../agent-pipeline/src/index.ts"],
       "@qcqx/lattice-agent-protocol": [
         "../agent-protocol/src/index.ts"
       ],

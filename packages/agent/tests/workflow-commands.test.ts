@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventBus } from '../src/events/event-bus.js';
 import { WorkflowEngine } from '../src/workflow/workflow-engine.js';
-import { formatSkillsAppendix } from '../src/workflow/workflow-engine.js';
 import { scanLocalCommands, stripFrontmatter } from '../src/workflow/command-scan.js';
 
 let userDir: string;
@@ -61,19 +60,8 @@ describe('stripFrontmatter', () => {
   });
 });
 
-describe('formatSkillsAppendix', () => {
-  it('空清单返回 undefined（不追加）', () => {
-    expect(formatSkillsAppendix([])).toBeUndefined();
-  });
-
-  it('生成 <available_skills> XML（name + description）', () => {
-    const out = formatSkillsAppendix([{ name: 'lattice', description: '上下文层' }]);
-    expect(out).toContain('<available_skills>');
-    expect(out).toContain('- name: lattice');
-    expect(out).toContain('description: 上下文层');
-    expect(out).toContain('</available_skills>');
-  });
-});
+// skills 清单文案的测试已随实现迁至 @qcqx/lattice-agent-pipeline
+// （tests/profile.test.ts：formatSkillsAppendix 形态 + 注入通道选择）
 
 describe('WorkflowEngine 本地命令', () => {
   it('loadLocalCommands：用户级 + 项目级，同名项目级覆盖', async () => {

@@ -81,6 +81,9 @@ importers:
 
   packages/agent:
     dependencies:
+      '@qcqx/lattice-agent-pipeline':
+        specifier: workspace:*
+        version: link:../agent-pipeline
       '@qcqx/lattice-agent-protocol':
         specifier: workspace:*
         version: link:../agent-protocol

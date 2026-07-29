@@ -25,12 +25,19 @@ function payloadOf(text: string, opts: PromptPayload['opts'] = {}): PromptPayloa
 }
 
 describe('resolveSourceProfile：能力 → 计划', () => {
-  it('Pi 画像：原生 slash + 原生 skills → 只装通用两件（normalize + guard）', () => {
+  it('Pi 画像：原生 slash → 不装展开；原生 skills → 清单仍注入但不含源级 skills', () => {
     const profile = resolveSourceProfile(manifestOf('pi', PI_LIKE), {
       resolveCommandTemplate: async () => 'T',
       listSkills: async () => [{ name: 's' }],
     });
-    expect(profile.middlewares.map((m) => m.name)).toEqual(['normalize', 'capability-guard']);
+    expect(profile.middlewares.map((m) => m.name)).toEqual([
+      'normalize',
+      'tool-semantic',
+      'skills-injection',
+      'capability-guard',
+    ]);
+    // 源已原生注入自己的 skills → 宿主清单不应重复罗列源级 skills
+    expect(profile.plans.skills).toEqual({ includeSourceSkills: false });
     expect(profile.plans).toMatchObject({
       fork: 'at-message',
       slash: { kind: 'native' },
@@ -38,18 +45,20 @@ describe('resolveSourceProfile：能力 → 计划', () => {
     });
   });
 
-  it('Qoder 画像：无原生 slash + 无原生 skills → 装满四件', () => {
+  it('Qoder 画像：无原生 slash + 无原生 skills → 装源五件，且清单含源级 skills', () => {
     const profile = resolveSourceProfile(manifestOf('qoder', QODER_LIKE), {
       resolveCommandTemplate: async () => 'T',
       listSkills: async () => [{ name: 's' }],
     });
     expect(profile.middlewares.map((m) => m.name)).toEqual([
       'normalize',
+      'tool-semantic',
       'slash-expansion',
       'skills-injection',
       'capability-guard',
     ]);
     expect(profile.plans.toolInjection).toEqual({ kind: 'direct', transport: 'mcp-bridge' });
+    expect(profile.plans.skills).toEqual({ includeSourceSkills: true });
   });
 
   it('ACP 画像：fork 无锚点 → 投影里如实反映（UI 据此渲染，不猜）', () => {
@@ -179,38 +188,55 @@ describe('slash 展开 middleware', () => {
 });
 
 describe('skills 注入 middleware', () => {
-  it('源原生注入 → 工厂返回 null（不装配，避免双份清单）', () => {
-    expect(
-      createSkillsInjectionMiddleware({ capabilities: PI_LIKE, listSkills: async () => [] }),
-    ).toBeNull();
+  it('源原生注入时仍然装配（宿主清单不能丢），仅由 plans 告知不要重复列源级', async () => {
+    const mw = createSkillsInjectionMiddleware({
+      capabilities: PI_LIKE,
+      listSkills: async () => [{ name: 'local-skill' }],
+    });
+    const out = await mw.transformPrompt!(payloadOf('hi'), CTX);
+    const config = out.opts.systemPrompt;
+    expect(config?.mode === 'append' && config.additional).toContain('local-skill');
   });
 
   it('清单为空 → 不改 payload（不注入空壳标签）', async () => {
     const mw = createSkillsInjectionMiddleware({
       capabilities: QODER_LIKE,
       listSkills: async () => [],
-    })!;
+    });
     const payload = payloadOf('hi');
     expect(await mw.transformPrompt!(payload, CTX)).toBe(payload);
   });
 
-  it('可 append 的源 → 清单进 systemPrompt.append', async () => {
+  it('可 append 的源 → 清单进 systemPrompt.append（引导语 + 结构化条目）', async () => {
     const mw = createSkillsInjectionMiddleware({
       capabilities: QODER_LIKE,
       listSkills: async () => [{ name: 'review', description: '代码评审' }],
-    })!;
-    const out = await mw.transformPrompt!(payloadOf('hi'), CTX);
-    expect(out.opts.systemPrompt).toEqual({
-      mode: 'append',
-      additional: '<available_skills>\n- review：代码评审\n</available_skills>',
     });
+    const out = await mw.transformPrompt!(payloadOf('hi'), CTX);
+    const config = out.opts.systemPrompt;
+    expect(config?.mode).toBe('append');
+    const text = config?.mode === 'append' ? config.additional : '';
+    expect(text).toContain('<available_skills>');
+    expect(text).toContain('- name: review\n  description: 代码评审');
+    expect(text).toContain('read tool'); // 引导语：告知模型如何加载 skill 正文
+  });
+
+  it('文案可被宿主覆写（format 选项）', async () => {
+    const mw = createSkillsInjectionMiddleware({
+      capabilities: QODER_LIKE,
+      listSkills: async () => [{ name: 'a' }],
+      format: (skills) => `SKILLS:${skills.map((s) => s.name).join(',')}`,
+    });
+    const out = await mw.transformPrompt!(payloadOf('hi'), CTX);
+    const config = out.opts.systemPrompt;
+    expect(config?.mode === 'append' && config.additional).toBe('SKILLS:a');
   });
 
   it('宿主已有 append 请求 → 合并而非覆盖', async () => {
     const mw = createSkillsInjectionMiddleware({
       capabilities: QODER_LIKE,
       listSkills: async () => [{ name: 's' }],
-    })!;
+    });
     const out = await mw.transformPrompt!(
       payloadOf('hi', { systemPrompt: { mode: 'append', additional: '宿主守则' } }),
       CTX,
@@ -230,9 +256,10 @@ describe('skills 注入 middleware', () => {
 
   it('清单文案形态', () => {
     expect(formatSkillsAppendix([])).toBe('');
-    expect(formatSkillsAppendix([{ name: 'a' }, { name: 'b', description: 'B' }])).toBe(
-      '<available_skills>\n- a\n- b：B\n</available_skills>',
-    );
+    const text = formatSkillsAppendix([{ name: 'a' }, { name: 'b', description: 'B' }]);
+    expect(text).toContain('- name: a\n  description: ');
+    expect(text).toContain('- name: b\n  description: B');
+    expect(text.endsWith('</available_skills>')).toBe(true);
   });
 });
 

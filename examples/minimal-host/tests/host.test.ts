@@ -99,10 +99,16 @@ async function setup() {
 }
 
 describe('minimal-host：三包 + 会话簿记 = 完整宿主', () => {
-  it('富能力源：slash 原样透传（源自解释），skills 不重复注入', async () => {
+  it('富能力源：slash 原样透传（源自解释），源级 skills 不重复罗列', async () => {
     const { host } = await setup();
     const profile = await host.prepare('rich');
-    expect(profile.middlewares.map((m) => m.name)).toEqual(['normalize', 'capability-guard']);
+    expect(profile.middlewares.map((m) => m.name)).toEqual([
+      'normalize',
+      'tool-semantic',
+      'skills-injection',
+      'capability-guard',
+    ]);
+    expect(profile.plans.skills.includeSourceSkills).toBe(false);
 
     host.createThread('t1', 'rich');
     const turn = await host.send('t1', [{ type: 'text', text: '/build now' }]);
@@ -115,6 +121,7 @@ describe('minimal-host：三包 + 会话簿记 = 完整宿主', () => {
     const profile = await host.prepare('lean');
     expect(profile.middlewares.map((m) => m.name)).toEqual([
       'normalize',
+      'tool-semantic',
       'slash-expansion',
       'skills-injection',
       'capability-guard',
