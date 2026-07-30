@@ -7,6 +7,7 @@ import {
   getAllProjectSpecs,
   unifiedSearch,
 } from '@qcqx/lattice-core';
+import { ok } from './shared';
 
 export function registerSpecRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { scope?: string; projectId?: string; username?: string } }>(
@@ -14,19 +15,19 @@ export function registerSpecRoutes(app: FastifyInstance): void {
     async (req) => {
       const username = req.query.username || (await getUsername());
       const scope = req.query.scope;
-      if (scope === 'global') return getGlobalSpecs();
-      if (scope === 'user') return getUserSpecs(username);
+      if (scope === 'global') return ok(await getGlobalSpecs());
+      if (scope === 'user') return ok(await getUserSpecs(username));
       if (scope === 'project' && req.query.projectId) {
-        return getProjectSpecs(username, req.query.projectId);
+        return ok(await getProjectSpecs(username, req.query.projectId));
       }
       const projectSpecs = req.query.projectId
         ? await getProjectSpecs(username, req.query.projectId)
         : await getAllProjectSpecs(username);
-      return {
+      return ok({
         global: await getGlobalSpecs(),
         user: await getUserSpecs(username),
         project: projectSpecs,
-      };
+      });
     },
   );
 
@@ -39,7 +40,7 @@ export function registerSpecRoutes(app: FastifyInstance): void {
       if (req.query.type) opts.type = req.query.type;
       if (req.query.projectId) opts.projectId = req.query.projectId;
       if (req.query.limit) opts.limit = parseInt(req.query.limit, 10);
-      return unifiedSearch(req.query.q, opts);
+      return ok(await unifiedSearch(req.query.q, opts));
     },
   );
 }

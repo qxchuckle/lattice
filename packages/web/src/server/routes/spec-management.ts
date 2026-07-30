@@ -14,6 +14,7 @@ import {
   applySpecTemplate,
   updateRagIndex,
 } from '@qcqx/lattice-core';
+import { ok, fail } from './shared';
 
 export async function registerSpecManagementRoutes(app: FastifyInstance): Promise<void> {
   app.post<{
@@ -28,7 +29,7 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
     const username = await getUsername();
     const { relativePath, scope, title, description, tags } = req.body;
     if (relativePath.includes('..')) {
-      return { error: 'bad_request', message: '路径不允许包含 ..' };
+      return fail('bad_request', '路径不允许包含 ..');
     }
     let dir: string;
     if (scope === 'global') {
@@ -36,12 +37,12 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
     } else if (scope === 'user') {
       dir = getUserSpecDir(username);
     } else {
-      return { error: 'bad_request', message: '项目级 Spec 请在项目目录中创建' };
+      return fail('bad_request', '项目级 Spec 请在项目目录中创建');
     }
     const filePath = join(dir, relativePath);
     const tagList = tags ? tags.split(',').map((s: string) => s.trim()) : [];
     await writeSpec(filePath, { title, description, tags: tagList }, `# ${title}\n\n`);
-    return { success: true };
+    return ok();
   });
 
   app.post<{
@@ -50,7 +51,7 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
   }>('/api/specs/:id/frontmatter', async (req) => {
     const username = await getUsername();
     const matches = await findSpecByName(username, null, req.params.id);
-    if (matches.length === 0) return { error: 'not_found', message: 'Spec 未找到' };
+    if (matches.length === 0) return fail('not_found', 'Spec 未找到');
     const spec = matches[0].spec;
     const tagList = req.body.tags ? req.body.tags.split(',').map((s: string) => s.trim()) : [];
     await writeSpec(
@@ -67,24 +68,24 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
     } catch {
       // ignore
     }
-    return { success: true };
+    return ok();
   });
 
   app.post('/api/specs/lint', async () => {
     const username = await getUsername();
     const [globalSpecs, userSpecs] = await Promise.all([getGlobalSpecs(), getUserSpecs(username)]);
-    return lintSpecs([...globalSpecs, ...userSpecs]);
+    return ok(await lintSpecs([...globalSpecs, ...userSpecs]));
   });
 
   app.post('/api/specs/conflicts', async () => {
     const username = await getUsername();
-    return await detectSpecConflicts(username, '');
+    return ok(await detectSpecConflicts(username, ''));
   });
 
   // ── Spec 模板 ──
 
   app.get('/api/spec-templates', async () => {
-    return await listSpecTemplates();
+    return ok(await listSpecTemplates());
   });
 
   app.post<{ Body: { name: string; projectId?: string } }>(
@@ -98,9 +99,9 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
         } catch {
           // ignore
         }
-        return { success: true, filePath };
+        return ok({ filePath });
       }
-      return { error: 'not_found', message: `模板 ${req.body.name} 未找到` };
+      return fail('not_found', `模板 ${req.body.name} 未找到`);
     },
   );
 }

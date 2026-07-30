@@ -7,6 +7,7 @@ import {
   deleteRelationFile,
   mergeProjects,
 } from '@qcqx/lattice-core';
+import { ok } from './shared';
 
 export function registerProjectManagementRoutes(app: FastifyInstance): void {
   app.post<{
@@ -20,13 +21,13 @@ export function registerProjectManagementRoutes(app: FastifyInstance): void {
     if (req.body.groups !== undefined) updates.groups = req.body.groups;
     if (req.body.tags !== undefined) updates.tags = req.body.tags;
     await updateProjectMeta(username, req.params.id, updates);
-    return { success: true };
+    return ok();
   });
 
   app.post<{ Params: { id: string } }>('/api/projects/:id/remove', async (req) => {
     const username = await getUsername();
     await unregisterProject(username, req.params.id);
-    return { success: true };
+    return ok();
   });
 
   app.post<{
@@ -41,7 +42,7 @@ export function registerProjectManagementRoutes(app: FastifyInstance): void {
       description: req.body.description,
       createdBy: 'manual',
     });
-    return { success: true, id: saved.id };
+    return ok({ id: saved.id });
   });
 
   app.delete<{ Params: { id: string; rid: string } }>(
@@ -49,14 +50,13 @@ export function registerProjectManagementRoutes(app: FastifyInstance): void {
     async (req) => {
       const username = await getUsername();
       await deleteRelationFile(username, req.params.rid);
-      return { success: true };
+      return ok();
     },
   );
 
   // ── 项目合并 ──
 
   app.post<{ Body: { fromId: string; toId: string } }>('/api/projects/merge', async (req) => {
-    const result = await mergeProjects(req.body.fromId, req.body.toId);
-    return result;
+    return ok(await mergeProjects(req.body.fromId, req.body.toId));
   });
 }

@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyError } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
@@ -56,14 +56,31 @@ export async function createServer() {
           return reply.type('text/html').send(html);
         }
       }
-      reply.code(404).send({ error: 'not_found', message: `Route ${req.url} not found` });
+      reply.code(404).send({ code: 'not_found', message: `Route ${req.url} not found` });
     });
   } else {
     // 开发模式：Vite dev server 提供前端，Fastify 只提供 API
     app.setNotFoundHandler((req, reply) => {
-      reply.code(404).send({ error: 'not_found', message: `Route ${req.url} not found` });
+      reply.code(404).send({ code: 'not_found', message: `Route ${req.url} not found` });
     });
   }
+
+  // 全局错误处理兜底（不泄漏堆栈，只返回错误码和消息）
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const statusCode = error.statusCode ?? 500;
+    // 401 保持原样
+    if (statusCode === 401) {
+      reply.code(401).send({ code: 'invalid_password', message: error.message });
+      return;
+    }
+    // 500 及以上：不泄漏内部信息
+    if (statusCode >= 500) {
+      reply.code(500).send({ code: 'unknown', message: 'Internal server error' });
+      return;
+    }
+    // 4xx 框架错误（如 schema 验证 400、payload 过大 413）：降为 200 + envelope
+    reply.code(200).send({ code: 'bad_request', message: error.message });
+  });
 
   return app;
 }

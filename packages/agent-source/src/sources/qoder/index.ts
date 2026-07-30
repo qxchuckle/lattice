@@ -21,14 +21,6 @@ import type {
 } from '@qcqx/lattice-agent-protocol';
 import { CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
 import type { PermissionMode, McpServerConfig } from '@qoder-ai/qoder-agent-sdk';
-import {
-  query,
-  qodercliAuth,
-  accessTokenFromEnv,
-  forkSession,
-  getSessionMessages,
-  renameSession,
-} from '@qoder-ai/qoder-agent-sdk';
 import type {
   SourceDriver,
   DriverSessionHandle,
@@ -44,6 +36,14 @@ import { QODER_INFO, QODER_CAPABILITIES, QODER_AUTH_REQUIREMENTS } from './capab
 import { ModelCatalog } from './models.js';
 import { makeQoderPrompt } from './prompt-input.js';
 import { isRecord, stringField } from '../../internal/shape.js';
+
+/**
+ * SDK 惰性加载（optionalDependencies：未安装时不致模块顶层崩溃）
+ * 参照 pi/index.ts 的 loadSdk() 模式：在 driver 方法内部按需动态 import。
+ */
+function loadSdk() {
+  return import('@qoder-ai/qoder-agent-sdk');
+}
 
 export interface QoderSourceOptions {
   authMode?: 'env' | 'cli';
@@ -151,6 +151,7 @@ class QoderDriver implements SourceDriver<QoderHandle> {
     opts: PromptOpts,
     controller: AbortController,
   ): Promise<Record<string, unknown>> {
+    const { accessTokenFromEnv, qodercliAuth } = await loadSdk();
     const auth = this.options.authMode === 'env' ? accessTokenFromEnv() : qodercliAuth();
     // 宿主工具 = 会话参数（经 MCP 桥），非源级状态
     const sessionTools = opts.tools?.tools ?? [];
@@ -197,6 +198,7 @@ class QoderDriver implements SourceDriver<QoderHandle> {
     const makePrompt = makeQoderPrompt(message);
 
     try {
+      const { query } = await loadSdk();
       const queryOptions = await this.buildQueryOptions(opts, controller);
       // 有真实会话 ID → 直接 resume（SDK 从磁盘 JSONL 恢复）
       if (handle.resumeId) queryOptions.resume = handle.resumeId;
@@ -251,6 +253,7 @@ class QoderDriver implements SourceDriver<QoderHandle> {
   private async lastAssistantUuid(sessionId: string): Promise<string | undefined> {
     if (!sessionId) return undefined;
     try {
+      const { getSessionMessages } = await loadSdk();
       const msgs = await getSessionMessages(sessionId);
       return [...msgs].reverse().find((m) => m.type === 'assistant')?.uuid;
     } catch {
@@ -261,11 +264,13 @@ class QoderDriver implements SourceDriver<QoderHandle> {
   // ── fork / rename（能力守卫在工厂，进入此处即合法） ──
 
   async forkNative(sessionId: string, atMessage?: string): Promise<string> {
+    const { forkSession } = await loadSdk();
     const result = await forkSession(sessionId, { upToMessageId: atMessage });
     return result.sessionId;
   }
 
   async renameNative(sessionId: string, title: string): Promise<void> {
+    const { renameSession } = await loadSdk();
     await renameSession(sessionId, title);
   }
 

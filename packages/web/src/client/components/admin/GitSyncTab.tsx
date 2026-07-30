@@ -37,7 +37,6 @@ interface GitStatus {
 }
 
 interface GitOpResult {
-  success: boolean;
   message: string;
   output?: string;
 }
@@ -95,21 +94,16 @@ export const GitSyncTab = memo(function GitSyncTab() {
 
         if ('commit' in data) {
           const lines = [
-            `提交: ${data.commit.success ? '✓' : '⚠'} ${data.commit.message}`,
-            `拉取: ${data.pull.success ? '✓' : '⚠'} ${data.pull.message}`,
-            `推送: ${data.push.success ? '✓' : '⚠'} ${data.push.message}`,
+            `提交: ${data.commit.message}`,
+            `拉取: ${data.pull.message}`,
+            `推送: ${data.push.message}`,
           ];
           setLog(lines.join('\n'));
           message.success('同步完成');
         } else {
-          if (data.success) {
-            setLog(data.message + (data.output ? `\n${data.output}` : ''));
-            message.success(data.message);
-            if (op === 'commit') setCommitMsg('');
-          } else {
-            setLog(data.message);
-            message.warning(data.message);
-          }
+          setLog(data.message + (data.output ? `\n${data.output}` : ''));
+          message.success(data.message);
+          if (op === 'commit') setCommitMsg('');
         }
         refresh();
       } catch (err) {
@@ -134,14 +128,10 @@ export const GitSyncTab = memo(function GitSyncTab() {
         name: values.name,
         url: values.url,
       });
-      if (data.success) {
-        message.success(data.message);
-        setAddOpen(false);
-        addForm.resetFields();
-        refresh();
-      } else {
-        message.warning(data.message);
-      }
+      message.success(data.message);
+      setAddOpen(false);
+      addForm.resetFields();
+      refresh();
     } catch (err) {
       message.error(`添加失败: ${(err as Error).message}`);
       throw err;
@@ -161,14 +151,10 @@ export const GitSyncTab = memo(function GitSyncTab() {
         name: editRemote.name,
         url: values.url,
       });
-      if (data.success) {
-        message.success(data.message);
-        setEditRemote(null);
-        editForm.resetFields();
-        refresh();
-      } else {
-        message.warning(data.message);
-      }
+      message.success(data.message);
+      setEditRemote(null);
+      editForm.resetFields();
+      refresh();
     } catch (err) {
       message.error(`修改失败: ${(err as Error).message}`);
       throw err;
@@ -184,12 +170,8 @@ export const GitSyncTab = memo(function GitSyncTab() {
         onOk: async () => {
           try {
             const data = await apiPost<GitOpResult>('/api/git/remotes/remove', { name });
-            if (data.success) {
-              message.success(data.message);
-              refresh();
-            } else {
-              message.warning(data.message);
-            }
+            message.success(data.message);
+            refresh();
           } catch (err) {
             message.error(`删除失败: ${(err as Error).message}`);
             throw err;

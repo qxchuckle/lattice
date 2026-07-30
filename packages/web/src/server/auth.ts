@@ -113,13 +113,13 @@ export async function authGuard(req: FastifyRequest, reply: FastifyReply): Promi
 
   const token = extractToken(req);
   if (!token) {
-    reply.code(401).send({ error: 'unauthorized', message: '未登录或 token 缺失' });
+    reply.code(401).send({ code: 'unauthorized', message: '未登录或 token 缺失' });
     return;
   }
 
   const payload = verifyJwt(token, webAuth.jwtSecret);
   if (!payload) {
-    reply.code(401).send({ error: 'unauthorized', message: 'token 无效或已过期' });
+    reply.code(401).send({ code: 'unauthorized', message: 'token 无效或已过期' });
     return;
   }
 }

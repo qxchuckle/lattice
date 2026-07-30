@@ -4,7 +4,7 @@ import { ScanOutlined } from '@ant-design/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
-import { getAuthHeaders } from '../../lib';
+import { getAuthHeaders } from '../../api/request';
 
 interface ScanProgress {
   current: number;

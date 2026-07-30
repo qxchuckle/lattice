@@ -16,6 +16,8 @@ import {
   sendWs,
   isWsReady,
   waitForSessionReady,
+  subscribeTree,
+  unsubscribeTree,
   __setWebSocketCtorForTest,
   __resetConnectionForTest,
 } from './connection';
@@ -299,5 +301,145 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
   it('waitForSessionReady：已就绪则立即 resolve（不等事件）', async () => {
     agentStore.sessionId = 'already';
     await expect(waitForSessionReady(10)).resolves.toBe('already');
+  });
+});
+
+describe('重连后树订阅恢复', () => {
+  // 每测试用唯一 treeId，避免模块级 subscribedTrees 交叉污染
+  const TREE_A = 'reconn-treeA';
+  const TREE_B = 'reconn-treeB';
+  const TREE_C = 'reconn-treeC';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FakeWebSocket.instances = [];
+    __setWebSocketCtorForTest(asCtor());
+    agentStore.sessionId = null;
+    agentStore.treeId = null;
+  });
+
+  afterEach(() => {
+    // 清理模块级 subscribedTrees（unsubscribeTree 对未订阅的 treeId 安全 noop）
+    unsubscribeTree(TREE_A);
+    unsubscribeTree(TREE_B);
+    unsubscribeTree(TREE_C);
+    __resetConnectionForTest();
+    __setWebSocketCtorForTest(null);
+    vi.useRealTimers();
+  });
+
+  it('重连后恢复多树订阅', () => {
+    // 建链
+    agentStore.treeId = TREE_A;
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    // session.created 设置 sessionId + 订阅 TREE_A
+    FakeWebSocket.last.simulateMessage({
+      type: 'session.created',
+      sessionId: 'sess-r1',
+      treeId: TREE_A,
+    });
+    // 再订阅 TREE_B
+    subscribeTree(TREE_B);
+    expect(agentStore.sessionId).toBe('sess-r1');
+
+    // 断链 → 退避 → 重连
+    FakeWebSocket.last.simulateAbnormalClose();
+    vi.advanceTimersByTime(2_000);
+    const second = FakeWebSocket.last;
+    second.simulateOpen();
+    const baseSent = second.sent.length;
+
+    // 重连后 session.created（TREE_A 是当前树）
+    second.simulateMessage({
+      type: 'session.created',
+      sessionId: 'sess-r2',
+      treeId: TREE_A,
+    });
+
+    // 验证：对 TREE_B 发了 tree.subscribe（恢复订阅）
+    const newPayloads = second.sent
+      .slice(baseSent)
+      .map((s) => JSON.parse(s) as { type: string; treeId?: string });
+    const treeSubscribes = newPayloads.filter(
+      (p) => p.type === 'tree.subscribe' && p.treeId === TREE_B,
+    );
+    expect(treeSubscribes.length, 'TREE_B 应被恢复订阅').toBe(1);
+
+    // P1-#7 修复：重连后 server 侧主树订阅已丢失，TREE_A 也需重新订阅（恰好一次）
+    const treeASubscribes = newPayloads.filter(
+      (p) => p.type === 'tree.subscribe' && p.treeId === TREE_A,
+    );
+    expect(treeASubscribes.length, 'TREE_A 重连后需重新订阅').toBe(1);
+  });
+
+  it('重连后主树只发一次 tree.subscribe', () => {
+    // 先连接并订阅 TREE_A 和 TREE_B
+    agentStore.treeId = TREE_A;
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    FakeWebSocket.last.simulateMessage({
+      type: 'session.created',
+      sessionId: 'sess-dup',
+      treeId: TREE_A,
+    });
+    subscribeTree(TREE_B);
+
+    // 断链 → 退避 → 重连
+    FakeWebSocket.last.simulateAbnormalClose();
+    vi.advanceTimersByTime(2_000);
+    const second = FakeWebSocket.last;
+    second.simulateOpen();
+    const baseSent = second.sent.length;
+
+    second.simulateMessage({
+      type: 'session.created',
+      sessionId: 'sess-dup2',
+      treeId: TREE_A,
+    });
+
+    // 验证：重连后主树 TREE_A 恰好发一次 tree.subscribe（server 侧订阅已丢失需重发）
+    const payloads = second.sent
+      .slice(baseSent)
+      .map((s) => JSON.parse(s) as { type: string; treeId?: string });
+    const treeASubscribes = payloads.filter(
+      (p) => p.type === 'tree.subscribe' && p.treeId === TREE_A,
+    );
+    expect(treeASubscribes.length, '主树 TREE_A 重连后恰好发一次').toBe(1);
+    // TREE_B 也恢复订阅一次
+    const treeBSubscribes = payloads.filter(
+      (p) => p.type === 'tree.subscribe' && p.treeId === TREE_B,
+    );
+    expect(treeBSubscribes.length, 'TREE_B 恢复订阅一次').toBe(1);
+  });
+
+  it('空树订阅集合重连只发一次主树订阅', () => {
+    // 不订阅任何额外树（subscribedTrees 仅含 session.created 带的 treeId）
+    agentStore.treeId = TREE_C;
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    agentStore.sessionId = 'sess-empty';
+
+    // 断链 → 退避 → 重连
+    FakeWebSocket.last.simulateAbnormalClose();
+    vi.advanceTimersByTime(2_000);
+    const second = FakeWebSocket.last;
+    second.simulateOpen();
+    const baseSent = second.sent.length;
+
+    // 重连后 session.created（带 TREE_C，无其他树订阅）
+    second.simulateMessage({
+      type: 'session.created',
+      sessionId: 'sess-empty2',
+      treeId: TREE_C,
+    });
+
+    // 验证：仅对主树 TREE_C 发一次 tree.subscribe，无多余
+    const treeSubscribes = second.sent
+      .slice(baseSent)
+      .map((s) => JSON.parse(s) as { type: string; treeId?: string })
+      .filter((p) => p.type === 'tree.subscribe');
+    expect(treeSubscribes.length, '仅主树订阅一次，无多余').toBe(1);
+    expect(treeSubscribes[0].treeId).toBe(TREE_C);
   });
 });

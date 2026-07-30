@@ -11,6 +11,7 @@ import {
   generateEmbedding,
   removeInstalledModel,
 } from '@qcqx/lattice-core';
+import { ok, fail } from './shared';
 import { createSseStream } from '../sse';
 
 /** RAG 操作并发锁 */
@@ -18,13 +19,12 @@ const ragLock = { running: false };
 
 export function registerRagRoutes(app: FastifyInstance): void {
   app.get('/api/rag/status', async () => {
-    return await getRAGStatus();
+    return ok(await getRAGStatus());
   });
 
   app.post('/api/rag/update', async (_req, reply) => {
     if (ragLock.running) {
-      reply.code(409);
-      return { error: 'conflict', message: 'RAG 操作正在进行中，请稍后再试' };
+      return reply.code(409).send(fail('conflict', 'RAG 操作正在进行中，请稍后再试'));
     }
     ragLock.running = true;
     let sse: ReturnType<typeof createSseStream> | null = null;
@@ -49,8 +49,7 @@ export function registerRagRoutes(app: FastifyInstance): void {
         sse.done({ done: true, error: (err as Error).message });
       } else {
         // createSseStream 自身失败，回退到 JSON
-        reply.code(500);
-        return { error: 'internal', message: (err as Error).message };
+        return fail('internal', (err as Error).message);
       }
     } finally {
       ragLock.running = false;
@@ -59,8 +58,7 @@ export function registerRagRoutes(app: FastifyInstance): void {
 
   app.post('/api/rag/rebuild', async (_req, reply) => {
     if (ragLock.running) {
-      reply.code(409);
-      return { error: 'conflict', message: 'RAG 操作正在进行中，请稍后再试' };
+      return reply.code(409).send(fail('conflict', 'RAG 操作正在进行中，请稍后再试'));
     }
     ragLock.running = true;
     let sse: ReturnType<typeof createSseStream> | null = null;
@@ -83,8 +81,7 @@ export function registerRagRoutes(app: FastifyInstance): void {
       if (sse) {
         sse.done({ done: true, error: (err as Error).message });
       } else {
-        reply.code(500);
-        return { error: 'internal', message: (err as Error).message };
+        return fail('internal', (err as Error).message);
       }
     } finally {
       ragLock.running = false;
@@ -94,13 +91,13 @@ export function registerRagRoutes(app: FastifyInstance): void {
   // ── 模型管理 ──
 
   app.get('/api/rag/model/status', async () => {
-    return {
+    return ok({
       installed: await isModelInstalled(),
       loaded: isModelLoaded(),
       loadError: getModelLoadError()?.message ?? null,
       isNetworkError: isModelLoadNetworkError(),
       networkHint: isModelLoadNetworkError() ? formatModelNetworkHint() : null,
-    };
+    });
   });
 
   app.post('/api/rag/model/download', async (_req, reply) => {
@@ -118,6 +115,6 @@ export function registerRagRoutes(app: FastifyInstance): void {
 
   app.post('/api/rag/model/remove', async () => {
     await removeInstalledModel();
-    return { success: true };
+    return ok();
   });
 }

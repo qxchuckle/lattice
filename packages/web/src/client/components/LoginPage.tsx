@@ -4,6 +4,7 @@ import { LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
 import { getAdapter } from '../adapters';
 import { saveToken } from '../store';
+import { ApiError } from '../../shared/api';
 
 export function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -21,8 +22,14 @@ export function LoginPage() {
       message.success('登录成功');
       navigate('/');
     } catch (err) {
-      const msg = (err as Error).message;
-      message.error(msg === 'unauthorized' || msg === 'HTTP 401' ? '密码错误' : `登录失败: ${msg}`);
+      if (err instanceof ApiError && err.code === 'invalid_password') {
+        message.error(err.message || '密码错误');
+      } else {
+        const msg = (err as Error).message;
+        message.error(
+          msg === 'unauthorized' || msg === 'HTTP 401' ? '密码错误' : `登录失败: ${msg}`,
+        );
+      }
     } finally {
       setLoading(false);
     }

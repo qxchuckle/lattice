@@ -49,7 +49,8 @@ export interface WsSocket {
   send(data: string): void;
   close(code?: number, reason?: string): void;
   on(event: 'message', handler: (raw: Buffer | string | unknown[]) => void): void;
-  on(event: 'close' | 'error', handler: () => void): void;
+  on(event: 'close', handler: () => void): void;
+  on(event: 'error', handler: (err: Error) => void): void;
 }
 
 /** 一个 WS 连接（订阅者）：可订多棵树；一棵树可被多连接订阅 */
@@ -58,6 +59,10 @@ export interface AgentConn {
   socket: WsSocket;
   clientKind: string;
   subscribed: Set<string>;
+  /** P1-#12: 该连接有权 respond 的 permission requestId 集合 */
+  pendingPermissions: Set<string>;
+  /** P1-#12 fix: 该连接发起/持有的 session 集合，用于权限请求按 session 归属过滤 */
+  sessions: Set<string>;
 }
 
 // ── 路由注册 ──

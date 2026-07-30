@@ -9,7 +9,7 @@
  *
  * 注意：当前 TASK_TRANSITIONS 为全连通矩阵（见 core/src/task/fsm.ts 注释），
  * 真实 fsm 下「非法转换」分支不可达；用例②用 mockReturnValueOnce(false) 模拟
- * 未来收紧后的状态机否决，验证路由对 fsm 裁决的契约（400 + 转换错误信息 + 不落库）。
+ * 未来收紧后的状态机否决，验证路由对 fsm 裁决的契约（200 + bad_request envelope + 不落库）。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -60,26 +60,27 @@ const postStatus = (status: string) =>
   app.inject({ method: 'POST', url: '/api/tasks/task-1/status', payload: { status } });
 
 describe('POST /api/tasks/:id/status 状态机契约', () => {
-  it('非法状态值（done）：isValidTaskStatus 拦截，返回 bad_request 且不查库不落库', async () => {
+  it('非法状态值（done）：isValidTaskStatus 拦截，返回 bad_request envelope 且不查库不落库', async () => {
     const res = await postStatus('done');
-    // 如实断言现状：该分支未设置 reply.code(400)，HTTP 状态码为 200（与转换分支不一致）
+    // 业务错误统一返回 200 + envelope
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ error: 'bad_request', message: '无效的状态: done' });
+    expect(res.json()).toEqual({ code: 'bad_request', message: '无效的状态: done' });
     // 值校验失败即短路：不读任务元数据、不进状态机、不落库
     expect(mockedGetTaskMeta).not.toHaveBeenCalled();
     expect(mockedCanTransition).not.toHaveBeenCalled();
     expect(mockedUpdateTask).not.toHaveBeenCalled();
   });
 
-  it('非法状态转换：canTransitionTaskStatus 否决 → 400 + 转换错误信息，不落库', async () => {
+  it('非法状态转换：canTransitionTaskStatus 否决 → 200 + bad_request envelope，不落库', async () => {
     mockedGetTaskMeta.mockResolvedValueOnce({ status: 'completed' } as unknown as TaskMeta);
     // 真实转换表当前全连通，此分支不可达；模拟 fsm 否决验证路由契约
     mockedCanTransition.mockReturnValueOnce(false);
 
     const res = await postStatus('planning');
-    expect(res.statusCode).toBe(400);
+    // 业务错误统一返回 200 + envelope（不再使用 HTTP 400）
+    expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
-      error: 'bad_request',
+      code: 'bad_request',
       message: '无效的状态转换: completed -> planning',
     });
     expect(mockedCanTransition).toHaveBeenCalledWith('completed', 'planning');
@@ -91,7 +92,7 @@ describe('POST /api/tasks/:id/status 状态机契约', () => {
 
     const res = await postStatus('in_progress');
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ success: true });
+    expect(res.json()).toEqual({ code: 'ok' });
     expect(mockedCanTransition).toHaveBeenCalledWith('planning', 'in_progress');
     expect(mockedUpdateTask).toHaveBeenCalledWith('tester', 'task-1', { status: 'in_progress' });
   });
@@ -101,7 +102,7 @@ describe('POST /api/tasks/:id/status 状态机契约', () => {
 
     const res = await postStatus('completed');
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ success: true });
+    expect(res.json()).toEqual({ code: 'ok' });
     expect(mockedCanTransition).not.toHaveBeenCalled();
     expect(mockedUpdateTask).toHaveBeenCalledWith('tester', 'task-1', { status: 'completed' });
   });

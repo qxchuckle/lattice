@@ -24,8 +24,11 @@ import { agentStore, putTurn, ensureUi } from './store';
 import { buildTurnsFromNodes } from './turnGraph';
 import type { TurnNode, ConversationEntry } from './types';
 
-/** 他端在途流的实时累积：requestId → 已生成内容（快照到达前的缓冲） */
-const liveStreams = new Map<string, NodeContent[]>();
+/** 他端在途流缓冲 TTL：超时视为异常中止，丢弃缓冲 */
+const LIVE_STREAM_TTL_MS = 5 * 60_000; // 5 分钟
+
+/** 他端在途流的实时累积：requestId → { blocks: 已生成内容, at: 最后更新时间 } */
+const liveStreams = new Map<string, { blocks: NodeContent[]; at: number }>();
 
 /** 已应用的最高 rev（快照/重载共用，防旧状态覆盖新状态的丢失更新） */
 let lastAppliedRev = 0;
@@ -54,9 +57,10 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
       lastAppliedRev,
     );
   }
-  // rev 守卫：lastAppliedRev 只由已应用的全量快照推进，被跳过的旧快照必已被更新全量覆盖，不丢节点
+  // rev 守卫：undefined rev（服务端旧版/特殊快照）→ (undefined <= N) === false → 不跳过，安全应用
+  // lastAppliedRev 只由已应用的全量快照推进，被跳过的旧快照必已被更新全量覆盖，不丢节点
   if (!force && msg.rev <= lastAppliedRev) return;
-  lastAppliedRev = Math.max(lastAppliedRev, msg.rev);
+  lastAppliedRev = Math.max(lastAppliedRev, msg.rev ?? 0);
 
   const turns = buildTurnsFromNodes(msg.nodes as ConversationNode[]);
 
@@ -76,12 +80,18 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
       turn.blocks = [...s.content];
       turn.status = 'streaming';
     }
-    liveStreams.set(s.requestId, [...s.content]);
+    liveStreams.set(s.requestId, { blocks: [...s.content], at: Date.now() });
   }
-  for (const [rid, blocks] of liveStreams) {
+  // 遍历 liveStreams 时顺手清理过期条目（TTL 防异常中止流缓冲永久驻留）
+  const now = Date.now();
+  for (const [rid, entry] of liveStreams) {
+    if (now - entry.at > LIVE_STREAM_TTL_MS) {
+      liveStreams.delete(rid); // 过期丢弃
+      continue;
+    }
     const turn = turns.get(rid);
     if (turn && turn.blocks.length === 0 && turn.status !== 'undone' && turn.status !== 'hidden') {
-      turn.blocks = [...blocks];
+      turn.blocks = [...entry.blocks];
       turn.status = 'streaming';
     }
   }
@@ -120,12 +130,13 @@ export function handleStreamEvent(msg: StreamEventMessage): void {
   if (msg.treeId !== agentStore.treeId) return;
   const turn = agentStore.turns.get(msg.requestId) as TurnNode | undefined;
   if (!turn) {
-    let arr = liveStreams.get(msg.requestId);
-    if (!arr) {
-      arr = [];
-      liveStreams.set(msg.requestId, arr);
+    let entry = liveStreams.get(msg.requestId);
+    if (!entry) {
+      entry = { blocks: [], at: Date.now() };
+      liveStreams.set(msg.requestId, entry);
     }
-    applyEventToContent(arr, msg.event as SourceEvent);
+    entry.at = Date.now(); // 刷新时间戳（防 TTL 过期）
+    applyEventToContent(entry.blocks, msg.event as SourceEvent);
     return;
   }
   if (isTerminalViewStatus(turn.status)) return; // 终止态守卫（状态机单一真相）

@@ -6,6 +6,7 @@ import type { ConversationTree, ConversationNode, SourceEvent } from '@qcqx/latt
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 import { workbenchStore, setTreeData, setStreaming, resetStreaming } from './store';
 import { authStore } from '../../store';
+import { get } from '../../api/request';
 
 export function useAgentSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -77,11 +78,9 @@ export function useAgentSocket() {
 
   const loadTree = useCallback(async (treeId: string) => {
     try {
-      const headers: Record<string, string> = {};
-      if (authStore.token) headers.Authorization = `Bearer ${authStore.token}`;
-      const res = await fetch(`/api/agent/tree/${treeId}`, { headers });
-      if (!res.ok) return;
-      const data = (await res.json()) as { tree: ConversationTree; nodes: ConversationNode[] };
+      const data = await get<{ tree: ConversationTree; nodes: ConversationNode[] }>(
+        `/api/agent/tree/${treeId}`,
+      );
       setTreeData(data.tree, data.nodes);
     } catch {
       /* ignore */

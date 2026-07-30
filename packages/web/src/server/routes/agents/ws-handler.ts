@@ -20,6 +20,41 @@ import { handleWsCommand, type WsCommandContext } from './ws-commands';
 
 const STREAM_GRACE_MS = 30000;
 
+/** permission:request 事件 payload（与 permission-guard emit 对齐） */
+export interface PermissionRequestPayload {
+  request: {
+    id: string;
+    tool: string;
+    args: Record<string, unknown>;
+    level: 'allow' | 'ask' | 'deny';
+  };
+  /** 发起该请求的源会话 ID（permission-guard 透传） */
+  sessionId?: string;
+}
+
+/**
+ * 处理 permission:request 事件：按 session 归属过滤后转发给指定连接。
+ * P1-#12 fix: 只对持有该 session 的连接转发 + 记录 pendingPermissions，
+ * 防多连接全局广播致归属校验失效（非发起连接也能 respond → 安全降级）。
+ */
+export function forwardPermissionRequest(
+  conn: AgentConn,
+  payload: PermissionRequestPayload,
+  send: (msg: ServerMessage) => void,
+): void {
+  const { request, sessionId } = payload;
+  // fail-closed: 无 sessionId 或连接不持有该 session → 不转发（权限将超时自动拒绝）
+  if (!sessionId || !conn.sessions.has(sessionId)) return;
+  send({
+    type: 'permission.request',
+    requestId: request.id,
+    tool: request.tool,
+    args: request.args,
+    level: request.level,
+  });
+  conn.pendingPermissions.add(request.id);
+}
+
 export function setupAgentWs(
   app: FastifyInstance,
   getAgent: () => Promise<LatticeAgent>,
@@ -112,6 +147,8 @@ export function setupAgentWs(
         socket,
         clientKind: 'web',
         subscribed: new Set(),
+        pendingPermissions: new Set(),
+        sessions: new Set(),
       };
 
       // 构建一棵树的全量快照
@@ -202,21 +239,13 @@ export function setupAgentWs(
         };
       };
 
-      // 权限事件转发
+      // 权限事件转发（P1-#12 fix: 按 session 归属过滤，只转发给发起该请求的连接）
       const unsubPermission = events.on('permission:request', (event) => {
-        const p = event.payload as {
-          requestId: string;
-          tool: string;
-          args: Record<string, unknown>;
-          level: 'allow' | 'ask' | 'deny';
-        };
-        send(socket, {
-          type: 'permission.request',
-          requestId: p.requestId,
-          tool: p.tool,
-          args: p.args,
-          level: p.level,
-        });
+        forwardPermissionRequest(
+          conn,
+          event.payload as unknown as PermissionRequestPayload,
+          (msg) => send(socket, msg),
+        );
       });
 
       // 命令分发上下文
@@ -267,9 +296,16 @@ export function setupAgentWs(
         unsubPermission();
         for (const rid of socketRequestIds) conversation.abortByRequestId(rid);
         socketRequestIds.clear();
+        conn.pendingPermissions.clear();
+        conn.sessions.clear();
         for (const treeId of [...conn.subscribed]) unsubscribeConn(conn, treeId);
       });
-      socket.on('error', () => unsubPermission());
+      socket.on('error', (err) => {
+        req.log.error({ err, connId: conn.id }, 'agent ws socket error');
+        unsubPermission();
+        conn.pendingPermissions.clear();
+        conn.sessions.clear();
+      });
     },
   );
 

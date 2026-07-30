@@ -27,9 +27,76 @@ export interface WsCommandContext {
   socketRequestIds: Set<string>;
 }
 
+// ── P1-#11: 入站参数守卫 ──────────────────────────────────────────
+
+/** 防止超长/超大 payload 耗尽服务端资源 */
+const MAX_TREE_ID_LEN = 256;
+const MAX_SESSION_ID_LEN = 256;
+const MAX_BRANCH_NAME_LEN = 256;
+const MAX_NODE_ID_LEN = 256;
+const MAX_NODE_IDS_COUNT = 1000;
+const MAX_MESSAGE_CHARS = 200_000; // ~200KB 文本
+
+function validateStringField(value: unknown, field: string, maxLen: number): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.length > maxLen) {
+    return `${field} exceeds maximum length (${maxLen})`;
+  }
+  return null;
+}
+
+function validateCommonFields(msg: ClientMessage): string | null {
+  if ('treeId' in msg && msg.treeId) {
+    const err = validateStringField(msg.treeId, 'treeId', MAX_TREE_ID_LEN);
+    if (err) return err;
+  }
+  if ('sessionId' in msg && msg.sessionId) {
+    const err = validateStringField(msg.sessionId, 'sessionId', MAX_SESSION_ID_LEN);
+    if (err) return err;
+  }
+  if ('branchId' in msg && msg.branchId) {
+    const err = validateStringField(msg.branchId, 'branchId', MAX_BRANCH_NAME_LEN);
+    if (err) return err;
+  }
+  if ('branchName' in msg && msg.branchName) {
+    const err = validateStringField(msg.branchName, 'branchName', MAX_BRANCH_NAME_LEN);
+    if (err) return err;
+  }
+  if ('nodeId' in msg && msg.nodeId) {
+    const err = validateStringField(msg.nodeId, 'nodeId', MAX_NODE_ID_LEN);
+    if (err) return err;
+  }
+  if ('nodeIds' in msg && Array.isArray(msg.nodeIds)) {
+    if (msg.nodeIds.length > MAX_NODE_IDS_COUNT) {
+      return `nodeIds exceeds maximum count (${MAX_NODE_IDS_COUNT})`;
+    }
+    for (const id of msg.nodeIds) {
+      const err = validateStringField(id, 'nodeIds[]', MAX_NODE_ID_LEN);
+      if (err) return err;
+    }
+  }
+  if ('message' in msg && typeof msg.message === 'string') {
+    if (msg.message.length > MAX_MESSAGE_CHARS) {
+      return `message exceeds maximum length (${MAX_MESSAGE_CHARS} chars)`;
+    }
+  }
+  return null;
+}
+
 export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage): Promise<void> {
   const { latticeAgent, send, broadcastTree, broadcastSnapshot, makeHooks, conn } = ctx;
   const { conversation, session, sources, permission } = latticeAgent;
+
+  // P1-#11: 入站参数守卫
+  const validationError = validateCommonFields(msg);
+  if (validationError) {
+    send({
+      type: 'session.error',
+      sessionId: (msg as any).sessionId ?? '',
+      message: `Invalid parameters: ${validationError}`,
+    });
+    return;
+  }
 
   switch (msg.type) {
     case 'session.create': {
@@ -42,12 +109,16 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
       let treeId = msg.treeId ?? null;
       if (treeId && !(await session.loadTree(treeId))) treeId = null;
       conversation.createSession(sessionId, sourceId, treeId);
+      // P1-#12 fix: 记录 session 归属，权限请求只发给持有该 session 的连接
+      conn.sessions.add(sessionId);
       send({ type: 'session.created', sessionId, treeId: treeId ?? '', agentId: sourceId });
       break;
     }
 
     case 'session.send': {
       if (!msg.sessionId || !msg.message) return;
+      // P1-#12 fix: 记录 session 归属（客户端可能 resume 已有 session）
+      conn.sessions.add(msg.sessionId);
       const requestId = msg.requestId ?? randomUUID();
       conversation.send(
         msg.sessionId,
@@ -69,6 +140,7 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
 
     case 'session.continue': {
       if (!msg.sessionId || !msg.nodeId) return;
+      conn.sessions.add(msg.sessionId);
       const requestId = msg.requestId ?? randomUUID();
       conversation.continue(
         msg.sessionId,
@@ -81,6 +153,7 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
 
     case 'session.retry': {
       if (!msg.sessionId || !msg.nodeId) return;
+      conn.sessions.add(msg.sessionId);
       const requestId = msg.requestId ?? randomUUID();
       conversation.retry(msg.sessionId, msg.nodeId, requestId, makeHooks(msg.sessionId, requestId));
       break;
@@ -172,7 +245,18 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
     }
 
     case 'permission.respond': {
-      if (msg.requestId) permission.respond(msg.requestId, msg.allowed);
+      if (!msg.requestId) break;
+      // P1-#12: 校验权限请求归属——只允许持有对应 requestId 的连接应答
+      if (!conn.pendingPermissions.has(msg.requestId)) {
+        send({
+          type: 'session.error',
+          sessionId: '',
+          message: 'Unauthorized permission response',
+        });
+        break;
+      }
+      conn.pendingPermissions.delete(msg.requestId);
+      permission.respond(msg.requestId, msg.allowed);
       break;
     }
 

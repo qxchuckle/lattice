@@ -2,7 +2,7 @@
  * AgentCanvas — React Flow 对话树画布
  * 两种节点：root-input（始终存在的输入框）+ conversation（一轮对话）
  */
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -153,8 +153,17 @@ function AgentCanvasInner() {
     setRfEdges(flowEdges);
   }, [snap.version]);
 
+  const fitViewTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (fitViewTimerRef.current !== undefined) clearTimeout(fitViewTimerRef.current);
+    };
+  }, []);
+
   const handleInit = useCallback((instance: { fitView: () => void }) => {
-    setTimeout(() => instance.fitView(), 100);
+    if (fitViewTimerRef.current !== undefined) clearTimeout(fitViewTimerRef.current);
+    fitViewTimerRef.current = setTimeout(() => instance.fitView(), 100);
   }, []);
 
   return (

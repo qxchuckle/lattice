@@ -5,6 +5,7 @@ import { useCallback, useRef } from 'react';
 import Editor, { DiffEditor, type OnMount } from '@monaco-editor/react';
 import { useSnapshot } from 'valtio';
 import { workbenchStore, closeTab, setActiveTab, markDirty, closeDiff } from './store';
+import { post } from '../../api/request';
 
 const EXT_LANG_MAP: Record<string, string> = {
   ts: 'typescript',
@@ -60,11 +61,7 @@ export function MonacoEditorPanel() {
   const handleAcceptDiff = useCallback(() => {
     if (snap.diffView) {
       // 接受修改 → 写入文件
-      fetch('/api/fs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: snap.diffView.path, content: snap.diffView.modified }),
-      });
+      post('/api/fs/write', { path: snap.diffView.path, content: snap.diffView.modified });
       closeDiff();
     }
   }, [snap.diffView]);

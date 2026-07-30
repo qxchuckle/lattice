@@ -7,15 +7,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { LatticeAgent } from '@qcqx/lattice-agent';
 import type {
-  GetTreeResponse,
-  GetTreeNotFoundResponse,
   ResourceListItem,
   SourceResourceInfo,
   SourceResourceQuery,
   ModelInfo,
 } from '@qcqx/lattice-agent-protocol';
 import { getUsername, listProjects } from '@qcqx/lattice-core';
-import { isPathSafe } from '../shared';
+import { isPathSafe, ok, fail } from '../shared';
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { readCustomModels } from './index';
@@ -29,7 +27,7 @@ export function registerAgentRestRoutes(
   app.get('/api/agent/sources', async () => {
     const latticeAgent = await getAgent();
     const manifests = latticeAgent.sources.registry.listManifests();
-    return {
+    return ok({
       sources: manifests.map((m) => ({
         id: m.info.id,
         displayName: m.info.displayName,
@@ -42,7 +40,7 @@ export function registerAgentRestRoutes(
         downgrades: m.downgrades.length > 0 ? m.downgrades : undefined,
         capabilities: m.capabilities,
       })),
-    };
+    });
   });
 
   // 获取模型列表（可按源过滤）：源提供的模型 + 用户自定义模型（仅 hybrid/open 源）
@@ -95,7 +93,7 @@ export function registerAgentRestRoutes(
         } as (typeof items)[number] & { custom: boolean });
       }
     }
-    return { models: items };
+    return ok({ models: items });
   });
 
   // 资源发现：本地（lattice 命令/skill）+ 源级（产品自带）聚合
@@ -128,14 +126,14 @@ export function registerAgentRestRoutes(
         }
       }
     }
-    return { resources };
+    return ok({ resources });
   });
 
   // @ 文件引用搜索：在全部注册项目范围内按文件名模糊匹配（浅层遍历，上限 20 条）
   app.get('/api/agent/file-search', async (req) => {
     const { q } = req.query as { q?: string };
     const kw = (q ?? '').trim().toLowerCase();
-    if (!kw) return { files: [] };
+    if (!kw) return ok({ files: [] });
 
     const IGNORED = new Set([
       'node_modules',
@@ -186,41 +184,37 @@ export function registerAgentRestRoutes(
       if (results.length >= MAX_RESULTS) break;
       await walk(root, root, 0);
     }
-    return { files: results };
+    return ok({ files: results });
   });
 
   // 获取对话树（含中断检测 + 能力投影）
-  app.get(
-    '/api/agent/tree/:treeId',
-    async (req): Promise<GetTreeResponse | GetTreeNotFoundResponse> => {
-      const { treeId } = req.params as { treeId: string };
-      const latticeAgent = await getAgent();
-      const tree = await latticeAgent.session.loadTree(treeId);
-      if (!tree) return { error: 'not_found' };
-      const nodes = latticeAgent.session.getNodes(treeId);
-      const interruptedStreams = await latticeAgent.session.getInterruptedStreams(treeId);
-      const turnCapabilities = latticeAgent.conversation.turnCapabilities(treeId);
-      return { tree, nodes, interruptedStreams, turnCapabilities };
-    },
-  );
+  app.get('/api/agent/tree/:treeId', async (req) => {
+    const { treeId } = req.params as { treeId: string };
+    const latticeAgent = await getAgent();
+    const tree = await latticeAgent.session.loadTree(treeId);
+    if (!tree) return fail('not_found');
+    const nodes = latticeAgent.session.getNodes(treeId);
+    const interruptedStreams = await latticeAgent.session.getInterruptedStreams(treeId);
+    const turnCapabilities = latticeAgent.conversation.turnCapabilities(treeId);
+    return ok({ tree, nodes, interruptedStreams, turnCapabilities });
+  });
 
   // 获取历史会话列表
   app.get('/api/agent/conversations', async () => {
     const latticeAgent = await getAgent();
     const sessions = await latticeAgent.session.listSessions();
-    return { conversations: sessions.sort((a, b) => b.updatedAt - a.updatedAt) };
+    return ok({ conversations: sessions.sort((a, b) => b.updatedAt - a.updatedAt) });
   });
 
   // 删除历史会话
-  app.delete('/api/agent/conversations/:treeId', async (req, reply) => {
+  app.delete('/api/agent/conversations/:treeId', async (req) => {
     const { treeId } = req.params as { treeId: string };
     try {
       await (await getAgent()).session.deleteTree(treeId);
       cleanupTree(treeId); // 清理 WS 同步状态（订阅/presence/宽限计时）
-      return { ok: true };
+      return ok();
     } catch (err) {
-      reply.code(500);
-      return { error: String(err) };
+      return fail('exec_failed', String(err));
     }
   });
 }

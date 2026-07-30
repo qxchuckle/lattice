@@ -1,6 +1,7 @@
 import { memo, useState, useCallback } from 'react';
 import { Modal, Form, Input, Select, App } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
+import { post } from '../../api/request';
 
 export const TaskCreateModal = memo(function TaskCreateModal({
   open,
@@ -22,24 +23,15 @@ export const TaskCreateModal = memo(function TaskCreateModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const res = await fetch('/api/tasks/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: values.title,
-          projectIds: values.projectIds,
-          parentTaskId: values.parentTaskId || undefined,
-        }),
+      const data = await post<{ id: string }>('/api/tasks/create', {
+        title: values.title,
+        projectIds: values.projectIds,
+        parentTaskId: values.parentTaskId || undefined,
       });
-      const data = await res.json();
-      if (data.success) {
-        message.success(`任务已创建: ${data.task.id}`);
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        form.resetFields();
-        onClose();
-      } else {
-        message.error(data.message ?? '创建失败');
-      }
+      message.success(`任务已创建: ${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      form.resetFields();
+      onClose();
     } catch (err) {
       if ((err as Error).message) {
         message.error(`创建失败: ${(err as Error).message}`);

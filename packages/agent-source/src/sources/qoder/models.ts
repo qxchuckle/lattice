@@ -5,7 +5,14 @@
  *      → ModelCatalog（SWR 缓存策略）。纯函数与策略分离便于单测。
  */
 import type { ModelInfo } from '@qcqx/lattice-agent-protocol';
-import { query, qodercliAuth, accessTokenFromEnv } from '@qoder-ai/qoder-agent-sdk';
+
+/**
+ * SDK 惰性加载（optionalDependencies：未安装时不致模块顶层崩溃）
+ * 参照 pi/index.ts 的 loadSdk() 模式。
+ */
+function loadSdk() {
+  return import('@qoder-ai/qoder-agent-sdk');
+}
 
 /** 动态模型目录缓存 TTL（每次获取需起 CLI 控制通道，成本高） */
 export const MODEL_CACHE_TTL_MS = 60_000;
@@ -175,6 +182,7 @@ export function mapSdkModel(m: SdkModelLike): ModelInfo {
  * streaming-input 模式不产出任何用户消息，仅建控制通道，取完即 close。
  */
 export async function fetchModelsFromSdk(authMode: 'env' | 'cli'): Promise<ModelInfo[]> {
+  const { query, accessTokenFromEnv, qodercliAuth } = await loadSdk();
   const auth = authMode === 'env' ? accessTokenFromEnv() : qodercliAuth();
 
   // 挂起的空输入流：不发消息，close 时结束
@@ -201,7 +209,9 @@ export async function fetchModelsFromSdk(authMode: 'env' | 'cli'): Promise<Model
       .map((m) => mapSdkModel(m as SdkModelLike));
   } finally {
     releaseInput();
-    await q.close().catch(() => {});
+    await q.close().catch((err) => {
+      console.debug('[Qoder] process close failed:', err?.message ?? err);
+    });
   }
 }
 
@@ -237,8 +247,11 @@ export class ModelCatalog {
       .then((models) => {
         if (models.length > 0) this.cache = { at: this.now(), models };
       })
-      .catch(() => {
-        /* 未登录/CLI 不可用/超时 → 继续用静态兜底 */
+      .catch((err) => {
+        console.debug(
+          '[Qoder] model list refresh failed (using static fallback):',
+          err?.message ?? err,
+        );
       })
       .finally(() => {
         this.inFlight = false;

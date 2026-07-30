@@ -4,13 +4,23 @@
  * 契约套件（contract-suite）测「声明↔实现一致性」，本文件测「运行时状态机」：
  * 句柄生命周期、多轮会话、资源缓存、流的边界语义。
  */
-import { describe, it, expect, vi } from 'vitest';
-import type { SourceEvent, SourceResourceInfo } from '@qcqx/lattice-agent-protocol';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type {
+  SourceEvent,
+  SourceResourceInfo,
+  ISource,
+  SourceManifest,
+  ResolvedManifest,
+  ModelInfo,
+  AuthStatus,
+  SourceResourceQuery,
+} from '@qcqx/lattice-agent-protocol';
 import { EventStream, SourceEventStream } from '@qcqx/lattice-agent-protocol';
 import { defineSource } from '../src/define-source.js';
 import { createScriptedDriver } from '../src/testing/index.js';
 import type { SourceDriver, DriverSessionHandle } from '../src/driver.js';
 import { SourceError } from '../src/types/error.js';
+import { SourceRegistry } from '../src/registry.js';
 
 async function collect(iter: AsyncIterable<SourceEvent>): Promise<SourceEvent[]> {
   const out: SourceEvent[] = [];
@@ -282,5 +292,192 @@ describe('连接重试（指数退避）', () => {
       events.some((e) => e.type === 'error'),
       '耗尽重试后报错',
     ).toBe(true);
+  });
+});
+
+/** 最小化 mock ISource，仅 registry 依赖的方法有实现 */
+function createMockSource(overrides: Partial<ISource> & { id: string }): ISource {
+  const baseManifest: SourceManifest = {
+    contractVersion: 1,
+    info: { id: overrides.id, displayName: `Mock ${overrides.id}`, version: '0.0.0' },
+    capabilities: {
+      execution: { mode: 'local', contextOwnership: 'source' },
+      prompt: {
+        images: false,
+        systemPrompt: { builtin: 'none', override: false, append: false },
+        slashCommands: false,
+        permissionModes: { available: ['full_auto'], default: 'full_auto' },
+      },
+      session: {
+        resume: false,
+        fork: false,
+        rename: false,
+        maxConcurrentSessions: 1,
+      },
+      resources: false,
+      tools: { builtin: [], injection: false },
+      context: { compaction: false },
+      models: { policy: 'catalog', tuning: false },
+      skills: { nativeInjection: false },
+    },
+    authRequirements: [],
+  };
+
+  const resolvedManifest: ResolvedManifest = {
+    ...baseManifest,
+    available: true,
+    authSnapshot: { status: 'configured' },
+    downgrades: [],
+    resolvedAt: Date.now(),
+  };
+
+  return {
+    async init() {},
+    async dispose() {},
+    describe: () => baseManifest,
+    async handshake(): Promise<ResolvedManifest> {
+      return { ...resolvedManifest };
+    },
+    async listModels(): Promise<ModelInfo[]> {
+      return [];
+    },
+    async checkAuth(): Promise<AuthStatus> {
+      return { status: 'configured' };
+    },
+    async listResources(_query?: SourceResourceQuery): Promise<SourceResourceInfo[]> {
+      return [];
+    },
+    prompt() {
+      return new EventStream<any, any>(
+        (e) => e?.type === 'done',
+        (e) => ({ sessionId: 's', sourceMessageId: 'm' }),
+      );
+    },
+    async forkSession() {
+      throw new Error('unsupported');
+    },
+    async renameSession() {
+      throw new Error('unsupported');
+    },
+    async destroySession() {
+      throw new Error('unsupported');
+    },
+    ...overrides,
+  };
+}
+
+describe('initAll 失败处理', () => {
+  let registry: SourceRegistry;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    registry = new SourceRegistry();
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('单源 init 失败 → console.warn + available:false manifest', async () => {
+    const sourceA = createMockSource({ id: 'source-a' });
+    const sourceB = createMockSource({
+      id: 'source-b',
+      async init() {
+        throw new Error('B init boom');
+      },
+    });
+
+    registry.register(sourceA);
+    registry.register(sourceB);
+    await registry.initAll();
+
+    // console.warn 被调用，消息包含 source-b
+    expect(warnSpy).toHaveBeenCalled();
+    const warnMsg = warnSpy.mock.calls[0][0] as string;
+    expect(warnMsg).toContain('source-b');
+
+    // B manifest: available=false, code=handshake-failed
+    const manifestB = registry.getManifest('source-b')!;
+    expect(manifestB).toBeDefined();
+    expect(manifestB.available).toBe(false);
+    expect(manifestB.unavailableReason).toBeDefined();
+    expect(manifestB.unavailableReason!.code).toBe('handshake-failed');
+    expect(manifestB.unavailableReason!.message).toContain('B init boom');
+
+    // A manifest 正常（available !== false）
+    const manifestA = registry.getManifest('source-a')!;
+    expect(manifestA).toBeDefined();
+    expect(manifestA.available).not.toBe(false);
+  });
+
+  it('全部失败 → 不抛异常，两个 manifest 都标记 available:false', async () => {
+    const sourceA = createMockSource({
+      id: 'source-a',
+      async init() {
+        throw new Error('A init boom');
+      },
+    });
+    const sourceB = createMockSource({
+      id: 'source-b',
+      async init() {
+        throw new Error('B init boom');
+      },
+    });
+
+    registry.register(sourceA);
+    registry.register(sourceB);
+
+    // Promise resolve，不 reject
+    await expect(registry.initAll()).resolves.toBeUndefined();
+
+    // 两个 manifest 都标记 available:false
+    const manifestA = registry.getManifest('source-a')!;
+    const manifestB = registry.getManifest('source-b')!;
+    expect(manifestA.available).toBe(false);
+    expect(manifestB.available).toBe(false);
+    expect(manifestA.unavailableReason!.code).toBe('handshake-failed');
+    expect(manifestB.unavailableReason!.code).toBe('handshake-failed');
+  });
+});
+
+describe('listResources 并发安全', () => {
+  let registry: SourceRegistry;
+
+  beforeEach(() => {
+    registry = new SourceRegistry();
+  });
+
+  it('异步期间 unregister 不影响遍历（entries 快照在 await 前展开）', async () => {
+    const sourceA = createMockSource({
+      id: 'source-a',
+      async listResources(): Promise<SourceResourceInfo[]> {
+        return new Promise((resolve) =>
+          setTimeout(() => resolve([{ kind: 'command', name: 'cmd-a', scope: 'user' }]), 50),
+        );
+      },
+    });
+    const sourceB = createMockSource({
+      id: 'source-b',
+      async listResources(): Promise<SourceResourceInfo[]> {
+        return [{ kind: 'skill', name: 'skill-b', scope: 'user' }];
+      },
+    });
+
+    registry.register(sourceA);
+    registry.register(sourceB);
+
+    // 启动 listResources（entries 快照在此同步展开）
+    const listPromise = registry.listResources();
+
+    // 在 A 的慢 Promise 等待期间 unregister B
+    registry.unregister('source-b');
+
+    // 最终返回的 map 仍含 B 的结果（快照已展开，不受后续 unregister 影响）
+    const result = (await listPromise) as Record<string, SourceResourceInfo[]>;
+    expect(result).toHaveProperty('source-a');
+    expect(result).toHaveProperty('source-b');
+    expect(result['source-a']).toEqual([{ kind: 'command', name: 'cmd-a', scope: 'user' }]);
+    expect(result['source-b']).toEqual([{ kind: 'skill', name: 'skill-b', scope: 'user' }]);
   });
 });

@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect } from 'react';
 import { Modal, Form, Input, Select, App } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ProjectMeta } from '@qcqx/lattice-core';
+import { post } from '../../api/request';
 
 export const ProjectEditModal = memo(function ProjectEditModal({
   open,
@@ -33,24 +34,15 @@ export const ProjectEditModal = memo(function ProjectEditModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const res = await fetch(`/api/projects/${encodeURIComponent(project.ids[0])}/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: values.name,
-          description: values.description || undefined,
-          groups: values.groups ? values.groups.split(',').map((s: string) => s.trim()) : [],
-          tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
-        }),
+      await post(`/api/projects/${encodeURIComponent(project.ids[0])}/update`, {
+        name: values.name,
+        description: values.description || undefined,
+        groups: values.groups ? values.groups.split(',').map((s: string) => s.trim()) : [],
+        tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
       });
-      const data = await res.json();
-      if (data.success) {
-        message.success('项目已更新');
-        queryClient.invalidateQueries({ queryKey: ['projects'] });
-        onClose();
-      } else {
-        message.error('更新失败');
-      }
+      message.success('项目已更新');
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      onClose();
     } catch (err) {
       message.error(`更新失败: ${(err as Error).message}`);
     } finally {
@@ -96,14 +88,11 @@ export function useProjectRemove() {
         content: `确认注销「${project.name}」？项目将移入垃圾桶，可恢复。`,
         okType: 'danger',
         onOk: async () => {
-          const res = await fetch(`/api/projects/${encodeURIComponent(project.ids[0])}/remove`, {
-            method: 'POST',
-          });
-          const data = await res.json();
-          if (data.success) {
+          try {
+            await post(`/api/projects/${encodeURIComponent(project.ids[0])}/remove`);
             message.success('项目已注销');
             queryClient.invalidateQueries({ queryKey: ['projects'] });
-          } else {
+          } catch {
             message.error('注销失败');
           }
         },
@@ -134,24 +123,15 @@ export const RelationModal = memo(function RelationModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/relations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectB: values.projectB,
-          type: values.type,
-          description: values.description || undefined,
-        }),
+      await post(`/api/projects/${encodeURIComponent(projectId)}/relations`, {
+        projectB: values.projectB,
+        type: values.type,
+        description: values.description || undefined,
       });
-      const data = await res.json();
-      if (data.success) {
-        message.success('关系已添加');
-        queryClient.invalidateQueries({ queryKey: ['relations'] });
-        form.resetFields();
-        onClose();
-      } else {
-        message.error(data.message ?? '添加失败');
-      }
+      message.success('关系已添加');
+      queryClient.invalidateQueries({ queryKey: ['relations'] });
+      form.resetFields();
+      onClose();
     } catch (err) {
       if ((err as Error).message) {
         message.error(`添加失败: ${(err as Error).message}`);

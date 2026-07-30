@@ -19,7 +19,8 @@ export function createSourcePermissionHandler(guard: PermissionGuard): Permissio
     ask: async (req) => {
       // 工具名缺省时用请求种类作标识（file-write/terminal 等），保证规则表可命中
       const subject = req.toolName ?? req.kind;
-      const allowed = await guard.requestPermission(subject, req.detail ?? {});
+      // P1-#12 fix: 透传 sessionId，permission-guard emit 时携带，ws-handler 据此过滤目标连接
+      const allowed = await guard.requestPermission(subject, req.detail ?? {}, req.sessionId);
       return allowed
         ? { behavior: 'allow', scope: 'once' }
         : { behavior: 'deny', scope: 'once', message: '用户或权限策略拒绝了该操作' };

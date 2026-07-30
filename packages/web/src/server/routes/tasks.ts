@@ -12,6 +12,7 @@ import {
   listAllUsernames,
   type TaskStatus,
 } from '@qcqx/lattice-core';
+import { ok, fail } from './shared';
 
 export function registerTaskRoutes(app: FastifyInstance): void {
   app.get<{
@@ -23,7 +24,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
 
     if (req.query.allUser === 'true') {
       if (projectId) {
-        return listTasksCrossUser(currentUsername, projectId, { status });
+        return ok(await listTasksCrossUser(currentUsername, projectId, { status }));
       }
       // 无 projectId：聚合所有用户的任务
       const allUsernames = await listAllUsernames();
@@ -32,45 +33,45 @@ export function registerTaskRoutes(app: FastifyInstance): void {
           listTasks(u, { status }).then((tasks) => tasks.map((t) => ({ ...t, sourceUser: u }))),
         ),
       );
-      return results.flat();
+      return ok(results.flat());
     }
 
-    return listTasks(currentUsername, { status, projectId });
+    return ok(await listTasks(currentUsername, { status, projectId }));
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (req) => {
     const username = await getUsername();
     const task = await getTaskMeta(username, req.params.id);
-    if (!task) return { error: 'not_found', message: '任务不存在' };
-    return task;
+    if (!task) return fail('not_found', '任务不存在');
+    return ok(task);
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/progress', async (req) => {
     const username = await getUsername();
-    return listCheckpoints(username, req.params.id);
+    return ok(await listCheckpoints(username, req.params.id));
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/tree', async (req) => {
     const username = await getUsername();
-    return getTaskGraphViews(username, req.params.id);
+    return ok(await getTaskGraphViews(username, req.params.id));
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/lineage', async (req) => {
     const username = await getUsername();
-    return getTaskLineage(username, req.params.id);
+    return ok(await getTaskLineage(username, req.params.id));
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/context', async (req) => {
     const username = await getUsername();
     try {
       const ctx = await getSmartContext(username, req.params.id, { crossUser: false });
-      return {
+      return ok({
         directSpecs: ctx.directSpecs,
         relatedSpecs: ctx.relatedSpecs,
         semanticSpecs: ctx.semanticSpecs,
-      };
+      });
     } catch {
-      return { directSpecs: [], relatedSpecs: [], semanticSpecs: [] };
+      return ok({ directSpecs: [], relatedSpecs: [], semanticSpecs: [] });
     }
   });
 
@@ -79,7 +80,7 @@ export function registerTaskRoutes(app: FastifyInstance): void {
   app.get('/api/relations', async (req) => {
     const query = req.query as { username?: string };
     const username = query.username || (await getUsername());
-    return listRelations(username);
+    return ok(await listRelations(username));
   });
 
   // ── 活跃任务 Checkpoint（全局图用）──
@@ -93,6 +94,6 @@ export function registerTaskRoutes(app: FastifyInstance): void {
         checkpoints: await listCheckpoints(username, t.id),
       })),
     );
-    return results;
+    return ok(results);
   });
 }

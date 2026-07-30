@@ -4,6 +4,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSnapshot } from 'valtio';
 import { workbenchStore, openFile, setFileTree } from './store';
+import { get } from '../../api/request';
 
 interface FileEntry {
   name: string;
@@ -90,13 +91,10 @@ export function FileTreePanel() {
   const loadTree = useCallback(async () => {
     if (snap.workspaceRoots.length === 0) return;
     try {
-      const res = await fetch(
-        `/api/fs/tree?root=${encodeURIComponent(snap.workspaceRoots[0])}&depth=3`,
+      const data = await get<{ trees: { root: string; entries: FileEntry[] }[] }>(
+        `/api/fs/tree?roots=${encodeURIComponent(snap.workspaceRoots[0])}&depth=3`,
       );
-      if (res.ok) {
-        const data = await res.json();
-        setFileTree(data.entries ?? []);
-      }
+      setFileTree(data.trees[0]?.entries ?? []);
     } catch {
       /* ignore */
     }

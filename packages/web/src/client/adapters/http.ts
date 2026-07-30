@@ -21,72 +21,36 @@ import type {
   GitStatus,
 } from '@qcqx/lattice-core';
 import type { DoctorReport, RAGStatus } from '@qcqx/lattice-core';
-import { authStore, clearToken } from '../store';
+import { get, post } from '../api/request';
 
 const API_BASE = '/api';
-
-/** 获取鉴权请求头（从 authStore 读 token） */
-function getAuthHeaders(): Record<string, string> {
-  return authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
-}
-
-async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, { headers: getAuthHeaders(), signal });
-  if (res.status === 401) {
-    clearToken();
-    throw new Error('unauthorized');
-  }
-  if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
-  return res.json() as Promise<T>;
-}
-
-/** POST 请求辅助：检查 res.ok，返回 { success } JSON */
-async function postJson(
-  url: string,
-  body?: unknown,
-): Promise<{ success?: boolean; [key: string]: unknown }> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: body ? { 'Content-Type': 'application/json', ...getAuthHeaders() } : getAuthHeaders(),
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 401) {
-    clearToken();
-    throw new Error('unauthorized');
-  }
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => null);
-    throw new Error(errBody?.message ?? `HTTP ${res.status}`);
-  }
-  return res.json();
-}
 
 /** 浏览器环境 adapter：通过 fetch 调 Fastify API */
 export class HttpAdapter implements LatticeDataAdapter {
   // ── 用户 ──
   getUsers(): Promise<UsersResult> {
-    return fetchJson<UsersResult>(`${API_BASE}/users`);
+    return get<UsersResult>(`${API_BASE}/users`);
   }
 
   // ── 项目 ──
   getProjects(username?: string): Promise<ProjectMeta[]> {
     const qs = username ? `?username=${encodeURIComponent(username)}` : '';
-    return fetchJson<ProjectMeta[]>(`${API_BASE}/projects${qs}`);
+    return get<ProjectMeta[]>(`${API_BASE}/projects${qs}`);
   }
   getProject(id: string): Promise<ProjectMeta | null> {
-    return fetchJson<ProjectMeta | null>(`${API_BASE}/projects/${encodeURIComponent(id)}`);
+    return get<ProjectMeta | null>(`${API_BASE}/projects/${encodeURIComponent(id)}`);
   }
   getProjectGitStatus(id: string): Promise<GitStatus | null> {
-    return fetchJson<GitStatus | null>(`${API_BASE}/projects/${encodeURIComponent(id)}/git-status`);
+    return get<GitStatus | null>(`${API_BASE}/projects/${encodeURIComponent(id)}/git-status`);
   }
   getProjectSpecs(id: string): Promise<ParsedSpec[]> {
-    return fetchJson<ParsedSpec[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/specs`);
+    return get<ParsedSpec[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/specs`);
   }
   getProjectTasks(id: string): Promise<TaskMeta[]> {
-    return fetchJson<TaskMeta[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/tasks`);
+    return get<TaskMeta[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/tasks`);
   }
   getProjectRelations(id: string): Promise<ProjectRelation[]> {
-    return fetchJson<ProjectRelation[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/relations`);
+    return get<ProjectRelation[]>(`${API_BASE}/projects/${encodeURIComponent(id)}/relations`);
   }
 
   // ── 任务 ──
@@ -97,30 +61,30 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (opts?.allUser) params.set('allUser', 'true');
     if (opts?.username) params.set('username', opts.username);
     const qs = params.toString();
-    return fetchJson<TaskMeta[]>(`${API_BASE}/tasks${qs ? `?${qs}` : ''}`);
+    return get<TaskMeta[]>(`${API_BASE}/tasks${qs ? `?${qs}` : ''}`);
   }
   getTask(id: string): Promise<TaskMeta | null> {
-    return fetchJson<TaskMeta | null>(`${API_BASE}/tasks/${encodeURIComponent(id)}`);
+    return get<TaskMeta | null>(`${API_BASE}/tasks/${encodeURIComponent(id)}`);
   }
   getTaskProgress(id: string): Promise<CheckpointEntry[]> {
-    return fetchJson<CheckpointEntry[]>(`${API_BASE}/tasks/${encodeURIComponent(id)}/progress`);
+    return get<CheckpointEntry[]>(`${API_BASE}/tasks/${encodeURIComponent(id)}/progress`);
   }
   getTaskTree(id: string): Promise<unknown> {
-    return fetchJson<unknown>(`${API_BASE}/tasks/${encodeURIComponent(id)}/tree`);
+    return get<unknown>(`${API_BASE}/tasks/${encodeURIComponent(id)}/tree`);
   }
   getTaskLineage(id: string): Promise<unknown> {
-    return fetchJson<unknown>(`${API_BASE}/tasks/${encodeURIComponent(id)}/lineage`);
+    return get<unknown>(`${API_BASE}/tasks/${encodeURIComponent(id)}/lineage`);
   }
 
   // ── 关系 ──
   getRelations(username?: string): Promise<ProjectRelation[]> {
     const qs = username ? `?username=${encodeURIComponent(username)}` : '';
-    return fetchJson<ProjectRelation[]>(`${API_BASE}/relations${qs}`);
+    return get<ProjectRelation[]>(`${API_BASE}/relations${qs}`);
   }
 
   // ── 任务语义上下文 ──
   getTaskContext(id: string): Promise<TaskContextResult> {
-    return fetchJson<TaskContextResult>(`${API_BASE}/tasks/${encodeURIComponent(id)}/context`);
+    return get<TaskContextResult>(`${API_BASE}/tasks/${encodeURIComponent(id)}/context`);
   }
 
   // ── Spec ──
@@ -130,7 +94,7 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (projectId) params.set('projectId', projectId);
     if (username) params.set('username', username);
     const qs = params.toString();
-    return fetchJson<SpecResult>(`${API_BASE}/specs${qs ? `?${qs}` : ''}`);
+    return get<SpecResult>(`${API_BASE}/specs${qs ? `?${qs}` : ''}`);
   }
 
   // ── 搜索 ──
@@ -139,99 +103,97 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (opts?.type) params.set('type', opts.type);
     if (opts?.projectId) params.set('projectId', opts.projectId);
     if (opts?.limit) params.set('limit', String(opts.limit));
-    return fetchJson<SearchResult[]>(`${API_BASE}/search?${params.toString()}`, opts?.signal);
+    return get<SearchResult[]>(`${API_BASE}/search?${params.toString()}`, { signal: opts?.signal });
   }
 
   // ── 打开文件/目录 ──
   async openPath(type: string, entityId: string, app: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/open`, { type, entityId, app });
-    return json.success === true;
+    await post(`${API_BASE}/open`, { type, entityId, app });
+    return true;
   }
 
   // ── 文件内容 ──
   async getContent(type: string, id: string): Promise<string | null> {
     // spec 类型用 POST 避免 URL 过长
     if (type === 'spec') {
-      const json = await postJson(`${API_BASE}/spec/content`, { specId: id });
-      return (json as { content?: string }).content ?? null;
+      const data = await post<{ content?: string }>(`${API_BASE}/spec/content`, { specId: id });
+      return data?.content ?? null;
     }
-    const res = await fetchJson<{ content?: string; error?: string }>(
+    const data = await get<{ content?: string }>(
       `${API_BASE}/content/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
     );
-    return res.content ?? null;
+    return data?.content ?? null;
   }
 
   // ── 统计 ──
   getStats(): Promise<DashboardStats> {
-    return fetchJson<DashboardStats>(`${API_BASE}/stats`);
+    return get<DashboardStats>(`${API_BASE}/stats`);
   }
 
   // ── 管理操作 ──
 
   // 任务管理
   async updateTaskStatus(id: string, status: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/status`, { status });
-    return json.success === true;
+    await post(`${API_BASE}/tasks/${encodeURIComponent(id)}/status`, { status });
+    return true;
   }
 
   async archiveTask(id: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/archive`);
-    return json.success === true;
+    await post(`${API_BASE}/tasks/${encodeURIComponent(id)}/archive`);
+    return true;
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/delete`);
-    return json.success === true;
+    await post(`${API_BASE}/tasks/${encodeURIComponent(id)}/delete`);
+    return true;
   }
 
   async addCheckpoint(id: string, type: string, title: string, message: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/tasks/${encodeURIComponent(id)}/checkpoint`, {
+    await post(`${API_BASE}/tasks/${encodeURIComponent(id)}/checkpoint`, {
       type,
       title,
       message,
     });
-    return json.success === true;
+    return true;
   }
 
   // RAG
   getRagStatus(): Promise<RAGStatus> {
-    return fetchJson<RAGStatus>(`${API_BASE}/rag/status`);
+    return get<RAGStatus>(`${API_BASE}/rag/status`);
   }
 
   async getModelStatus(): Promise<ModelStatus> {
-    return fetchJson<ModelStatus>(`${API_BASE}/rag/model/status`);
+    return get<ModelStatus>(`${API_BASE}/rag/model/status`);
   }
 
   async removeModel(): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/rag/model/remove`);
-    return json.success === true;
+    await post(`${API_BASE}/rag/model/remove`);
+    return true;
   }
 
   // Doctor
   async runDoctor(options?: DoctorOptions): Promise<DoctorReport> {
-    const json = await postJson(`${API_BASE}/doctor/run`, options ?? {});
-    return json as unknown as DoctorReport;
+    return post<DoctorReport>(`${API_BASE}/doctor/run`, options ?? {});
   }
 
   // 垃圾桶
   getTrash(type?: string): Promise<TrashItem[]> {
     const qs = type ? `?type=${encodeURIComponent(type)}` : '';
-    return fetchJson<TrashItem[]>(`${API_BASE}/trash${qs}`);
+    return get<TrashItem[]>(`${API_BASE}/trash${qs}`);
   }
 
   async restoreTrash(id: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/trash/restore/${encodeURIComponent(id)}`);
-    return json.success === true;
+    await post(`${API_BASE}/trash/restore/${encodeURIComponent(id)}`);
+    return true;
   }
 
   async purgeTrash(id: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/trash/purge/${encodeURIComponent(id)}`);
-    return json.success === true;
+    await post(`${API_BASE}/trash/purge/${encodeURIComponent(id)}`);
+    return true;
   }
 
   async emptyTrash(): Promise<{ count: number }> {
-    const json = await postJson(`${API_BASE}/trash/empty`);
-    return json as unknown as { count: number };
+    return post<{ count: number }>(`${API_BASE}/trash/empty`);
   }
 
   // 配置
@@ -239,49 +201,51 @@ export class HttpAdapter implements LatticeDataAdapter {
     const params = new URLSearchParams();
     if (scope) params.set('scope', scope);
     if (diffDefaults) params.set('diffDefaults', 'true');
-    return fetchJson<Record<string, unknown>>(`${API_BASE}/config?${params.toString()}`);
+    return get<Record<string, unknown>>(`${API_BASE}/config?${params.toString()}`);
   }
 
   async setConfig(key: string, value: unknown, scope: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/config/set`, { key, value, scope });
-    return json.success === true;
+    await post(`${API_BASE}/config/set`, { key, value, scope });
+    return true;
   }
 
   async unsetConfig(key: string, scope: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/config/unset`, { key, scope });
-    return json.success === true;
+    await post(`${API_BASE}/config/unset`, { key, scope });
+    return true;
   }
 
   // 文档保存
   async saveContent(type: string, entityId: string, content: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/content/save`, { type, entityId, content });
-    return json.success === true;
+    await post(`${API_BASE}/content/save`, { type, entityId, content });
+    return true;
   }
 
   // 打开已知安全路径（后端校验 isPathSafe）
   async openPathByPath(path: string, app: string): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/open-path`, { path, app });
-    return json.success === true;
+    await post(`${API_BASE}/open-path`, { path, app });
+    return true;
   }
 
   // ── 鉴权 ──
 
   async getAuthStatus(): Promise<{ enabled: boolean }> {
-    return fetchJson<{ enabled: boolean }>(`${API_BASE}/auth/status`);
+    return get<{ enabled: boolean }>(`${API_BASE}/auth/status`);
   }
 
   async login(password: string, remember: boolean): Promise<{ token: string; expiresIn: number }> {
-    const json = await postJson(`${API_BASE}/auth/login`, { password, remember });
-    return json as unknown as { token: string; expiresIn: number };
+    return post<{ token: string; expiresIn: number }>(`${API_BASE}/auth/login`, {
+      password,
+      remember,
+    });
   }
 
   async changePassword(newPassword: string | null): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/auth/password`, { newPassword });
-    return json.success === true;
+    await post(`${API_BASE}/auth/password`, { newPassword });
+    return true;
   }
 
   async logout(): Promise<boolean> {
-    const json = await postJson(`${API_BASE}/auth/logout`);
-    return json.success === true;
+    await post(`${API_BASE}/auth/logout`);
+    return true;
   }
 }

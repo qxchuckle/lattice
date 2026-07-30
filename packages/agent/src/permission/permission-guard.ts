@@ -84,8 +84,14 @@ export class PermissionGuard {
     return 'ask';
   }
 
-  /** 请求用户授权（异步等待响应） */
-  async requestPermission(tool: string, args: Record<string, unknown>): Promise<boolean> {
+  /** 请求用户授权（异步等待响应）
+   * @param sessionId 发起该请求的源会话 ID，用于 ws-handler 按 session 归属过滤目标连接（P1-#12 fix）
+   */
+  async requestPermission(
+    tool: string,
+    args: Record<string, unknown>,
+    sessionId?: string,
+  ): Promise<boolean> {
     const level = this.check(tool, args);
     if (level === 'allow') return true;
     if (level === 'deny') return false;
@@ -111,7 +117,8 @@ export class PermissionGuard {
         finalize(() => this.pending.delete(request.id)),
       ),
     );
-    this.events.emit('permission:request', { request });
+    // P1-#12 fix: 携带 sessionId，ws-handler 据此只转发给持有该 session 的连接
+    this.events.emit('permission:request', { request, sessionId });
     return answered;
   }
 

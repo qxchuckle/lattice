@@ -24,19 +24,25 @@ import type {
   DriverPromptOutcome,
   DriverProbeReport,
 } from '../../driver.js';
-import {
-  client,
-  ndJsonStream,
-  methods,
-  type ClientConnection,
-  type ActiveSession,
-  type Stream,
+import type {
+  ClientConnection,
+  ActiveSession,
+  Stream,
+  SessionNotification,
+  InitializeResponse,
 } from '@agentclientprotocol/sdk';
-import type { SessionNotification, InitializeResponse } from '@agentclientprotocol/sdk';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import { readFile, writeFile } from 'node:fs/promises';
 import { mapSessionUpdate } from './event-map.js';
+
+/**
+ * SDK 惰性加载（optionalDependencies：未安装时不致模块顶层崩溃）
+ * 参照 pi/index.ts 的 loadSdk() 模式：在 driver 方法内部按需动态 import。
+ */
+function loadSdk() {
+  return import('@agentclientprotocol/sdk');
+}
 
 // ── 配置 ──
 
@@ -101,7 +107,8 @@ const STOP_REASON_NOTICE: Record<string, string> = {
 
 // ── stdio → Web Stream 桥接 ──
 
-function createStdioStream(child: ChildProcess): Stream {
+async function createStdioStream(child: ChildProcess): Promise<Stream> {
+  const { ndJsonStream } = await loadSdk();
   const readable = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
   const writable = Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>;
   return ndJsonStream(writable, readable);
@@ -146,6 +153,7 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
   }
 
   async init(): Promise<void> {
+    const { client, methods } = await loadSdk();
     // 启动子进程
     const child = spawn(this.opts.command, this.opts.args ?? [], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -219,7 +227,7 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
       });
 
     // 连接（SDK 管理帧分割/路由/超时）
-    const stream = createStdioStream(child);
+    const stream = await createStdioStream(child);
     this.connection = app.connect(stream);
 
     // initialize 握手
@@ -347,7 +355,8 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
    * 只要它在应答 prompt 前发完。提前 dispose 会丢掉中止前的最后内容；
    * 真正的路由清理在 prompt() 的 finally 里（此时 prompt 已带 stopReason 返回）。
    */
-  private wrapHandle(id: string, active: ActiveSession): AcpSessionHandle {
+  private async wrapHandle(id: string, active: ActiveSession): Promise<AcpSessionHandle> {
+    const { methods } = await loadSdk();
     return {
       id,
       active,
@@ -357,8 +366,11 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
         // 通知 agent 停生成（否则它继续烧 token）
         void this.connection?.agent
           .notify(methods.agent.session.cancel, { sessionId: id })
-          .catch(() => {
-            /* 连接已断：中止目的已达成 */
+          .catch((err) => {
+            console.debug(
+              '[ACP] session cancel notify failed (connection likely closed):',
+              err?.message ?? err,
+            );
           });
       },
     };
@@ -476,6 +488,7 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
 
   async forkNative(sessionId: string): Promise<string> {
     if (!this.connection) throw new Error('ACP 未初始化');
+    const { methods } = await loadSdk();
     const result = await this.connection.agent.request(methods.agent.session.fork, {
       sessionId,
       cwd: this.opts.cwd,

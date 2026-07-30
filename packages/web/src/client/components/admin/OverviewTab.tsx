@@ -6,6 +6,7 @@ import { getAdapter } from '../../adapters';
 import { apiGet, apiPost } from '../../lib';
 import { useStats } from '../../hooks';
 import { ConfigModal } from './ConfigModal';
+import { ApiError } from '../../../shared/api';
 
 interface GlobalStatus {
   latticeRoot: string;
@@ -32,23 +33,20 @@ export const OverviewTab = memo(function OverviewTab() {
   const { data: globalStatus } = useQuery({
     queryKey: ['global-status'],
     queryFn: async (): Promise<GlobalStatus | null> => {
-      const data = await apiGet<GlobalStatus & { error?: string }>('/api/global-status');
-      return data.error ? null : data;
+      try {
+        return await apiGet<GlobalStatus>('/api/global-status');
+      } catch (err) {
+        if ((err as ApiError).code === 'internal') return null;
+        throw err;
+      }
     },
     staleTime: 30_000,
   });
 
   const handleOpenRoot = async (mode: 'finder' | 'terminal') => {
     try {
-      const data = await apiPost<{ success?: boolean; message?: string }>(
-        '/api/open-lattice-root',
-        { mode },
-      );
-      if (data.success) {
-        message.success(data.message ?? '已打开');
-      } else {
-        message.error(data.message ?? '打开失败');
-      }
+      const data = await apiPost<{ message?: string }>('/api/open-lattice-root', { mode });
+      message.success(data.message ?? '已打开');
     } catch (err) {
       message.error(`打开失败: ${(err as Error).message}`);
     }

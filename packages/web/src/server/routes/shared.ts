@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { ApiEnvelope, ApiErrorCode } from '../../shared/api';
 import { sep } from 'node:path';
 import {
   getLatticeRoot,
@@ -80,3 +81,12 @@ export type GetUsernameFn = typeof GetUsername;
 
 /** 路由模块注册函数类型 */
 export type RouteRegistrar = (app: FastifyInstance) => void | Promise<void>;
+
+// ─── 响应 helper ───
+export function ok<T>(data?: T): ApiEnvelope<T> {
+  return data !== undefined ? { code: 'ok', data } : { code: 'ok' };
+}
+
+export function fail(code: ApiErrorCode, message?: string): ApiEnvelope<never> {
+  return message ? { code, message } : { code };
+}

@@ -57,11 +57,12 @@ export function isSelfRequest(requestId?: string): boolean {
 
 const subscribedTrees = new Set<string>();
 
-/** 订阅一棵树（server 下发快照 + 后续广播）；幂等 */
+/** 订阅一棵树（server 下发快照 + 后续广播）；幂等（重连后 subscribedTrees 保留，仍需发送） */
 export function subscribeTree(treeId: string): void {
-  if (!treeId || subscribedTrees.has(treeId)) return;
+  if (!treeId) return;
+  const isNew = !subscribedTrees.has(treeId);
   subscribedTrees.add(treeId);
-  sendWs({ type: 'tree.subscribe', treeId, clientKind: 'web' });
+  if (isNew) sendWs({ type: 'tree.subscribe', treeId, clientKind: 'web' });
 }
 
 /** 退订（切换会话时调） */
@@ -183,6 +184,7 @@ export function __resetConnectionForTest(): void {
   connSub = null;
   socket$ = null;
   heartbeatTimedOut = false;
+  connectionEpoch = 0; // 重置连接代数
   setConnState({ type: 'disconnected' });
   // 状态订阅一并退订（防泄漏），再重绑保持「心跳随状态联动」对后续测试可用
   stateSubscription?.unsubscribe();
@@ -222,10 +224,16 @@ let lastPongAt = 0;
 // 心跳超时主动 error 的标记：供 retry.delay 判定触发源（error 对象会被 rxjs webSocket 包装，不可靠）
 let heartbeatTimedOut = false;
 
+/** 连接代数：每次 onOpen 递增，heartbeat 回调检查代数匹配，防旧 timer 误判新连接 */
+let connectionEpoch = 0;
+
 function startHeartbeat(): void {
   stopHeartbeat();
   lastPongAt = Date.now();
+  const epoch = connectionEpoch; // 捕获本次连接的代数
   heartbeatSub = timer(HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL).subscribe(() => {
+    // 代数不匹配：当前连接已不是 heartbeat 启动时的连接，静默退出
+    if (epoch !== connectionEpoch) return;
     if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT) {
       // 死连接：error 当前 socket → retry 触发重连
       heartbeatTimedOut = true;
@@ -255,6 +263,7 @@ function bindHeartbeatToState(): void {
 bindHeartbeatToState();
 
 function onOpen(): void {
+  connectionEpoch++; // 新连接代数
   setConnState({ type: 'connected' }); // 连上：重置退避计数（状态不再携 attempt）；心跳随状态订阅启动
   if (!agentStore.sessionId) {
     sendWs({
@@ -267,7 +276,7 @@ function onOpen(): void {
 
 function onClose(): void {
   agentStore.sessionId = null; // 清除旧 session，重连后重新 session.create
-  subscribedTrees.clear(); // server 已丢失订阅，清空以便重连后重新订阅（否则广播收不到）
+  // 保留 subscribedTrees：server 侧订阅已丢失，但 client 侧记录需重连后恢复
   // 状态置 disconnected（若因错误将进入 reconnecting，retry.delay 会接管）；心跳随状态订阅停止
   if (connectionStateSubject.value.type === 'connected') setConnState({ type: 'disconnected' });
 }
@@ -347,8 +356,13 @@ function handleServerMessage(msg: ServerMessage): void {
       // 竞态防护：仅匹配当前树或懒建树（treeId 空）时接管，避免切换会话后旧 session 在途响应把 treeId 拉回
       if (msg.treeId && (agentStore.treeId === msg.treeId || !agentStore.treeId)) {
         agentStore.treeId = msg.treeId;
-        // 订阅该树：server 下发快照（替代原 REST loadTree）+ 后续多端广播
-        subscribeTree(msg.treeId);
+        // 仅维护 set（幂等）；不调 subscribeTree——其 isNew 幂等在重连场景下会漏发主树订阅
+        subscribedTrees.add(msg.treeId);
+        // P1-#7 修复：重连后 server 侧订阅已丢失（socket close 时 unsubscribeConn 清空），
+        // 需对全部 subscribedTrees（含主树）统一重发 tree.subscribe，不能依赖 isNew 幂等判断
+        for (const tid of subscribedTrees) {
+          sendWs({ type: 'tree.subscribe', treeId: tid, clientKind: 'web' });
+        }
         loadConversations();
       }
       break;

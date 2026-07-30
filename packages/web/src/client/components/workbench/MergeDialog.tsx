@@ -4,6 +4,7 @@
 import { useState, useCallback } from 'react';
 import { useSnapshot } from 'valtio';
 import { workbenchStore, closeMergeDialog } from './store';
+import { post } from '../../api/request';
 
 type MergeMode = 'squash' | 'cherry-pick' | 'reference';
 
@@ -30,15 +31,11 @@ export function MergeDialog({ onMerge }: Props) {
     setGenerating(true);
     // 调用后端 AI 生成摘要
     try {
-      const res = await fetch('/api/agent/merge-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branchId, treeId: snap.treeId }),
+      const data = await post<{ summary: string }>('/api/agent/merge-summary', {
+        branchId,
+        treeId: snap.treeId,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSummary(data.summary ?? '');
-      }
+      setSummary(data.summary ?? '');
     } catch {
       /* ignore */
     }

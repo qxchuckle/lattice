@@ -21,18 +21,11 @@ export const SpecCreateModal = memo(function SpecCreateModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const data = await apiPost<{ success?: boolean; message?: string }>(
-        '/api/specs/init',
-        values,
-      );
-      if (data.success) {
-        message.success('Spec 已创建');
-        queryClient.invalidateQueries({ queryKey: ['specs'] });
-        form.resetFields();
-        onClose();
-      } else {
-        message.error(data.message ?? '创建失败');
-      }
+      await apiPost('/api/specs/init', values);
+      message.success('Spec 已创建');
+      queryClient.invalidateQueries({ queryKey: ['specs'] });
+      form.resetFields();
+      onClose();
     } catch (err) {
       if ((err as Error).message) {
         message.error(`创建失败: ${(err as Error).message}`);
@@ -106,22 +99,15 @@ export const SpecFrontmatterModal = memo(function SpecFrontmatterModal({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const data = await apiPost<{ success?: boolean; message?: string }>(
-        `/api/specs/${encodeURIComponent(specId)}/frontmatter`,
-        {
-          title: values.title,
-          description: values.description,
-          tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
-        },
-      );
-      if (data.success) {
-        message.success('Frontmatter 已更新，RAG 索引已自动更新');
-        queryClient.invalidateQueries({ queryKey: ['specs'] });
-        queryClient.invalidateQueries({ queryKey: ['rag-status'] });
-        onClose();
-      } else {
-        message.error(data.message ?? '更新失败');
-      }
+      await apiPost(`/api/specs/${encodeURIComponent(specId)}/frontmatter`, {
+        title: values.title,
+        description: values.description,
+        tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
+      });
+      message.success('Frontmatter 已更新，RAG 索引已自动更新');
+      queryClient.invalidateQueries({ queryKey: ['specs'] });
+      queryClient.invalidateQueries({ queryKey: ['rag-status'] });
+      onClose();
     } catch (err) {
       if ((err as Error).message) {
         message.error(`更新失败: ${(err as Error).message}`);

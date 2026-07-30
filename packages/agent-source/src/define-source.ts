@@ -103,7 +103,10 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       // 模型快照仅展示用途（权威通道 listModels），失败不影响握手
       const modelsSnapshot =
         auth.status === 'configured'
-          ? await this.driver.listModels().catch(() => undefined)
+          ? await this.driver.listModels().catch((err) => {
+              console.debug(`[Source:${this.driver.info.id}] listModels failed during handshake:`, err?.message ?? err);
+              return undefined;
+            })
           : undefined;
       this.manifest = buildResolvedManifest({
         declared,

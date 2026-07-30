@@ -65,8 +65,10 @@ export class SourceRegistry implements ISourceRegistry {
       return source ? enumerate(source) : [];
     }
     const map: SourceResourcesMap = {};
+    // 快照展开在 await 前完成（同步），不受后续异步期间 register/unregister 影响
+    const entries = [...this.sources.entries()];
     await Promise.all(
-      [...this.sources.entries()].map(async ([id, source]) => {
+      entries.map(async ([id, source]) => {
         map[id] = await enumerate(source);
       }),
     );
@@ -84,6 +86,11 @@ export class SourceRegistry implements ISourceRegistry {
           await source.init();
           this.manifests.set(source.id, await source.handshake());
         } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          // 铁律：不静默降级——失败必须可观测（registry 层无 EventBus，console.warn 保底）
+          console.warn(
+            `[SourceRegistry] Source "${source.id}" init failed: ${message}. Marked unavailable.`,
+          );
           // handshake() 内部自兜不抛；能走到这里的是 init 失败
           const declared = source.describe();
           this.manifests.set(source.id, {
@@ -92,11 +99,11 @@ export class SourceRegistry implements ISourceRegistry {
             available: false,
             unavailableReason: {
               code: 'handshake-failed',
-              message: err instanceof Error ? err.message : String(err),
+              message,
             },
             authSnapshot: {
               status: 'error',
-              message: err instanceof Error ? err.message : String(err),
+              message,
             },
             downgrades: [],
             resolvedAt: Date.now(),

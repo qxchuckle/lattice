@@ -294,7 +294,7 @@ class PiDriver implements SourceDriver<PiHandle> {
       await rename(branchedPath, join(newDir, basename(branchedPath)));
     } else {
       // 全量 fork：拷贝父会话完整历史
-      const files = await readdir(parentDir).catch(() => [] as string[]);
+      const files = await readdir(parentDir).catch((err) => { console.debug('[Pi] fork readdir failed:', err?.message ?? err); return [] as string[]; });
       const parentFile = files.find((f) => f.endsWith('.jsonl'));
       if (!parentFile) {
         throw new Error(`Cannot fork: no persisted session for ${sessionId}`);

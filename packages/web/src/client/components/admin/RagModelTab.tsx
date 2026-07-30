@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
-import { getAuthHeaders } from '../../lib';
+import { getAuthHeaders } from '../../api/request';
 
 interface RagProgress {
   current: number;

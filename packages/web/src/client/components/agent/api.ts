@@ -1,31 +1,19 @@
 /**
  * REST API 调用（agent 相关端点）
  */
-import type {
-  NodeContent,
-  ModelListItem,
-  GetTreeResponse,
-  GetTreeNotFoundResponse,
-} from '@qcqx/lattice-agent-protocol';
-import { authStore } from '../../store';
-import { agentStore, ensureUi, putTurn } from './store';
+import type { NodeContent, ModelListItem, GetTreeResponse } from '@qcqx/lattice-agent-protocol';
+import { get, del } from '../../api/request';
+import { ApiError } from '../../../shared/api';
+import { agentStore, ensureUi, putTurn, type ClientSourceInfo } from './store';
+import type { ConversationEntry } from './types';
 import { buildTurnsFromNodes, restoreStreamingTurns, fillInterruptedStreams } from './turnGraph';
-
-function getHeaders(): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (authStore.token) h.Authorization = `Bearer ${authStore.token}`;
-  return h;
-}
 
 // ── 对话树加载 ──
 
 export async function loadTree(treeId: string): Promise<void> {
   try {
-    const res = await fetch(`/api/agent/tree/${treeId}`, { headers: getHeaders() });
-    if (!res.ok) return;
-    // 契约类型直接用 protocol 的响应形状（不再局部 as 硬转；server 端同一类型钉住）
-    const data = (await res.json()) as GetTreeResponse | GetTreeNotFoundResponse;
-    if (data.error || !data.nodes.length) return;
+    const data = await get<GetTreeResponse>(`/api/agent/tree/${treeId}`);
+    if (!data.nodes.length) return;
     // 竞态防护：异步返回时若已切换到别的树，丢弃本次结果，避免旧树数据覆盖当前树
     if (agentStore.treeId !== treeId) return;
 
@@ -57,8 +45,9 @@ export async function loadTree(treeId: string): Promise<void> {
       ensureUi(id);
     }
     agentStore.version++;
-  } catch {
-    /* ignore */
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'not_found') return;
+    /* ignore other errors too */
   }
 }
 
@@ -66,9 +55,7 @@ export async function loadTree(treeId: string): Promise<void> {
 
 export async function loadSources(): Promise<void> {
   try {
-    const res = await fetch('/api/agent/sources', { headers: getHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await get<{ sources: ClientSourceInfo[] }>('/api/agent/sources');
     agentStore.sources = data.sources ?? [];
   } catch {
     /* ignore */
@@ -79,9 +66,7 @@ export async function loadSources(): Promise<void> {
 export async function fetchModels(sourceId?: string): Promise<ModelListItem[]> {
   try {
     const qs = sourceId ? `?sourceId=${sourceId}` : '';
-    const res = await fetch(`/api/agent/models${qs}`, { headers: getHeaders() });
-    if (!res.ok) return [];
-    const data = await res.json();
+    const data = await get<{ models: ModelListItem[] }>(`/api/agent/models${qs}`);
     return data.models ?? [];
   } catch {
     return [];
@@ -123,9 +108,7 @@ export interface AgentClientConfig {
 
 export async function loadAgentConfig(): Promise<AgentClientConfig> {
   try {
-    const res = await fetch('/api/config?scope=local', { headers: getHeaders() });
-    if (!res.ok) return {};
-    const data = await res.json();
+    const data = await get<Record<string, unknown>>('/api/config?scope=local');
     return (data?.agent as AgentClientConfig) ?? {};
   } catch {
     return {};
@@ -136,9 +119,7 @@ export async function loadAgentConfig(): Promise<AgentClientConfig> {
 
 export async function loadConversations(): Promise<void> {
   try {
-    const res = await fetch('/api/agent/conversations', { headers: getHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await get<{ conversations: ConversationEntry[] }>('/api/agent/conversations');
     agentStore.conversations = data.conversations ?? [];
   } catch {
     /* ignore */
@@ -146,8 +127,5 @@ export async function loadConversations(): Promise<void> {
 }
 
 export async function deleteConversationApi(treeId: string): Promise<void> {
-  const headers: Record<string, string> = {};
-  if (authStore.token) headers.Authorization = `Bearer ${authStore.token}`;
-  const res = await fetch(`/api/agent/conversations/${treeId}`, { method: 'DELETE', headers });
-  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  await del(`/api/agent/conversations/${treeId}`);
 }

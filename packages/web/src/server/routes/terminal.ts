@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { getUsername, isAuthEnabled, readWebAuth } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
-import { isPathSafe } from './shared';
+import { isPathSafe, ok } from './shared';
 
 // ── 终端进程抽象（PTY / spawn 降级统一接口）──
 
@@ -163,7 +163,7 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
       await getPty();
       currentMode = ptyModule ? 'pty' : 'spawn';
     }
-    return { mode: currentMode };
+    return ok({ mode: currentMode });
   });
 
   // WebSocket 终端端点

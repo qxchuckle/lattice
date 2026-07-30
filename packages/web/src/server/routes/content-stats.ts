@@ -12,7 +12,7 @@ import {
   type OpenMode,
   type EditorApp,
 } from '@qcqx/lattice-core';
-import { resolveFilePath } from './shared';
+import { resolveFilePath, ok, fail } from './shared';
 
 export function registerContentRoutes(app: FastifyInstance): void {
   app.post<{ Body: { type: string; entityId: string; content: string } }>(
@@ -21,14 +21,14 @@ export function registerContentRoutes(app: FastifyInstance): void {
       const username = await getUsername();
       const { type, entityId, content } = req.body;
       const path = await resolveFilePath(type, entityId, username);
-      if (!path) return { error: 'not_found', message: '文件不存在' };
+      if (!path) return fail('not_found', '文件不存在');
       await writeText(path, content);
       try {
         await updateRagIndex();
       } catch {
         // rag update 失败不影响保存结果
       }
-      return { success: true };
+      return ok();
     },
   );
 }
@@ -40,12 +40,12 @@ export function registerStatsRoutes(app: FastifyInstance): void {
     const tasks = await listTasks(username);
     const relations = await listRelations(username);
     const activeTasks = tasks.filter((t) => t.status === 'in_progress');
-    return {
+    return ok({
       projectCount: projects.length,
       taskCount: tasks.length,
       activeTaskCount: activeTasks.length,
       relationCount: relations.length,
-    };
+    });
   });
 
   // ── 全局状态（含 latticeRoot）──
@@ -53,8 +53,8 @@ export function registerStatsRoutes(app: FastifyInstance): void {
   app.get('/api/global-status', async () => {
     // DB 已在 createServer() 时初始化，无需在此重复 init/close
     const status = await getGlobalStatus();
-    if (!status) return { error: 'not_initialized', message: 'Lattice 未初始化' };
-    return status;
+    if (!status) return fail('internal', 'Lattice 未初始化');
+    return ok(status);
   });
 
   // ── 打开 LatticeRoot ──
@@ -63,9 +63,9 @@ export function registerStatsRoutes(app: FastifyInstance): void {
     const mode = (req.body?.mode ?? 'finder') as OpenMode;
     const result = await openLatticeRoot(mode);
     if (result.success) {
-      return { success: true, message: result.message };
+      return ok({ message: result.message });
     }
-    return { error: 'open_failed', message: result.message };
+    return fail('exec_failed', result.message);
   });
 
   // ── 用编辑器打开路径 ──
@@ -76,12 +76,12 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       const username = await getUsername();
       const { type, entityId, app } = req.body;
       const path = await resolveFilePath(type, entityId, username);
-      if (!path) return { error: 'not_found', message: '文件不存在' };
+      if (!path) return fail('not_found', '文件不存在');
       const result = await openWithEditor(path, app as EditorApp);
       if (result.success) {
-        return { success: true, message: result.message };
+        return ok({ message: result.message });
       }
-      return { error: 'exec_failed', message: result.message };
+      return fail('exec_failed', result.message);
     },
   );
 }

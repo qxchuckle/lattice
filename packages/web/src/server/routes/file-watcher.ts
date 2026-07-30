@@ -4,7 +4,7 @@
 import type { FastifyInstance } from 'fastify';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { getUsername } from '@qcqx/lattice-core';
-import { isPathSafe } from './shared';
+import { isPathSafe, ok, fail } from './shared';
 
 interface WatcherEntry {
   watcher: FSWatcher;
@@ -21,12 +21,12 @@ export function registerFileWatcherRoutes(app: FastifyInstance) {
   app.get('/api/fs/watch', async (request, reply) => {
     const { root } = request.query as { root?: string };
     if (!root) {
-      return reply.status(400).send({ error: 'root is required' });
+      return reply.code(400).send(fail('bad_request', 'root is required'));
     }
 
     const username = await getUsername();
     if (!isPathSafe(root, username)) {
-      return reply.status(403).send({ error: 'path not allowed' });
+      return reply.code(403).send(fail('forbidden', 'path not allowed'));
     }
 
     // SSE headers
@@ -79,15 +79,15 @@ export function registerFileWatcherRoutes(app: FastifyInstance) {
    * POST /api/fs/watch/stop
    * 停止指定 root 的监听
    */
-  app.post('/api/fs/watch/stop', async (request, reply) => {
+  app.post('/api/fs/watch/stop', async (request, _reply) => {
     const { root } = request.body as { root?: string };
-    if (!root) return reply.status(400).send({ error: 'root required' });
+    if (!root) return fail('bad_request', 'root required');
 
     const entry = watchers.get(root);
     if (entry) {
       await entry.watcher.close();
       watchers.delete(root);
     }
-    return { ok: true };
+    return ok();
   });
 }

@@ -4,7 +4,7 @@
  * 覆盖：tree.snapshot 重建 + 在途流恢复、stream.event 路由/缓冲/只读守卫、
  * stream.aborted 中止、presence.state。直接操作 agentStore（valtio proxy）。
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type {
   ConversationNode,
   TreeSnapshotMessage,
@@ -19,6 +19,7 @@ import {
   handleStreamAborted,
   handlePresenceState,
   resetLastAppliedRev,
+  getLastAppliedRev,
 } from './sync';
 import type { TurnNode } from './types';
 
@@ -395,5 +396,96 @@ describe('sync 会话切换竞态防护（treeId 守卫贯穿全部入口）', (
     agentStore.treeId = 'X';
     applySnapshot(snapFor('Y', [userNode('y2')], 2), true);
     expect(agentStore.turns.has('y2'), '切走后旧树快照被丢弃').toBe(false);
+  });
+});
+
+describe('liveStreams TTL', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetLastAppliedRev();
+    agentStore.treeId = TREE;
+    agentStore.turns.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function evt(requestId: string, content: string) {
+    return {
+      type: 'stream.event' as const,
+      treeId: TREE,
+      requestId,
+      event: { type: 'text' as const, content },
+    };
+  }
+
+  it('liveStreams 过期缓冲被清理', () => {
+    // 缓冲一个 requestId 的 delta（turn 尚未由快照建立）
+    handleStreamEvent(evt('u1', '过期流'));
+
+    // 时间前进 > 5 分钟（LIVE_STREAM_TTL_MS）
+    vi.advanceTimersByTime(5 * 60_000 + 1000);
+
+    // 快照到达（不含 u1 的 streaming）
+    applySnapshot(snapshot([userNode('u1')]));
+
+    // 过期缓冲被丢弃 → turn.blocks 为空
+    const turn = agentStore.turns.get('u1');
+    expect(turn).toBeTruthy();
+    expect(turn!.blocks.length, '过期缓冲被丢弃，blocks 为空').toBe(0);
+  });
+
+  it('liveStreams 未过期正常恢复', () => {
+    // 缓冲 delta
+    handleStreamEvent(evt('u1', '新鲜流'));
+
+    // 时间前进 < 5 分钟
+    vi.advanceTimersByTime(2 * 60_000);
+
+    // 快照到达
+    applySnapshot(snapshot([userNode('u1')]));
+
+    // 未过期缓冲正常恢复
+    const turn = agentStore.turns.get('u1');
+    expect(turn).toBeTruthy();
+    expect(turn!.blocks.length, '未过期缓冲恢复，blocks 不为空').toBeGreaterThan(0);
+    expect((turn!.blocks[0] as { text: string }).text).toBe('新鲜流');
+  });
+});
+
+describe('rev 守卫 undefined 安全', () => {
+  beforeEach(() => {
+    resetLastAppliedRev();
+    agentStore.treeId = TREE;
+    agentStore.turns.clear();
+  });
+
+  it('rev 为 undefined 的快照正常应用', () => {
+    // 不带 rev 字段的快照
+    const snapNoRev: TreeSnapshotMessage = {
+      ...snapshot([userNode('u1')]),
+      rev: undefined as unknown as number,
+    };
+    applySnapshot(snapNoRev);
+    expect(agentStore.turns.has('u1'), 'undefined rev 快照正常应用').toBe(true);
+  });
+
+  it('rev 为 undefined 后 lastAppliedRev 不回归', () => {
+    // 先应用 rev=5 快照
+    applySnapshot({ ...snapshot([userNode('u1')]), rev: 5 });
+    expect(getLastAppliedRev()).toBe(5);
+
+    // 再应用 rev=undefined 快照
+    const snapNoRev: TreeSnapshotMessage = {
+      ...snapshot([userNode('u1'), userNode('u2')]),
+      rev: undefined as unknown as number,
+    };
+    applySnapshot(snapNoRev);
+
+    // lastAppliedRev 仍为 5（不回归）
+    expect(getLastAppliedRev(), 'lastAppliedRev 不回归').toBe(5);
+    // 但快照内容正常应用
+    expect(agentStore.turns.has('u2'), 'undefined rev 快照内容正常应用').toBe(true);
   });
 });

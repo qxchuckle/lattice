@@ -40,10 +40,9 @@ export const UserTab = memo(function UserTab() {
       return;
     }
     try {
-      const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/create', {
+      await apiPost('/api/users/create', {
         name: newName.trim(),
       });
-      if (!data.success) throw new Error(data.message ?? '创建失败');
       message.success(`用户 ${newName.trim()} 已创建`);
       setNewName('');
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -60,18 +59,14 @@ export const UserTab = memo(function UserTab() {
       return; // 校验错误，表单自行展示
     }
     try {
-      const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/rename', {
+      await apiPost('/api/users/rename', {
         oldName: renameUser,
         newName: values.newName,
       });
-      if (data.success) {
-        message.success(`已重命名为 ${values.newName}`);
-        setRenameUser(null);
-        renameForm.resetFields();
-        queryClient.invalidateQueries({ queryKey: ['users'] });
-      } else {
-        throw new Error(data.message ?? '重命名失败');
-      }
+      message.success(`已重命名为 ${values.newName}`);
+      setRenameUser(null);
+      renameForm.resetFields();
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err) {
       message.error(`重命名失败: ${(err as Error).message}`);
       throw err;
@@ -85,15 +80,11 @@ export const UserTab = memo(function UserTab() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const data = await apiPost<{ success?: boolean; message?: string }>('/api/users/remove', {
+          await apiPost('/api/users/remove', {
             name: username,
           });
-          if (data.success) {
-            message.success(`用户 ${username} 已删除`);
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-          } else {
-            throw new Error(data.message ?? '删除失败');
-          }
+          message.success(`用户 ${username} 已删除`);
+          queryClient.invalidateQueries({ queryKey: ['users'] });
         } catch (err) {
           message.error(`删除失败: ${(err as Error).message}`);
           throw err;
