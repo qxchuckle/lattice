@@ -37,6 +37,7 @@
     "@earendil-works/pi-coding-agent": "^0.80.0",
     "@qcqx/lattice-agent-protocol": "workspace:*",
     "@qoder-ai/qoder-agent-sdk": "^1.0.15",
+    "rxjs": "^7.8.2",
     "zod": "^3.25.0"
   },
   "devDependencies": {

@@ -306,6 +306,29 @@ describe('场景 10: 中止（abort 进行中的流）', () => {
       'abort 前已生成的部分内容保留',
     ).toBe(true);
   });
+
+  it('流式持久化节流不丢尾：中断时 finally 补写最终全量态', async () => {
+    const { sm, state, controller } = await setup();
+    state.hangUntilAbort = true;
+    // spy writeStreaming：捕获每次落盘内容（流式文件结束时会被 clear，无法事后观察）
+    const persisted: string[] = [];
+    const orig = sm.writeStreaming.bind(sm);
+    sm.writeStreaming = async (treeId, s) => {
+      persisted.push(s.content.map((c) => (c.type === 'text' ? c.text : '')).join(''));
+      return orig(treeId, s);
+    };
+
+    controller.createSession('sp', 'mock', null);
+    controller.send('sp', '提问', { requestId: 'p1' }, noopHooks);
+    await new Promise((r) => setTimeout(r, 50));
+    controller.abort('sp', 'p1');
+    await flush(controller, 'sp');
+    sm.writeStreaming = orig;
+
+    // 链路正确性：至少写盘一次（finally 补写），且**最后**一次捕获到完整累加内容
+    expect(persisted.length, '中断路径至少补写一次').toBeGreaterThanOrEqual(1);
+    expect(persisted.at(-1), '最终落盘为完整累加内容，节流不丢尾').toBe('回复[提问]');
+  });
 });
 
 describe('场景 11: 删除对话树（deleteTree 统一清理）', () => {

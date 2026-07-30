@@ -2,6 +2,8 @@
  * WebSocket 连接管理 + SourceEvent 流式处理
  */
 import type { SourceEvent, ServerMessage } from '@qcqx/lattice-agent-protocol';
+import { timer, retry, tap, BehaviorSubject, type Subscription } from 'rxjs';
+import { webSocket, type WebSocketSubject } from 'rxjs/webSocket';
 import { authStore } from '../../store';
 import { agentStore } from './store';
 import { loadTree, loadConversations } from './api';
@@ -85,91 +87,162 @@ export function handleSourceEvent(event: SourceEvent, requestId?: string): void 
   }
 }
 
-// ── WebSocket ──
+// ── WebSocket（rxjs：webSocket + retry 自动重连 + timer 心跳） ──
 
-let ws: WebSocket | null = null;
-let reconnectAttempt = 0;
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let lastPongAt = 0;
 const HEARTBEAT_INTERVAL = 25000;
 const HEARTBEAT_TIMEOUT = 60000; // 超过此时间未收到任何消息 → 判定死连接主动重连
 
+/**
+ * 连接状态机（显式判别联合，单一状态源）：替代旧 `connected` 布尔 + 散落的 reconnectAttempt。
+ * disconnected（未连/主动断）→ connecting → connected → reconnecting（带 attempt）→ connecting …
+ */
+export type ConnectionState =
+  | { type: 'disconnected' }
+  | { type: 'connecting'; attempt: number }
+  | { type: 'connected' }
+  | { type: 'reconnecting'; attempt: number };
+
+/** 连接状态单一真相（BehaviorSubject：持有当前值，可被 UI/逻辑订阅） */
+export const connectionState$ = new BehaviorSubject<ConnectionState>({ type: 'disconnected' });
+
+function setConnState(next: ConnectionState): void {
+  connectionState$.next(next);
+  agentStore.connected = next.type === 'connected';
+}
+
+let socket$: WebSocketSubject<ServerMessage> | null = null;
+let connSub: Subscription | null = null;
+let heartbeatSub: Subscription | null = null;
+let lastPongAt = 0;
+
+/**
+ * 可注入的 WebSocket 构造器（测试接缝）。
+ * rxjs 的 `webSocket({ WebSocketCtor })` 官方就为「mocking a WebSocket for testing purposes」提供此项，
+ * 故重连/心跳时序可在单测中确定性验证（无需真实网络与第三方 mock 库）。
+ * 生产置 null ⇒ 交给 rxjs 用全局 WebSocket。
+ */
+type WsCtor = { new (url: string, protocols?: string | string[]): WebSocket };
+let wsCtorOverride: WsCtor | null = null;
+
+/** 仅测试用：注入假 WebSocket 构造器（传 null 恢复默认） */
+export function __setWebSocketCtorForTest(ctor: WsCtor | null): void {
+  wsCtorOverride = ctor;
+}
+
+/** 仅测试用：重置连接模块内部状态（退订、清空状态机） */
+export function __resetConnectionForTest(): void {
+  connSub?.unsubscribe();
+  connSub = null;
+  stopHeartbeat();
+  socket$ = null;
+  lastPongAt = 0;
+  setConnState({ type: 'disconnected' });
+}
+
+/** 当前重连尝试次数（从状态机派生，不再单独维护变量） */
+function currentAttempt(): number {
+  const s = connectionState$.value;
+  return s.type === 'reconnecting' || s.type === 'connecting' ? s.attempt : 0;
+}
+
 /** 指数退避 + 抖动（防 server 重启惊群）：500ms 起、封顶 30s、抖动 50%~100% */
-function reconnectDelay(): number {
-  const exp = Math.min(500 * 2 ** reconnectAttempt, 30000);
-  reconnectAttempt++;
+export function reconnectDelayMs(attempt: number): number {
+  const exp = Math.min(500 * 2 ** attempt, 30000);
   return Math.floor(exp * (0.5 + Math.random() * 0.5));
 }
 
-/** 应用层心跳：定期 ping + 检测对端存活（半开连接/NAT 超时静默断开时快速发现） */
-function startHeartbeat(): void {
-  stopHeartbeat();
-  lastPongAt = Date.now();
-  heartbeatTimer = setInterval(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT) {
-      ws.close(); // 触发 onclose → 重连
-      return;
-    }
-    sendWs({ type: 'ping' });
-  }, HEARTBEAT_INTERVAL);
-}
-
-function stopHeartbeat(): void {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-}
-
-/** 底层发送（供 actions 使用） */
+/** 底层发送（供 actions 使用）；未连接时丢弃（与旧 readyState 检查一致） */
 export function sendWs(payload: Record<string, unknown>): void {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
+  if (socket$ && connectionState$.value.type === 'connected') {
+    socket$.next(payload as unknown as ServerMessage);
   }
 }
 
 export function isWsReady(): boolean {
-  return !!ws && ws.readyState === WebSocket.OPEN && !!agentStore.sessionId;
+  return !!socket$ && connectionState$.value.type === 'connected' && !!agentStore.sessionId;
+}
+
+/** 应用层心跳：定期 ping + 检测对端存活（半开连接/NAT 静默断开时快速发现并触发重连） */
+function startHeartbeat(): void {
+  stopHeartbeat();
+  lastPongAt = Date.now();
+  heartbeatSub = timer(HEARTBEAT_INTERVAL, HEARTBEAT_INTERVAL).subscribe(() => {
+    if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT) {
+      // 死连接：error 当前 socket → retry 触发重连
+      socket$?.error(new Error('heartbeat timeout'));
+      return;
+    }
+    sendWs({ type: 'ping' });
+  });
+}
+
+function stopHeartbeat(): void {
+  heartbeatSub?.unsubscribe();
+  heartbeatSub = null;
+}
+
+function onOpen(): void {
+  setConnState({ type: 'connected' }); // 连上：重置退避计数（状态不再携 attempt）
+  startHeartbeat();
+  if (!agentStore.sessionId) {
+    sendWs({
+      type: 'session.create',
+      agentId: agentStore.activeSourceId,
+      treeId: agentStore.treeId ?? undefined,
+    });
+  }
+}
+
+function onClose(): void {
+  agentStore.sessionId = null; // 清除旧 session，重连后重新 session.create
+  subscribedTrees.clear(); // server 已丢失订阅，清空以便重连后重新订阅（否则广播收不到）
+  stopHeartbeat();
+  // 状态置 disconnected（若因错误将进入 reconnecting，retry.delay 会接管）
+  if (connectionState$.value.type === 'connected') setConnState({ type: 'disconnected' });
 }
 
 export function connectAgentWs(): void {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
+  const st = connectionState$.value.type;
+  if (socket$ && (st === 'connected' || st === 'connecting')) return;
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const token = authStore.token ? `?token=${authStore.token}` : '';
-  ws = new WebSocket(`${protocol}//${window.location.host}/api/agent/ws${token}`);
+  setConnState({ type: 'connecting', attempt: currentAttempt() });
+  socket$ = webSocket<ServerMessage>({
+    url: `${protocol}//${window.location.host}/api/agent/ws${token}`,
+    openObserver: { next: () => onOpen() },
+    closeObserver: { next: () => onClose() },
+    ...(wsCtorOverride ? { WebSocketCtor: wsCtorOverride } : {}),
+  });
 
-  ws.onopen = () => {
-    reconnectAttempt = 0;
-    agentStore.connected = true;
-    startHeartbeat();
-    if (!agentStore.sessionId) {
-      sendWs({
-        type: 'session.create',
-        agentId: agentStore.activeSourceId,
-        treeId: agentStore.treeId ?? undefined,
-      });
-    }
-  };
+  // retry：网络错误/心跳超时 → 指数退避重连（webSocket 重订阅即重建底层连接，socket$ 引用稳定供 sendWs）
+  connSub = socket$
+    .pipe(
+      tap(() => {
+        lastPongAt = Date.now(); // 任何消息都证明对端存活
+      }),
+      retry({
+        delay: () => {
+          const attempt = currentAttempt() + 1;
+          onClose();
+          setConnState({ type: 'reconnecting', attempt }); // 退避计数随状态机派生
+          return timer(reconnectDelayMs(attempt));
+        },
+      }),
+    )
+    .subscribe({
+      next: (msg) => handleServerMessage(msg),
+    });
+}
 
-  ws.onclose = () => {
-    agentStore.connected = false;
-    agentStore.sessionId = null; // 清除旧 session，重连后重新 session.create
-    subscribedTrees.clear(); // server 已丢失订阅，清空本地集合以便重连后重新订阅（否则广播收不到）
-    stopHeartbeat();
-    setTimeout(() => connectAgentWs(), reconnectDelay());
-  };
-
-  ws.onmessage = (raw) => {
-    try {
-      const msg = JSON.parse(raw.data) as ServerMessage;
-      lastPongAt = Date.now(); // 任何消息都证明对端存活
-      handleServerMessage(msg);
-    } catch {
-      /* ignore */
-    }
-  };
+/** 主动断开（登出/卸载时）：停止重连与心跳 */
+export function disconnectAgentWs(): void {
+  connSub?.unsubscribe();
+  connSub = null;
+  stopHeartbeat();
+  socket$?.complete();
+  socket$ = null;
+  setConnState({ type: 'disconnected' });
 }
 
 function handleServerMessage(msg: ServerMessage): void {

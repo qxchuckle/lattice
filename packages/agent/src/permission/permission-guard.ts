@@ -3,6 +3,7 @@
  * 三级权限：allow / ask / deny
  */
 import { randomUUID } from 'node:crypto';
+import { Subject, firstValueFrom, filter, map, timeout, of, finalize } from 'rxjs';
 import type { PermissionLevel, PermissionRequest } from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
 
@@ -27,10 +28,10 @@ export interface ScopeConfig {
 export class PermissionGuard {
   private rules: PermissionRule[] = [];
   private scope: ScopeConfig = { scopePaths: [], safePaths: [] };
-  private pendingRequests = new Map<
-    string,
-    { resolve: (v: boolean) => void; timer: ReturnType<typeof setTimeout> }
-  >();
+  /** 用户应答流（requestId 关联）；respond → next，requestPermission → filter 对应 id */
+  private readonly responses$ = new Subject<{ id: string; allowed: boolean }>();
+  /** 待应答请求 id（仅为 respond 保“只处理已知请求”语义；无需再手管 timer/resolve） */
+  private readonly pending = new Set<string>();
   private events: EventBus;
 
   constructor(events: EventBus) {
@@ -98,26 +99,27 @@ export class PermissionGuard {
       timestamp: Date.now(),
     };
 
-    return new Promise<boolean>((resolve) => {
-      // 先注册再发事件：反序会让同步应答者（同进程监听器 / 自动策略）的 respond 落空，
-      // 导致请求挂到 60s 超时才被拒——这是反向通道接入时暴露的真实竞态
-      const timer = setTimeout(() => {
-        if (this.pendingRequests.delete(request.id)) resolve(false);
-      }, PERMISSION_TIMEOUT_MS);
-      this.pendingRequests.set(request.id, { resolve, timer });
-      this.events.emit('permission:request', { request });
-    });
+    // 先订阅后 emit：firstValueFrom 同步订阅 responses$，确保同进程监听器/自动策略在
+    // emit 期间的同步 respond 不会落空（反向通道接入时暴露的真实竞态）。
+    // timeout 代替手写 setTimeout：未应答自动归为 false（安全默认）；finalize 统一清理 pending。
+    this.pending.add(request.id);
+    const answered = firstValueFrom(
+      this.responses$.pipe(
+        filter((r) => r.id === request.id),
+        map((r) => r.allowed),
+        timeout({ each: PERMISSION_TIMEOUT_MS, with: () => of(false) }),
+        finalize(() => this.pending.delete(request.id)),
+      ),
+    );
+    this.events.emit('permission:request', { request });
+    return answered;
   }
 
-  /** 用户响应权限请求 */
+  /** 用户响应权限请求（仅处理已知待应答请求，同旧版） */
   respond(requestId: string, allowed: boolean): void {
-    const pending = this.pendingRequests.get(requestId);
-    if (pending) {
-      clearTimeout(pending.timer); // 避免已应答请求的定时器空转 60s
-      pending.resolve(allowed);
-      this.pendingRequests.delete(requestId);
-      this.events.emit('permission:response', { requestId, allowed });
-    }
+    if (!this.pending.has(requestId)) return;
+    this.responses$.next({ id: requestId, allowed });
+    this.events.emit('permission:response', { requestId, allowed });
   }
 
   /** 路径是否在允许范围内 */

@@ -32,6 +32,21 @@ import { checkPiAuth, discoverPiModels } from './auth.js';
 import { PI_INFO, PI_CAPABILITIES, PI_AUTH_REQUIREMENTS } from './capabilities.js';
 import { scanPiResources } from './resources.js';
 import { isRecord } from '../../internal/shape.js';
+import {
+  fromEventPattern,
+  from,
+  merge,
+  defer,
+  EMPTY,
+  Subject,
+  lastValueFrom,
+  filter,
+  tap,
+  takeUntil,
+  catchError,
+  ignoreElements,
+  finalize,
+} from 'rxjs';
 
 // ── SDK 最小结构类型 ──
 
@@ -214,25 +229,30 @@ class PiDriver implements SourceDriver<PiHandle> {
       .filter((b): b is Extract<ContentBlock, { type: 'image' }> => b.type === 'image')
       .map((b) => ({ type: 'image' as const, data: b.data, mimeType: b.mimeType }));
 
-    await new Promise<void>((resolveSettled) => {
-      let settled = false;
-      let unsub: () => void = () => {};
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        unsub();
-        resolveSettled();
-      };
-      // 终止信号用 agent_settled 而非 agent_end：threshold 压缩/自动重试在 agent_end 之后、
-      // settled 之前发生（post-run 阶段），提前退出会漏掉 compaction 事件
-      unsub = session.subscribe((raw: unknown) => {
-        if (!isRecord(raw)) return; // SDK 异常载荷（非对象）直接忽略，不让它污染映射
+    // 事件源为本质的 Observable：fromEventPattern 桥接 session.subscribe 回调（不再手写 Promise+settled+finish）。
+    // 两个终止信号竞速（先到先终）：
+    //   ① agent_settled / error 事件（用 settled 而非 agent_end：threshold 压缩/自动重试在 agent_end 后、settled 前，提前退出会漏 compaction）；
+    //   ② session.prompt() 结结（resolve 或 reject）。
+    // takeUntil(settle$) 终止后自动退订 → fromEventPattern 调 session unsub。
+    const settle$ = new Subject<void>();
+
+    const raw$ = fromEventPattern<unknown>(
+      (handler) => session.subscribe(handler as (raw: unknown) => void),
+      (_handler, unsub) => (unsub as () => void)(),
+    ).pipe(
+      filter(isRecord), // SDK 异常载荷（非对象）忽略，不污染映射
+      tap((raw) => {
         for (const mapped of mapPiEvent(raw, src)) emit(mapped);
-        if (raw.type === 'agent_settled' || raw.type === 'error') finish();
-      });
-      // prompt 在 agent 运行前抛出（如模型校验失败）时不发任何终止事件——
-      // 非致命路径：emit error 内容事件后正常收尾（保持旧行为：error + done 都会出现）
-      session.prompt(text, images.length > 0 ? { images } : undefined).then(finish, (err) => {
+        if (raw.type === 'agent_settled' || raw.type === 'error') settle$.next();
+      }),
+    );
+
+    // defer：订阅时才调 session.prompt()，确保 subscribe 监听已注册（否则同步回放漏事件）。
+    // prompt 在 agent 运行前抛出（如模型校验失败）→ emit error 后正常收尾（保持 error+done 都出现）。
+    const prompt$ = defer(() =>
+      from(session.prompt(text, images.length > 0 ? { images } : undefined)),
+    ).pipe(
+      catchError((err) => {
         emit({
           type: 'error',
           message: err instanceof Error ? err.message : String(err),
@@ -240,9 +260,13 @@ class PiDriver implements SourceDriver<PiHandle> {
           retryable: false,
           source: src,
         });
-        finish();
-      });
-    });
+        return EMPTY;
+      }),
+      ignoreElements(), // prompt 的 resolve 值不作为事件
+      finalize(() => settle$.next()), // resolve / 已处理的 reject → 终止
+    );
+
+    await lastValueFrom(merge(raw$, prompt$).pipe(takeUntil(settle$)), { defaultValue: null });
 
     // 捕获最后一条消息的 Pi entry ID（fork 锚点，存入树节点 metadata）
     return { sourceMessageId: handle.manager.getLeafId() ?? undefined };

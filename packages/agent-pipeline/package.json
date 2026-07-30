@@ -27,7 +27,8 @@
     "node": ">=20.19"
   },
   "dependencies": {
-    "@qcqx/lattice-agent-protocol": "workspace:*"
+    "@qcqx/lattice-agent-protocol": "workspace:*",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

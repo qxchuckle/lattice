@@ -15,7 +15,10 @@ import {
   isReadOnly,
   isBranchableChild,
   shouldSkipDescendantMark,
+  advanceViewStatus,
+  isTerminalViewStatus,
 } from '../src/index.js';
+import type { ViewSignal } from '../src/index.js';
 
 describe('errorCategory：全 code 归类（穷尽）', () => {
   const cases: Array<[SourceErrorCode, string]> = [
@@ -188,6 +191,49 @@ describe('操作守卫与视图投影（server 侧纵深防御的同一真相）
       if (caps.canDelete) expect(canApplyOperation('delete', persisted)).toBe(true);
       if (caps.canContinue) expect(canApplyOperation('continue', persisted)).toBe(true);
       if (caps.canRetry) expect(canApplyOperation('retry', persisted)).toBe(true);
+    }
+  });
+});
+
+describe('ViewStatus 状态机：advanceViewStatus 转换表', () => {
+  const ALL: ViewStatus[] = ['streaming', 'done', 'error', 'interrupted', 'undone', 'hidden'];
+  const SIGNALS: ViewSignal[] = ['start', 'done', 'error', 'abort'];
+
+  it('streaming：done→done / error→error / abort→interrupted / start→streaming', () => {
+    expect(advanceViewStatus('streaming', 'done')).toBe('done');
+    expect(advanceViewStatus('streaming', 'error')).toBe('error');
+    expect(advanceViewStatus('streaming', 'abort')).toBe('interrupted');
+    expect(advanceViewStatus('streaming', 'start')).toBe('streaming');
+  });
+
+  it('settled 态（done/error/interrupted）被 start 拉回 streaming', () => {
+    expect(advanceViewStatus('done', 'start')).toBe('streaming');
+    expect(advanceViewStatus('error', 'start')).toBe('streaming');
+    expect(advanceViewStatus('interrupted', 'start')).toBe('streaming');
+  });
+
+  it('🔴 终止态 undone/hidden：任何信号都不改变（防已删节点被迟到 done 复活）', () => {
+    for (const signal of SIGNALS) {
+      expect(advanceViewStatus('undone', signal)).toBe('undone');
+      expect(advanceViewStatus('hidden', signal)).toBe('hidden');
+    }
+  });
+
+  it('无合法转换时保持原态（不抛错、不产生非法态）', () => {
+    // done 收到 done（重复终止）→ 保持 done；error 收到 abort → 保持 error
+    expect(advanceViewStatus('done', 'done')).toBe('done');
+    expect(advanceViewStatus('error', 'abort')).toBe('error');
+    // 全组合的返回值必须仍是合法 ViewStatus
+    for (const s of ALL) {
+      for (const sig of SIGNALS) {
+        expect(ALL).toContain(advanceViewStatus(s, sig));
+      }
+    }
+  });
+
+  it('isTerminalViewStatus 与 isReadOnly 对齐（undone/hidden）', () => {
+    for (const s of ALL) {
+      expect(isTerminalViewStatus(s)).toBe(s === 'undone' || s === 'hidden');
     }
   });
 });

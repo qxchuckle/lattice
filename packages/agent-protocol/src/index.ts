@@ -180,6 +180,8 @@ export {
   canApplyOperation,
   shouldSkipDescendantMark,
   isBranchableChild,
+  advanceViewStatus,
+  isTerminalViewStatus,
   projectNodeCapabilities,
   projectViewStatus,
   deriveTurnViewStatus,
@@ -187,6 +189,7 @@ export {
 } from './source/node-state.js';
 export type {
   ViewStatus,
+  ViewSignal,
   NodeOperation,
   NodeCapabilities,
   NodeCapabilityContext,

@@ -26,12 +26,18 @@ import type {
   SourceEvent,
 } from '@qcqx/lattice-agent-protocol';
 import { SourceEventStream, CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
+import { defer, from, timer, throwError, firstValueFrom, retry } from 'rxjs';
 import type { SourceDriver, DriverSessionHandle, DriverEmit } from './driver.js';
 import { SourceError } from './types/error.js';
 import { buildResolvedManifest, buildFailedManifest } from './handshake.js';
 
 /** 资源发现缓存 TTL */
 const RESOURCE_CACHE_TTL_MS = 60_000;
+
+/** 连接重试：仅对**可重试**错误（network/timeout/rate_limited）指数退避重连 */
+const MAX_CONNECT_RETRIES = 3;
+const CONNECT_BACKOFF_BASE_MS = 200;
+const CONNECT_BACKOFF_CAP_MS = 3_000;
 
 /** 非 SourceError 的 driver 异常 → 类型化包装 */
 function toSourceError(
@@ -164,7 +170,8 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
         throw SourceError.notInitialized(this.driver.info.id, this.driver.info.displayName);
       }
       const existing = sessionId ? this.handles.get(sessionId) : undefined;
-      const handle = existing ?? (await this.driver.connect(sessionId, opts));
+      // 仅对**新建连接**重试（已有句柄直接复用）；只重试 connect，不重试 prompt（避免向 agent 重发造成副作用）
+      const handle = existing ?? (await this.connectWithRetry(sessionId, opts));
       this.handles.set(handle.id, handle);
 
       // signal = 唯一取消真相：触发即中止在途生成（中止是正常结局，driver 返回 outcome）
@@ -213,6 +220,33 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   /** ts 在源边缘统一打点（宿主无关） */
   private stamp<E extends SourceEvent>(event: E): E {
     return event.ts !== undefined ? event : { ...event, ts: Date.now() };
+  }
+
+  /**
+   * 连接建立 + 可重试错误指数退避重连。
+   *
+   * 仅重试**连接建立**阶段，不涉 prompt（prompt 重发会向 agent 重复提交消息，有副作用）。
+   * 重试门：仅 SourceError.retryable（network/timeout/rate_limited）；其余（如二进制缺失 ENOENT
+   * 被包为 unknown）立即抛出——重试无意义。退避：200ms × 2^n，封顶 3s。
+   * 尊重取消信号：退避等待期间 signal 中止则不再重试（避免用户已取消却继续重连）。
+   */
+  private connectWithRetry(sessionId: string | null, opts: PromptOpts): Promise<H> {
+    return firstValueFrom(
+      defer(() => from(this.driver.connect(sessionId, opts))).pipe(
+        retry({
+          count: MAX_CONNECT_RETRIES,
+          delay: (err: unknown, attempt: number) => {
+            const retryable = err instanceof SourceError && err.retryable;
+            if (!retryable || opts.signal?.aborted) return throwError(() => err);
+            const backoff = Math.min(
+              CONNECT_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+              CONNECT_BACKOFF_CAP_MS,
+            );
+            return timer(backoff);
+          },
+        }),
+      ),
+    );
   }
 
   // ── 会话原子操作（能力守卫 = 纵深防御，正确用法是查声明而非 catch） ──

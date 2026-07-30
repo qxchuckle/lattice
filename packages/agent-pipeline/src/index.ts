@@ -28,7 +28,7 @@ export {
 export {
   runPrompt,
   applyPromptMiddlewares,
-  wrapEventStream,
+  transformEvents,
   sortMiddlewares,
   type RunPromptArgs,
 } from './pipeline.js';

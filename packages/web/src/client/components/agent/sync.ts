@@ -19,6 +19,7 @@ import type {
   PresenceStateMessage,
 } from '@qcqx/lattice-agent-protocol';
 import { applyEventToContent } from '@qcqx/lattice-agent-protocol';
+import { advanceViewStatus, isTerminalViewStatus } from '@qcqx/lattice-agent-protocol';
 import { agentStore, putTurn, ensureUi } from './store';
 import { buildTurnsFromNodes } from './turnGraph';
 import type { TurnNode, ConversationEntry } from './types';
@@ -115,22 +116,25 @@ export function handleStreamEvent(msg: StreamEventMessage): void {
     applyEventToContent(arr, msg.event as SourceEvent);
     return;
   }
-  if (turn.status === 'undone' || turn.status === 'hidden') return;
+  if (isTerminalViewStatus(turn.status)) return; // 终止态守卫（状态机单一真相）
   const ev = msg.event as SourceEvent;
   // 他端流 delta 到达时提升为 streaming：快照重建的 turn 默认 'done'（assistant 未落盘），
   // 不提升会导致他端流式期间思考块不展开/无实时计时、无光标、无停止按钮
-  if (ev.type !== 'done' && ev.type !== 'error' && turn.status !== 'streaming') {
-    turn.status = 'streaming';
-    agentStore.version++;
+  if (ev.type !== 'done' && ev.type !== 'error') {
+    const next = advanceViewStatus(turn.status, 'start');
+    if (next !== turn.status) {
+      turn.status = next;
+      agentStore.version++;
+    }
   }
   applyEventToContent(turn.blocks, ev);
   if (ev.type === 'done') {
-    turn.status = 'done';
+    turn.status = advanceViewStatus(turn.status, 'done');
     turn.usage = ev.usage;
     liveStreams.delete(msg.requestId);
     agentStore.version++;
   } else if (ev.type === 'error') {
-    turn.status = 'error';
+    turn.status = advanceViewStatus(turn.status, 'error');
     liveStreams.delete(msg.requestId);
     agentStore.version++;
   }
@@ -140,9 +144,12 @@ export function handleStreamEvent(msg: StreamEventMessage): void {
 export function handleStreamAborted(msg: StreamAbortedMessage): void {
   if (msg.treeId !== agentStore.treeId) return;
   const turn = agentStore.turns.get(msg.requestId) as TurnNode | undefined;
-  if (turn && turn.status === 'streaming') {
-    turn.status = 'interrupted';
-    agentStore.version++;
+  if (turn) {
+    const next = advanceViewStatus(turn.status, 'abort'); // 仅 streaming → interrupted
+    if (next !== turn.status) {
+      turn.status = next;
+      agentStore.version++;
+    }
   }
   liveStreams.delete(msg.requestId);
 }

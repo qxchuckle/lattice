@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { PromptPayload, MiddlewareContext } from '@qcqx/lattice-agent-protocol';
+import { lastValueFrom } from 'rxjs';
 import {
   resolveSourceProfile,
   runPrompt,
@@ -165,11 +166,13 @@ describe('slash 展开 middleware', () => {
       resolveCommandTemplate: async (name) => (name === 'build' ? '构建步骤：…' : null),
       commandLabel: 'Lattice Command',
     });
-    await runPrompt({
-      source,
-      payload: payloadOf('/build --fast'),
-      middlewares: profile.middlewares,
-    });
+    await lastValueFrom(
+      runPrompt({
+        source,
+        payload: payloadOf('/build --fast'),
+        middlewares: profile.middlewares,
+      }),
+    );
     const sent = calls.prompts[0].message[0];
     expect(sent.type === 'text' && sent.text).toBe(
       '--fast\n\n--- Lattice Command: build ---\n构建步骤：…\n--- End Lattice Command ---',
@@ -181,7 +184,9 @@ describe('slash 展开 middleware', () => {
     const profile = resolveSourceProfile(manifestOf('qoder', QODER_LIKE), {
       resolveCommandTemplate: async () => null,
     });
-    await runPrompt({ source, payload: payloadOf('/unknown x'), middlewares: profile.middlewares });
+    await lastValueFrom(
+      runPrompt({ source, payload: payloadOf('/unknown x'), middlewares: profile.middlewares }),
+    );
     const sent = calls.prompts[0].message[0];
     expect(sent.type === 'text' && sent.text).toBe('/unknown x');
   });

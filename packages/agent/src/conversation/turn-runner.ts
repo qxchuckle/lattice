@@ -10,8 +10,27 @@
 import type { ISource, ConversationBranch, ContentBlock } from '@qcqx/lattice-agent-protocol';
 import { StreamAccumulator, isReadOnly } from '@qcqx/lattice-agent-protocol';
 import { runPrompt as runPipelinePrompt } from '@qcqx/lattice-agent-pipeline';
+import {
+  auditTime,
+  concatMap,
+  from,
+  lastValueFrom,
+  catchError,
+  EMPTY,
+  map,
+  tap,
+  share,
+} from 'rxjs';
 import type { ConversationControllerDeps, ConversationHooks, SessionContext } from './types.js';
 import type { TreeRuntimeRegistry } from './tree-runtime.js';
+
+/**
+ * 流式持久化节流窗口（ms）。
+ * 高频 delta 合并为最多每此间隔一次全量快照写盘（崩溃恢复用）。
+ * 旧行为：每条 delta 一次 writeFile 且 await 阻塞转发 → 2000 token = 2000 次写、
+ * 每次序列化全量内容（O(n²) 写放大），且磁盘延迟直接叠加到用户看到的流式延迟上。
+ */
+const STREAM_PERSIST_THROTTLE_MS = 100;
 
 /** 一轮请求的模型参数（落盘于节点 metadata，retry/continue 复用） */
 interface TurnModelOpts {
@@ -242,8 +261,16 @@ export class TurnRunner {
     // 线程身份与任务关联：注入类 middleware 据此取上下文（无任务关联时不注入）
     const taskId = treeId ? this.deps.session.getTree(treeId)?.taskId : undefined;
 
+    // 持久化支路排干句柄（建流成功后才有；runPipelinePrompt 入向失败时保持 undefined）
+    let persistDrained: Promise<unknown> | undefined;
+
     try {
-      const stream = await runPipelinePrompt({
+      // 事件主干：pipeline runPrompt 直接返回 Observable<SourceEvent>（整条链全程 Observable，无需再 from() 桥接）。
+      // share() 后分两支路共享同一次上游：
+      //   ① 转发/累积：tap 同步即时（不被磁盘 IO 阻塞，避免用户看到的流式卡顿）；
+      //   ② 持久化：auditTime 节流（只写最新全量快照）+ concatMap 串行写（不并发交错，写失败不断流）。
+      // 入向 middleware 失败 / 中间件错误 → Observable error → 下方 catch；源错误走 error 事件（不双重）。
+      const event$ = runPipelinePrompt({
         source,
         payload: {
           sessionId: sourceSessionId,
@@ -258,14 +285,27 @@ export class TurnRunner {
         },
         middlewares,
         ctx: { threadId: treeId ?? undefined, metadata: { taskId } },
-      });
-      for await (const rawEvent of stream) {
-        // ts 由源边缘（defineSource 工厂）统一打点；第三方源实现未打点时兜底补齐
-        const event = rawEvent.ts === undefined ? { ...rawEvent, ts: Date.now() } : rawEvent;
-        accumulator.apply(event);
-        await persistStreaming();
-        hooks.onEvent(event, requestId);
-      }
+      }).pipe(
+        // ts 由源边缘统一打点；第三方源未打点时兜底补齐
+        map((raw) => (raw.ts === undefined ? { ...raw, ts: Date.now() } : raw)),
+        tap((event) => {
+          accumulator.apply(event);
+          hooks.onEvent(event, requestId);
+        }),
+        share(),
+      );
+
+      // 持久化支路：先同步订阅，与主干共享同一次上游拉取；catch 兵底使 finally await 不会抛出
+      persistDrained = lastValueFrom(
+        event$.pipe(
+          auditTime(STREAM_PERSIST_THROTTLE_MS),
+          concatMap(() => from(persistStreaming()).pipe(catchError(() => EMPTY))),
+        ),
+        { defaultValue: null },
+      ).catch(() => null);
+
+      // 主干消费：驱动上游拉取并等待流结束
+      await lastValueFrom(event$, { defaultValue: null });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       // 仅真实错误（非用户中止）记入内容并通知客户端：
@@ -281,9 +321,16 @@ export class TurnRunner {
         });
         hooks.onError(errMsg, requestId);
       }
-      await persistStreaming();
     } finally {
       rtStream.abortControllers.delete(requestId);
+      // 排干在途写：上游完成会级联完成持久化支路（concatMap 等在途 write 收尾）；
+      // 未建流（入向失败）时 persistDrained 为 undefined，跳过。
+      if (persistDrained) await persistDrained;
+      // 中断/未完成才补写最终全量态（正常结束下面会 clearStreaming，无需多写一次）：
+      // auditTime 会丢弃 complete 时窗口内未发的尾值，崩溃恢复需要最新内容。
+      if (abortController.signal.aborted || !accumulator.done) {
+        await persistStreaming();
+      }
     }
 
     const interrupted = abortController.signal.aborted || !accumulator.done;

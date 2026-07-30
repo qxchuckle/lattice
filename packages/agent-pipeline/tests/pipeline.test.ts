@@ -1,20 +1,21 @@
 /**
  * 管线 runner 测试：相位序、错误包装、事件流透明性
  *
- * 关键不变式：
+ * 关键不变式（runPrompt 返回 Observable<SourceEvent>）：
  * - 入向按相位正序、出向逆序（洋葱）
- * - 无 transformEvent 时零包装（返回原流对象本身）
- * - done 被吞/复制 → middleware_failure（否则 result() 永挂）
- * - 源流 fail → 下游 result() 同样 reject（不吞异常）
+ * - 无 transformEvent 时事件原样透传（from(raw) 零变换）
+ * - done 被吞/复制 → middleware_failure（Observable error）
+ * - middleware 抛错 → PipelineError → Observable error（不吞异常）
+ * - 源错误走 error **事件**通道（不被 pipeline 吞）
  */
 import { describe, it, expect } from 'vitest';
 import type { SourceMiddleware, PromptPayload, SourceEvent } from '@qcqx/lattice-agent-protocol';
-import { SourceEventStream } from '@qcqx/lattice-agent-protocol';
+import { lastValueFrom } from 'rxjs';
 import {
   runPrompt,
   sortMiddlewares,
   applyPromptMiddlewares,
-  wrapEventStream,
+  transformEvents,
   PipelineError,
 } from '../src/index.js';
 import { createFakeSource, collect } from './fixtures.js';
@@ -110,7 +111,7 @@ describe('middleware 错误处理', () => {
       },
     };
     await expect(
-      runPrompt({ source, payload: basePayload, middlewares: [boom] }),
+      lastValueFrom(runPrompt({ source, payload: basePayload, middlewares: [boom] })),
     ).rejects.toBeInstanceOf(PipelineError);
     expect(calls.prompts).toHaveLength(0);
   });
@@ -123,9 +124,16 @@ describe('事件流包装', () => {
     transformPrompt: async (p) => p,
   };
 
-  it('无 transformEvent middleware → 返回原流对象（零包装开销）', () => {
-    const raw = new SourceEventStream();
-    expect(wrapEventStream(raw, [passthroughPrompt], { sourceId: 'fake' })).toBe(raw);
+  it('无 transformEvent middleware → 事件原样透传（transformEvents 零变换）', async () => {
+    const { source } = createFakeSource('fake', {
+      events: [
+        { type: 'text', content: 'a' },
+        { type: 'text', content: 'b' },
+      ],
+    });
+    const raw = source.prompt(null, [{ type: 'text', text: 'x' }]);
+    const events = await collect(transformEvents(raw, [passthroughPrompt], { sourceId: 'fake' }));
+    expect(events.map((e) => e.type)).toEqual(['text', 'text', 'done']);
   });
 
   it('逐事件变换：一变多、滤除、原样放行混合生效', async () => {
@@ -177,8 +185,9 @@ describe('事件流包装', () => {
       phase: 'guard',
       transformEvent: (e) => (e.type === 'done' ? [] : [e]),
     };
-    const stream = await runPrompt({ source, payload: basePayload, middlewares: [swallow] });
-    const err = (await stream.result().catch((e: unknown) => e)) as PipelineError;
+    const err = (await lastValueFrom(
+      runPrompt({ source, payload: basePayload, middlewares: [swallow] }),
+    ).catch((e: unknown) => e)) as PipelineError;
     expect(err).toBeInstanceOf(PipelineError);
     expect(err.code).toBe('middleware_failure');
   });
@@ -190,8 +199,9 @@ describe('事件流包装', () => {
       phase: 'guard',
       transformEvent: (e) => (e.type === 'done' ? [e, e] : [e]),
     };
-    const stream = await runPrompt({ source, payload: basePayload, middlewares: [dup] });
-    await expect(stream.result()).rejects.toBeInstanceOf(PipelineError);
+    await expect(
+      lastValueFrom(runPrompt({ source, payload: basePayload, middlewares: [dup] })),
+    ).rejects.toBeInstanceOf(PipelineError);
   });
 
   it('transformEvent 抛错 → 流以 middleware_failure 终止', async () => {
@@ -203,31 +213,50 @@ describe('事件流包装', () => {
         throw new Error('bad');
       },
     };
-    const stream = await runPrompt({ source, payload: basePayload, middlewares: [boom] });
-    const err = (await stream.result().catch((e: unknown) => e)) as PipelineError;
+    const err = (await lastValueFrom(
+      runPrompt({ source, payload: basePayload, middlewares: [boom] }),
+    ).catch((e: unknown) => e)) as PipelineError;
     expect(err.code).toBe('middleware_failure');
     expect(err.context.middleware).toBe('boom');
   });
 
-  it('源流 fail → 包装流的 result() 同样 reject（异常不被吞）', async () => {
-    const cause = new Error('source died');
-    const { source } = createFakeSource('fake', { events: [], failWith: cause });
+  it('源错误走 error **事件**通道 → pipeline 原样透传不吞', async () => {
+    // 真实 source（defineSource）fail 前必先 push error 事件；此处模拟该行为：
+    // 错误作为事件在流内传达，pipeline 不得吞掉
+    const { source } = createFakeSource('fake', {
+      events: [
+        {
+          type: 'error',
+          message: 'source died',
+          code: 'unknown',
+          retryable: false,
+          source: { id: 'fake', name: 'Fake' },
+        },
+      ],
+    });
     const tap: SourceMiddleware = {
       name: 'tap',
       phase: 'normalize',
       transformEvent: (e: SourceEvent) => [e],
     };
-    const stream = await runPrompt({ source, payload: basePayload, middlewares: [tap] });
-    await expect(stream.result()).rejects.toBe(cause);
+    const events = await collect(runPrompt({ source, payload: basePayload, middlewares: [tap] }));
+    expect(events.some((e) => e.type === 'error' && e.message === 'source died')).toBe(true);
   });
 
   it('入向变换后的 payload 才是源看到的内容（sessionId/opts 一并透传）', async () => {
     const { source, calls } = createFakeSource();
-    await runPrompt({
-      source,
-      payload: { sessionId: 's1', message: [{ type: 'text', text: 'hi' }], opts: { model: 'm1' } },
-      middlewares: [marker('norm', 'normalize')],
-    });
+    // runPrompt 惰性（defer）：需订阅（collect）才会跑入向 middleware + 调源
+    await collect(
+      runPrompt({
+        source,
+        payload: {
+          sessionId: 's1',
+          message: [{ type: 'text', text: 'hi' }],
+          opts: { model: 'm1' },
+        },
+        middlewares: [marker('norm', 'normalize')],
+      }),
+    );
     expect(calls.prompts[0].sessionId).toBe('s1');
     expect(calls.prompts[0].opts.model).toBe('m1');
     expect(calls.prompts[0].message).toEqual([{ type: 'text', text: 'hi|norm' }]);

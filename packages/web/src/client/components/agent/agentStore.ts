@@ -54,6 +54,7 @@ import { resetLastAppliedRev } from './sync';
 import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
+import { advanceViewStatus } from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 
 // ── 提交消息 ──
@@ -171,9 +172,13 @@ export function abortStream(turnId?: string): void {
     // 清除流式路由映射：避免后续延迟事件/错误覆盖中断态，也防止残留映射
     setStreamingTarget(null, turnId);
     const turn = agentStore.turns.get(turnId);
-    if (turn && turn.status === 'streaming') {
-      turn.status = 'interrupted';
-      agentStore.version++;
+    if (turn) {
+      // 状态机：仅 streaming → interrupted（终止态/其他态不变，由 advanceViewStatus 守卫）
+      const next = advanceViewStatus(turn.status, 'abort');
+      if (next !== turn.status) {
+        turn.status = next;
+        agentStore.version++;
+      }
     }
   }
 }
@@ -184,8 +189,8 @@ export function continueTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
 
-  // 重置状态为 streaming（在原节点上续写）
-  turn.status = 'streaming';
+  // 状态机 start 信号：拉回 streaming（终止态 undone/hidden 不会被拉回）。在原节点续写
+  turn.status = advanceViewStatus(turn.status, 'start');
   agentStore.version++;
 
   // 发送 session.continue，server 会在原节点上追加内容
@@ -206,7 +211,7 @@ export function retryTurn(turnId: string): void {
 
   // 重置 turn 以展示重新生成的流式内容（旧回复 server 会标记 undone）
   turn.blocks = [];
-  turn.status = 'streaming';
+  turn.status = advanceViewStatus(turn.status, 'start');
   agentStore.version++;
   // contentOnly=false：retry 会标记后代 undone（结构性变化），完成后必须重载以同步后代状态
   setStreamingTarget(turnId, turnId, false);

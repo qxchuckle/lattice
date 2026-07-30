@@ -15,6 +15,7 @@ import type {
   ContentBlock,
 } from '@qcqx/lattice-agent-protocol';
 import { SourceEventStream, CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
+import { Observable, lastValueFrom, toArray } from 'rxjs';
 
 export const PI_LIKE: SourceCapabilities = {
   execution: { mode: 'local', contextOwnership: 'source' },
@@ -152,8 +153,6 @@ export function createFakeSource(
   return { source, calls };
 }
 
-export async function collect(iter: AsyncIterable<SourceEvent>): Promise<SourceEvent[]> {
-  const out: SourceEvent[] = [];
-  for await (const e of iter) out.push(e);
-  return out;
+export async function collect(events$: Observable<SourceEvent>): Promise<SourceEvent[]> {
+  return lastValueFrom(events$.pipe(toArray()));
 }

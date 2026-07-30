@@ -13,7 +13,8 @@
   "dependencies": {
     "@qcqx/lattice-agent-pipeline": "workspace:*",
     "@qcqx/lattice-agent-protocol": "workspace:*",
-    "@qcqx/lattice-agent-source": "workspace:*"
+    "@qcqx/lattice-agent-source": "workspace:*",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

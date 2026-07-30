@@ -23,6 +23,42 @@ export function isReadOnly(status: NodeStatus | undefined): boolean {
   return status === 'undone' || status === 'hidden';
 }
 
+// ── turn 视图态状态机（流式生命周期的单一真相） ──
+
+/**
+ * 视图态转换信号（驱动 streaming 生命周期）：
+ * - start：发起/重试/续写 → 进入 streaming
+ * - done：源正常结束
+ * - error：源报错
+ * - abort：用户/他端中止
+ */
+export type ViewSignal = 'start' | 'done' | 'error' | 'abort';
+
+/**
+ * ViewStatus 转换表：显式状态机，集中所有合法转换（替代散落各文件的 if/else 赋值）。
+ * 铁律：undone/hidden 是**终止态**（用户已撤销/删除），任何信号都不改变它——
+ * 防「已删节点被迟到的 done 事件复活」（旧代码散落在多处的 undone/hidden 判空）。
+ * settled 态（done/error/interrupted）可被 start 拉回 streaming（continue/retry）。
+ */
+const VIEW_TRANSITIONS: Record<ViewStatus, Partial<Record<ViewSignal, ViewStatus>>> = {
+  streaming: { done: 'done', error: 'error', abort: 'interrupted', start: 'streaming' },
+  done: { start: 'streaming' },
+  error: { start: 'streaming' },
+  interrupted: { start: 'streaming', done: 'done', error: 'error' },
+  undone: {},
+  hidden: {},
+};
+
+/** 应用一个信号，返回下一视图态；无合法转换时保持原态（含终止态守卫）。 */
+export function advanceViewStatus(current: ViewStatus, signal: ViewSignal): ViewStatus {
+  return VIEW_TRANSITIONS[current][signal] ?? current;
+}
+
+/** 是否终止态（不接受任何转换，也不应再累积内容）。 */
+export function isTerminalViewStatus(status: ViewStatus): boolean {
+  return status === 'undone' || status === 'hidden';
+}
+
 /**
  * 操作守卫：该操作能否作用于该状态的节点。
  * - delete：undone→hidden 合法，仅已 hidden 不可重复；

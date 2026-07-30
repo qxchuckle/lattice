@@ -10,6 +10,7 @@ import { EventStream, SourceEventStream } from '@qcqx/lattice-agent-protocol';
 import { defineSource } from '../src/define-source.js';
 import { createScriptedDriver } from '../src/testing/index.js';
 import type { SourceDriver, DriverSessionHandle } from '../src/driver.js';
+import { SourceError } from '../src/types/error.js';
 
 async function collect(iter: AsyncIterable<SourceEvent>): Promise<SourceEvent[]> {
   const out: SourceEvent[] = [];
@@ -216,5 +217,70 @@ describe('createAgentSource 便捷工厂', () => {
     const { registry, dispose } = await createAgentSource();
     expect(registry.listManifests()).toEqual([]);
     await dispose();
+  });
+});
+
+describe('连接重试（指数退避）', () => {
+  const identity = { sourceId: 'mock', sourceName: 'Mock' };
+
+  /** connect 前 N 次抛指定错，之后成功 */
+  function makeFlakyDriver(failCount: number, code: 'network' | 'auth_missing') {
+    let attempts = 0;
+    const base = createScriptedDriver({ id: 'mock' });
+    const driver: SourceDriver = {
+      ...base,
+      async connect(sessionId: string | null): Promise<DriverSessionHandle> {
+        attempts++;
+        if (attempts <= failCount) {
+          throw new SourceError(code, 'transient', { ...identity, operation: 'prompt' });
+        }
+        return { id: sessionId ?? 'ok', abort: () => {} };
+      },
+      async prompt() {
+        return { sessionId: 'ok' };
+      },
+    };
+    return { driver, attempts: () => attempts };
+  }
+
+  it('可重试错误（network）前两次失败 → 第三次连上，流正常完成', async () => {
+    const { driver, attempts } = makeFlakyDriver(2, 'network');
+    const source = defineSource(driver);
+    await source.init();
+    const events = await collect(source.prompt(null, [{ type: 'text', text: 'hi' }]));
+    expect(attempts(), '重试至第三次才成功').toBe(3);
+    expect(
+      events.some((e) => e.type === 'done'),
+      '重连后正常结束',
+    ).toBe(true);
+    expect(
+      events.some((e) => e.type === 'error'),
+      '成功重连不报错',
+    ).toBe(false);
+  });
+
+  it('不可重试错误（auth_missing）→ 立即抛出，不重试', async () => {
+    const { driver, attempts } = makeFlakyDriver(2, 'auth_missing');
+    const source = defineSource(driver);
+    await source.init();
+    const events = await collect(source.prompt(null, [{ type: 'text', text: 'hi' }]));
+    expect(attempts(), '不可重试 → 只试一次').toBe(1);
+    expect(
+      events.some((e) => e.type === 'error'),
+      '直接报错',
+    ).toBe(true);
+  });
+
+  it('超过重试上限仍失败 → 最终报错', async () => {
+    const { driver, attempts } = makeFlakyDriver(99, 'network');
+    const source = defineSource(driver);
+    await source.init();
+    const events = await collect(source.prompt(null, [{ type: 'text', text: 'hi' }]));
+    // 1 次首发 + 3 次重试 = 4 次尝试
+    expect(attempts(), '首发 + MAX_CONNECT_RETRIES(3)').toBe(4);
+    expect(
+      events.some((e) => e.type === 'error'),
+      '耗尽重试后报错',
+    ).toBe(true);
   });
 });

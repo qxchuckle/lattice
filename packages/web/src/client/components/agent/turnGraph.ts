@@ -10,6 +10,8 @@ import {
   isReadOnly,
   applyEventToContent,
   segmentsToDisplayText,
+  advanceViewStatus,
+  isTerminalViewStatus,
 } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode } from './types';
 import { deriveTurnStatus } from './turnState';
@@ -118,12 +120,14 @@ export function fillInterruptedStreams(
  * 终态（done/error）更新 turn 状态。
  */
 export function applyStreamEvent(turn: TurnNode, event: SourceEvent): void {
+  // 终止态守卫（状态机单一真相）：undone/hidden 的 turn 不再累积内容、不被 done 复活
+  if (isTerminalViewStatus(turn.status)) return;
   applyEventToContent(turn.blocks, event);
   if (event.type === 'done') {
-    turn.status = 'done';
+    turn.status = advanceViewStatus(turn.status, 'done');
     turn.usage = event.usage;
   } else if (event.type === 'error') {
-    turn.status = 'error';
+    turn.status = advanceViewStatus(turn.status, 'error');
   }
 }
 

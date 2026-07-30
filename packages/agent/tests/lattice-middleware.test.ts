@@ -3,7 +3,7 @@
  *
  * 行为等价基线：无任务关联 / 无 ContextSource 时**不得**注入（重构前也不注入）。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type {
   MiddlewareContext,
   PromptPayload,
@@ -162,6 +162,22 @@ describe('反向权限通道：PermissionGuard 适配', () => {
       guard.respond(request.id, true);
     });
     expect(await createSourcePermissionHandler(guard)(req)).toMatchObject({ behavior: 'allow' });
+  });
+
+  it('规则 ask → 未应答超时自动拒绝（timeout → false）', async () => {
+    vi.useFakeTimers();
+    try {
+      const events = new EventBus();
+      const guard = new PermissionGuard(events);
+      guard.setScope({ scopePaths: ['/repo'], safePaths: [] });
+      guard.setRules([{ tool: 'Write', level: 'ask' }]);
+      // 不应答，直接推进超过 60s 超时窗口
+      const decision = createSourcePermissionHandler(guard)(req);
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(await decision).toMatchObject({ behavior: 'deny' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('路径越界（scope 外）→ 拒绝，不问询', async () => {

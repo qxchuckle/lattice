@@ -18,6 +18,7 @@ import type {
   PromptOpts,
 } from '@qcqx/lattice-agent-protocol';
 import { projectNodeCapabilities } from '@qcqx/lattice-agent-protocol';
+import { lastValueFrom, toArray } from 'rxjs';
 import {
   resolveSourceProfile,
   runPrompt,
@@ -81,22 +82,26 @@ export class MinimalHost {
     const source = this.mustGetSource(thread.sourceId);
 
     this.turnNotices = [];
-    const stream = await runPrompt({
-      source,
-      payload: { sessionId: thread.sessionId, message, opts },
-      middlewares: profile.middlewares,
-    });
+    // pipeline runPrompt 返回 Observable<SourceEvent>；订阅收集全部事件（入向失败 → reject）。
+    const events: SourceEvent[] = await lastValueFrom(
+      runPrompt({
+        source,
+        payload: { sessionId: thread.sessionId, message, opts },
+        middlewares: profile.middlewares,
+      }).pipe(toArray()),
+    );
 
-    const events: SourceEvent[] = [];
     let text = '';
-    for await (const event of stream) {
-      events.push(event);
+    for (const event of events) {
       if (event.type === 'text') text += event.content;
       if (event.type === 'notice') this.turnNotices.push(event.message);
     }
-    const result = await stream.result();
-    thread.sessionId = result.sessionId;
-    thread.lastMessageId = result.sourceMessageId;
+    // 从 done 事件提取会话翻新（代替旧 stream.result()；done 必携 sessionId）
+    const done = events.find((e) => e.type === 'done');
+    if (done && done.type === 'done') {
+      thread.sessionId = done.sessionId ?? null;
+      thread.lastMessageId = done.sourceMessageId;
+    }
     return { text, events, notices: this.turnNotices };
   }
 
