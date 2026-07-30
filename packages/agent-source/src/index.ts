@@ -29,5 +29,5 @@ export { createAgentSource } from './factory.js';
 export type { AgentSourceInstance } from './factory.js';
 
 // ── 内置源 ──
-export { createPiSource, createQoderSource } from './sources/index.js';
+export { createPiSource, createQoderSource, createAcpSource } from './sources/index.js';
 export type { PiSourceOptions, QoderSourceOptions } from './sources/index.js';
