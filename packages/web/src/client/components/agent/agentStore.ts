@@ -49,6 +49,7 @@ import {
   connectAgentWs,
   setStreamingTarget,
   unsubscribeTree,
+  waitForSessionReady,
 } from './connection';
 import { resetLastAppliedRev } from './sync';
 import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
@@ -58,6 +59,29 @@ import { advanceViewStatus } from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 
 // ── 提交消息 ──
+
+/** 连接/session 就绪超时：落一个 error 态 turn（用户可见 + 可重试） */
+function failTurn(
+  parentTurnId: string | null,
+  message: string,
+  sourceId: string,
+  modelId: string,
+): void {
+  const turnId = crypto.randomUUID();
+  const turn: TurnNode = {
+    id: turnId,
+    parentTurnId,
+    userMessage: message.trim(),
+    blocks: [{ type: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
+    status: 'error',
+    timestamp: Date.now(),
+    sourceId,
+    modelId,
+  };
+  putTurn(turn);
+  ensureUi(turnId);
+  agentStore.version++;
+}
 
 export function submitFromNode(
   parentTurnId: string | null,
@@ -83,45 +107,27 @@ export function submitFromNode(
     if (!isWsReady()) {
       connectAgentWs();
     }
-    // 发送 session.create 并等待响应
+    // 发送 session.create 并等响应
     sendWs({
       type: 'session.create',
       agentId: sourceId,
       treeId: agentStore.treeId ?? undefined,
     });
-    // 等待 session 建立后重试（最多 5 次，每次 300ms）
-    let attempts = 0;
-    const waitForSession = () => {
-      attempts++;
-      if (agentStore.sessionId) {
-        submitFromNode(parentTurnId, message, opts);
-      } else if (attempts < 5) {
-        setTimeout(waitForSession, 300);
-      } else {
-        // 超时：创建 error 状态的 turn（用户可见 + 可重试）
-        const turnId = crypto.randomUUID();
-        const turn: TurnNode = {
-          id: turnId,
-          parentTurnId,
-          userMessage: message.trim(),
-          blocks: [{ type: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
-          status: 'error',
-          timestamp: Date.now(),
-          sourceId,
-          modelId,
-        };
-        putTurn(turn);
-        ensureUi(turnId);
-        agentStore.version++;
-      }
-    };
-    setTimeout(waitForSession, 300);
+    // 事件驱动等待（替代旧的 300ms×5 轮询）：session.created 一到立即继续；超时落 error turn
+    void waitForSessionReady().then(
+      () => submitFromNode(parentTurnId, message, opts),
+      () => failTurn(parentTurnId, message, sourceId, modelId),
+    );
     return null;
   }
 
   if (!isWsReady()) {
     connectAgentWs();
-    setTimeout(() => submitFromNode(parentTurnId, message, opts), 500);
+    // 同上：等连接+session 就绪事件，而非盲等 500ms
+    void waitForSessionReady().then(
+      () => submitFromNode(parentTurnId, message, opts),
+      () => failTurn(parentTurnId, message, sourceId, modelId),
+    );
     return null;
   }
 

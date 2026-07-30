@@ -295,11 +295,32 @@ export class TurnRunner {
         share(),
       );
 
-      // 持久化支路：先同步订阅，与主干共享同一次上游拉取；catch 兵底使 finally await 不会抛出
+      // 持久化支路：先同步订阅，与主干共享同一次上游拉取；catch 兵底使 finally await 不会抛出。
+      // 铁律：不静默降级——写盘失败意味着崩溃恢复凭据不可用（进程挂了就丢在途回复），
+      // 必须告知；但逐次告知会刷屏，故只在**首次**失败时发 warning notice。
+      let persistFailureNotified = false;
       persistDrained = lastValueFrom(
         event$.pipe(
           auditTime(STREAM_PERSIST_THROTTLE_MS),
-          concatMap(() => from(persistStreaming()).pipe(catchError(() => EMPTY))),
+          concatMap(() =>
+            from(persistStreaming()).pipe(
+              catchError((err: unknown) => {
+                if (!persistFailureNotified) {
+                  persistFailureNotified = true;
+                  hooks.onEvent(
+                    {
+                      type: 'notice',
+                      level: 'warning',
+                      message: `流式中间态写盘失败（${err instanceof Error ? err.message : String(err)}），若进程异常退出将无法恢复本次在途回复`,
+                      ts: Date.now(),
+                    },
+                    requestId,
+                  );
+                }
+                return EMPTY; // 不断流：单次写失败不影响已转发的对话内容
+              }),
+            ),
+          ),
         ),
         { defaultValue: null },
       ).catch(() => null);

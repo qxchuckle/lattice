@@ -329,6 +329,38 @@ describe('场景 10: 中止（abort 进行中的流）', () => {
     expect(persisted.length, '中断路径至少补写一次').toBeGreaterThanOrEqual(1);
     expect(persisted.at(-1), '最终落盘为完整累加内容，节流不丢尾').toBe('回复[提问]');
   });
+
+  it('写盘失败不静默：首次失败发 warning notice（不刷屏、不断流）', async () => {
+    const { sm, controller } = await setup();
+    // 写盘永远失败（模拟磁盘满/权限错）
+    sm.writeStreaming = async () => {
+      throw new Error('ENOSPC');
+    };
+
+    const notices: string[] = [];
+    controller.createSession('sf', 'mock', null);
+    controller.send(
+      'sf',
+      '提问',
+      { requestId: 'p1' },
+      {
+        ...noopHooks,
+        onEvent: (e) => {
+          if (e.type === 'notice') notices.push(e.message);
+        },
+      },
+    );
+    await flush(controller, 'sf');
+
+    // 铁律：必须告知（崩溃恢复凭据不可用），但只一条（不逐次刷屏）
+    const writeNotices = notices.filter((m) => m.includes('写盘失败'));
+    expect(writeNotices.length, '首次写盘失败必须告知').toBeGreaterThanOrEqual(1);
+    expect(writeNotices.length, '不得逐次刷屏').toBeLessThanOrEqual(1);
+    // 不断流：对话内容仍正常落盘
+    const tid = controller.getSession('sf')!.treeId!;
+    const asst = sm.getNodes(tid).find((n) => n.role === 'assistant' && n.parentId === 'p1');
+    expect(asst, '写盘失败不影响对话落盘').toBeTruthy();
+  });
 });
 
 describe('场景 11: 删除对话树（deleteTree 统一清理）', () => {

@@ -10,10 +10,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   reconnectDelayMs,
-  connectionState$,
+  getConnectionState,
   connectAgentWs,
   sendWs,
   isWsReady,
+  waitForSessionReady,
   __setWebSocketCtorForTest,
   __resetConnectionForTest,
 } from './connection';
@@ -101,10 +102,10 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
 
   it('connect → connecting；open 后 → connected 且自动发 session.create', () => {
     connectAgentWs();
-    expect(connectionState$.value.type).toBe('connecting');
+    expect(getConnectionState().type).toBe('connecting');
 
     FakeWebSocket.last.simulateOpen();
-    expect(connectionState$.value.type).toBe('connected');
+    expect(getConnectionState().type).toBe('connected');
     expect(agentStore.connected).toBe(true);
 
     // 无 sessionId 时握手：自动 session.create
@@ -146,7 +147,7 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
 
     // 推进超过 HEARTBEAT_TIMEOUT（心跳每 25s 检查一次，第 75s 那次检测到 >60s 无消息）
     vi.advanceTimersByTime(75_000);
-    expect(connectionState$.value.type).not.toBe('connected');
+    expect(getConnectionState().type).not.toBe('connected');
 
     // 退避后重连：产生第二个 socket 实例
     vi.advanceTimersByTime(60_000);
@@ -163,17 +164,17 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
       vi.advanceTimersByTime(25_000);
       FakeWebSocket.last.simulateMessage({ type: 'pong' });
     }
-    expect(connectionState$.value.type).toBe('connected');
+    expect(getConnectionState().type).toBe('connected');
     expect(FakeWebSocket.instances).toHaveLength(1);
   });
 
   it('🔴 异常断开 → reconnecting（带 attempt 递增）→ 退避后重连', () => {
     connectAgentWs();
     FakeWebSocket.last.simulateOpen();
-    expect(connectionState$.value.type).toBe('connected');
+    expect(getConnectionState().type).toBe('connected');
 
     FakeWebSocket.last.simulateAbnormalClose();
-    const st = connectionState$.value;
+    const st = getConnectionState();
     expect(st.type).toBe('reconnecting');
     if (st.type === 'reconnecting') expect(st.attempt).toBe(1);
 
@@ -191,5 +192,30 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
     FakeWebSocket.last.simulateAbnormalClose();
     expect(agentStore.sessionId).toBeNull();
     expect(isWsReady()).toBe(false);
+  });
+
+  it('🔴 waitForSessionReady：session.created 到达即唤醒（事件驱动，不等轮询 tick）', async () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    const waiting = waitForSessionReady(1500);
+    // 立即推送 session.created（不推进任何定时器）
+    FakeWebSocket.last.simulateMessage({ type: 'session.created', sessionId: 's-9', treeId: '' });
+    await expect(waiting).resolves.toBe('s-9');
+  });
+
+  it('🔴 waitForSessionReady：超时未就绪 → reject（边界由 timeout 显式表达）', async () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    const waiting = waitForSessionReady(1000);
+    const assertion = expect(waiting).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(1100);
+    await assertion;
+  });
+
+  it('waitForSessionReady：已就绪则立即 resolve（不等事件）', async () => {
+    agentStore.sessionId = 'already';
+    await expect(waitForSessionReady(10)).resolves.toBe('already');
   });
 });

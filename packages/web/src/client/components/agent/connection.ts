@@ -1,8 +1,18 @@
 /**
  * WebSocket 连接管理 + SourceEvent 流式处理
  */
-import type { SourceEvent, ServerMessage } from '@qcqx/lattice-agent-protocol';
-import { timer, retry, tap, BehaviorSubject, type Subscription } from 'rxjs';
+import type { SourceEvent, ServerMessage, ClientMessage } from '@qcqx/lattice-agent-protocol';
+import {
+  timer,
+  retry,
+  tap,
+  BehaviorSubject,
+  Subject,
+  firstValueFrom,
+  timeout,
+  type Observable,
+  type Subscription,
+} from 'rxjs';
 import { webSocket, type WebSocketSubject } from 'rxjs/webSocket';
 import { authStore } from '../../store';
 import { agentStore } from './store';
@@ -102,15 +112,44 @@ export type ConnectionState =
   | { type: 'connected' }
   | { type: 'reconnecting'; attempt: number };
 
-/** 连接状态单一真相（BehaviorSubject：持有当前值，可被 UI/逻辑订阅） */
-export const connectionState$ = new BehaviorSubject<ConnectionState>({ type: 'disconnected' });
+/**
+ * 连接状态单一真相。Subject 保持**私有**，对外只给只读流与快照读取器——
+ * 避开 RxJS 头号反模式「对外暴露可写 Subject」（外部 next() 能篡改状态机，使转换不可推断）。
+ */
+const connectionStateSubject = new BehaviorSubject<ConnectionState>({ type: 'disconnected' });
+
+/** 连接状态（只读流）：外部只能订阅，不能 next */
+export const connectionState$: Observable<ConnectionState> = connectionStateSubject.asObservable();
+
+/** 当前连接状态快照（同步读） */
+export function getConnectionState(): ConnectionState {
+  return connectionStateSubject.value;
+}
+
+/**
+ * session 就绪信号（事件驱动，替代轮询）：server 回 session.created 时发出 sessionId。
+ * Subject 私有，对外只给只读流（避开「暴露可写 Subject」反模式）。
+ */
+const sessionReadySubject = new Subject<string>();
+export const sessionReady$: Observable<string> = sessionReadySubject.asObservable();
+
+/**
+ * 等 session 就绪：已就绪立即返回；否则等 session.created 事件，超时则 reject。
+ * 代替旧的「每 300ms 轮询、最多 5 次」：事件驱动 ⇒ 建立即继续（不再等下个 tick），
+ * 边界由 timeout operator 显式表达（而非隐含在重试次数里）。
+ */
+export function waitForSessionReady(timeoutMs = 1500): Promise<string> {
+  if (agentStore.sessionId) return Promise.resolve(agentStore.sessionId);
+  return firstValueFrom(sessionReady$.pipe(timeout({ each: timeoutMs })));
+}
 
 function setConnState(next: ConnectionState): void {
-  connectionState$.next(next);
+  connectionStateSubject.next(next);
   agentStore.connected = next.type === 'connected';
 }
 
-let socket$: WebSocketSubject<ServerMessage> | null = null;
+// webSocket 单泛型同时用于收发：用 ServerMessage|ClientMessage 联合，避免发送侧类型谎言
+let socket$: WebSocketSubject<ServerMessage | ClientMessage> | null = null;
 let connSub: Subscription | null = null;
 let heartbeatSub: Subscription | null = null;
 let lastPongAt = 0;
@@ -141,7 +180,7 @@ export function __resetConnectionForTest(): void {
 
 /** 当前重连尝试次数（从状态机派生，不再单独维护变量） */
 function currentAttempt(): number {
-  const s = connectionState$.value;
+  const s = connectionStateSubject.value;
   return s.type === 'reconnecting' || s.type === 'connecting' ? s.attempt : 0;
 }
 
@@ -151,15 +190,16 @@ export function reconnectDelayMs(attempt: number): number {
   return Math.floor(exp * (0.5 + Math.random() * 0.5));
 }
 
-/** 底层发送（供 actions 使用）；未连接时丢弃（与旧 readyState 检查一致） */
-export function sendWs(payload: Record<string, unknown>): void {
-  if (socket$ && connectionState$.value.type === 'connected') {
-    socket$.next(payload as unknown as ServerMessage);
+/** 底层发送（供 actions 使用）；未连接时丢弃（与旧 readyState 检查一致）。
+ * 入参用 ClientMessage 而非 Record<string,unknown>：编译期校验消息形状，去除 as unknown as 类型谎言。 */
+export function sendWs(payload: ClientMessage): void {
+  if (socket$ && connectionStateSubject.value.type === 'connected') {
+    socket$.next(payload);
   }
 }
 
 export function isWsReady(): boolean {
-  return !!socket$ && connectionState$.value.type === 'connected' && !!agentStore.sessionId;
+  return !!socket$ && connectionStateSubject.value.type === 'connected' && !!agentStore.sessionId;
 }
 
 /** 应用层心跳：定期 ping + 检测对端存活（半开连接/NAT 静默断开时快速发现并触发重连） */
@@ -198,17 +238,17 @@ function onClose(): void {
   subscribedTrees.clear(); // server 已丢失订阅，清空以便重连后重新订阅（否则广播收不到）
   stopHeartbeat();
   // 状态置 disconnected（若因错误将进入 reconnecting，retry.delay 会接管）
-  if (connectionState$.value.type === 'connected') setConnState({ type: 'disconnected' });
+  if (connectionStateSubject.value.type === 'connected') setConnState({ type: 'disconnected' });
 }
 
 export function connectAgentWs(): void {
-  const st = connectionState$.value.type;
+  const st = connectionStateSubject.value.type;
   if (socket$ && (st === 'connected' || st === 'connecting')) return;
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const token = authStore.token ? `?token=${authStore.token}` : '';
   setConnState({ type: 'connecting', attempt: currentAttempt() });
-  socket$ = webSocket<ServerMessage>({
+  socket$ = webSocket<ServerMessage | ClientMessage>({
     url: `${protocol}//${window.location.host}/api/agent/ws${token}`,
     openObserver: { next: () => onOpen() },
     closeObserver: { next: () => onClose() },
@@ -231,7 +271,8 @@ export function connectAgentWs(): void {
       }),
     )
     .subscribe({
-      next: (msg) => handleServerMessage(msg),
+      // 入向必为 ServerMessage（联合仅为容纳发送侧 ClientMessage）
+      next: (msg) => handleServerMessage(msg as ServerMessage),
     });
 }
 
@@ -249,6 +290,7 @@ function handleServerMessage(msg: ServerMessage): void {
   switch (msg.type) {
     case 'session.created':
       agentStore.sessionId = msg.sessionId;
+      sessionReadySubject.next(msg.sessionId); // 唤醒等待者（事件驱动，不再轮询）
       // 竞态防护：仅匹配当前树或懒建树（treeId 空）时接管，避免切换会话后旧 session 在途响应把 treeId 拉回
       if (msg.treeId && (agentStore.treeId === msg.treeId || !agentStore.treeId)) {
         agentStore.treeId = msg.treeId;
