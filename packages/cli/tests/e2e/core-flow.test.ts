@@ -75,6 +75,16 @@ describe('task 命令域（全生命周期）', () => {
     expect(info.stdout).toContain('in_progress');
   });
 
+  it('task update --status 非法状态：非零退出并提示合法值', async () => {
+    const r = await env.run(['task', 'update', taskId, '--status', 'done']);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout).toContain('无效状态：done');
+    expect(r.stdout).toContain('可选值：planning / in_progress / completed / archived');
+    // 状态未被改动（isValidTaskStatus 拦截后短路，不落库）
+    const info = await env.run(['task', 'info', taskId]);
+    expect(info.stdout).toContain('in_progress');
+  });
+
   it('task checkpoint + progress：结构化进度记录可读回', async () => {
     const cp = await env.run([
       'task',

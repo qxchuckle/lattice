@@ -39,20 +39,22 @@ export function resetLastAppliedRev(): void {
 /**
  * 应用全量快照：重建 turns + 恢复他端在途流 + 刷新 peers。
  * rev 守卫：跳过不新于已应用的快照（防乱序/重复覆盖）；force=true 时强制（reject 回滚）。
+ * expectedNextRev 仅作新鲜度提示（warn）不跳过：全量快照总是安全可应用，跳过会丢节点。
  * 流式保护：本端正在流式的 turn（status streaming）保留 live blocks，不被快照（未落盘全）覆盖。
  */
 export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
   if (msg.treeId !== agentStore.treeId) return; // 非当前树（已切换）忽略
-  // 新鲜度守卫：expectedNextRev（服务端构建时 rev+1）不高于已应用 rev ⇒ 快照严格旧于当前状态
-  // （异步构建期间又有新 tree.updated 的情形），跳过防回退
+  // 新鲜度提示：expectedNextRev（服务端构建时 rev+1）不高于已应用 rev → 构建期间又有新变更。
+  // 仅 warn 不跳过：快照是全量的，应用旧快照至多短暂回退，后续快照会推回最新；
+  // 若因此跳过 rev 更新的快照，其中独有的节点会永久丢失。
   if (!force && msg.expectedNextRev !== undefined && msg.expectedNextRev <= lastAppliedRev) {
     console.warn(
-      '[snapshot] Stale snapshot skipped (expectedNextRev=%d, currentRev=%d)',
+      '[snapshot] Snapshot built before newer updates (expectedNextRev=%d, currentRev=%d), applying anyway',
       msg.expectedNextRev,
       lastAppliedRev,
     );
-    return;
   }
+  // rev 守卫：lastAppliedRev 只由已应用的全量快照推进，被跳过的旧快照必已被更新全量覆盖，不丢节点
   if (!force && msg.rev <= lastAppliedRev) return;
   lastAppliedRev = Math.max(lastAppliedRev, msg.rev);
 

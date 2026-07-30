@@ -60,6 +60,8 @@ export { createToolSemanticMiddleware } from './middleware/tool-semantic.js';
 // 反向通道：权限闸门（声明式策略 → onPermissionRequest 回调）
 export {
   createPermissionGate,
+  clearSessionPermissions,
+  type PermissionGate,
   type PermissionRule,
   type PermissionGateOptions,
 } from './permission-gate.js';

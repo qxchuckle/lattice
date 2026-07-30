@@ -58,6 +58,8 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   readonly id: string;
   private initialized = false;
   private handles = new Map<string, H>();
+  /** 旧占位 ID → 回填后真实 ID：调用方可能仍持回填前的旧值，销毁/复用时据此换算 */
+  private sessionAliases = new Map<string, string>();
   private resourceCache = new Map<string, { at: number; resources: SourceResourceInfo[] }>();
   private manifest: ResolvedManifest | undefined;
 
@@ -75,6 +77,8 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   async dispose(): Promise<void> {
     for (const handle of this.handles.values()) await handle.close?.();
     this.handles.clear();
+    this.sessionAliases.clear();
+    this.resourceCache.clear();
     await this.driver.dispose?.();
     this.initialized = false;
   }
@@ -139,6 +143,7 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     }
     try {
       const resources = await this.driver.scanResources(query);
+      this.pruneResourceCache(); // 顺手清过期项，防 per-cwd 缓存只增不删
       this.resourceCache.set(cwd, { at: Date.now(), resources });
       return filterResourceKinds(resources, query?.kinds);
     } catch {
@@ -169,7 +174,7 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       if (!this.initialized) {
         throw SourceError.notInitialized(this.driver.info.id, this.driver.info.displayName);
       }
-      const existing = sessionId ? this.handles.get(sessionId) : undefined;
+      const existing = sessionId ? this.handles.get(this.resolveSessionId(sessionId)) : undefined;
       // 仅对**新建连接**重试（已有句柄直接复用）；只重试 connect，不重试 prompt（避免向 agent 重发造成副作用）
       const handle = existing ?? (await this.connectWithRetry(sessionId, opts));
       this.handles.set(handle.id, handle);
@@ -187,6 +192,7 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       const finalId = outcome.sessionId ?? handle.id;
       if (finalId !== handle.id) {
         this.handles.delete(handle.id);
+        this.sessionAliases.set(handle.id, finalId); // 记别名：调用方可能仍持旧 ID
         handle.id = finalId;
         this.handles.set(finalId, handle);
       }
@@ -284,15 +290,55 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   }
 
   async destroySession(sessionId: string): Promise<void> {
-    const handle = this.handles.get(sessionId);
+    // 调用方可能持回填前的旧占位 ID：沿别名链换算到当前真实 ID
+    const realId = this.resolveSessionId(sessionId);
+    const handle = this.handles.get(realId);
     if (handle) {
       await handle.close?.();
-      this.handles.delete(sessionId);
+      this.handles.delete(realId);
     }
+    this.pruneAliases(realId);
     try {
-      await this.driver.destroyNative?.(sessionId);
+      await this.driver.destroyNative?.(realId);
     } catch (err) {
       throw toSourceError(err, this.driver, 'destroySession');
+    }
+  }
+
+  /** 沿别名链换算到句柄表现用 ID；换算不到则原样返回（防环） */
+  private resolveSessionId(sessionId: string): string {
+    let id = sessionId;
+    const seen = new Set<string>();
+    while (!this.handles.has(id)) {
+      const next = this.sessionAliases.get(id);
+      if (next === undefined || seen.has(next)) return id;
+      seen.add(id);
+      id = next;
+    }
+    return id;
+  }
+
+  /** 删除（传递地）指向已销毁会话的全部别名，防别名表随会话生灭只增不删 */
+  private pruneAliases(destroyedId: string): void {
+    const removed = new Set<string>([destroyedId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const [oldId, target] of this.sessionAliases) {
+        if (removed.has(target) || removed.has(oldId)) {
+          this.sessionAliases.delete(oldId);
+          removed.add(oldId);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  /** 淘汰过期的资源缓存条目 */
+  private pruneResourceCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.resourceCache) {
+      if (now - entry.at >= RESOURCE_CACHE_TTL_MS) this.resourceCache.delete(key);
     }
   }
 }

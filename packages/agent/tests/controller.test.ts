@@ -215,6 +215,59 @@ describe('ConversationController 编排核心', () => {
     ).toBe(false);
   });
 
+  it('源缺失 preflight：排队期间源下线 → onError(Source not found)，不调源、不落 assistant', async () => {
+    const { sm, state, calls, controller } = await setup();
+    const log: string[] = [];
+    controller.createSession('sess1', 'mock', null);
+
+    // turn1 流式挂起；turn2 同分支排队（doSend 的源守卫此刻通过，user 节点已落盘）
+    state.hangUntilAbort = true;
+    controller.send('sess1', '第一轮', { requestId: 'turn1' }, makeLogHooks(log));
+    await new Promise((r) => setTimeout(r, 30));
+    controller.send(
+      'sess1',
+      '排队追问',
+      { requestId: 'turn2', parentNodeId: 'turn1' },
+      makeLogHooks(log),
+    );
+    await new Promise((r) => setTimeout(r, 30));
+
+    // 真实时序：建树与 user 节点落盘都在 doSend 阶段，早于 runTurn preflight；
+    // preflight 失败不回滚已落盘的 user 节点
+    const treeId = controller.getSession('sess1')!.treeId!;
+    expect(treeId, '树在 doSend 阶段已懒建').toBeTruthy();
+    expect(sm.getNode(treeId, 'turn2')?.role, 'turn2 user 节点已先行落盘').toBe('user');
+
+    // 排队期间源下线：turn2 的 runTurn preflight 时 getSource 返回 undefined
+    const { sources } = (
+      controller as unknown as {
+        deps: { sources: { registry: { getSource(id: string): unknown } } };
+      }
+    ).deps;
+    sources.registry.getSource = () => undefined;
+
+    // 结束 turn1 的挂起流，放行排在其后的 turn2
+    controller.abort('sess1', 'turn1');
+    await flush(controller, 'sess1');
+
+    // turn-runner 预检文案固定为 'Source not found'（无源 ID 后缀，区别于 doSend 守卫）
+    expect(
+      log.filter((l) => l === 'error:Source not found').length,
+      'lifecycle 走 fail → onError 上报固定文案',
+    ).toBe(1);
+    expect(
+      calls.prompts.some((p) => p.text === '排队追问'),
+      '不进入流：源未被调用',
+    ).toBe(false);
+    expect(
+      sm.getNodes(treeId).find((n) => n.role === 'assistant' && n.parentId === 'turn2'),
+      '无 assistant 节点落盘',
+    ).toBeUndefined();
+    expect(sm.getNode(treeId, 'turn2')?.status, 'user 节点不因 preflight 失败变只读').not.toBe(
+      'undone',
+    );
+  });
+
   it('树创建失败回退 idle：错误经 hooks.onError 上报，下次 send 可重新懒建', async () => {
     const { sm, controller } = await setup();
     const log: string[] = [];

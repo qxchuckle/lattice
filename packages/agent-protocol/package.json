@@ -32,13 +32,19 @@
   "engines": {
     "node": ">=20.19"
   },
-  "dependencies": {
+  "peerDependencies": {
     "zod": "^3.25.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "zod": "^3.25.0"
   },
   "publishConfig": {
     "access": "public"

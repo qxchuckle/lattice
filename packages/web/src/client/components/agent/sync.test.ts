@@ -145,6 +145,13 @@ describe('sync.applySnapshot', () => {
     expect(agentStore.turns.has('u2'), 'force 同 rev 也重建').toBe(true);
   });
 
+  it('expectedNextRev 仅 warn 不跳过：rev 更新的快照必须应用（防节点永久丢失）', () => {
+    applySnapshot({ ...snapshot([userNode('u1')]), rev: 6, expectedNextRev: 7 });
+    // 构建耗时期间发生新变更 → expectedNextRev 滞后，但 rev 更新且含新节点 u2
+    applySnapshot({ ...snapshot([userNode('u1'), userNode('u2')]), rev: 7, expectedNextRev: 5 });
+    expect(agentStore.turns.has('u2'), 'expectedNextRev 滞后不得跳过更新快照').toBe(true);
+  });
+
   it('流式保护：本端 streaming turn 的 live blocks 不被快照覆盖', () => {
     putTurn({
       id: 'u1',

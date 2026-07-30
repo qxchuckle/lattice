@@ -246,7 +246,21 @@ export function setupAgentWs(
           return;
         }
         if (!isClientMessage(parsed)) return;
-        await handleWsCommand(ctx, parsed as ClientMessage);
+        // 命令处理异常不得击穿 message handler（单条命令失败 → 后续消息仍可处理）
+        try {
+          await handleWsCommand(ctx, parsed as ClientMessage);
+        } catch (err) {
+          req.log.error({ err, msgType: (parsed as ClientMessage).type }, 'ws command failed');
+          try {
+            send(socket, {
+              type: 'session.error',
+              sessionId: (parsed as { sessionId?: string }).sessionId ?? '',
+              message: 'Internal error processing command',
+            });
+          } catch {
+            /* send 失败忽略，避免二次崩溃 */
+          }
+        }
       });
 
       socket.on('close', () => {
