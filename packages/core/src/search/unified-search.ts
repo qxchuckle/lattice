@@ -30,7 +30,7 @@ export async function unifiedSearch(
   },
 ): Promise<SearchResult[]> {
   // 显式传 limit → 使用传入值；未传 → 动态计算
-  const dynamic = opts?.limit == null ? computeDynamicLimits() : null;
+  const dynamic = opts?.limit === undefined ? computeDynamicLimits() : null;
   const limit = opts?.limit ?? dynamic?.spec ?? 10;
 
   // type=project：走 searchProjects（关键词匹配 + 反查）

@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  getUsername,
   getRAGStatus,
   updateRagIndex,
   forceRebuildIndex,

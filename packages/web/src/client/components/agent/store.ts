@@ -2,12 +2,19 @@
  * Agent 状态（valtio proxy）+ 纯查询函数
  */
 import { proxy } from 'valtio';
-import type { SourceListItem, ModelListItem, PresenceState } from '@qcqx/lattice-agent-protocol';
+import type {
+  SourceListItem,
+  ModelListItem,
+  PresenceState,
+  NodeCapabilities,
+} from '@qcqx/lattice-agent-protocol';
 import type { TurnNode, NodeUiState, ConversationEntry } from './types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
 
 export const agentStore = proxy({
   turns: new Map<string, TurnNode>(),
+  /** server 下发的 turn 能力表（数据驱动渲染：client 不重算，与接口守卫同源） */
+  turnCaps: new Map<string, NodeCapabilities>(),
   ui: new Map<string, NodeUiState>(),
   sessionId: null as string | null,
   treeId: null as string | null,

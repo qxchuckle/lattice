@@ -129,6 +129,19 @@ export interface ConversationTree {
 /** 分支合并模式 */
 export type MergeMode = 'squash' | 'cherry-pick' | 'reference';
 
+/**
+ * 在途流式快照（崩溃恢复用）：流式期逐 delta 落盘，正常结束后清除。
+ * 跳层流转（磁盘 → agent → REST → client 恢复中断 turn），故归 protocol 单一真相。
+ */
+export interface StreamingState {
+  requestId: string;
+  /** 流式回复所挂的父节点（user 节点）ID */
+  parentId: string;
+  role: 'assistant';
+  startedAt: number;
+  content: NodeContent[];
+}
+
 // ── 权限（WS 传输） ──
 
 export type PermissionLevel = 'allow' | 'ask' | 'deny';

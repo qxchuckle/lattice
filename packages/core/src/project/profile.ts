@@ -3,7 +3,6 @@
  */
 import { createHash } from 'node:crypto';
 import simpleGit from 'simple-git';
-import type { ProjectMeta } from '../types';
 import {
   getProjectProfileDir,
   getProjectProfileSummaryPath,
@@ -166,7 +165,6 @@ interface ProfileInputs {
 export async function collectProfileInputs(
   username: string,
   projectId: string,
-  projectDirName: string,
 ): Promise<ProfileInputs> {
   // Git 状态
   let git: ProfileInputs['git'] = null;
@@ -360,7 +358,7 @@ export async function checkProfiles(username: string): Promise<ProfileCheckResul
     }
 
     // 采集当前输入
-    const inputs = await collectProfileInputs(username, project.id, dirName);
+    const inputs = await collectProfileInputs(username, project.id);
     const currentHash = computeInputsHash(inputs);
 
     if (currentHash === cache.inputsHash) {
@@ -403,7 +401,7 @@ export async function checkSingleProfile(
     return { id: projectId, name: projectName, status: 'stale', reasons: ['画像版本过期'] };
   }
 
-  const inputs = await collectProfileInputs(username, projectId, projectDirName);
+  const inputs = await collectProfileInputs(username, projectId);
   const currentHash = computeInputsHash(inputs);
 
   if (currentHash === cache.inputsHash) {
@@ -426,7 +424,7 @@ export async function markProfileDone(
   projectId: string,
 ): Promise<void> {
   // 采集当前输入
-  const inputs = await collectProfileInputs(username, projectId, projectDirName);
+  const inputs = await collectProfileInputs(username, projectId);
   const hash = computeInputsHash(inputs);
   const detail = buildDetail(inputs);
 

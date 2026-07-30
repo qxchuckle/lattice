@@ -9,7 +9,12 @@
  * - resolveCommandTemplate 不注入：lattice 的命令展开在结构化输入层（PromptComposer）完成，
  *   源级命令正文属源私有资产，宿主拿不到模板 → 不装 slash 展开 middleware（保持透传语义）
  */
-import type { ISourceRegistry, ModelInfo } from '@qcqx/lattice-agent-protocol';
+import type {
+  ISourceRegistry,
+  ModelInfo,
+  SourceCapabilities,
+  SourceMiddleware,
+} from '@qcqx/lattice-agent-protocol';
 import {
   resolveSourceProfile,
   type SourceProfile,
@@ -28,10 +33,16 @@ export interface SourceProfileProviderDeps {
   registry: ISourceRegistry;
   /** 宿主本地 skills（lattice 的 WorkflowEngine 提供） */
   listLocalSkills: () => SkillDescriptor[];
-  /** 模型目录（guard 校验用）；缺省用 manifest 快照 */
+  /**
+   * 模型目录（guard 的 catalog 校验用）。**缺省不校验**：
+   * 握手快照（manifest.modelsSnapshot）是非权威且可过期的（权威通道是 listModels），
+   * 用它做硬守卫会误拒握手之后上线的新模型——只有宿主能提供“新鲜目录”时才开启。
+   */
   catalogOf?: (sourceId: string) => ModelInfo[] | undefined;
-  /** 降级提示（图片省略/工具丢弃/指令内联）——宿主决定呈现 */
+  /** 降级提示（图片省略/工具丢弃/指令内联）——宿主必须呈现，不得丢弃 */
   onNotice?: (sourceId: string, notice: PipelineNotice) => void;
+  /** lattice 专属的“价值类”拦截（任务/spec 上下文注入等），接入同一管线 */
+  extraMiddlewares?: (capabilities: SourceCapabilities) => SourceMiddleware[];
 }
 
 export function createSourceProfileProvider(
@@ -44,8 +55,10 @@ export function createSourceProfileProvider(
     if (!manifest) return undefined;
     const nativeSkills = manifest.capabilities.skills.nativeInjection;
     return resolveSourceProfile(manifest, {
-      catalog: deps.catalogOf?.(sourceId) ?? manifest.modelsSnapshot,
+      // 不传握手快照：快照过期时会误拒新上线模型（模型合法性以 listModels 为权威）
+      catalog: deps.catalogOf?.(sourceId),
       onNotice: (notice) => deps.onNotice?.(sourceId, notice),
+      extraMiddlewares: deps.extraMiddlewares,
       listSkills: async () => {
         const skills = new Map<string, SkillDescriptor>();
         for (const s of deps.listLocalSkills()) skills.set(s.name, s);

@@ -2,7 +2,7 @@ import { useDebouncedValue } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
 import { queryKeys } from '../lib';
-import type { ProjectMeta, TaskMeta, ParsedSpec, SearchResult } from '@qcqx/lattice-core';
+import type { SearchResult } from '@qcqx/lattice-core';
 
 export function useEntityDetail(entityId: string | null, entityType: string | null) {
   const adapter = getAdapter();

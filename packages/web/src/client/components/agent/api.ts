@@ -1,10 +1,14 @@
 /**
  * REST API 调用（agent 相关端点）
  */
-import type { ConversationNode, NodeContent, ModelListItem } from '@qcqx/lattice-agent-protocol';
+import type {
+  NodeContent,
+  ModelListItem,
+  GetTreeResponse,
+  GetTreeNotFoundResponse,
+} from '@qcqx/lattice-agent-protocol';
 import { authStore } from '../../store';
 import { agentStore, ensureUi, putTurn } from './store';
-import type { TurnNode } from './types';
 import { buildTurnsFromNodes, restoreStreamingTurns, fillInterruptedStreams } from './turnGraph';
 
 function getHeaders(): Record<string, string> {
@@ -19,12 +23,13 @@ export async function loadTree(treeId: string): Promise<void> {
   try {
     const res = await fetch(`/api/agent/tree/${treeId}`, { headers: getHeaders() });
     if (!res.ok) return;
-    const data = await res.json();
-    if (data.error || !data.nodes?.length) return;
+    // 契约类型直接用 protocol 的响应形状（不再局部 as 硬转；server 端同一类型钉住）
+    const data = (await res.json()) as GetTreeResponse | GetTreeNotFoundResponse;
+    if (data.error || !data.nodes.length) return;
     // 竞态防护：异步返回时若已切换到别的树，丢弃本次结果，避免旧树数据覆盖当前树
     if (agentStore.treeId !== treeId) return;
 
-    const nodes = data.nodes as ConversationNode[];
+    const nodes = data.nodes;
 
     // 捕获在途流式 turn 的实时内容（避免全量重建冲掉未落盘的累积）
     const liveStreaming = new Map<string, NodeContent[]>();
@@ -36,8 +41,13 @@ export async function loadTree(treeId: string): Promise<void> {
     // 纯函数重建 + 流式恢复 + 中断填充（数据逻辑见 turnGraph.ts，可独立测试）
     const turns = buildTurnsFromNodes(nodes);
     restoreStreamingTurns(turns, liveStreaming);
-    if (data.interruptedStreams?.length) {
+    if (data.interruptedStreams.length) {
       fillInterruptedStreams(turns, data.interruptedStreams);
+    }
+    // 能力数据驱动：REST 与 WS 快照同源，reload 后立即可用（不本地重算）
+    agentStore.turnCaps.clear();
+    for (const [turnId, caps] of Object.entries(data.turnCapabilities)) {
+      agentStore.turnCaps.set(turnId, caps);
     }
 
     // 写入 store（putTurn 包 proxy：流式 delta 靠 turn 级响应式驱动节点重渲染）

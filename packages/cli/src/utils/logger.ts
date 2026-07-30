@@ -1,17 +1,8 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
-import { format } from 'light-date';
 
 // 当前活跃的 spinner
 let activeSpinner: Ora | null = null;
-
-/**
- * 获取当前时间戳字符串
- */
-const getTimestamp = (): string => {
-  const timestamp = format(new Date(), '{HH}:{mm}:{ss}.{SSS}');
-  return chalk.gray(`[${timestamp}]`);
-};
 
 /**
  * 在有 spinner 时安全输出日志（带时间戳）
@@ -19,11 +10,9 @@ const getTimestamp = (): string => {
 const safeLog = (logFn: (...args: unknown[]) => void, ...args: unknown[]): void => {
   if (activeSpinner) {
     activeSpinner.clear();
-    // logFn(getTimestamp(), ...args);
     logFn(...args);
     activeSpinner.render();
   } else {
-    // logFn(getTimestamp(), ...args);
     logFn(...args);
   }
 };

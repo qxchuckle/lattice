@@ -2,12 +2,7 @@
  * Workbench Store — 对话树 + Agent 会话状态管理
  */
 import { proxy } from 'valtio';
-import type {
-  ConversationNode,
-  ConversationBranch,
-  ConversationTree,
-  AgentEvent,
-} from '@qcqx/lattice-agent';
+import type { ConversationNode, ConversationTree, SourceEvent } from '@qcqx/lattice-agent';
 
 // ── 对话树状态 ──
 
@@ -30,7 +25,7 @@ export const workbenchStore = proxy({
   /** 当前流式响应文本 */
   streamingText: '',
   /** 当前流式事件 */
-  streamingEvents: [] as AgentEvent[],
+  streamingEvents: [] as SourceEvent[],
 
   // ── UI 状态 ──
   layoutMode: 'tree' as string,
@@ -88,7 +83,7 @@ export function setMultiSelect(ids: string[]) {
   workbenchStore.selectedNodeId = null;
 }
 
-export function setStreaming(text: string, events: AgentEvent[]) {
+export function setStreaming(text: string, events: SourceEvent[]) {
   workbenchStore.streamingText = text;
   workbenchStore.streamingEvents = events;
 }

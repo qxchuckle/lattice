@@ -120,15 +120,28 @@ export class SessionManager {
     const tree = await this.repo.readTree(treeId);
     if (!tree) return undefined;
     this.trees.set(treeId, tree);
-    if (!this.nodes.has(treeId)) this.nodes.set(treeId, new Map());
+    this.nodeMapOf(treeId); // 预建缓存表，后续节点加载直接写入
     return tree;
+  }
+
+  /**
+   * 取该树的节点缓存表（缺失即建）。
+   * 消灭 `has(id)` → `get(id)!` 两步式：非空断言依赖「我刚 set 过」的程序员记忆，
+   * 而本方法把「必然存在」变成返回值上的类型保证。
+   */
+  private nodeMapOf(treeId: string): Map<string, ConversationNode> {
+    let map = this.nodes.get(treeId);
+    if (!map) {
+      map = new Map<string, ConversationNode>();
+      this.nodes.set(treeId, map);
+    }
+    return map;
   }
 
   /** Level 1: 加载最近 N 个节点（从 JSONL 尾部读取） */
   async loadRecentNodes(treeId: string, count = 50): Promise<ConversationNode[]> {
     const nodes = await this.repo.readTailNodes(treeId, count);
-    if (!this.nodes.has(treeId)) this.nodes.set(treeId, new Map());
-    const nodeMap = this.nodes.get(treeId)!;
+    const nodeMap = this.nodeMapOf(treeId);
     for (const node of nodes) nodeMap.set(node.id, node);
     return nodes;
   }
@@ -165,7 +178,7 @@ export class SessionManager {
 
   /** 从祖先路径加载（只加载 HEAD 到 root 的路径节点） */
   async loadAncestorPath(treeId: string, nodeId: string): Promise<ConversationNode[]> {
-    if (!this.nodes.has(treeId) || this.nodes.get(treeId)!.size === 0) {
+    if (this.nodeMapOf(treeId).size === 0) {
       await this.loadTree(treeId);
     }
     return this.getAncestorPath(treeId, nodeId);
@@ -205,7 +218,7 @@ export class SessionManager {
       metadata: opts.metadata,
     };
 
-    this.nodes.get(treeId)!.set(node.id, node);
+    this.nodeMapOf(treeId).set(node.id, node);
     if (opts.advanceHead !== false) tree.headNodeId = node.id;
     this.touch(tree);
 
@@ -215,7 +228,7 @@ export class SessionManager {
     if (this.indexManager) {
       await this.indexManager.touch(treeId, {
         lastRole: node.role,
-        nodeCount: this.nodes.get(treeId)!.size,
+        nodeCount: this.nodeMapOf(treeId).size,
       });
     }
 

@@ -70,6 +70,11 @@ export interface ResolveProfileOptions {
   catalog?: ModelInfo[];
   /** 降级/丢弃提示回调 */
   onNotice?: (notice: PipelineNotice) => void;
+  /**
+   * 宿主自定义 middleware（“价值类”拦截：如项目规范/任务上下文注入）。
+   * 传入能力以便宿主按能力选落法（如用 planSystemPrompt）；排序由 runner 按相位处理，追加顺序无关。
+   */
+  extraMiddlewares?: (capabilities: SourceCapabilities) => SourceMiddleware[];
 }
 
 /**
@@ -125,6 +130,9 @@ export function resolveSourceProfile(
       onNotice: options.onNotice,
     }),
   );
+
+  // 宿主自定义拦截（价值类）：排在最后追加，runner 按相位重排（故不影响执行序）
+  if (options.extraMiddlewares) middlewares.push(...options.extraMiddlewares(caps));
 
   return {
     sourceId: manifest.info.id,

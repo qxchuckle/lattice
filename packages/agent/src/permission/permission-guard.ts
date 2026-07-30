@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import type { PermissionLevel, PermissionRequest } from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
 
+/** 未应答的权限请求自动拒绝时限（安全默认：不应答即拒绝） */
+const PERMISSION_TIMEOUT_MS = 60_000;
+
 export interface PermissionRule {
   /** tool 名称或通配符 '*' */
   tool: string;
@@ -24,7 +27,10 @@ export interface ScopeConfig {
 export class PermissionGuard {
   private rules: PermissionRule[] = [];
   private scope: ScopeConfig = { scopePaths: [], safePaths: [] };
-  private pendingRequests = new Map<string, { resolve: (v: boolean) => void }>();
+  private pendingRequests = new Map<
+    string,
+    { resolve: (v: boolean) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   private events: EventBus;
 
   constructor(events: EventBus) {
@@ -58,7 +64,11 @@ export class PermissionGuard {
   /** 检查权限 */
   check(tool: string, args: Record<string, unknown>): PermissionLevel {
     // 1. 路径安全检查
-    const path = (args.path ?? args.cwd ?? '') as string;
+    // args 由模型生成，path/cwd 可能是任意类型：旧实现 `as string` 后调 startsWith 会运行时崩溃。
+    // 权限守卫按失败关闭处理——给了路径但类型非法 = 无法校验 = 拒绝。
+    const rawPath = args.path ?? args.cwd;
+    if (rawPath !== undefined && rawPath !== null && typeof rawPath !== 'string') return 'deny';
+    const path = typeof rawPath === 'string' ? rawPath : '';
     if (path && !this.isPathAllowed(path)) return 'deny';
 
     // 2. 匹配规则（第一条命中即返回）
@@ -88,17 +98,14 @@ export class PermissionGuard {
       timestamp: Date.now(),
     };
 
-    this.events.emit('permission:request', { request });
-
     return new Promise<boolean>((resolve) => {
-      this.pendingRequests.set(request.id, { resolve });
-      // 超时自动拒绝（60s）
-      setTimeout(() => {
-        if (this.pendingRequests.has(request.id)) {
-          this.pendingRequests.delete(request.id);
-          resolve(false);
-        }
-      }, 60_000);
+      // 先注册再发事件：反序会让同步应答者（同进程监听器 / 自动策略）的 respond 落空，
+      // 导致请求挂到 60s 超时才被拒——这是反向通道接入时暴露的真实竞态
+      const timer = setTimeout(() => {
+        if (this.pendingRequests.delete(request.id)) resolve(false);
+      }, PERMISSION_TIMEOUT_MS);
+      this.pendingRequests.set(request.id, { resolve, timer });
+      this.events.emit('permission:request', { request });
     });
   }
 
@@ -106,6 +113,7 @@ export class PermissionGuard {
   respond(requestId: string, allowed: boolean): void {
     const pending = this.pendingRequests.get(requestId);
     if (pending) {
+      clearTimeout(pending.timer); // 避免已应答请求的定时器空转 60s
       pending.resolve(allowed);
       this.pendingRequests.delete(requestId);
       this.events.emit('permission:response', { requestId, allowed });

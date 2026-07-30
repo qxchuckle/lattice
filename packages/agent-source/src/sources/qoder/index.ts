@@ -43,6 +43,7 @@ import { scanCommandDir, scanFlatMdDir, scanSkillDir } from '../resource-scan.js
 import { QODER_INFO, QODER_CAPABILITIES, QODER_AUTH_REQUIREMENTS } from './capabilities.js';
 import { ModelCatalog } from './models.js';
 import { makeQoderPrompt } from './prompt-input.js';
+import { isRecord, stringField } from '../../internal/shape.js';
 
 export interface QoderSourceOptions {
   authMode?: 'env' | 'cli';
@@ -204,10 +205,10 @@ class QoderDriver implements SourceDriver<QoderHandle> {
       const runStream = async (options: Record<string, unknown>): Promise<void> => {
         const q = query({ prompt: makePrompt() as never, options });
         for await (const msg of q) {
-          const m = msg as Record<string, unknown>;
-          if (m.session_id && typeof m.session_id === 'string') captured = m.session_id;
-          for (const event of mapQoderMessage(m, src)) emit(event);
-          if (m.type === 'result') break;
+          if (!isRecord(msg)) continue; // SDK 异常载荷（非对象）跳过，不让它污染映射
+          captured = stringField(msg, 'session_id') ?? captured;
+          for (const event of mapQoderMessage(msg, src)) emit(event);
+          if (msg.type === 'result') break;
         }
       };
 

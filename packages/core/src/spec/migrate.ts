@@ -1,9 +1,9 @@
 import type { ParsedSpec } from '../types';
-import { writeSpec, normalizeSpecFrontmatter } from './io';
+import { writeSpec } from './io';
 import { isValidSpecId } from './id';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from './cascade';
 import { getUsername } from '../config';
-import { getProjectSpecDir, getUserSpecDir, getGlobalSpecDir, getFileMtime } from '../paths';
+import { getFileMtime } from '../paths';
 
 export interface MigrateResult {
   /** 成功 backfill 的 spec */

@@ -31,6 +31,7 @@ import { mapPiEvent } from './map-event.js';
 import { checkPiAuth, discoverPiModels } from './auth.js';
 import { PI_INFO, PI_CAPABILITIES, PI_AUTH_REQUIREMENTS } from './capabilities.js';
 import { scanPiResources } from './resources.js';
+import { isRecord } from '../../internal/shape.js';
 
 // ── SDK 最小结构类型 ──
 
@@ -51,6 +52,39 @@ type PiSessionManager = {
   createBranchedSession(leafId: string): string | undefined;
   getSessionFile(): string | undefined;
 };
+
+/**
+ * SDK 对象 → 最小结构类型的**受检适配**（而非 `as unknown as` 硬转）。
+ *
+ * SDK 的公开类型与我们用到的子集不结构兼容，硬转会把「SDK 改了方法名」拖到
+ * 运行时才爆（`x is not a function`）；这里在边界处先验形状，不合则立即报出可读错误。
+ */
+function hasMethods<K extends string>(
+  value: unknown,
+  methods: readonly K[],
+): value is Record<K, (...args: never[]) => unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return methods.every((m) => typeof record[m] === 'function');
+}
+
+function asAgentSession(value: unknown): AgentSession {
+  if (!hasMethods(value, ['prompt', 'subscribe', 'abort', 'dispose'])) {
+    throw new Error(
+      'pi SDK 返回的 session 缺少必要方法（prompt/subscribe/abort/dispose），SDK 版本不兼容',
+    );
+  }
+  return value as AgentSession;
+}
+
+function asPiSessionManager(value: unknown): PiSessionManager {
+  if (!hasMethods(value, ['getLeafId', 'createBranchedSession', 'getSessionFile'])) {
+    throw new Error(
+      'pi SDK 的 SessionManager 缺少必要方法（getLeafId/createBranchedSession/getSessionFile），SDK 版本不兼容',
+    );
+  }
+  return value as PiSessionManager;
+}
 
 /**
  * SDK 惰性加载（模块级普通 async 函数）
@@ -151,8 +185,8 @@ class PiDriver implements SourceDriver<PiHandle> {
       ...(sessionTools.length ? { customTools: sessionTools.map(toPiCustomTool) } : {}),
     } as Parameters<typeof createAgentSession>[0]);
 
-    const session = result.session as unknown as AgentSession;
-    const manager = sessionManager as unknown as PiSessionManager;
+    const session = asAgentSession(result.session);
+    const manager = asPiSessionManager(sessionManager);
     return {
       id,
       session,
@@ -192,9 +226,9 @@ class PiDriver implements SourceDriver<PiHandle> {
       // 终止信号用 agent_settled 而非 agent_end：threshold 压缩/自动重试在 agent_end 之后、
       // settled 之前发生（post-run 阶段），提前退出会漏掉 compaction 事件
       unsub = session.subscribe((raw: unknown) => {
-        const event = raw as Record<string, unknown>;
-        for (const mapped of mapPiEvent(event, src)) emit(mapped);
-        if (event.type === 'agent_settled' || event.type === 'error') finish();
+        if (!isRecord(raw)) return; // SDK 异常载荷（非对象）直接忽略，不让它污染映射
+        for (const mapped of mapPiEvent(raw, src)) emit(mapped);
+        if (raw.type === 'agent_settled' || raw.type === 'error') finish();
       });
       // prompt 在 agent 运行前抛出（如模型校验失败）时不发任何终止事件——
       // 非致命路径：emit error 内容事件后正常收尾（保持旧行为：error + done 都会出现）
@@ -227,10 +261,7 @@ class PiDriver implements SourceDriver<PiHandle> {
 
     if (atMessage !== undefined) {
       // 截断 fork：打开父 session，创建只含 root→atMessage 路径的新 session 文件
-      const parentManager = SessionManager.continueRecent(
-        cwd,
-        parentDir,
-      ) as unknown as PiSessionManager;
+      const parentManager = asPiSessionManager(SessionManager.continueRecent(cwd, parentDir));
       const branchedPath = parentManager.createBranchedSession(atMessage);
       if (!branchedPath) {
         throw new Error(`Cannot fork: entry ${atMessage} not found in session ${sessionId}`);

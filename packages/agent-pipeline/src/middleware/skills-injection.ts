@@ -2,7 +2,7 @@
  * inject 相位：skills 清单注入
  *
  * 注入的是「有哪些 skill 可用」的清单，不是正文——模型按需再读，避免撑爆上下文。
- * 落法交给 systemPrompt 策略表（append / override / 内联兜底），本 middleware 不自行决策通道。
+ * 落法交给策略层 `injectSystemPromptAddition`（append / override / 内联兜底的唯一落点）。
  *
  * 与 `capabilities.skills.nativeInjection` 的关系（易错点）：
  * 该声明只说明「源已把**自己的** skills 列进了 system prompt」，不意味着宿主清单无需注入。
@@ -13,9 +13,8 @@ import type {
   SourceCapabilities,
   SourceMiddleware,
   PromptPayload,
-  SystemPromptConfig,
 } from '@qcqx/lattice-agent-protocol';
-import { planSystemPrompt } from '../strategies/system-prompt.js';
+import { injectSystemPromptAddition } from '../strategies/system-prompt.js';
 import type { PipelineNotice } from './normalize.js';
 
 export interface SkillDescriptor {
@@ -49,12 +48,6 @@ export function formatSkillsAppendix(skills: readonly SkillDescriptor[]): string
   ].join('\n');
 }
 
-/** 合并两段 append 文本（已有 systemPrompt.append 请求时不覆盖宿主意图） */
-function mergeAppend(existing: SystemPromptConfig | undefined, addition: string): string {
-  if (existing?.mode === 'append') return `${existing.additional}\n\n${addition}`;
-  return addition;
-}
-
 export function createSkillsInjectionMiddleware(options: SkillsInjectionOptions): SourceMiddleware {
   const { capabilities: caps } = options;
 
@@ -66,25 +59,11 @@ export function createSkillsInjectionMiddleware(options: SkillsInjectionOptions)
       const appendix = (options.format ?? formatSkillsAppendix)(skills);
       if (!appendix) return payload;
 
-      const merged = mergeAppend(payload.opts.systemPrompt, appendix);
-      const plan = planSystemPrompt(caps.prompt.systemPrompt, {
-        kind: 'append',
-        additional: merged,
-      });
-      switch (plan.kind) {
-        case 'pass-through':
-          return { ...payload, opts: { ...payload.opts, systemPrompt: plan.config } };
-        case 'inline-fallback': {
-          options.onNotice?.({ code: 'system_prompt_inlined', message: plan.notice });
-          return {
-            ...payload,
-            message: [{ type: 'text', text: plan.text }, ...payload.message],
-          };
-        }
-        case 'reject':
-          // skills 清单是增强而非必需：拒绝即跳过（不阻断本轮对话）
-          return payload;
-      }
+      const applied = injectSystemPromptAddition(payload, caps.prompt.systemPrompt, appendix);
+      if (applied.notice)
+        options.onNotice?.({ code: 'system_prompt_inlined', message: applied.notice });
+      // skills 清单是增强而非必需：源拒绝时跳过，不阻断本轮对话
+      return applied.payload;
     },
   };
 }

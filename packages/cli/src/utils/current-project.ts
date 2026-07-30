@@ -12,7 +12,6 @@ import {
   getProjectMetaById,
   resolveProjectIds,
   getUsername,
-  type ProjectMeta,
 } from '@qcqx/lattice-core';
 
 export interface CurrentProject {

@@ -209,6 +209,19 @@ describe('applyProbeOverrides：降准留痕（Qoder list{} 谎言场景）', ()
     expect(capabilities).toBe(QODER_CAPABILITIES);
     expect(downgrades).toEqual([]);
   });
+
+  it('同一路径多次 override：每条留痕的 declared 均为**原始声明**，不是上一次的结果', () => {
+    // 否则审计链失真：第二条会把 first override 的值误报为“源声明值”
+    const { capabilities, downgrades } = applyProbeOverrides(QODER_CAPABILITIES, [
+      { path: 'session.fork', actual: { atMessage: false }, reason: 'probe: 仅支持末尾分叉' },
+      { path: 'session.fork', actual: false, reason: 'probe: 复测后完全不支持' },
+    ]);
+    expect(capabilities.session.fork, '最后一次生效').toBe(false);
+    expect(
+      downgrades.map((d) => d.declared),
+      '两条的 declared 都是原始声明',
+    ).toEqual([{ atMessage: true }, { atMessage: true }]);
+  });
 });
 
 describe('manifest 组装', () => {

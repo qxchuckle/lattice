@@ -10,6 +10,7 @@ import type {
   NodeContent,
 } from '../source/conversation.js';
 import type { PromptSegment } from '../source/prompt-input.js';
+import type { NodeCapabilities } from '../source/node-state.js';
 
 // ═══════════════════════════════════════════
 // 多端同步：共享类型
@@ -237,7 +238,6 @@ export interface SessionClosedMessage {
 export interface TreeUpdatedMessage {
   type: 'tree.updated';
   treeId: string;
-  branch?: unknown;
   headNodeId?: string | null;
   /** 本次持久化的 user 节点 ID（client 用于重试定位） */
   userNodeId?: string;
@@ -261,7 +261,7 @@ export interface PermissionRequestMessage {
 
 // ── 多端同步（per-tree 广播） ──
 
-/** 全量快照（订阅时或 rev 缺口兼底） */
+/** 全量快照（订阅时或 rev 缺口兜底） */
 export interface TreeSnapshotMessage {
   type: 'tree.snapshot';
   treeId: string;
@@ -269,6 +269,12 @@ export interface TreeSnapshotMessage {
   nodes: ConversationNode[];
   branches: ConversationBranch[];
   headNodeId: string | null;
+  /**
+   * turn 能力投影：turnId（user 节点 ID）→ 可执行操作。
+   * server 计算并下发（派生数据不落盘），client 直接渲染不重算；
+   * 与 server 命令入口守卫同源，故置灰的结构操作绕过 UI 也同样被拒。
+   */
+  turnCapabilities?: Record<string, NodeCapabilities>;
   /** 在途流式中间态（迟到加入者补齐）：requestId → 已生成内容 */
   streaming?: { requestId: string; parentId: string; content: NodeContent[] }[];
   /** 该树的会话列表元数据（捎带，免客户端每次变更再走 REST 拉列表） */

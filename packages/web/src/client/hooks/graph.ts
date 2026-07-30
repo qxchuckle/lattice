@@ -1,4 +1,4 @@
-import { useEffect, useDeferredValue, useMemo, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
@@ -12,17 +12,7 @@ import {
   getProjectId,
   hasIdIntersection,
 } from '../lib';
-import {
-  canvasStore,
-  canvasSearchStore,
-  sidebarStore,
-  toggleTheme,
-  themeStore,
-  closeDetail,
-  openCanvasSearch,
-  closeCanvasSearch,
-  type ViewMode,
-} from '../store';
+import { canvasStore } from '../store';
 import type { LatticeNode, LatticeEdge } from '../types/graph';
 import type {
   ProjectMeta,

@@ -2,7 +2,7 @@
  * useAgentSocket — Agent WebSocket 连接管理
  */
 import { useEffect, useRef, useCallback } from 'react';
-import type { ConversationTree, ConversationNode, AgentEvent } from '@qcqx/lattice-agent';
+import type { ConversationTree, ConversationNode, SourceEvent } from '@qcqx/lattice-agent';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 import { workbenchStore, setTreeData, setStreaming, resetStreaming } from './store';
 import { authStore } from '../../store';
@@ -47,7 +47,7 @@ export function useAgentSocket() {
         break;
       }
       case 'event': {
-        const agentEvent = msg.event as AgentEvent;
+        const agentEvent = msg.event as SourceEvent;
         const events = [...workbenchStore.streamingEvents, agentEvent];
         const text = events
           .filter((e) => e.type === 'text')

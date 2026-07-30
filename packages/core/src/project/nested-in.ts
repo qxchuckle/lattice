@@ -6,7 +6,6 @@
  */
 
 import { resolve as pathResolve, dirname, sep } from 'node:path';
-import type { ProjectMeta } from '../types';
 import { fileExists, readJSON } from '../paths';
 import { collectFingerprint } from './fingerprint';
 import { computeProjectIds } from './identity-generate';

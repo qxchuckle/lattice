@@ -30,6 +30,10 @@ export interface MiddlewareContext {
   sourceId: string;
   /** 工作目录（宿主会话语境） */
   cwd?: string;
+  /** 宿主侧线程标识（源无关概念）：注入类 middleware 与 proxy 常需按线程取上下文 */
+  threadId?: string;
+  /** 宿主自定义只读元数据（如 lattice 的 taskId）：middleware 只读，不得写回 */
+  metadata?: Readonly<Record<string, unknown>>;
 }
 
 export interface SourceMiddleware {

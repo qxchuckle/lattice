@@ -41,7 +41,7 @@ export function registerDoctorCommand(program: Command): void {
     });
 }
 
-function outputReport(entries: DoctorEntry[], jsonFormat?: boolean): void {
+function outputReport(entries: DoctorEntry[]): void {
   const healthy = entries.filter((e) => e.status === 'healthy').length;
   const stale = entries.filter((e) => e.status === 'stale').length;
   const errors = entries.filter((e) => e.status === 'error').length;

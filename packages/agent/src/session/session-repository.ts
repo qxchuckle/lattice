@@ -11,7 +11,17 @@
  */
 import { readFile, writeFile, appendFile, mkdir, readdir, open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ConversationNode, ConversationTree, NodeContent } from '@qcqx/lattice-agent-protocol';
+import type {
+  ConversationNode,
+  ConversationTree,
+  StreamingState,
+} from '@qcqx/lattice-agent-protocol';
+
+/**
+ * 会话持久化结构版本（单调整数，结构不兼容变更时递增）。
+ * v1：tree.json + nodes.jsonl + streaming/（本次重构后的基线）。
+ */
+export const SESSION_SCHEMA_VERSION = 1;
 
 export interface SessionStorage {
   baseDir: string; // ~/.lattice/.cache/sessions/
@@ -19,13 +29,8 @@ export interface SessionStorage {
 }
 
 /** streaming 中间态文件内容（持久化正在生成的 assistant 回复） */
-export interface StreamingState {
-  requestId: string;
-  parentId: string;
-  role: 'assistant';
-  startedAt: number;
-  content: NodeContent[];
-}
+/** 在途流式快照（跨端流转，单一真相在 protocol） */
+export type { StreamingState };
 
 export class SessionRepository {
   /**
@@ -80,19 +85,35 @@ export class SessionRepository {
 
   // ── tree.json ──
 
+  /**
+   * 读 tree.json。版本处理（前兼容 + 后拒绝）：
+   * - 无 schemaVersion 字段 = 版本化之前的旧数据，视为 v1 正常加载
+   * - 高于当前版本 = 新版写的数据，**拒绝加载并报错**（而非静默误读导致数据逐步损坏）
+   */
   async readTree(treeId: string): Promise<ConversationTree | undefined> {
+    let parsed: unknown;
     try {
       const raw = await readFile(join(this.treeDir(treeId), 'tree.json'), 'utf-8');
-      return JSON.parse(raw) as ConversationTree;
+      parsed = JSON.parse(raw);
     } catch {
-      return undefined;
+      return undefined; // 不存在或不可解析：当作无此树
     }
+    const version = (parsed as { schemaVersion?: unknown }).schemaVersion;
+    if (typeof version === 'number' && version > SESSION_SCHEMA_VERSION) {
+      throw new Error(
+        `会话数据版本过新（tree=${treeId} schemaVersion=${version}，本程序支持 ${SESSION_SCHEMA_VERSION}），` +
+          '请升级 lattice 后重试——降级读取会丢弃新版字段并写回损坏结构',
+      );
+    }
+    return parsed as ConversationTree;
   }
 
   async writeTree(tree: ConversationTree): Promise<void> {
     const dir = this.treeDir(tree.id);
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, 'tree.json'), JSON.stringify(tree, null, 2), 'utf-8');
+    // 版本号随每次写入落盘（旧数据一经写回即完成标记）
+    const payload = { schemaVersion: SESSION_SCHEMA_VERSION, ...tree };
+    await writeFile(join(dir, 'tree.json'), JSON.stringify(payload, null, 2), 'utf-8');
   }
 
   /** 删除整个树目录（tree.json + nodes.jsonl + streaming） */

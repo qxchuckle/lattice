@@ -18,7 +18,6 @@ import {
   applySpecTemplate,
   parseSpec,
   writeSpec,
-  specExists,
   findSpecByName,
   syncSpecTemplateRegistry,
   listSpecTemplateRegistries,

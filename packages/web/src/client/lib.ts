@@ -264,10 +264,7 @@ export function deduplicateProjects(projects: ProjectMeta[]): ProjectMeta[] {
     }
     // 选 primary ID 优先级最高的作为代表
     const sorted = [...group].sort((a, b) => {
-      const pa = selectPrimaryId(a.ids) ?? '';
-      const pb = selectPrimaryId(b.ids) ?? '';
-      // selectPrimaryId 已按优先级排序，直接比较字符串不可靠
-      // 用 ids 数组中第一个（已排序）比较
+      // selectPrimaryId 已按优先级排序，直接比较字符串不可靠：用 ids 数组首个（已排序）比较
       return (a.ids[0] ?? '').localeCompare(b.ids[0] ?? '');
     });
     const rep = sorted[0];

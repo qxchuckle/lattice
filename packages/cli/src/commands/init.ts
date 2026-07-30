@@ -31,7 +31,6 @@ import {
   closeDb,
   scanForProjects,
   type ScanProgress,
-  readScanCache,
   writeScanCache,
   readResolvedConfig,
   getUsername,

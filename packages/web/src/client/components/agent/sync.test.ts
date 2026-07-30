@@ -75,6 +75,40 @@ describe('sync.applySnapshot', () => {
     expect((turn!.blocks[0] as { text: string }).text).toBe('回答');
   });
 
+  it('快照携带的 turnCapabilities 写入 store（能力数据驱动：client 不重算）', () => {
+    const caps = {
+      canBranch: true,
+      canUndo: true,
+      canDelete: true,
+      canRetry: false,
+      canContinue: false,
+      canFollowup: true,
+      canAbort: false,
+    };
+    agentStore.turnCaps.clear();
+    // 旧能力项应被整表替换（server 是全量下发，残留会让已删节点的能力鬼影存活）
+    agentStore.turnCaps.set('ghost', caps);
+    applySnapshot({ ...snapshot([userNode('u1')]), turnCapabilities: { u1: caps } });
+    expect(agentStore.turnCaps.get('u1')).toEqual(caps);
+    expect(agentStore.turnCaps.has('ghost'), '全量替换，不残留旧项').toBe(false);
+  });
+
+  it('快照未带 turnCapabilities 时保留现有能力表（兼容可选字段）', () => {
+    const caps = {
+      canBranch: false,
+      canUndo: false,
+      canDelete: true,
+      canRetry: false,
+      canContinue: false,
+      canFollowup: false,
+      canAbort: false,
+    };
+    agentStore.turnCaps.clear();
+    agentStore.turnCaps.set('u1', caps);
+    applySnapshot(snapshot([userNode('u1')]));
+    expect(agentStore.turnCaps.get('u1'), '未下发则不清空（避免闪烁回本地投影）').toEqual(caps);
+  });
+
   it('恢复快照携带的在途流中间态', () => {
     applySnapshot(
       snapshot(

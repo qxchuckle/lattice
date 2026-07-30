@@ -14,7 +14,7 @@
 import type { ProjectMeta } from '../types';
 import { listAllProjects, listProjectDirs } from '../db';
 import { findProjectsByFingerprint, listFingerprintsByProject } from '../db';
-import { selectPrimaryId, normalizeProjectId, normalizeProjectMeta, ID_PREFIX } from './identity';
+import { normalizeProjectId, normalizeProjectMeta, ID_PREFIX } from './identity';
 import { getProjectMetaPath, fileExists, readJSON } from '../paths';
 
 // ─── 进程内缓存 ───

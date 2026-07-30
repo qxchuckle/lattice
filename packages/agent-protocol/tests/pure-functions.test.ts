@@ -6,8 +6,16 @@
  * server 守卫与 UI 渲染的单一真相（接口行为 ≡ 视图）。
  */
 import { describe, it, expect } from 'vitest';
-import type { SourceErrorCode, ViewStatus } from '../src/index.js';
-import { errorCategory, projectNodeCapabilities } from '../src/index.js';
+import type { SourceErrorCode, ViewStatus, NodeStatus } from '../src/index.js';
+import {
+  errorCategory,
+  projectNodeCapabilities,
+  projectViewStatus,
+  canApplyOperation,
+  isReadOnly,
+  isBranchableChild,
+  shouldSkipDescendantMark,
+} from '../src/index.js';
 
 describe('errorCategory：全 code 归类（穷尽）', () => {
   const cases: Array<[SourceErrorCode, string]> = [
@@ -102,6 +110,61 @@ describe('projectNodeCapabilities：状态 × 源能力', () => {
       expect(projectNodeCapabilities(s)).toEqual(
         projectNodeCapabilities(s, { fork: { atMessage: true } }),
       );
+    }
+  });
+});
+
+describe('操作守卫与视图投影（server 侧纵深防御的同一真相）', () => {
+  it('canApplyOperation：delete 对 undone 合法、对 hidden 非法；其余操作不作用于只读终态', () => {
+    expect(canApplyOperation('delete', 'undone')).toBe(true);
+    expect(canApplyOperation('delete', 'hidden')).toBe(false);
+    expect(canApplyOperation('delete', 'active')).toBe(true);
+    for (const op of ['continue', 'retry', 'undo'] as const) {
+      expect(canApplyOperation(op, 'active')).toBe(true);
+      expect(canApplyOperation(op, 'interrupted')).toBe(true);
+      expect(canApplyOperation(op, 'undone')).toBe(false);
+      expect(canApplyOperation(op, 'hidden')).toBe(false);
+    }
+  });
+
+  it('isReadOnly / isBranchableChild：只读终态判定一致（同一语义两处使用）', () => {
+    expect(isReadOnly('undone')).toBe(true);
+    expect(isReadOnly('hidden')).toBe(true);
+    expect(isReadOnly('active')).toBe(false);
+    expect(isReadOnly(undefined)).toBe(false);
+    expect(isBranchableChild('active')).toBe(true);
+    expect(isBranchableChild('undone')).toBe(false);
+  });
+
+  it('shouldSkipDescendantMark：undo 不复活已删除后代；delete 全标不跳过', () => {
+    expect(shouldSkipDescendantMark('undone', 'hidden')).toBe(true);
+    expect(shouldSkipDescendantMark('undone', 'active')).toBe(false);
+    expect(shouldSkipDescendantMark('hidden', 'hidden')).toBe(false);
+  });
+
+  it('projectViewStatus：undone > hidden > error(内容) > interrupted > done', () => {
+    expect(projectViewStatus('undone', true)).toBe('undone');
+    expect(projectViewStatus('hidden', true)).toBe('hidden');
+    expect(projectViewStatus('interrupted', true)).toBe('error'); // 内容有错优先于中断
+    expect(projectViewStatus('interrupted', false)).toBe('interrupted');
+    expect(projectViewStatus('active', false)).toBe('done');
+    expect(projectViewStatus(undefined, false)).toBe('done');
+  });
+
+  it('投影与守卫不矛盾：投影允许的操作，守卫必须也允许（接口行为 ≡ 视图）', () => {
+    const cases: Array<[ViewStatus, NodeStatus]> = [
+      ['done', 'active'],
+      ['error', 'active'],
+      ['interrupted', 'interrupted'],
+      ['undone', 'undone'],
+      ['hidden', 'hidden'],
+    ];
+    for (const [view, persisted] of cases) {
+      const caps = projectNodeCapabilities(view);
+      if (caps.canUndo) expect(canApplyOperation('undo', persisted)).toBe(true);
+      if (caps.canDelete) expect(canApplyOperation('delete', persisted)).toBe(true);
+      if (caps.canContinue) expect(canApplyOperation('continue', persisted)).toBe(true);
+      if (caps.canRetry) expect(canApplyOperation('retry', persisted)).toBe(true);
     }
   });
 });

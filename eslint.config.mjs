@@ -25,7 +25,11 @@ export default defineConfig(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      // 未用声明必报（代码删改后的残留导入/变量会静默积累）；故意保留的用 `_` 前缀豁免
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-unused-expressions': 'off',
       curly: 'warn',
       eqeqeq: 'warn',

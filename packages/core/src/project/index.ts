@@ -33,14 +33,8 @@ import { deleteRelationsByProject, listRelations as listRelationsFromFile } from
 import { nowISO } from '../utils/time';
 import type { ProjectRelation } from '../types';
 import { moveToTrash } from '../trash';
-import {
-  parsePrefixedId,
-  resolveProjectIds,
-  normalizeLegacyId,
-  selectPrimaryId,
-  normalizeProjectMeta,
-} from './identity';
-import { computeProjectIds, generateProjectId } from './identity-generate';
+import { normalizeLegacyId, selectPrimaryId, normalizeProjectMeta } from './identity';
+import { computeProjectIds } from './identity-generate';
 
 // ─── 项目信息自动检测（轻量）───
 

@@ -17,6 +17,8 @@ import {
   slashShape,
   planSlash,
   planSystemPrompt,
+  applySystemPromptRequest,
+  injectSystemPromptAddition,
   planToolInjection,
   validateModel,
   allowsCustomModelId,
@@ -196,5 +198,79 @@ describe('tools / models 策略表', () => {
   it('自定义模型输入仅在非 catalog 策略下允许（UI 与接口同一判定）', () => {
     expect(allowsCustomModelId({ policy: 'catalog', tuning: false })).toBe(false);
     expect(allowsCustomModelId({ policy: 'open', tuning: false })).toBe(true);
+  });
+});
+
+describe('策略表补角（消除未覆盖分支后的语义确认）', () => {
+  it("systemPrompt 'source-default' 请求 → 原样直传（不构造多余配置）", () => {
+    expect(
+      planSystemPrompt(
+        { builtin: 'opaque', override: false, append: false },
+        { kind: 'source-default' },
+      ),
+    ).toEqual({ kind: 'pass-through', config: { mode: 'source-default' } });
+  });
+
+  it('compaction 上报粒度逐形态透出（Pi=both带摘要 / Qoder=auto无摘要）', () => {
+    expect(
+      planCompaction({ trigger: 'manual', reportsSummary: false, reportsTokens: true }),
+    ).toEqual({
+      kind: 'host-trigger',
+      reportsSummary: false,
+      reportsTokens: true,
+    });
+    expect(planCompaction(false)).toEqual({ kind: 'host-polyfill' });
+  });
+});
+
+describe('systemPrompt 计划执行（三处调用方共用的唯一落点）', () => {
+  const appendable = { builtin: 'opaque' as const, override: true, append: true };
+  const locked = { builtin: 'opaque' as const, override: false, append: false };
+  const base = { sessionId: null, message: [{ type: 'text' as const, text: 'hi' }], opts: {} };
+
+  it('pass-through：落到 opts.systemPrompt，消息不动', () => {
+    const out = applySystemPromptRequest(base, appendable, { kind: 'append', additional: 'X' });
+    expect(out.payload.opts.systemPrompt).toEqual({ mode: 'append', additional: 'X' });
+    expect(out.payload.message).toBe(base.message);
+    expect(out.notice).toBeUndefined();
+    expect(out.rejection).toBeUndefined();
+  });
+
+  it('inline-fallback：文本前插进消息，且清掉 opts.systemPrompt（不重复送）', () => {
+    const withReq = {
+      ...base,
+      opts: { systemPrompt: { mode: 'append' as const, additional: 'X' } },
+    };
+    const out = applySystemPromptRequest(withReq, locked, { kind: 'append', additional: 'X' });
+    expect(out.payload.opts.systemPrompt).toBeUndefined();
+    expect(out.payload.message[0]).toEqual({ type: 'text', text: 'X' });
+    expect(out.notice).toBeTruthy();
+  });
+
+  it('reject：以 rejection 返回而非抛错（调用方决定报错或跳过）', () => {
+    const out = applySystemPromptRequest(base, locked, { kind: 'override', prompt: 'X' });
+    expect(out.payload).toBe(base);
+    expect(out.rejection).toMatchObject({ capabilityPath: 'prompt.systemPrompt.override' });
+  });
+
+  it('injectSystemPromptAddition：与已有 append 段合并，顺序为「先有的 → 新增的」', () => {
+    const withExisting = {
+      ...base,
+      opts: { systemPrompt: { mode: 'append' as const, additional: '先前注入' } },
+    };
+    const out = injectSystemPromptAddition(withExisting, appendable, '本次注入');
+    const config = out.payload.opts.systemPrompt;
+    expect(config?.mode === 'append' && config.additional).toBe('先前注入\n\n本次注入');
+  });
+
+  it('injectSystemPromptAddition：无已有段时直接作为 additional', () => {
+    const out = injectSystemPromptAddition(base, appendable, '仅此一段');
+    const config = out.payload.opts.systemPrompt;
+    expect(config?.mode === 'append' && config.additional).toBe('仅此一段');
+  });
+
+  it('override 请求不被 inject 合并语义污染（override 仍走替换）', () => {
+    const out = applySystemPromptRequest(base, appendable, { kind: 'override', prompt: 'ONLY' });
+    expect(out.payload.opts.systemPrompt).toEqual({ mode: 'override', prompt: 'ONLY' });
   });
 });

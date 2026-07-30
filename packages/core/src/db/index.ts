@@ -18,7 +18,7 @@ import {
   listUserDirs,
   readJSON,
 } from '../paths';
-import { selectPrimaryId, resolveProjectIds, normalizeProjectMeta } from '../project/identity';
+import { selectPrimaryId, normalizeProjectMeta } from '../project/identity';
 
 let _db: Database.Database | null = null;
 

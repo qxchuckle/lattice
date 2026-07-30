@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { dirname, resolve as pathResolve, sep } from 'node:path';
+import { resolve as pathResolve } from 'node:path';
 
 import {
   applySpecTemplate,
@@ -18,12 +18,9 @@ import {
   updateProjectMeta,
   findProjectByAnyId,
   getProjectMeta,
-  getProjectMetaById,
   selectPrimaryId,
   resolveProjectIds,
   syncProjectIdsToDb,
-  upsertRelationFile,
-  deleteRelationsByFilter,
   fileExists,
   readJSON,
   writeJSON,

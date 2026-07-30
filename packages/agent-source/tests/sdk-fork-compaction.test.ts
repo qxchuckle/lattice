@@ -9,7 +9,7 @@
  * 该部分自动 skip（node >= 22 或 undici 修复后自动恢复回归）。
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm, readdir, readFile, copyFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';

@@ -25,7 +25,6 @@ import { getRelatedProjectIds } from '../project/virtual-merge';
 import { selectPrimaryId } from '../project/identity';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
-import { readProfileSummary, readProfileTags } from '../project/profile';
 
 /**
  * 获取虚拟合并组的所有任务 ID（去重）

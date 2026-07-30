@@ -2,7 +2,6 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { resolve as pathResolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import { confirm } from '@inquirer/prompts';
 import {
   getUsername,
   initDb,
@@ -41,13 +40,7 @@ import type {
   ScopePath,
   TaskMetaWithSource,
 } from '@qcqx/lattice-core';
-import {
-  logger,
-  outputJson,
-  resolveCurrentProject,
-  resolveAndRegisterUpwards,
-  shouldSkipConfirm,
-} from '../utils';
+import { logger, outputJson, resolveCurrentProject, resolveAndRegisterUpwards } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 // 检查点类型按信息源三分（详见 core/types CheckpointType 注释）

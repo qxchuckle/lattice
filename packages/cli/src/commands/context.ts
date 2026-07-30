@@ -18,16 +18,11 @@ import {
   type ProjectContext,
   type SearchResult,
 } from '@qcqx/lattice-core';
-import {
-  logger,
-  outputJson,
-  resolveCurrentProject,
-  resolveCurrentProjectWithAncestors,
-} from '../utils';
+import { logger, outputJson, resolveCurrentProjectWithAncestors } from '../utils';
 
 /** 剥离 spec 的 content 和冗余字段，JSON 输出精简 */
 function stripSpecContent(spec: ParsedSpec, scope?: string): Record<string, unknown> {
-  const { id, title, description, tags } = spec.frontmatter;
+  const { title, description, tags } = spec.frontmatter;
   return {
     title: title ?? spec.fileName,
     filePath: spec.filePath,

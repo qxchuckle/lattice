@@ -23,6 +23,8 @@ import {
   type ConversationHooks,
 } from '@qcqx/lattice-agent';
 import type {
+  GetTreeResponse,
+  GetTreeNotFoundResponse,
   ClientMessage,
   ServerMessage,
   PresenceState,
@@ -218,6 +220,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
           nodes,
           branches: tree.branches,
           headNodeId: tree.headNodeId,
+          // 能力数据驱动：server 算好下发（与命令入口守卫同源），client 只渲染不重算
+          turnCapabilities: conversation.turnCapabilities(treeId),
           streaming: interrupted.map((s) => ({
             requestId: s.requestId,
             parentId: s.parentId,
@@ -429,8 +433,9 @@ export function registerAgentRoutes(app: FastifyInstance): void {
 
           case 'tree.fork': {
             if (!msg.treeId || !msg.nodeId) return;
-            const branch = await conversation.fork(msg.treeId, msg.nodeId, msg.branchName);
-            send(socket, { type: 'tree.updated', treeId: msg.treeId, branch });
+            // fork 产物（新分支）由随后的 broadcastSnapshot 全量下发，无需在此重复塞进消息
+            await conversation.fork(msg.treeId, msg.nodeId, msg.branchName);
+            send(socket, { type: 'tree.updated', treeId: msg.treeId });
             broadcastSnapshot(msg.treeId);
             break;
           }
@@ -710,15 +715,21 @@ export function registerAgentRoutes(app: FastifyInstance): void {
   });
 
   // 获取对话树（含中断检测）
-  app.get('/api/agent/tree/:treeId', async (req) => {
-    const { treeId } = req.params as { treeId: string };
-    const latticeAgent = await getAgent();
-    const tree = await latticeAgent.session.loadTree(treeId);
-    if (!tree) return { error: 'not_found' as const };
-    const nodes = latticeAgent.session.getNodes(treeId);
-    const interruptedStreams = await latticeAgent.session.getInterruptedStreams(treeId);
-    return { tree, nodes, interruptedStreams };
-  });
+  // 返回类型由 protocol 契约钉住：server 少给字段即编译报错（不再靠 client 猜形状）
+  app.get(
+    '/api/agent/tree/:treeId',
+    async (req): Promise<GetTreeResponse | GetTreeNotFoundResponse> => {
+      const { treeId } = req.params as { treeId: string };
+      const latticeAgent = await getAgent();
+      const tree = await latticeAgent.session.loadTree(treeId);
+      if (!tree) return { error: 'not_found' };
+      const nodes = latticeAgent.session.getNodes(treeId);
+      const interruptedStreams = await latticeAgent.session.getInterruptedStreams(treeId);
+      // 能力与 WS 快照同源：reload 后立即可数据驱动渲染，无需等首个快照
+      const turnCapabilities = latticeAgent.conversation.turnCapabilities(treeId);
+      return { tree, nodes, interruptedStreams, turnCapabilities };
+    },
+  );
 
   // 获取历史会话列表
   app.get('/api/agent/conversations', async () => {

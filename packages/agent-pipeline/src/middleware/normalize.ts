@@ -16,7 +16,7 @@ import type {
   SourceMiddleware,
   PromptPayload,
 } from '@qcqx/lattice-agent-protocol';
-import { planSystemPrompt, type SystemPromptRequest } from '../strategies/system-prompt.js';
+import { applySystemPromptRequest, type SystemPromptRequest } from '../strategies/system-prompt.js';
 import { PipelineError } from '../errors.js';
 
 export interface PipelineNotice {
@@ -85,23 +85,21 @@ export function createNormalizeMiddleware(options: NormalizeOptions): SourceMidd
             : opts.systemPrompt.mode === 'override'
               ? { kind: 'override', prompt: opts.systemPrompt.prompt }
               : { kind: 'source-default' };
-        const plan = planSystemPrompt(caps.prompt.systemPrompt, req);
-        switch (plan.kind) {
-          case 'pass-through':
-            opts = { ...opts, systemPrompt: plan.config };
-            break;
-          case 'inline-fallback': {
-            const { systemPrompt: _dropped, ...rest } = opts;
-            opts = rest;
-            message = plan.text
-              ? [{ type: 'text', text: plan.text } as ContentBlock, ...message]
-              : message;
-            onNotice?.({ code: 'system_prompt_inlined', message: plan.notice });
-            break;
-          }
-          case 'reject':
-            throw PipelineError.unsupportedOption(plan.capabilityPath, plan.reason);
+        const applied = applySystemPromptRequest(
+          { ...payload, message, opts },
+          caps.prompt.systemPrompt,
+          req,
+        );
+        // normalize 是“把宿主意图归一化”的相位：源拒绝意图时必须报错（而非静默丢弃）
+        if (applied.rejection) {
+          throw PipelineError.unsupportedOption(
+            applied.rejection.capabilityPath,
+            applied.rejection.reason,
+          );
         }
+        if (applied.notice) onNotice?.({ code: 'system_prompt_inlined', message: applied.notice });
+        message = applied.payload.message;
+        opts = applied.payload.opts;
       }
 
       return message === payload.message && opts === payload.opts

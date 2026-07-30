@@ -22,30 +22,26 @@ export type CompactionPlan =
   /** 源不压缩：溢出即报错，宿主自理（截断/摘要/拒绝），且必须自行呈现 */
   | { kind: 'host-polyfill' };
 
-const COMPACTION_PLANNERS: Record<
-  CompactionShape,
-  (cap: Exclude<CompactionCapability, false> | null) => CompactionPlan
-> = {
-  auto: (cap) => ({
-    kind: 'observe',
-    reportsSummary: cap?.reportsSummary ?? false,
-    reportsTokens: cap?.reportsTokens ?? false,
-  }),
-  manual: (cap) => ({
-    kind: 'host-trigger',
-    reportsSummary: cap?.reportsSummary ?? false,
-    reportsTokens: cap?.reportsTokens ?? false,
-  }),
-  both: (cap) => ({
-    kind: 'observe-and-trigger',
-    reportsSummary: cap?.reportsSummary ?? false,
-    reportsTokens: cap?.reportsTokens ?? false,
-  }),
-  none: () => ({ kind: 'host-polyfill' }),
-};
+/** 上报粒度（从能力声明提取一次，避免各 planner 重复可选链产生不可达分支） */
+interface CompactionReports {
+  reportsSummary: boolean;
+  reportsTokens: boolean;
+}
+
+const COMPACTION_PLANNERS: Record<CompactionShape, (reports: CompactionReports) => CompactionPlan> =
+  {
+    auto: (reports) => ({ kind: 'observe', ...reports }),
+    manual: (reports) => ({ kind: 'host-trigger', ...reports }),
+    both: (reports) => ({ kind: 'observe-and-trigger', ...reports }),
+    none: () => ({ kind: 'host-polyfill' }),
+  };
 
 export function planCompaction(cap: CompactionCapability): CompactionPlan {
-  return COMPACTION_PLANNERS[compactionShape(cap)](cap === false ? null : cap);
+  const reports: CompactionReports =
+    cap === false
+      ? { reportsSummary: false, reportsTokens: false }
+      : { reportsSummary: cap.reportsSummary, reportsTokens: cap.reportsTokens };
+  return COMPACTION_PLANNERS[compactionShape(cap)](reports);
 }
 
 /** 宿主是否需要自行呈现「已压缩」提示（源不发 compaction 事件时） */

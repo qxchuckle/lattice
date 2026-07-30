@@ -42,7 +42,7 @@ import {
   writeJSON,
 } from '../paths';
 import { getUsername, isInitialized } from '../config';
-import { closeDb, deleteProject, initDb } from '../db';
+import { deleteProject } from '../db';
 import { FTS_INDEX_VERSION, getFtsIndexVersion } from '../db';
 import { getRAGStatus } from '../rag';
 import { readInitMeta } from '../cache/init-meta';

@@ -1,37 +1,27 @@
 /**
  * REST API 请求/响应 schema 类型（Agent 相关端点）
  */
-import type { ConversationTree, ConversationNode } from '../source/conversation.js';
+import type { ConversationTree, ConversationNode, StreamingState } from '../source/conversation.js';
 import type { SourceResourceInfo } from '../source/resources.js';
+import type { NodeCapabilities } from '../source/node-state.js';
 
 // ── GET /api/agent/tree/:treeId ──
 
 export interface GetTreeResponse {
   tree: ConversationTree;
   nodes: ConversationNode[];
+  /** 未正常结束的在途流（崩溃恢复：client 据此把 turn 填为 interrupted） */
+  interruptedStreams: StreamingState[];
+  /**
+   * turn 能力投影（turnId → 可执行操作）：与 WS 快照同源同形。
+   * reload 走 REST 时也必须带上，否则快照到达前 client 只能本地投影（缺源能力维度）。
+   */
+  turnCapabilities: Record<string, NodeCapabilities>;
   error?: undefined;
 }
 
 export interface GetTreeNotFoundResponse {
   error: 'not_found';
-}
-
-// ── GET /api/agent/turns/latest ──
-
-export interface GetLatestTurnsResponse {
-  treeId: string | null;
-  turns: unknown[];
-}
-
-// ── POST /api/agent/turns ──
-
-export interface PostTurnRequest {
-  treeId: string;
-  node: { id: string; [key: string]: unknown };
-}
-
-export interface PostTurnResponse {
-  ok: true;
 }
 
 // ── GET /api/agent/sources（未来：源配置页） ──

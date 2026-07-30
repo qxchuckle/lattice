@@ -8,7 +8,7 @@
  */
 
 import type { ProjectMeta } from '../types';
-import { resolveProjectIds, mergeIds, selectPrimaryId, normalizeLegacyId } from './identity';
+import { mergeIds, selectPrimaryId, normalizeLegacyId } from './identity';
 import { getProjectMetaById, findUsernameAndDirName } from './lookup';
 import {
   getProjectDir,
@@ -20,7 +20,6 @@ import {
   fileExists,
   listDir,
   listUserDirs,
-  removeDir,
   join,
   getCacheDir,
   getTaskMetaPath,
@@ -98,8 +97,8 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
       throw new Error(`目标项目 ${toId} 不存在`);
     }
 
-    const { meta: fromMeta, username: fromUsername } = fromData;
-    const { meta: toMeta, username: toUsername } = toData;
+    const { meta: fromMeta } = fromData;
+    const { meta: toMeta } = toData;
 
     // 2a. 合并 project.json
     const fromIds = fromMeta.ids;

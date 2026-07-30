@@ -24,9 +24,12 @@ export { slashShape, planSlash, type SlashShape, type SlashPlan } from './slash.
 
 export {
   planSystemPrompt,
+  applySystemPromptRequest,
+  injectSystemPromptAddition,
   type SystemPromptRequest,
   type SystemPromptRequestKind,
   type SystemPromptPlan,
+  type SystemPromptApplication,
 } from './system-prompt.js';
 
 export {

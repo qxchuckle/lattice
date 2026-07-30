@@ -51,13 +51,7 @@ import {
   unsubscribeTree,
 } from './connection';
 import { resetLastAppliedRev } from './sync';
-import {
-  loadModels,
-  loadSources,
-  loadConversations,
-  deleteConversationApi,
-  loadAgentConfig,
-} from './api';
+import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';

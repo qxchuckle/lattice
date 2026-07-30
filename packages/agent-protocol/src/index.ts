@@ -103,6 +103,7 @@ export type {
   ConversationBranch,
   ConversationTree,
   MergeMode,
+  StreamingState,
   PermissionLevel,
   PermissionRequest,
 } from './source/conversation.js';
@@ -146,9 +147,6 @@ export type { SseProgress, SseDone } from './transport/sse.js';
 export type {
   GetTreeResponse,
   GetTreeNotFoundResponse,
-  GetLatestTurnsResponse,
-  PostTurnRequest,
-  PostTurnResponse,
   SourceListItem,
   GetSourcesResponse,
   ModelListItem,
@@ -184,6 +182,8 @@ export {
   isBranchableChild,
   projectNodeCapabilities,
   projectViewStatus,
+  deriveTurnViewStatus,
+  projectTurnCapabilities,
 } from './source/node-state.js';
 export type {
   ViewStatus,

@@ -44,11 +44,6 @@ import {
   contentHash,
   getEmbeddingConfig,
   isModelInstalled,
-  isModelLoaded,
-  isModelLoadNetworkError,
-  formatModelNetworkHint,
-  getModelLoadError,
-  removeInstalledModel,
   resolveEmbeddingProxy,
 } from './embeddings';
 import { chunkMarkdown } from './chunker';

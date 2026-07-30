@@ -2,6 +2,7 @@
  * Qoder 消息 → SourceEvent 映射（纯函数）
  */
 import type { DriverEvent } from '../../driver.js';
+import { recordField } from '../../internal/shape.js';
 
 /** 从工具参数提取文件路径（Qoder 写入类工具用 `file_path` 参数） */
 function extractPath(args: Record<string, unknown>): string | undefined {
@@ -33,7 +34,7 @@ export function mapQoderMessage(
         // 跳过 text：流式 delta 已经产出过，避免重复
         if (block.type === 'tool_use') {
           const name = block.name ?? 'unknown';
-          const args = (block.input as Record<string, unknown>) ?? {};
+          const args = recordField(block, 'input');
           events.push({ type: 'tool_call', id: block.id ?? '', name, args });
           const fileEdit = mapFileWrite(name, args);
           if (fileEdit) events.push(fileEdit);

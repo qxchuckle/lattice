@@ -1,4 +1,4 @@
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute } from 'node:path';
 import type { ProjectRow, TaskProjectRow } from '../types';
 import { getUsername, isInitialized } from '../config';
 import {
@@ -12,7 +12,7 @@ import {
   listTaskProjectLinks,
   unlinkTaskProject,
 } from '../db';
-import { fileExists, getTaskMetaPath, getTaskPrdPath, listUserDirs, readJSON } from '../paths';
+import { fileExists, getTaskMetaPath, getTaskPrdPath, listUserDirs } from '../paths';
 import { findProjectDirName } from '../project';
 import { removeSearchDocumentIndex } from '../rag';
 

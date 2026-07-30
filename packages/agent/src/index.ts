@@ -12,7 +12,6 @@ export type {
   ConversationNode,
   ConversationBranch,
   ConversationTree,
-  AgentEvent,
   AgentToolParameter,
   AgentToolDefinition,
   AgentToolResult,

@@ -133,3 +133,36 @@ export function projectViewStatus(
   if (nodeStatus === 'interrupted') return 'interrupted';
   return 'done';
 }
+
+// ── turn 级投影（UI 以 turn 为单位渲染：user 节点 + 其 assistant 子节点） ──
+
+/** 投影所需的最小节点形状（不绑完整 ConversationNode，便于测试与壳层适配） */
+export interface TurnProjectionNode {
+  status?: NodeStatus;
+  content?: ReadonlyArray<{ type: string }>;
+}
+
+/**
+ * 从持久化的 user/assistant 节点投影出 turn 视图状态。
+ * server（下发能力与命令守卫）与 client（渲染）共用本函数，保证接口行为 ≡ 视图。
+ */
+export function deriveTurnViewStatus(
+  userNode: TurnProjectionNode,
+  assistantNode: TurnProjectionNode | undefined,
+): ViewStatus {
+  const nodeStatus = userNode.status ?? assistantNode?.status;
+  const hasError = assistantNode?.content?.some((c) => c.type === 'error') ?? false;
+  return projectViewStatus(nodeStatus, hasError);
+}
+
+/**
+ * turn 能力投影（单一真相）：server 据此随 wire DTO 下发并守卫命令入口，
+ * client 直接渲染——两边同一函数，绕过 UI 直请接口时行为完全一致。
+ */
+export function projectTurnCapabilities(
+  userNode: TurnProjectionNode,
+  assistantNode: TurnProjectionNode | undefined,
+  ctx?: NodeCapabilityContext,
+): NodeCapabilities {
+  return projectNodeCapabilities(deriveTurnViewStatus(userNode, assistantNode), ctx);
+}

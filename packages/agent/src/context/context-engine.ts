@@ -1,6 +1,9 @@
 /**
- * Context Engine — 上下文构建、注入、压缩
- * 分层架构：tools → specs → task → history
+ * Context Engine — 上下文构建与注入（分层：specs → task）
+ *
+ * 产物经 `createTaskContextMiddleware` 进管线的 inject 相位。
+ * 压缩不在本模块：源内部压缩由能力声明描述（context.compaction），
+ * 源不压缩时的宿主兜底走 session/compaction.ts。
  */
 import type { BuiltContext, ContextLayer } from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
@@ -91,14 +94,6 @@ export class ContextEngine {
     const systemPrompt = this.buildSystemPrompt(layers);
 
     return { systemPrompt, layers, totalTokens, maxTokens };
-  }
-
-  /** 压缩历史（TODO: Phase 1 集成 Pi compaction） */
-  async compact(historyContent: string, targetTokens: number): Promise<string> {
-    // 骨架：直接截断。实际实现将调用 LLM 做语义压缩
-    const maxChars = targetTokens * 4;
-    if (historyContent.length <= maxChars) return historyContent;
-    return historyContent.slice(-maxChars);
   }
 
   private buildSystemPrompt(layers: ContextLayer[]): string {

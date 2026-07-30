@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  getUsername,
   readGlobalConfig,
   readLocalConfig,
   writeGlobalConfig,

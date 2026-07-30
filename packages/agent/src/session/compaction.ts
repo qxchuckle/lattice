@@ -19,14 +19,21 @@ export interface CompactionOptions {
   branchId?: string;
 }
 
-export interface CompactionResult {
-  /** AI 生成的摘要文本 */
-  summary: string;
-  /** 被压缩的节点 ID 列表 */
-  compactedNodeIds: string[];
-  /** 摘要节点（role=aggregation，追加到 JSONL） */
-  summaryNode: ConversationNode;
-}
+/**
+ * 压缩结果（判别联合）：未达阀值时根本不存在摘要节点，
+ * 故不用“非空类型装 null”说谎——调用方先判 compacted 再取载荷。
+ */
+export type CompactionResult =
+  | { compacted: false }
+  | {
+      compacted: true;
+      /** AI 生成的摘要文本 */
+      summary: string;
+      /** 被压缩的节点 ID 列表 */
+      compactedNodeIds: string[];
+      /** 摘要节点（role=aggregation，追加到 JSONL） */
+      summaryNode: ConversationNode;
+    };
 
 /**
  * 摘要生成函数签名
@@ -68,12 +75,8 @@ export async function compactConversation(
   }
 
   if (candidates.length <= keepRecent) {
-    // 节点数不够，无需压缩
-    return {
-      summary: '',
-      compactedNodeIds: [],
-      summaryNode: null as unknown as ConversationNode,
-    };
+    // 节点数不够，无需压缩（不调 LLM、不建节点）
+    return { compacted: false };
   }
 
   // 分割：要压缩的 vs 保留的
@@ -102,7 +105,7 @@ export async function compactConversation(
 
   const summaryNode = await createNode(summaryContent, compactedNodeIds);
 
-  return { summary, compactedNodeIds, summaryNode };
+  return { compacted: true, summary, compactedNodeIds, summaryNode };
 }
 
 /**

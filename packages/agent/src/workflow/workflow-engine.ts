@@ -6,7 +6,8 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SourceResourceInfo } from '@qcqx/lattice-agent-protocol';
-import type { SlashCommand, AgentEvent } from '../types.js';
+import type { SlashCommand } from '../types.js';
+import type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 import type { EventBus } from '../events/event-bus.js';
 import { scanLocalCommands, stripFrontmatter } from './command-scan.js';
 import type { LocalCommand } from './command-scan.js';
@@ -120,7 +121,7 @@ export class WorkflowEngine {
   // ── 自动触发器 ──
 
   checkTriggers(
-    event: AgentEvent,
+    event: SourceEvent,
     context: { fileEditCount?: number; turnCount?: number },
   ): TriggerResult[] {
     if (this.config.automation === 'manual') return [];

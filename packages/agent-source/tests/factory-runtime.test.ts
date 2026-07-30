@@ -196,3 +196,25 @@ describe('EventStream 边界语义', () => {
     expect(await s.result()).toBe(5);
   });
 });
+
+describe('createAgentSource 便捷工厂', () => {
+  it('注册 + initAll + dispose 一条龙', async () => {
+    const { createAgentSource } = await import('../src/factory.js');
+    const { createScriptedDriver } = await import('../src/testing/index.js');
+    const { defineSource } = await import('../src/define-source.js');
+    const driver = createScriptedDriver({ id: 'mock' });
+    const { registry, dispose } = await createAgentSource({
+      sources: [defineSource(driver)],
+    });
+    expect(registry.getSource('mock')).toBeTruthy();
+    expect(registry.listManifests()).toHaveLength(1);
+    await dispose();
+  });
+
+  it('无配置 → 空 registry（不抛错）', async () => {
+    const { createAgentSource } = await import('../src/factory.js');
+    const { registry, dispose } = await createAgentSource();
+    expect(registry.listManifests()).toEqual([]);
+    await dispose();
+  });
+});

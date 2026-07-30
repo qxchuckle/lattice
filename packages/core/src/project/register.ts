@@ -9,28 +9,20 @@
  */
 
 import { basename } from 'node:path';
-import type { ProjectMeta, ProjectRow, ProjectFingerprintRow } from '../types';
+import type { ProjectMeta, ProjectFingerprintRow } from '../types';
 import {
   getProjectDir,
   getProjectMetaPath,
   getProjectSpecDir,
-  getUserProjectsDir,
   readJSON,
   writeJSON,
   ensureDir,
   fileExists,
   join,
 } from '../paths';
-import { upsertProject, upsertFingerprint, getProjectById, upsertProjectDir } from '../db';
+import { upsertProject, upsertFingerprint, upsertProjectDir } from '../db';
+import { selectPrimaryId, normalizeProjectMeta, type FingerprintDerived } from './identity';
 import {
-  selectPrimaryId,
-  resolveProjectIds,
-  normalizeProjectMeta,
-  type FingerprintDerived,
-} from './identity';
-import { computeProjectIds } from './identity-generate';
-import {
-  findProjectByAnyId,
   findAllProjectsByAnyId,
   getProjectMetaById,
   findProjectsOnDisk,

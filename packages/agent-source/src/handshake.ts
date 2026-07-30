@@ -14,27 +14,39 @@ import type {
   JsonValue,
 } from '@qcqx/lattice-agent-protocol';
 import type { DriverProbeReport } from './driver.js';
+import { isRecord } from './internal/shape.js';
 
 // ── dot-path 工具（capabilities 是 JSON 形状，路径读写安全） ──
 
 export function getPath(obj: unknown, path: string): JsonValue {
   let cur: unknown = obj;
   for (const key of path.split('.')) {
-    if (typeof cur !== 'object' || cur === null) return null;
-    cur = (cur as Record<string, unknown>)[key];
+    if (!isRecord(cur)) return null;
+    cur = cur[key];
   }
   return (cur ?? null) as JsonValue;
 }
 
-/** 不可变写入：返回深拷贝后的新对象（declared 声明不被就地篡改） */
-export function setPath<T>(obj: T, path: string, value: JsonValue): T {
+/**
+ * 不可变写入：返回深拷贝后的新对象（declared 声明不被就地篡改）。
+ *
+ * 入口/出口各一次局部断言是必要的：interface（如 SourceCapabilities）无索引签名，
+ * 无法与 `Record<string, unknown>` 互赋，而通用 dot-path 写入必须以记录视角走查。
+ * 路径中间节点的安全性由 `isRecord` 守卫保证，不再靠断言。
+ */
+export function setPath<T extends object>(obj: T, path: string, value: JsonValue): T {
   const keys = path.split('.');
   const root = structuredClone(obj) as Record<string, unknown>;
   let cur: Record<string, unknown> = root;
   for (const key of keys.slice(0, -1)) {
     const next = cur[key];
-    if (typeof next !== 'object' || next === null) cur[key] = {};
-    cur = cur[key] as Record<string, unknown>;
+    if (!isRecord(next)) {
+      const created: Record<string, unknown> = {};
+      cur[key] = created;
+      cur = created;
+    } else {
+      cur = next;
+    }
   }
   cur[keys[keys.length - 1]] = value;
   return root as T;
@@ -43,6 +55,9 @@ export function setPath<T>(obj: T, path: string, value: JsonValue): T {
 /**
  * probe overrides → verified capabilities + downgrades 留痕。
  * declared 与 actual 不符时机器可读记录（不静默修正）。
+ *
+ * 留痕的 `declared` 一律取自**原始声明**：若读累积更新后的值，
+ * 同一路径被多次 override 时会把上一次的结果误记为“源声明值”，审计链失真。
  */
 export function applyProbeOverrides(
   declared: SourceCapabilities,
@@ -53,7 +68,7 @@ export function applyProbeOverrides(
   for (const o of overrides ?? []) {
     downgrades.push({
       path: o.path,
-      declared: getPath(capabilities, o.path),
+      declared: getPath(declared, o.path),
       actual: o.actual,
       reason: o.reason,
     });

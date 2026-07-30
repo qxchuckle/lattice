@@ -50,6 +50,23 @@ export async function applyPromptMiddlewares(
 }
 
 /**
+ * 事件变换链：把「可选的 transformEvent」在构建期收成「必存的函数」，
+ * 使后续调用无需非空断言（类型保证而非程序员保证）。
+ */
+interface EventTransformer {
+  readonly name: string;
+  readonly transform: NonNullable<SourceMiddleware['transformEvent']>;
+}
+
+function eventChainOf(middlewares: readonly SourceMiddleware[]): EventTransformer[] {
+  const chain: EventTransformer[] = [];
+  for (const mw of sortMiddlewares(middlewares)) {
+    if (mw.transformEvent) chain.push({ name: mw.name, transform: mw.transformEvent.bind(mw) });
+  }
+  return chain.reverse(); // 出向逆序（洋葱）
+}
+
+/**
  * 事件流包装：逐事件透传变换结果。
  * 无 transformEvent middleware 时直接返回原流（零开销，也保住单消费者语义）。
  */
@@ -58,9 +75,7 @@ export function wrapEventStream(
   middlewares: readonly SourceMiddleware[],
   ctx: MiddlewareContext,
 ): SourceEventStream {
-  const chain = sortMiddlewares(middlewares)
-    .filter((mw) => mw.transformEvent)
-    .reverse(); // 出向逆序（洋葱）
+  const chain = eventChainOf(middlewares);
   if (chain.length === 0) return raw;
 
   const out = new SourceEventStream();
@@ -88,18 +103,18 @@ export function wrapEventStream(
 
 /** 事件出向：单事件经链变换（一变多用数组，滤除用空数组） */
 function applyChain(
-  chain: readonly SourceMiddleware[],
+  chain: readonly EventTransformer[],
   event: SourceEvent,
   ctx: MiddlewareContext,
 ): SourceEvent[] {
   let batch: SourceEvent[] = [event];
-  for (const mw of chain) {
+  for (const { name, transform } of chain) {
     const next: SourceEvent[] = [];
     for (const e of batch) {
       try {
-        next.push(...mw.transformEvent!(e, ctx));
+        next.push(...transform(e, ctx));
       } catch (err) {
-        throw PipelineError.middlewareFailed(mw.name, err);
+        throw PipelineError.middlewareFailed(name, err);
       }
     }
     batch = next;
@@ -111,7 +126,7 @@ export interface RunPromptArgs {
   source: ISource;
   payload: PromptPayload;
   middlewares?: readonly SourceMiddleware[];
-  /** 缺省由 source.id 与 payload.opts.cwd 推导 */
+  /** sourceId 缺省取 source.id、cwd 缺省取 payload.opts.cwd；threadId/metadata 由宿主给 */
   ctx?: Partial<MiddlewareContext>;
 }
 
@@ -124,6 +139,7 @@ export interface RunPromptArgs {
 export async function runPrompt(args: RunPromptArgs): Promise<SourceEventStream> {
   const middlewares = args.middlewares ?? [];
   const ctx: MiddlewareContext = {
+    ...args.ctx,
     sourceId: args.ctx?.sourceId ?? args.source.id,
     cwd: args.ctx?.cwd ?? args.payload.opts.cwd,
   };

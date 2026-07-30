@@ -12,7 +12,7 @@ import {
   filterKinds,
   parseFrontmatterAttrs,
 } from '../src/sources/resource-scan.js';
-import type { SourceResourceInfo } from '../src/types.js';
+import type { SourceResourceInfo } from '@qcqx/lattice-agent-protocol';
 
 let root: string;
 

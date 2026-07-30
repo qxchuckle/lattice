@@ -6,7 +6,7 @@
  */
 
 import type { TaskMeta, ProjectMeta } from '../types';
-import { resolveProjectIds, selectPrimaryId } from './identity';
+import { selectPrimaryId } from './identity';
 import { getRelatedProjectIds, getProjectIdsFromDb } from './virtual-merge';
 
 /**

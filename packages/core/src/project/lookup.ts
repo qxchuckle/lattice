@@ -9,12 +9,10 @@
 import type { ProjectRow } from '../types';
 import { getProjectById, findProjectsByFingerprint } from '../db';
 import {
-  resolveProjectIds,
   normalizeProjectMeta,
   normalizeLegacyId,
   normalizeProjectId,
   selectPrimaryId,
-  ID_PREFIX,
 } from './identity';
 import type { ProjectMeta } from '../types';
 import { readJSON, fileExists, listUserDirs } from '../paths';

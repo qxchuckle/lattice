@@ -15,7 +15,7 @@ export type {
 
 // ── Agent 事件（统一使用 protocol 的 SourceEvent） ──
 
-export type { SourceEvent, SourceEvent as AgentEvent } from '@qcqx/lattice-agent-protocol';
+export type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 
 // ── Agent 内部工具定义（区别于 protocol 的 ToolDefinition） ──
 

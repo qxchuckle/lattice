@@ -1,11 +1,11 @@
 /**
- * turnState — 客户端 turn 视图状态投影
+ * turnState — 客户端 turn 视图状态投影（薄适配）
  *
- * 状态机规则的单一真相在 protocol/node-state.ts（server/client 共享）。
- * 本文件仅做客户端适配：从持久化节点提取 hasError，委托 projectViewStatus 投影。
+ * 投影规则的单一真相在 protocol/node-state.ts（server 下发能力与命令守卫用同一函数）。
+ * 本文件仅做类型适配（ViewStatus → TurnNode['status']），不重写判定逻辑。
  */
 import type { ConversationNode } from '@qcqx/lattice-agent-protocol';
-import { projectViewStatus } from '@qcqx/lattice-agent-protocol';
+import { deriveTurnViewStatus } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode } from './types';
 
 /**
@@ -16,7 +16,5 @@ export function deriveTurnStatus(
   userNode: ConversationNode,
   assistantNode: ConversationNode | undefined,
 ): TurnNode['status'] {
-  const nodeStatus = userNode.status ?? assistantNode?.status;
-  const hasError = assistantNode?.content?.some((c) => c.type === 'error') ?? false;
-  return projectViewStatus(nodeStatus, hasError);
+  return deriveTurnViewStatus(userNode, assistantNode);
 }

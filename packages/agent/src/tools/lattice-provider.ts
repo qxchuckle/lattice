@@ -4,6 +4,46 @@
  */
 import type { IToolProvider, AgentToolDefinition, AgentToolResult } from '../types.js';
 
+// ── 参数受检读取 ──
+// tool args 由模型生成，类型不可信（完全可能给 number/null/对象）。
+// 旧实现用 `args.x as string` 直接断言，错类型会静默流进下游报不相关的错；
+// 改为实检 + 结构化失败，报错直接指向出错的参数名。
+
+type Checked<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** 必填字符串（空串视为缺失） */
+function requireStr(args: Record<string, unknown>, key: string): Checked<string> {
+  const raw = args[key];
+  if (typeof raw !== 'string' || raw === '') {
+    return { ok: false, error: `参数 ${key} 必填且需为非空字符串（得到 ${describeType(raw)}）` };
+  }
+  return { ok: true, value: raw };
+}
+
+/** 可选字符串：非字符串一律当未传（不把垃圾值当过滤条件） */
+function optionalStr(args: Record<string, unknown>, key: string): string | undefined {
+  const raw = args[key];
+  return typeof raw === 'string' && raw !== '' ? raw : undefined;
+}
+
+/** 批量必填：任一缺失即失败，返回值按 key 强类型展开 */
+function requireStrs<K extends string>(
+  args: Record<string, unknown>,
+  keys: readonly K[],
+): Checked<Record<K, string>> {
+  const out = {} as Record<K, string>;
+  for (const key of keys) {
+    const field = requireStr(args, key);
+    if (!field.ok) return field;
+    out[key] = field.value;
+  }
+  return { ok: true, value: out };
+}
+
+function describeType(value: unknown): string {
+  return value === null ? 'null' : typeof value;
+}
+
 export interface LatticeToolDeps {
   /** 获取当前用户名 */
   getUsername(): Promise<string>;
@@ -131,21 +171,27 @@ export class LatticeWorkflowProvider implements IToolProvider {
     try {
       switch (toolId) {
         case 'lattice.listTasks': {
-          const tasks = await this.deps.listTasks({ status: args.status as string | undefined });
+          const tasks = await this.deps.listTasks({ status: optionalStr(args, 'status') });
           return { success: true, data: tasks };
         }
         case 'lattice.getTask': {
-          const task = await this.deps.getTask(args.taskId as string);
+          const taskId = requireStr(args, 'taskId');
+          if (!taskId.ok) return { success: false, error: taskId.error };
+          const task = await this.deps.getTask(taskId.value);
           return task ? { success: true, data: task } : { success: false, error: 'Task not found' };
         }
         case 'lattice.search': {
-          const results = await this.deps.search(args.query as string, {
-            type: args.type as string | undefined,
+          const query = requireStr(args, 'query');
+          if (!query.ok) return { success: false, error: query.error };
+          const results = await this.deps.search(query.value, {
+            type: optionalStr(args, 'type'),
           });
           return { success: true, data: results };
         }
         case 'lattice.getSpec': {
-          const spec = await this.deps.getSpec(args.name as string);
+          const name = requireStr(args, 'name');
+          if (!name.ok) return { success: false, error: name.error };
+          const spec = await this.deps.getSpec(name.value);
           return spec ? { success: true, data: spec } : { success: false, error: 'Spec not found' };
         }
         case 'lattice.listSpecs': {
@@ -153,11 +199,13 @@ export class LatticeWorkflowProvider implements IToolProvider {
           return { success: true, data: specs };
         }
         case 'lattice.addCheckpoint': {
+          const fields = requireStrs(args, ['taskId', 'type', 'title', 'message'] as const);
+          if (!fields.ok) return { success: false, error: fields.error };
           const ok = await this.deps.addCheckpoint(
-            args.taskId as string,
-            args.type as string,
-            args.title as string,
-            args.message as string,
+            fields.value.taskId,
+            fields.value.type,
+            fields.value.title,
+            fields.value.message,
           );
           return { success: ok };
         }

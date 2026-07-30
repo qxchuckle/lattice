@@ -78,6 +78,13 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
     putTurn(turn);
     ensureUi(id);
   }
+  // 能力数据驱动：server 已按同一守卫函数算好，client 直接存下备渲染（不重算）
+  if (msg.turnCapabilities) {
+    agentStore.turnCaps.clear();
+    for (const [turnId, caps] of Object.entries(msg.turnCapabilities)) {
+      agentStore.turnCaps.set(turnId, caps);
+    }
+  }
   // 会话列表元数据增量更新（免每次变更走 REST 拉列表）
   if (msg.conversation) {
     const c = msg.conversation;

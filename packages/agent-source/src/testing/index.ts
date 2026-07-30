@@ -166,12 +166,21 @@ const MINIMAL_CAPABILITIES: SourceCapabilities = {
  * 脚本化 driver：prompt 回放 script → 返回 outcome。
  * 配合 defineSource 得到行为完整的 fake ISource（事件泵/守卫/握手全真）。
  */
+/**
+ * 类型安全的默认值合并：返回值由构造保证为 T（断言仅限索引写入一行，
+ * 不对整个对象形状撒谎）。undefined 覆盖项被忽略，不会把必填字段抹成 undefined。
+ */
+function withDefaults<T extends object>(base: T, override: Partial<T> = {}): T {
+  const out: T = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    if (value !== undefined) (out as Record<string, unknown>)[key] = value;
+  }
+  return out;
+}
+
 export function createScriptedDriver(options: ScriptedDriverOptions = {}): SourceDriver {
   const id = options.id ?? 'scripted';
-  const capabilities: SourceCapabilities = {
-    ...MINIMAL_CAPABILITIES,
-    ...options.capabilities,
-  } as SourceCapabilities;
+  const capabilities = withDefaults(MINIMAL_CAPABILITIES, options.capabilities);
   let seq = 0;
 
   return {
