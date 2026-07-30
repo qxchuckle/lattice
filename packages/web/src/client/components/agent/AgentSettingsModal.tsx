@@ -215,6 +215,66 @@ export function AgentSettingsModal() {
           onChange={(v) => setViewSourceId(v)}
         />
       </div>
+      {/* 源信息（数据驱动：可用性/降准/能力全部来自握手 manifest，不硬编码源名） */}
+      {viewSource && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '8px 12px',
+            fontSize: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tag color={viewSource.available ? 'green' : 'red'}>
+              {viewSource.available ? '可用' : '不可用'}
+            </Tag>
+            <span style={{ color: 'var(--text-secondary)' }}>
+              v{viewSource.version} · {viewSource.modelCount} 模型
+            </span>
+          </div>
+          {viewSource.unavailableReason && (
+            <div style={{ color: '#fa8c16', fontSize: 11 }}>
+              ⚠ {viewSource.unavailableReason.message}
+            </div>
+          )}
+          {viewSource.downgrades && viewSource.downgrades.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              降准：
+              {viewSource.downgrades.map((d) => (
+                <Tag key={d.path} color='orange' style={{ fontSize: 10 }}>
+                  {d.path}
+                </Tag>
+              ))}
+            </div>
+          )}
+          {viewSource.capabilities && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {Object.entries(viewSource.capabilities).map(([group, caps]) => {
+                // 通用能力摘要：布尔=true 显示 key；字符串/数字显示 key=val；对象显示 key（有真值子字段时）
+                const parts = Object.entries(caps)
+                  .map(([k, v]) => {
+                    if (v === true) return k;
+                    if (v === false || v == null) return null;
+                    if (typeof v === 'string' || typeof v === 'number') return `${k}:${v}`;
+                    if (typeof v === 'object' && !Array.isArray(v)) return k;
+                    if (Array.isArray(v) && v.length > 0) return `${k}(${v.length})`;
+                    return null;
+                  })
+                  .filter(Boolean);
+                if (parts.length === 0) return null;
+                return (
+                  <Tag key={group} style={{ fontSize: 10 }}>
+                    {group}·{parts.join('·')}
+                  </Tag>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       <div>
         <div style={labelStyle}>模型列表</div>
         <div

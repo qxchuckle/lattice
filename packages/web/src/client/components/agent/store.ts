@@ -2,12 +2,24 @@
  * Agent 状态（valtio proxy）+ 纯查询函数
  */
 import { proxy } from 'valtio';
-import type {
-  SourceListItem,
-  ModelListItem,
-  PresenceState,
-  NodeCapabilities,
-} from '@qcqx/lattice-agent-protocol';
+import type { ModelListItem, PresenceState, NodeCapabilities } from '@qcqx/lattice-agent-protocol';
+
+/**
+ * 客户端源信息（server 下发 SourceListItem 的 UI 消费形态）。
+ * capabilities 用浅型 Record：valtio DeepReadonly 递归完整 SourceCapabilities（8 组嵌套）
+ * 会触发 TS2589 类型实例化过深；UI 只读几个布尔字段，无需完整递归类型。
+ */
+export interface ClientSourceInfo {
+  id: string;
+  displayName: string;
+  version: string;
+  modelPolicy: 'catalog' | 'open' | 'hybrid';
+  available: boolean;
+  modelCount: number;
+  unavailableReason?: { code: string; message: string };
+  downgrades?: Array<{ path: string; declared: unknown; actual: unknown; reason?: string }>;
+  capabilities?: Record<string, Record<string, unknown>>;
+}
 import type { TurnNode, NodeUiState, ConversationEntry } from './types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
 
@@ -19,7 +31,7 @@ export const agentStore = proxy({
   sessionId: null as string | null,
   treeId: null as string | null,
   connected: false,
-  sources: [] as SourceListItem[],
+  sources: [] as ClientSourceInfo[],
   models: [] as ModelListItem[],
   activeSourceId: 'qoder' as string,
   activeModelId: '' as string,

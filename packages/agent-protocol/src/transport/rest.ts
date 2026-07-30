@@ -4,6 +4,8 @@
 import type { ConversationTree, ConversationNode, StreamingState } from '../source/conversation.js';
 import type { SourceResourceInfo } from '../source/resources.js';
 import type { NodeCapabilities } from '../source/node-state.js';
+import type { CapabilityDowngrade } from '../source/manifest.js';
+import type { SourceCapabilities } from '../source/capabilities.js';
 
 // ── GET /api/agent/tree/:treeId ──
 
@@ -34,6 +36,12 @@ export interface SourceListItem {
   modelPolicy: 'catalog' | 'open' | 'hybrid';
   available: boolean;
   modelCount: number;
+  /** 不可用时的机器可读原因（数据驱动：UI 直接展示，不硬编码判断） */
+  unavailableReason?: { code: string; message: string };
+  /** 降准留痕：声明与实际不符的能力路径（审计透明） */
+  downgrades?: CapabilityDowngrade[];
+  /** 握手后的实际能力（数据驱动：UI 按此渲染能力标签，不硬编码源名） */
+  capabilities?: SourceCapabilities;
 }
 
 export interface GetSourcesResponse {

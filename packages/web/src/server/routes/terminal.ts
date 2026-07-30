@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { getUsername, isAuthEnabled, readWebAuth } from '@qcqx/lattice-core';
 import { extractToken, verifyJwt } from '../auth';
@@ -20,7 +20,8 @@ interface ITerminalProcess {
 // 使用 optionalDependencies，加载失败不阻断 lattice-web 安装
 // 运行时动态 import，有则 PTY 完整体验，无则降级 spawn
 
-let ptyModule: any = null;
+// node-pty 是 optionalDependency，无 bundled 类型；运行时动态 import 后按方法存在性受检
+let ptyModule: unknown = null;
 let ptyTried = false;
 
 async function getPty(): Promise<unknown> {
@@ -42,8 +43,20 @@ function getDefaultShell(): string {
   return process.env.SHELL || 'bash';
 }
 
+interface PtyLike {
+  spawn(shell: string, args: string[], opts: Record<string, unknown>): PtyProcess;
+}
+interface PtyProcess {
+  pid: number;
+  onData(cb: (data: string) => void): void;
+  onExit(cb: (e: { exitCode: number; signal?: number }) => void): void;
+  resize(cols: number, rows: number): void;
+  write(data: string): void;
+  kill(): void;
+}
+
 function createPtyProcess(
-  pty: any,
+  pty: PtyLike,
   shell: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
@@ -161,7 +174,15 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
     '/api/terminal/ws',
     { websocket: true },
 
-    async (socket: any, req: any) => {
+    async (
+      socket: {
+        send(d: string): void;
+        close(c?: number, r?: string): void;
+        on(e: 'message', h: (raw: Buffer | string | unknown[]) => void): void;
+        on(e: 'close' | 'error', h: () => void): void;
+      },
+      req: FastifyRequest,
+    ) => {
       // 鉴权校验（authGuard 已在握手阶段拦截，此处双保险防止绕过）
       if (await isAuthEnabled()) {
         const webAuth = await readWebAuth();
@@ -219,7 +240,7 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
           if (pty) {
             currentMode = 'pty';
             try {
-              proc = createPtyProcess(pty, shell, cwd, env, cols, rows);
+              proc = createPtyProcess(pty as PtyLike, shell, cwd, env, cols, rows);
             } catch {
               proc = createSpawnProcess(shell, cwd, env);
               currentMode = 'spawn';
