@@ -6,7 +6,12 @@
  */
 import type { ConversationBranch } from '@qcqx/lattice-agent-protocol';
 import { canApplyOperation, shouldSkipDescendantMark } from '@qcqx/lattice-agent-protocol';
-import type { ConversationControllerDeps, ConversationHooks, SessionContext } from './types.js';
+import type {
+  ConversationControllerDeps,
+  ConversationHooks,
+  SessionContext,
+  ForkOutcome,
+} from './types.js';
 import type { TreeRuntimeRegistry } from './tree-runtime.js';
 
 export class TreeOps {
@@ -34,13 +39,18 @@ export class TreeOps {
     return undefined;
   }
 
-  /** fork 分支（含源级 fork 截断）；源按 fork 节点所在线程解析（树可混源） */
+  /**
+   * fork 分支（含源级 fork 截断）；源按 fork 节点所在线程解析（树可混源）。
+   *
+   * 返回结构化结果而非裸分支：源侧 fork 可能失败（会话过期/锁点不存在/能力不支持），
+   * 此时新分支从空白开始——属于降级，必须向上告知（铁律：不静默降级）。
+   */
   async fork(
     treeId: string,
     nodeId: string,
     name: string | undefined,
     fallbackSourceId: string | undefined,
-  ): Promise<ConversationBranch | undefined> {
+  ): Promise<ForkOutcome | undefined> {
     const threadSourceId = this.resolveNodeSourceId(treeId, nodeId) ?? fallbackSourceId;
     const branch = await this.deps.session.fork(treeId, nodeId, name, threadSourceId);
     const source = threadSourceId
@@ -58,11 +68,17 @@ export class TreeOps {
       try {
         const forkedSessionId = await source.forkSession(parentSessionId, atMessage);
         await this.deps.session.setBranchSession(treeId, branch.id, forkedSessionId);
-      } catch {
-        /* fork 失败时新分支从空白开始 */
+      } catch (err) {
+        // 铁律：不静默降级。源 fork 失败 → 新分支从空白开始（无历史上下文），
+        // 用户必须知道，否则会因为 AI “完全不记得前文”而困惑。
+        return {
+          branch,
+          contextCarried: false,
+          notice: `新分支未能继承对话上下文（源侧 fork 失败：${err instanceof Error ? err.message : String(err)}），将从空白开始`,
+        };
       }
     }
-    return branch;
+    return { branch, contextCarried: source !== undefined && parentSessionId !== undefined };
   }
 
   /** undo/delete 共用：fork 截断到父节点 + 标记目标及后代 */
@@ -110,8 +126,19 @@ export class TreeOps {
           if (branch && newSessionId !== sourceSessionId) {
             await this.deps.session.setBranchSession(treeId, branch.id, newSessionId);
           }
-        } catch {
-          /* fork 失败不影响树层操作 */
+        } catch (err) {
+          // 铁律：不静默降级。树层操作不受影响（树是宿主真相），
+          // 但源侧仍记得被撤销/删除的内容——下次对话 AI 可能提到已消失的节点，
+          // 用户会因此困惑，必须告知。
+          hooks.onEvent(
+            {
+              type: 'notice',
+              level: 'warning',
+              message: `${targetStatus === 'undone' ? '撤销' : '删除'}后未能同步源侧上下文（${err instanceof Error ? err.message : String(err)}），后续对话中 AI 可能仍记得这部分内容`,
+              ts: Date.now(),
+            },
+            '',
+          );
         }
       }
     } else if (branch && sourceSessionId && !parentNode) {

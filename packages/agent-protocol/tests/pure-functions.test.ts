@@ -101,7 +101,30 @@ describe('projectNodeCapabilities：状态 × 源能力', () => {
 
     const errNoFork = projectNodeCapabilities('error', { fork: false });
     expect(errNoFork.canRetry).toBe(false); // 重试 = 从锚点重问，需 fork
-    expect(projectNodeCapabilities('error', { fork: { atMessage: false } }).canRetry).toBe(true);
+  });
+
+  it('【atMessage 维度】只能末尾分叉的源：末尾可分支，中间节点不可', () => {
+    // ACP 型源：fork.atMessage=false → 只支持线形对话
+    const tailOnly = { fork: { atMessage: false }, isTail: true } as const;
+    const middle = { fork: { atMessage: false }, isTail: false } as const;
+
+    // 末尾节点：分支/重试可用（从会话末尾分叉做得到）
+    expect(projectNodeCapabilities('done', tailOnly).canBranch).toBe(true);
+    expect(projectNodeCapabilities('error', tailOnly).canRetry).toBe(true);
+
+    // 中间节点：分支/重试不可用——源做不到从任意 msgId 分叉
+    expect(projectNodeCapabilities('done', middle).canBranch).toBe(false);
+    expect(projectNodeCapabilities('error', middle).canRetry).toBe(false);
+    // 但追问/撤销/删除不受影响（不需 fork）
+    expect(projectNodeCapabilities('done', middle).canFollowup).toBe(true);
+    expect(projectNodeCapabilities('done', middle).canUndo).toBe(true);
+    expect(projectNodeCapabilities('done', middle).canDelete).toBe(true);
+  });
+
+  it('【atMessage 维度】支持任意锚点分叉的源：中间节点仍可分支', () => {
+    const anywhere = { fork: { atMessage: true }, isTail: false } as const;
+    expect(projectNodeCapabilities('done', anywhere).canBranch).toBe(true);
+    expect(projectNodeCapabilities('error', anywhere).canRetry).toBe(true);
   });
 
   it('ctx 缺省 = 宽松（client streaming 瞬时态过渡用）', () => {

@@ -3,9 +3,11 @@
  *
  * 与 mapPiEvent / mapQoderMessage 同层：把外部协议事件翻译成内部 SourceEvent。
  * 设计铁律：SourceEvent 是内部单一真相，ACP 只是传输形态之一。
+ *
+ * 输入类型来自 @agentclientprotocol/sdk（SessionNotification），不再手写。
  */
 import type { SourceEvent, SourceErrorCode } from '@qcqx/lattice-agent-protocol';
-import type { AcpSessionUpdate } from './types.js';
+import type { SessionNotification } from '@agentclientprotocol/sdk';
 
 /** ACP error code → SourceErrorCode（未知统一落 'unknown'） */
 function toErrorCode(raw: unknown): SourceErrorCode {
@@ -32,24 +34,32 @@ function toErrorCode(raw: unknown): SourceErrorCode {
 }
 
 /**
- * 将一条 ACP session/update 通知映射为零或多条 SourceEvent。
+ * 将 SDK 的 SessionNotification 映射为 SourceEvent。
  * 返回 null = 该变体无需映射（静默跳过，不报错）。
  */
-export function mapAcpUpdate(update: AcpSessionUpdate): SourceEvent | null {
-  const u = update.update;
-  const kind = u.sessionUpdate;
+export function mapSessionUpdate(notification: SessionNotification): SourceEvent | null {
+  const u = notification.update as Record<string, unknown>;
+  const kind = u.sessionUpdate as string | undefined;
+  if (!kind) return null;
 
   switch (kind) {
     case 'text':
-    case 'text_delta': {
-      const content = (u.text ?? u.delta ?? '') as string;
+    case 'text_delta':
+    case 'agent_message_chunk': {
+      // SDK ContentChunk: content 是 ContentBlock 对象（{ type:'text', text }）或字符串（非 SDK 源）
+      const block = u.content as { text?: string } | string | undefined;
+      const content =
+        typeof block === 'string' ? block : ((block?.text ?? u.text ?? u.delta ?? '') as string);
       if (!content) return null;
       return { type: 'text', content };
     }
 
     case 'thinking':
-    case 'thinking_delta': {
-      const content = (u.text ?? u.delta ?? '') as string;
+    case 'thinking_delta':
+    case 'agent_thought_chunk': {
+      const block = u.content as { text?: string } | string | undefined;
+      const content =
+        typeof block === 'string' ? block : ((block?.text ?? u.text ?? u.delta ?? '') as string);
       if (!content) return null;
       return { type: 'thinking', content };
     }
@@ -89,3 +99,6 @@ export function mapAcpUpdate(update: AcpSessionUpdate): SourceEvent | null {
       return null;
   }
 }
+
+/** 兼容旧名（测试引用） */
+export const mapAcpUpdate = mapSessionUpdate;

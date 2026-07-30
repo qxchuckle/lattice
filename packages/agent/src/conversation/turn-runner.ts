@@ -85,9 +85,15 @@ export class TurnRunner {
 
     // 排队后重解析源 session：同分支前序流可能刚捕获/更新了 sourceSessionId，
     // 用设置时的旧值会丢失上下文连续性
-    const sourceSessionId = opts.branch
+    const persistedSessionId = opts.branch
       ? (opts.branch.sourceSessionId ?? null)
       : opts.sourceSessionId;
+
+    // 能力守卫：源不支持 resume 时不传旧 sessionId。
+    // 否则源要么报错、要么静默新建（宿主却以为续上了）——两种都是错。
+    // 宿主影响可控：对话树是宿主真相，源侧上下文丢失不丢用户内容。
+    const canResume = this.deps.profiles.get(source.id)?.capabilities.session.resume !== false;
+    const sourceSessionId = canResume ? persistedSessionId : null;
 
     const { accumulator, interrupted } = await this.streamSource(
       ctx,

@@ -30,6 +30,7 @@ import type {
   SendOpts,
   SessionContext,
   TreeRuntime,
+  ForkOutcome,
 } from './types.js';
 
 export type {
@@ -161,8 +162,12 @@ export class ConversationController {
 
   // ── 树操作 ──
 
-  /** fork 分支（含源级 fork 截断）；源按 fork 节点所在线程解析（树可混源） */
-  fork(treeId: string, nodeId: string, name?: string): Promise<ConversationBranch | undefined> {
+  /**
+   * fork 分支（含源级 fork 截断）；源按 fork 节点所在线程解析（树可混源）。
+   * 返回 ForkOutcome：分支已建，但源侧上下文是否继承另看 `contextCarried`。
+   * 壳层应将 `notice` 展示给用户（铁律：不静默降级）。
+   */
+  fork(treeId: string, nodeId: string, name?: string): Promise<ForkOutcome | undefined> {
     return this.tree.fork(treeId, nodeId, name, this.contextByTreeId(treeId)?.sourceId);
   }
 
@@ -455,8 +460,18 @@ export class ConversationController {
           branch.sourceSessionId = newSessionId;
           retrySessionId = newSessionId;
         }
-      } catch {
-        /* fork 失败降级：复用原 session */
+      } catch (err) {
+        // 铁律：不静默降级。fork 截断失败 → 源侧仍带着**旧的失败回复**上下文，
+        // 重新生成会被它污染（模型看得到自己上一次的回答）。继续执行但必须告知。
+        hooks.onEvent(
+          {
+            type: 'notice',
+            level: 'warning',
+            message: `重试未能清除源侧旧回复（${err instanceof Error ? err.message : String(err)}），新回复可能受上次结果影响`,
+            ts: Date.now(),
+          },
+          requestId,
+        );
       }
     } else if (branch) {
       branch.sourceSessionId = undefined;

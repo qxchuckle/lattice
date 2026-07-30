@@ -172,13 +172,15 @@ describe('场景 7: 显式 tree.fork（源级 fork）', () => {
     const asst1 = sm.getNodes(tid).find((n) => n.role === 'assistant' && n.parentId === 'f1')!;
 
     calls.forks.length = 0;
-    const branch = await controller.fork(tid, asst1.id, '我的分支');
-    expect(branch?.name, 'fork 创建命名分支').toBe('我的分支');
+    const outcome = await controller.fork(tid, asst1.id, '我的分支');
+    expect(outcome?.branch.name, 'fork 创建命名分支').toBe('我的分支');
     expect(
       calls.forks.some((f) => f.sessionId === 'sess-1' && f.atMessage === 'msg-1'),
       'tree.fork 源级截断点 = asst1 的 msg-1',
     ).toBe(true);
-    expect(branch!.sourceSessionId, '新分支获得 forked session').toBe('sess-1-fork1');
+    expect(outcome!.branch.sourceSessionId, '新分支获得 forked session').toBe('sess-1-fork1');
+    expect(outcome!.contextCarried, '源侧 fork 成功 → 上下文已继承').toBe(true);
+    expect(outcome!.notice, '成功时无降级提示').toBeUndefined();
   });
 });
 

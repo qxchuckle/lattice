@@ -8,6 +8,7 @@ import type {
   ISourceRegistry,
   PromptSegment,
   PermissionRequestHandler,
+  ConversationBranch,
 } from '@qcqx/lattice-agent-protocol';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PromptComposerDeps } from '../prompt/prompt-composer.js';
@@ -44,6 +45,20 @@ export interface ConversationHooks {
   onReject?: (requestId: string | undefined, reason: string) => void;
   /** 在途流被中止（撤销/删除子树时）：广播给订阅端停渲染 */
   onStreamAborted?: (treeId: string, requestId: string, reason: string) => void;
+}
+
+/**
+ * fork 结果：分支已建，但源侧上下文是否真的继承下来是另一事。
+ *
+ * 为何不直接返 branch：源侧 forkSession 可能失败（会话过期/锚点不存在/能力不足），
+ * 此时新分支从空白开始——用户必须知道，否则会因为 AI “完全不记得前文”而困惑。
+ */
+export interface ForkOutcome {
+  branch: ConversationBranch;
+  /** 源侧上下文是否随分支继承（false = 新分支无历史） */
+  contextCarried: boolean;
+  /** 降级提示（contextCarried=false 且因失败而非本来无会话时提供） */
+  notice?: string;
 }
 
 export interface SendOpts {

@@ -80,10 +80,17 @@ export interface NodeCapabilities {
 export interface NodeCapabilityContext {
   /** 该节点所属线程源的 fork 能力（影响 canBranch/canRetry：非头部重问需要 fork） */
   fork: ForkCapability;
+  /**
+   * 该节点是否位于线程末尾（无活跃后代）。
+   *
+   * 为何必需：`fork.atMessage=false` 的源（如 ACP）只能从会话**末尾**分叉，
+   * 从中间节点重问/重试做不到。缺省 true = 当作末尾（向后兼容旧调用点）。
+   */
+  isTail?: boolean;
 }
 
 /** ctx 缺省时的宽松默认（等价旧行为：不按源能力收紧） */
-const PERMISSIVE_CTX: NodeCapabilityContext = { fork: { atMessage: true } };
+const PERMISSIVE_CTX: NodeCapabilityContext = { fork: { atMessage: true }, isTail: true };
 
 /**
  * 从视图状态 + 源能力投影节点能力（与 canApplyOperation 语义一致：
@@ -105,8 +112,13 @@ export function projectNodeCapabilities(
       : viewStatus === 'interrupted'
         ? 'interrupted'
         : 'active';
-  // 分支/重试 = 从锚点重问，需要源具备 fork 能力（形态粒度由策略层消化，这里只门 false）
-  const forkable = ctx.fork !== false;
+  // 分支/重试 = 从锚点重问，需源具备 fork 能力。
+  // 两个粒度都要门：
+  //   fork === false          → 根本不能分叉
+  //   fork.atMessage === false → 只能从会话末尾分叉（中间节点做不到）
+  // 后者对应的产品事实：该源只支持线形对话，非末尾节点不能再分支。
+  const isTail = ctx.isTail ?? true;
+  const forkable = ctx.fork !== false && (ctx.fork.atMessage || isTail);
   return {
     canBranch: !streaming && !isReadOnly(persisted) && forkable,
     canUndo: !streaming && canApplyOperation('undo', persisted),

@@ -59,6 +59,23 @@ describe('不变量：呈现为真 ⇒ 准入必为真（穷举 ViewStatus × fo
   });
 });
 
+describe('源能力→节点能力的端到端传导（isTail）', () => {
+  it('支持任意锚点分叉的源：中间节点仍可分支', async () => {
+    const ctx = await setup();
+    ctx.controller.createSession('S', 'mock', null);
+    // 两轮对话 → 第一轮变成中间节点
+    const treeId = await sendOnce(ctx, 'u1');
+    const assistant1 = ctx.sm.getNodes(treeId).find((n) => n.role === 'assistant')!;
+    ctx.controller.send('S', '第二轮', { requestId: 'u2', parentNodeId: assistant1.id }, noopHooks);
+    await flush(ctx.controller, 'S');
+
+    const caps = ctx.controller.turnCapabilities(treeId);
+    // mock 源声明 atMessage:true → 中间节点也能分支
+    expect(caps.u1.canBranch, '中间节点（源支持任意锚点）应可分支').toBe(true);
+    expect(caps.u2.canBranch, '末尾节点当然可分支').toBe(true);
+  });
+});
+
 describe('turn 能力表下发', () => {
   it('仅 user 节点成 turn（assistant 不单独持有操作入口）', async () => {
     const ctx = await setup();

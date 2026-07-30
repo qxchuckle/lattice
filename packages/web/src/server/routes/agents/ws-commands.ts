@@ -121,7 +121,11 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
 
     case 'tree.fork': {
       if (!msg.treeId || !msg.nodeId) return;
-      await conversation.fork(msg.treeId, msg.nodeId, msg.branchName);
+      const outcome = await conversation.fork(msg.treeId, msg.nodeId, msg.branchName);
+      // 铁律：不静默降级——源侧 fork 失败时新分支无历史上下文，必须告知发起端
+      if (outcome?.notice) {
+        send({ type: 'tree.error', treeId: msg.treeId, message: outcome.notice });
+      }
       send({ type: 'tree.updated', treeId: msg.treeId });
       broadcastSnapshot(msg.treeId);
       break;

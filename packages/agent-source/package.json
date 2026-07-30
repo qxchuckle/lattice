@@ -33,6 +33,7 @@
     "node": ">=20.19"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.3.0",
     "@earendil-works/pi-coding-agent": "^0.80.0",
     "@qcqx/lattice-agent-protocol": "workspace:*",
     "@qoder-ai/qoder-agent-sdk": "^1.0.15",

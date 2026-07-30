@@ -79,12 +79,28 @@ export class TurnGuard {
       );
   }
 
+  /**
+   * 该 turn 是否位于线程末尾（其 assistant 节点无活跃后代）。
+   *
+   * 用于传给能力投影：`fork.atMessage=false` 的源（如 ACP）只能从末尾分叉，
+   * 中间节点的 branch/retry 必须在两侧（UI 与接口）同时不可用。
+   */
+  private isTail(treeId: string, turnId: string): boolean {
+    const assistant = this.assistantOf(treeId, turnId);
+    if (!assistant) return true; // 还没回复 = 末尾
+    const nodes = this.deps.session.getNodes(treeId);
+    return !nodes.some(
+      (n) => n.parentId === assistant.id && n.status !== 'undone' && n.status !== 'hidden',
+    );
+  }
+
   /** 单个 turn 的能力（server 命令守卫与 client 渲染共用的同一判定） */
   capabilitiesOf(treeId: string, turnId: string): NodeCapabilities | undefined {
     const userNode = this.deps.session.getNode(treeId, turnId);
     if (!userNode) return undefined;
     return projectTurnCapabilities(userNode, this.assistantOf(treeId, turnId), {
       fork: this.forkCapabilityOf(treeId, turnId),
+      isTail: this.isTail(treeId, turnId),
     });
   }
 

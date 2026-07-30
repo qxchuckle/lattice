@@ -188,7 +188,7 @@ export async function setup(emitDone = true): Promise<TestContext> {
 }
 
 /** mock 源的握手产物（declared 能力即 verified，无降准） */
-function mockManifest(source: ISource): ResolvedManifest {
+export function mockManifest(source: ISource): ResolvedManifest {
   const declared = source.describe();
   return {
     info: declared.info,
