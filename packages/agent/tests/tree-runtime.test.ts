@@ -12,6 +12,7 @@ const ctxOf = (sessionId: string, treeId: string | null = null): SessionContext 
   sessionId,
   sourceId: 'mock',
   treeId,
+  state: treeId ? 'active' : 'idle',
 });
 
 /** 可控完成时机的任务 */
@@ -61,12 +62,16 @@ describe('结构队列（enqueue）', () => {
     expect(order).toEqual(['first-start', 'first-end', 'second-start']);
   });
 
-  it('任务抛错不卡住队列（后续任务仍能执行）', async () => {
+  it('任务抛错传播给 caller 且不卡住队列（后续任务仍能执行）', async () => {
     const reg = new TreeRuntimeRegistry();
     const ctx = ctxOf('s1', 't1');
-    await reg.enqueue(ctx, async () => {
-      throw new Error('boom');
-    });
+    // 新契约：enqueue 返回的 promise 原样传播任务错误（caller 可感知失败）
+    await expect(
+      reg.enqueue(ctx, async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    // 错误不卡队列：后续任务照常执行
     let ran = false;
     await reg.enqueue(ctx, async () => {
       ran = true;

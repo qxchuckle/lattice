@@ -31,6 +31,8 @@ import {
   addSpecRefs,
   removeSpecRefs,
   nowISO,
+  TASK_STATUSES,
+  isValidTaskStatus,
 } from '@qcqx/lattice-core';
 import type {
   TaskMeta,
@@ -42,7 +44,6 @@ import type {
 } from '@qcqx/lattice-core';
 import { logger, outputJson, resolveCurrentProject, resolveAndRegisterUpwards } from '../utils';
 
-const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 // 检查点类型按信息源三分（详见 core/types CheckpointType 注释）
 // A 区 用户输入 / B 区 AI 自我 / C 区 进程事件
 const CHECKPOINT_TYPES: CheckpointType[] = [
@@ -179,7 +180,7 @@ export function registerTaskCommand(program: Command): void {
 
           logger.raw(chalk.blue(`共 ${tasks.length} 个任务（跨用户）：\n`));
 
-          const statusIcon: Record<string, string> = {
+          const statusIcon: Record<TaskStatus, string> = {
             planning: '📋',
             in_progress: '🔨',
             completed: '✅',
@@ -216,7 +217,7 @@ export function registerTaskCommand(program: Command): void {
 
           logger.raw(chalk.blue(`共 ${tasks.length} 个任务：\n`));
 
-          const statusIcon: Record<string, string> = {
+          const statusIcon: Record<TaskStatus, string> = {
             planning: '📋',
             in_progress: '🔨',
             completed: '✅',
@@ -414,14 +415,14 @@ export function registerTaskCommand(program: Command): void {
         }
 
         if (opts.status) {
-          if (!TASK_STATUSES.includes(opts.status as TaskStatus)) {
+          if (!isValidTaskStatus(opts.status)) {
             logger.raw(chalk.yellow(`无效状态：${opts.status}`));
             process.exitCode = 1;
             logger.raw(chalk.dim(`可选值：${TASK_STATUSES.join(' / ')}`));
             closeDb();
             return;
           }
-          updates.status = opts.status as TaskStatus;
+          updates.status = opts.status;
         }
 
         const shouldUpdateProjects = Boolean(

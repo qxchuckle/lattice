@@ -279,6 +279,10 @@ export interface TreeSnapshotMessage {
   streaming?: { requestId: string; parentId: string; content: NodeContent[] }[];
   /** 该树的会话列表元数据（捎带，免客户端每次变更再走 REST 拉列表） */
   conversation?: { treeId: string; title?: string; nodeCount: number; updatedAt: number };
+  /** 快照构建起始时的服务端 Date.now()（新鲜度指示，供客户端调试/判旧；可选保持向后兼容） */
+  snapshotTakenAt?: number;
+  /** 构建时 rev + 1：客户端可据此检测 rev gap / 过时快照（可选保持向后兼容） */
+  expectedNextRev?: number;
 }
 
 /** 单条 live 持久化变更（带 rev） */

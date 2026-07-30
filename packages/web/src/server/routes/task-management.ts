@@ -1,16 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import {
   getUsername,
+  getTaskMeta,
   updateTask,
   archiveTask,
   deleteTask,
   addCheckpoint,
   createTask,
+  isValidTaskStatus,
+  canTransitionTaskStatus,
   type CheckpointType,
-  type TaskStatus,
 } from '@qcqx/lattice-core';
 
-const VALID_TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
 const VALID_CHECKPOINT_TYPES: CheckpointType[] = [
   'context',
   'correction',
@@ -28,13 +29,19 @@ const VALID_CHECKPOINT_TYPES: CheckpointType[] = [
 export function registerTaskManagementRoutes(app: FastifyInstance): void {
   app.post<{ Params: { id: string }; Body: { status: string } }>(
     '/api/tasks/:id/status',
-    async (req) => {
+    async (req, reply) => {
       const username = await getUsername();
       const status = req.body.status;
-      if (!VALID_TASK_STATUSES.includes(status as TaskStatus)) {
+      if (!isValidTaskStatus(status)) {
         return { error: 'bad_request', message: `无效的状态: ${status}` };
       }
-      await updateTask(username, req.params.id, { status: status as TaskStatus });
+      // 转换合法性由 core 状态机判定；任务不存在时交给 updateTask 按原逻辑处理
+      const meta = await getTaskMeta(username, req.params.id);
+      if (meta && !canTransitionTaskStatus(meta.status, status)) {
+        reply.code(400);
+        return { error: 'bad_request', message: `无效的状态转换: ${meta.status} -> ${status}` };
+      }
+      await updateTask(username, req.params.id, { status });
       return { success: true };
     },
   );

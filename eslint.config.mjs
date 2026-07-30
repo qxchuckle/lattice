@@ -3,6 +3,7 @@ import globals from 'globals';
 import pluginJs from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
+import rxjsX from 'eslint-plugin-rxjs-x';
 import tsconfigEslint from './tsconfig.eslint.json' with { type: 'json' };
 
 export default defineConfig(
@@ -36,6 +37,17 @@ export default defineConfig(
       'no-throw-literal': 'warn',
       semi: ['error', 'always'],
       'prefer-const': 'error',
+    },
+  },
+  // RxJS 订阅防卫（需类型信息，仅限上方已配 parserOptions.project 的 ts 文件）：
+  // no-exposed-subjects — 禁止对外暴露可写 Subject（外部 next() 会篡改状态机）
+  // no-ignored-subscription — 禁止丢弃 subscribe 返回的 Subscription（无句柄则无法退订，泄漏源头）
+  {
+    files: ['**/*.{ts,mts,cts}'],
+    plugins: { 'rxjs-x': rxjsX },
+    rules: {
+      'rxjs-x/no-exposed-subjects': 'warn',
+      'rxjs-x/no-ignored-subscription': 'warn',
     },
   },
   {

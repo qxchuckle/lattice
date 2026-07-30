@@ -65,4 +65,9 @@ export {
 } from './permission-gate.js';
 
 // 错误
-export { PipelineError, type PipelineErrorCode, type PipelineErrorContext } from './errors.js';
+export {
+  PipelineError,
+  type PipelineErrorCode,
+  type PipelineErrorContext,
+  type PipelinePhase,
+} from './errors.js';

@@ -15,7 +15,7 @@ import type {
   ContentBlock,
 } from '@qcqx/lattice-agent-protocol';
 import { SourceEventStream, CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
-import { Observable, lastValueFrom, toArray } from 'rxjs';
+import { Observable, asapScheduler, lastValueFrom, toArray } from 'rxjs';
 
 export const PI_LIKE: SourceCapabilities = {
   execution: { mode: 'local', contextOwnership: 'source' },
@@ -135,7 +135,9 @@ export function createFakeSource(
     prompt: (sessionId, message, opts = {}) => {
       calls.prompts.push({ sessionId, message, opts });
       const stream = new SourceEventStream();
-      queueMicrotask(() => {
+      // asapScheduler 即微任务调度（Promise.resolve），与原 queueMicrotask 时序等价：
+      // 保证订阅方同步拿到 stream 并挂接后才发射（不用 asyncScheduler/timer 以免降级为宏任务）
+      asapScheduler.schedule(() => {
         for (const e of options.events ?? [{ type: 'text', content: 'ok' }]) stream.push(e);
         if (options.failWith !== undefined) stream.fail(options.failWith);
         else stream.push({ type: 'done', sessionId: sessionId ?? 'new-session' });

@@ -13,12 +13,17 @@ import type {
 import type { SessionManager } from '../session/session-manager.js';
 import type { PromptComposerDeps } from '../prompt/prompt-composer.js';
 import type { SourceProfileProvider } from './source-profiles.js';
+import type { TreeRuntimeState } from './runtime-state.js';
+import type { SessionState } from './session-state.js';
 
 /** 每个 WS session 的运行时状态（轻量：连接身份 + 当前树）；锁域在 TreeRuntime */
 export interface SessionContext {
   sessionId: string;
   sourceId: string;
+  /** 当前树 id（保留：agent 内及下游直接读取；阶段真相在 state） */
   treeId: string | null;
+  /** 会话生命周期状态（session-state.ts 状态机推进，替代 treeId 判空的隐式表达） */
+  state: SessionState;
 }
 
 /**
@@ -32,6 +37,10 @@ export interface TreeRuntime {
   queue: Promise<void>;
   /** 分支级流式队列：branchId → 队尾 Promise（同分支串行，跨分支并行） */
   streamQueues: Map<string, Promise<void>>;
+  /** 运行阶段（runtime-state.ts 状态机推进：queue × stream 两个正交维度） */
+  state: TreeRuntimeState;
+  /** 最近一次任务/流的错误（原先被无痕吞掉；配合 state.*.failed 观测） */
+  lastError?: unknown;
 }
 
 /** 传输层注入的回调（controller 不感知 WS） */

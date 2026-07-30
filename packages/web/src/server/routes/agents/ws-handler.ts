@@ -116,6 +116,7 @@ export function setupAgentWs(
 
       // 构建一棵树的全量快照
       const buildSnapshot = async (treeId: string): Promise<ServerMessage | null> => {
+        const snapshotTakenAt = Date.now(); // 构建起始时间：异步构建期间若有新变更，客户端可据此判旧
         const tree = await session.loadTree(treeId);
         if (!tree) return null;
         const interrupted = await session.getInterruptedStreams(treeId);
@@ -139,6 +140,8 @@ export function setupAgentWs(
             nodeCount: nodes.length,
             updatedAt: tree.updatedAt,
           },
+          snapshotTakenAt,
+          expectedNextRev: (tree.rev ?? 0) + 1,
         };
       };
 

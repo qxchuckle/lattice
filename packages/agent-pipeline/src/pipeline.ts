@@ -48,7 +48,7 @@ export async function applyPromptMiddlewares(
       current = await mw.transformPrompt(current, ctx);
     } catch (err) {
       if (err instanceof PipelineError) throw err; // guard 相位的合法拒绝，原样上抛
-      throw PipelineError.middlewareFailed(mw.name, err);
+      throw PipelineError.middlewareFailed(mw.name, err, 'prompt');
     }
   }
   return current;
@@ -90,7 +90,7 @@ export function transformEvents(
         throw new PipelineError(
           'middleware_failure',
           'middleware 吞掉或复制了 done 事件（终止事件不可增删）',
-          { sourceId: ctx.sourceId },
+          { sourceId: ctx.sourceId, phase: 'transform' },
         );
       }
       // 一变多：按序发出；空数组 = 滤除（of() 不发值直接 complete）
@@ -112,7 +112,7 @@ function applyChain(
       try {
         next.push(...transform(e, ctx));
       } catch (err) {
-        throw PipelineError.middlewareFailed(name, err);
+        throw PipelineError.middlewareFailed(name, err, 'transform');
       }
     }
     batch = next;

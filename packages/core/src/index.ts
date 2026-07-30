@@ -342,6 +342,14 @@ export {
   getTaskContainingTree,
 } from './task';
 
+// 任务状态机（显式转换表 + 纯函数，cli/web 状态值与转换规则的单一真相）
+export {
+  TASK_STATUSES,
+  TASK_TRANSITIONS,
+  isValidTaskStatus,
+  canTransitionTaskStatus,
+} from './task/fsm';
+
 // 任务检查点
 export { addCheckpoint, listCheckpoints, getCheckpoint, readProgress } from './task/checkpoint';
 export type { AddCheckpointOptions, ListCheckpointsOptions } from './task/checkpoint';

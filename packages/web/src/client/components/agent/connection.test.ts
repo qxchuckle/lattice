@@ -12,6 +12,7 @@ import {
   reconnectDelayMs,
   getConnectionState,
   connectAgentWs,
+  disconnectAgentWs,
   sendWs,
   isWsReady,
   waitForSessionReady,
@@ -181,6 +182,87 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
     // 退避上限 500ms*2^1 → 最多 1s；推进足够时间后应重连出新实例
     vi.advanceTimersByTime(2_000);
     expect(FakeWebSocket.instances.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('🔴 重连触发源：connected 后断链 → reason=connection-lost', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    FakeWebSocket.last.simulateAbnormalClose();
+
+    const st = getConnectionState();
+    expect(st).toMatchObject({ type: 'reconnecting', reason: 'connection-lost' });
+  });
+
+  it('🔴 重连触发源：connecting 建链失败（从未 open）→ reason=connect-failed', () => {
+    connectAgentWs();
+    expect(getConnectionState().type).toBe('connecting');
+
+    FakeWebSocket.last.simulateAbnormalClose(); // 握手阶段就失败
+    const st = getConnectionState();
+    expect(st).toMatchObject({ type: 'reconnecting', reason: 'connect-failed' });
+
+    // 重连后再次失败：仍是 connect-failed（reconnecting → 失败属建链失败）
+    vi.advanceTimersByTime(2_000);
+    FakeWebSocket.last.simulateAbnormalClose();
+    expect(getConnectionState()).toMatchObject({ type: 'reconnecting', reason: 'connect-failed' });
+  });
+
+  it('🔴 重连触发源：心跳判死 → reason=heartbeat-timeout；后续建链失败不残留该标记', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    vi.advanceTimersByTime(75_000); // 第 75s 那次检测到 >60s 无消息 → 判死
+    expect(getConnectionState()).toMatchObject({
+      type: 'reconnecting',
+      reason: 'heartbeat-timeout',
+    });
+
+    // 标记已消费：重连后建链失败应判为 connect-failed 而非残留的 heartbeat-timeout
+    vi.advanceTimersByTime(60_000);
+    FakeWebSocket.last.simulateAbnormalClose();
+    expect(getConnectionState()).toMatchObject({ type: 'reconnecting', reason: 'connect-failed' });
+  });
+
+  it('🔴 心跳超时临界：快判死前收到 pong 刷新 → 不触发重连', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    vi.advanceTimersByTime(50_000); // 距上次消息 50s，下个 tick（75s）就会判死
+    FakeWebSocket.last.simulateMessage({ type: 'pong' }); // 临界前刷新存活
+    vi.advanceTimersByTime(25_000); // 75s tick：距 pong 仅 25s → 不判死
+
+    expect(getConnectionState().type).toBe('connected');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('🔴 主动断开后心跳随状态停止：不再发 ping、不再触发重连', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    disconnectAgentWs();
+    const sentAtClose = FakeWebSocket.last.sent.length;
+
+    vi.advanceTimersByTime(120_000); // 若残留幽灵心跳，早已发 ping 或判死重连
+    expect(FakeWebSocket.last.sent.length).toBe(sentAtClose);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(getConnectionState().type).toBe('disconnected');
+  });
+
+  it('🔴 快速重连不产生双心跳：新连接上每 25s 恰好一次 ping', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    FakeWebSocket.last.simulateAbnormalClose();
+
+    vi.advanceTimersByTime(2_000); // 退避后重建 socket
+    const second = FakeWebSocket.last;
+    second.simulateOpen(); // 快速重连成功 → 心跳重启（旧表应已停）
+    const base = second.sent.length;
+
+    vi.advanceTimersByTime(25_000);
+    const pings = second.sent
+      .slice(base)
+      .map((s) => JSON.parse(s) as { type: string })
+      .filter((p) => p.type === 'ping');
+    expect(pings.length).toBe(1); // 双心跳会是 2
   });
 
   it('断开时清 sessionId（重连后需重新 session.create）+ isWsReady 反映真实可用性', () => {

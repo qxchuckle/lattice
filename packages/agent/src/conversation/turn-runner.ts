@@ -7,7 +7,12 @@
  * - 只读竞态防护：排队期/流式期 user 节点被撤销或删除时，不请求模型 / 以同状态落盘
  * - 中断（signal）算正常结局：落 interrupted 节点而非报错
  */
-import type { ISource, ConversationBranch, ContentBlock } from '@qcqx/lattice-agent-protocol';
+import type {
+  ISource,
+  ConversationBranch,
+  ContentBlock,
+  SourceEvent,
+} from '@qcqx/lattice-agent-protocol';
 import { StreamAccumulator, isReadOnly } from '@qcqx/lattice-agent-protocol';
 import { runPrompt as runPipelinePrompt } from '@qcqx/lattice-agent-pipeline';
 import {
@@ -23,6 +28,8 @@ import {
 } from 'rxjs';
 import type { ConversationControllerDeps, ConversationHooks, SessionContext } from './types.js';
 import type { TreeRuntimeRegistry } from './tree-runtime.js';
+import type { StreamLifecycleState } from './stream-lifecycle.js';
+import { advanceStreamLifecycle, isInterruptedStreamState } from './stream-lifecycle.js';
 
 /**
  * 流式持久化节流窗口（ms）。
@@ -83,10 +90,16 @@ export class TurnRunner {
     const treeId = ctx.treeId;
     if (!treeId) return;
 
+    // 生命周期状态机：idle → preflight（前置检查），各提前返回路径落到显式终态
+    let lifecycle = advanceStreamLifecycle('idle', 'begin');
+
     // 分支队列排队期间 user 节点可能已被撤销/删除：不再请求模型（前端已不接收，
     // 后端不应白烧 token），仅通知一次闭合请求生命周期
     const userNodeAtStart = this.deps.session.getNode(treeId, opts.userNodeId);
     if (userNodeAtStart && isReadOnly(userNodeAtStart.status)) {
+      lifecycle = advanceStreamLifecycle(lifecycle, 'skip-readonly');
+    }
+    if (lifecycle === 'readonly-skipped') {
       hooks.onTreeUpdated(
         treeId,
         this.deps.session.getTree(treeId)?.headNodeId ?? null,
@@ -98,6 +111,9 @@ export class TurnRunner {
     const sourceId = opts.sourceId ?? ctx.sourceId;
     const source = this.deps.sources.registry.getSource(sourceId);
     if (!source) {
+      lifecycle = advanceStreamLifecycle(lifecycle, 'fail');
+    }
+    if (lifecycle === 'failed' || !source) {
       hooks.onError('Source not found', opts.requestId);
       return;
     }
@@ -114,7 +130,7 @@ export class TurnRunner {
     const canResume = this.deps.profiles.get(source.id)?.capabilities.session.resume !== false;
     const sourceSessionId = canResume ? persistedSessionId : null;
 
-    const { accumulator, interrupted } = await this.streamSource(
+    const { accumulator, lifecycle: settled } = await this.streamSource(
       ctx,
       source,
       sourceSessionId,
@@ -123,7 +139,10 @@ export class TurnRunner {
       opts.userNodeId,
       hooks,
       { model: opts.model, thinkingLevel: opts.thinkingLevel, contextWindow: opts.contextWindow },
+      lifecycle,
     );
+    // 对外「中断」由终态派生：aborted（用户中止）与 source-incomplete（源侧未完成）同为中断
+    const interrupted = isInterruptedStreamState(settled);
 
     // 捕获新 sessionId（新建时源返回，续写时不变）+ 同步分支源标记
     await this.ctxDeps.syncBranchSession(treeId, opts.branch, accumulator.sessionId, sourceId);
@@ -182,16 +201,22 @@ export class TurnRunner {
     const treeId = ctx.treeId;
     if (!treeId) return;
 
+    // 生命周期状态机：idle → preflight（前置检查）
+    let lifecycle = advanceStreamLifecycle('idle', 'begin');
+
     // 排队期间节点可能被撤销/删除：不再请求模型，仅通知一次闭合请求生命周期
     const current = this.deps.session.getNode(treeId, opts.targetNodeId);
     if (!current || isReadOnly(current.status)) {
+      lifecycle = advanceStreamLifecycle(lifecycle, 'skip-readonly');
+    }
+    if (lifecycle === 'readonly-skipped') {
       hooks.onTreeUpdated(treeId, opts.fallbackHeadNodeId, opts.requestId);
       return;
     }
     // 排队后取最新源 session（同分支前序流可能刚更新 sourceSessionId）
     const sourceSessionId = opts.branch?.sourceSessionId ?? null;
 
-    const { accumulator, interrupted } = await this.streamSource(
+    const { accumulator, lifecycle: settled } = await this.streamSource(
       ctx,
       opts.source,
       sourceSessionId,
@@ -204,7 +229,9 @@ export class TurnRunner {
         thinkingLevel: opts.thinkingLevel,
         contextWindow: opts.contextWindow,
       },
+      lifecycle,
     );
+    const interrupted = isInterruptedStreamState(settled);
 
     if (accumulator.content.length > 0) {
       // 落盘前重读：流式期间被撤销/删除则不追加内容、不覆盖只读状态
@@ -224,7 +251,9 @@ export class TurnRunner {
 
   /**
    * 流式调用源 + 每 delta 写 streaming 文件（崩溃恢复用）
-   * 返回累加器与中断标志；正常结束（含优雅中止）后清理 streaming 文件
+   * 返回累加器与生命周期终态（completed / aborted / source-incomplete，
+   * 调用方经 isInterruptedStreamState 派生对外中断语义）；
+   * 正常结束（含优雅中止）后清理 streaming 文件
    */
   private async streamSource(
     ctx: SessionContext,
@@ -235,7 +264,10 @@ export class TurnRunner {
     persistParentId: string | undefined,
     hooks: ConversationHooks,
     promptOpts: TurnModelOpts,
-  ): Promise<{ accumulator: StreamAccumulator; interrupted: boolean }> {
+    lifecycleIn: StreamLifecycleState,
+  ): Promise<{ accumulator: StreamAccumulator; lifecycle: StreamLifecycleState }> {
+    // preflight → streaming：前置检查已由调用方完成
+    let lifecycle = advanceStreamLifecycle(lifecycleIn, 'stream');
     const accumulator = new StreamAccumulator();
     const abortController = new AbortController();
     const rtStream = this.ctxDeps.runtimes.of(ctx);
@@ -264,10 +296,41 @@ export class TurnRunner {
     // 持久化支路排干句柄（建流成功后才有；runPipelinePrompt 入向失败时保持 undefined）
     let persistDrained: Promise<unknown> | undefined;
 
+    // ── 管线各环节的命名回调（闭包访问 accumulator / hooks / requestId）──
+
+    // ts 由源边缘统一打点；第三方源未打点时兜底补齐
+    const enhanceEventTimestamp = (raw: SourceEvent): SourceEvent =>
+      raw.ts === undefined ? { ...raw, ts: Date.now() } : raw;
+
+    // 转发/累积：同步即时（不被磁盘 IO 阻塞，避免用户看到的流式卡顿）
+    const applyEventToState = (event: SourceEvent): void => {
+      accumulator.apply(event);
+      hooks.onEvent(event, requestId);
+    };
+
+    // 铁律：不静默降级——写盘失败意味着崩溃恢复凭据不可用（进程挂了就丢在途回复），
+    // 必须告知；但逐次告知会刷屏，故只在**首次**失败时发 warning notice。
+    let persistFailureNotified = false;
+    const handlePersistError = (err: unknown) => {
+      if (!persistFailureNotified) {
+        persistFailureNotified = true;
+        hooks.onEvent(
+          {
+            type: 'notice',
+            level: 'warning',
+            message: `流式中间态写盘失败（${err instanceof Error ? err.message : String(err)}），若进程异常退出将无法恢复本次在途回复`,
+            ts: Date.now(),
+          },
+          requestId,
+        );
+      }
+      return EMPTY; // 不断流：单次写失败不影响已转发的对话内容
+    };
+
     try {
       // 事件主干：pipeline runPrompt 直接返回 Observable<SourceEvent>（整条链全程 Observable，无需再 from() 桥接）。
       // share() 后分两支路共享同一次上游：
-      //   ① 转发/累积：tap 同步即时（不被磁盘 IO 阻塞，避免用户看到的流式卡顿）；
+      //   ① 转发/累积：tap 同步即时；
       //   ② 持久化：auditTime 节流（只写最新全量快照）+ concatMap 串行写（不并发交错，写失败不断流）。
       // 入向 middleware 失败 / 中间件错误 → Observable error → 下方 catch；源错误走 error 事件（不双重）。
       const event$ = runPipelinePrompt({
@@ -285,42 +348,13 @@ export class TurnRunner {
         },
         middlewares,
         ctx: { threadId: treeId ?? undefined, metadata: { taskId } },
-      }).pipe(
-        // ts 由源边缘统一打点；第三方源未打点时兜底补齐
-        map((raw) => (raw.ts === undefined ? { ...raw, ts: Date.now() } : raw)),
-        tap((event) => {
-          accumulator.apply(event);
-          hooks.onEvent(event, requestId);
-        }),
-        share(),
-      );
+      }).pipe(map(enhanceEventTimestamp), tap(applyEventToState), share());
 
       // 持久化支路：先同步订阅，与主干共享同一次上游拉取；catch 兵底使 finally await 不会抛出。
-      // 铁律：不静默降级——写盘失败意味着崩溃恢复凭据不可用（进程挂了就丢在途回复），
-      // 必须告知；但逐次告知会刷屏，故只在**首次**失败时发 warning notice。
-      let persistFailureNotified = false;
       persistDrained = lastValueFrom(
         event$.pipe(
           auditTime(STREAM_PERSIST_THROTTLE_MS),
-          concatMap(() =>
-            from(persistStreaming()).pipe(
-              catchError((err: unknown) => {
-                if (!persistFailureNotified) {
-                  persistFailureNotified = true;
-                  hooks.onEvent(
-                    {
-                      type: 'notice',
-                      level: 'warning',
-                      message: `流式中间态写盘失败（${err instanceof Error ? err.message : String(err)}），若进程异常退出将无法恢复本次在途回复`,
-                      ts: Date.now(),
-                    },
-                    requestId,
-                  );
-                }
-                return EMPTY; // 不断流：单次写失败不影响已转发的对话内容
-              }),
-            ),
-          ),
+          concatMap(() => from(persistStreaming()).pipe(catchError(handlePersistError))),
         ),
         { defaultValue: null },
       ).catch(() => null);
@@ -347,20 +381,27 @@ export class TurnRunner {
       // 排干在途写：上游完成会级联完成持久化支路（concatMap 等在途 write 收尾）；
       // 未建流（入向失败）时 persistDrained 为 undefined，跳过。
       if (persistDrained) await persistDrained;
-      // 中断/未完成才补写最终全量态（正常结束下面会 clearStreaming，无需多写一次）：
-      // auditTime 会丢弃 complete 时窗口内未发的尾值，崩溃恢复需要最新内容。
-      if (abortController.signal.aborted || !accumulator.done) {
-        await persistStreaming();
-      }
+      // streaming → 终态：用户中止 > 源侧未完成 > 正常结束（原布尔混合判断的显式化）
+      lifecycle = advanceStreamLifecycle(
+        lifecycle,
+        abortController.signal.aborted
+          ? 'abort'
+          : accumulator.done
+            ? 'complete'
+            : 'source-incomplete',
+      );
+      // 无条件补写最终全量态：auditTime 会丢弃 complete 时窗口内未发的尾值，
+      // 崩溃恢复需要最新内容（正常结束路径下 clearStreaming 前若崩溃，文件须是完整快照）。
+      // 幂等：persistStreaming 写的是全量快照，若尾值未被丢弃则重复写入相同内容，安全。
+      // 兜底与支路一致：写失败不打断对话落盘，仅（首次）告知。
+      await persistStreaming().catch(handlePersistError);
     }
-
-    const interrupted = abortController.signal.aborted || !accumulator.done;
 
     // 正常结束（含优雅中止）清理 streaming 文件；崩溃时不会走到这里，文件保留供恢复
     if (treeId && persistParentId) {
       await this.deps.session.clearStreaming(treeId, requestId);
     }
 
-    return { accumulator, interrupted };
+    return { accumulator, lifecycle };
   }
 }

@@ -43,6 +43,16 @@ export function resetLastAppliedRev(): void {
  */
 export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
   if (msg.treeId !== agentStore.treeId) return; // 非当前树（已切换）忽略
+  // 新鲜度守卫：expectedNextRev（服务端构建时 rev+1）不高于已应用 rev ⇒ 快照严格旧于当前状态
+  // （异步构建期间又有新 tree.updated 的情形），跳过防回退
+  if (!force && msg.expectedNextRev !== undefined && msg.expectedNextRev <= lastAppliedRev) {
+    console.warn(
+      '[snapshot] Stale snapshot skipped (expectedNextRev=%d, currentRev=%d)',
+      msg.expectedNextRev,
+      lastAppliedRev,
+    );
+    return;
+  }
   if (!force && msg.rev <= lastAppliedRev) return;
   lastAppliedRev = Math.max(lastAppliedRev, msg.rev);
 

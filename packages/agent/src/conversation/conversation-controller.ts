@@ -24,6 +24,7 @@ import { TreeRuntimeRegistry } from './tree-runtime.js';
 import { TurnRunner } from './turn-runner.js';
 import { TreeOps } from './tree-ops.js';
 import { TurnGuard, type TurnCapabilityMap } from './turn-guard.js';
+import { advanceSessionState, isTerminalSessionState } from './session-state.js';
 import type {
   ConversationControllerDeps,
   ConversationHooks,
@@ -69,7 +70,9 @@ export class ConversationController {
   // ── Session 生命周期 ──
 
   createSession(sessionId: string, sourceId: string, treeId: string | null): SessionContext {
-    const ctx: SessionContext = { sessionId, sourceId, treeId };
+    const ctx: SessionContext = { sessionId, sourceId, treeId, state: 'idle' };
+    // 挂接已有树（重连/多端）：树已就绪，直达 active（idle --tree-created--> active）
+    if (treeId) ctx.state = advanceSessionState(ctx.state, 'tree-created');
     this.sessions.set(sessionId, ctx);
     return ctx;
   }
@@ -89,6 +92,9 @@ export class ConversationController {
   async destroySession(sessionId: string): Promise<void> {
     const ctx = this.sessions.get(sessionId);
     if (!ctx) return;
+    // 终态推进（幂等：destroyed 无出边，重复 destroy 保持原态）；
+    // 已排队/在途任务持有的 ctx 引用据此拒绝后续动作（见 rejectIfDestroyed）
+    ctx.state = advanceSessionState(ctx.state, 'destroy');
     // 连接级清理：仅移除 session 绑定。树资源（源会话句柄/streaming 文件）归属树而非连接，
     // 多端共享同一树时不能因某连接离开而拆除（会清掉他端在途流的恢复凭据）；
     // 树资源回收只在显式删除整棵树（SessionManager.deleteTree）时发生。
@@ -104,21 +110,30 @@ export class ConversationController {
   // ── 对话操作 ──
 
   send(sessionId: string, message: string, opts: SendOpts, hooks: ConversationHooks): void {
-    this.withSession(sessionId, (ctx) =>
-      this.runtimes.enqueue(ctx, () => this.doSend(ctx, message, opts, hooks)),
-    );
+    this.withSession(sessionId, (ctx) => {
+      if (this.rejectIfDestroyed(ctx, opts.requestId, hooks)) return;
+      this.runtimes
+        .enqueue(ctx, () => this.doSend(ctx, message, opts, hooks))
+        .catch((err: unknown) => this.reportTaskError(err, opts.requestId, hooks));
+    });
   }
 
   continue(sessionId: string, nodeId: string, requestId: string, hooks: ConversationHooks): void {
-    this.withSession(sessionId, (ctx) =>
-      this.runtimes.enqueue(ctx, () => this.doContinue(ctx, nodeId, requestId, hooks)),
-    );
+    this.withSession(sessionId, (ctx) => {
+      if (this.rejectIfDestroyed(ctx, requestId, hooks)) return;
+      this.runtimes
+        .enqueue(ctx, () => this.doContinue(ctx, nodeId, requestId, hooks))
+        .catch((err: unknown) => this.reportTaskError(err, requestId, hooks));
+    });
   }
 
   retry(sessionId: string, nodeId: string, requestId: string, hooks: ConversationHooks): void {
-    this.withSession(sessionId, (ctx) =>
-      this.runtimes.enqueue(ctx, () => this.doRetry(ctx, nodeId, requestId, hooks)),
-    );
+    this.withSession(sessionId, (ctx) => {
+      if (this.rejectIfDestroyed(ctx, requestId, hooks)) return;
+      this.runtimes
+        .enqueue(ctx, () => this.doRetry(ctx, nodeId, requestId, hooks))
+        .catch((err: unknown) => this.reportTaskError(err, requestId, hooks));
+    });
   }
 
   /**
@@ -179,16 +194,51 @@ export class ConversationController {
     if (ctx) run(ctx);
   }
 
+  /**
+   * 终态守卫：destroyed 会话拒绝新命令（拒绝方式与 turn-guard 一致：onReject 回滚乐观态）。
+   * 纵深防御两个时点：入口（map 已删时 withSession 已拦）+ 排队任务执行时
+   *（send 入队后、执行前被 destroy 的竞态：doSend 持有的 ctx 引用仍能读到终态）。
+   */
+  private rejectIfDestroyed(
+    ctx: SessionContext,
+    requestId: string | undefined,
+    hooks: ConversationHooks,
+  ): boolean {
+    if (!isTerminalSessionState(ctx.state)) return false;
+    hooks.onReject?.(requestId, 'session 已销毁，拒绝新命令');
+    return true;
+  }
+
+  /** 结构队列任务失败上报（enqueue 不再吞错；入口 fire-and-forget，错误统一转 hooks.onError） */
+  private reportTaskError(
+    err: unknown,
+    requestId: string | undefined,
+    hooks: ConversationHooks,
+  ): void {
+    hooks.onError(err instanceof Error ? err.message : String(err), requestId);
+  }
+
   private async doSend(
     ctx: SessionContext,
     message: string,
     opts: SendOpts,
     hooks: ConversationHooks,
   ): Promise<void> {
-    // 懒创建对话树（第一条消息时才创建）
+    // 排队期间会话被销毁：不再懒建树/请求模型（终态守卫，与入口同源）
+    if (this.rejectIfDestroyed(ctx, opts.requestId, hooks)) return;
+    // 懒创建对话树（第一条消息时才创建）：idle → initializing → active 显式推进
     if (!ctx.treeId) {
-      const created = await this.deps.session.createTree({});
+      ctx.state = advanceSessionState(ctx.state, 'tree-init');
+      let created;
+      try {
+        created = await this.deps.session.createTree({});
+      } catch (err) {
+        // 创建失败回退 idle（下次 send 可重新懒建）；错误经 enqueue promise 传播给 caller
+        ctx.state = advanceSessionState(ctx.state, 'tree-init-failed');
+        throw err;
+      }
       ctx.treeId = created.id;
+      ctx.state = advanceSessionState(ctx.state, 'tree-created');
       hooks.onTreeCreated?.(created.id);
     }
     const treeId = ctx.treeId;
@@ -345,6 +395,7 @@ export class ConversationController {
     requestId: string,
     hooks: ConversationHooks,
   ): Promise<void> {
+    if (this.rejectIfDestroyed(ctx, requestId, hooks)) return;
     const treeId = ctx.treeId;
     if (!treeId) return;
     const tree = this.deps.session.getTree(treeId);
@@ -409,6 +460,7 @@ export class ConversationController {
     requestId: string,
     hooks: ConversationHooks,
   ): Promise<void> {
+    if (this.rejectIfDestroyed(ctx, requestId, hooks)) return;
     const treeId = ctx.treeId;
     if (!treeId) return;
     const tree = this.deps.session.getTree(treeId);

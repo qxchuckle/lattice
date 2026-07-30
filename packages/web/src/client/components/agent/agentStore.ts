@@ -28,7 +28,7 @@ export {
   stableNodeData,
   clearNodeDataCache,
 } from './store';
-export { connectAgentWs } from './connection';
+export { connectAgentWs, disconnectAgentWs } from './connection';
 export {
   loadSources,
   loadModels,
@@ -47,6 +47,7 @@ import {
   sendWs,
   isWsReady,
   connectAgentWs,
+  disconnectAgentWs,
   setStreamingTarget,
   unsubscribeTree,
   waitForSessionReady,
@@ -55,6 +56,7 @@ import { resetLastAppliedRev } from './sync';
 import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
+import { timer, type Subscription } from 'rxjs';
 import { advanceViewStatus } from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
 
@@ -279,20 +281,21 @@ export function deleteTurn(turnId: string): void {
 
 // ── presence（多端同步：本端在场状态上报，节流） ──
 
-let presenceTimer: ReturnType<typeof setTimeout> | null = null;
+// 尾沿节流：一次性 rxjs timer（替代手写 setTimeout），Subscription 兼作「在途」标记与取消句柄
+let presenceSub: Subscription | null = null;
 let pendingPresence: { focusNodeId?: string | null; typing?: boolean } = {};
 
 /** 节流上报本端 presence（focus/typing）给同树其他端 */
 export function reportPresence(patch: { focusNodeId?: string | null; typing?: boolean }): void {
   pendingPresence = { ...pendingPresence, ...patch };
-  if (presenceTimer) return;
-  presenceTimer = setTimeout(() => {
-    presenceTimer = null;
+  if (presenceSub) return;
+  presenceSub = timer(300).subscribe(() => {
+    presenceSub = null;
     if (agentStore.treeId && agentStore.sessionId) {
       sendWs({ type: 'presence.update', treeId: agentStore.treeId, ...pendingPresence });
     }
     pendingPresence = {};
-  }, 300);
+  });
 }
 
 // ── 节点尺寸 ──
@@ -395,4 +398,24 @@ export async function initAgent(): Promise<void> {
   } finally {
     initializing = false;
   }
+}
+
+// ── 全局清理（页面卸载/登出） ──
+
+/**
+ * 清理 agent 模块的全部活跃订阅与连接：presence 节流 timer + WS 连接链
+ * （connSub / socket$ / 心跳 timer / 状态订阅，由 disconnectAgentWs 内部全量清理）。
+ * 幂等：重复调用无副作用；清理后再次 connectAgentWs/initAgent 可正常重建。
+ */
+export function cleanupAgentStore(): void {
+  presenceSub?.unsubscribe();
+  presenceSub = null;
+  pendingPresence = {};
+  disconnectAgentWs();
+}
+
+// 卸载兜底：应用无明确的路由离开/卸载点（agent 画布由 visible 开关控制而非路由），
+// 故在页面卸载前统一清理，避免 WS/timer 订阅泄漏（SSR/测试环境无 window 时跳过）
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', cleanupAgentStore);
 }

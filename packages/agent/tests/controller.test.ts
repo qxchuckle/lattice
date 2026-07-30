@@ -214,6 +214,97 @@ describe('ConversationController 编排核心', () => {
       '被删除的排队请求不调模型 API',
     ).toBe(false);
   });
+
+  it('树创建失败回退 idle：错误经 hooks.onError 上报，下次 send 可重新懒建', async () => {
+    const { sm, controller } = await setup();
+    const log: string[] = [];
+    controller.createSession('sess1', 'mock', null);
+    expect(controller.getSession('sess1')!.state, '初始 idle').toBe('idle');
+
+    // 首次 createTree 抛错：doSend 应回退 idle 并把错误传给 caller（→ hooks.onError）
+    const realCreateTree = sm.createTree.bind(sm);
+    let failNext = true;
+    sm.createTree = (async (opts: Parameters<typeof realCreateTree>[0]) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error('createTree failed');
+      }
+      return realCreateTree(opts);
+    }) as typeof sm.createTree;
+
+    controller.send('sess1', '你好', { requestId: 'turn1' }, makeLogHooks(log));
+    await flush(controller, 'sess1');
+
+    expect(controller.getSession('sess1')!.treeId, '创建失败树未挂接').toBeNull();
+    expect(controller.getSession('sess1')!.state, '失败回退 idle').toBe('idle');
+    expect(
+      log.some((l) => l.startsWith('error:') && l.includes('createTree failed')),
+      '错误经 hooks.onError 上报（enqueue 不再吞错）',
+    ).toBe(true);
+
+    // 恢复后重新 send：可再次懒建成功 → active
+    controller.send('sess1', '再试', { requestId: 'turn2' }, makeLogHooks(log));
+    await flush(controller, 'sess1');
+    expect(controller.getSession('sess1')!.treeId, '重试后成功建树').toBeTruthy();
+    expect(controller.getSession('sess1')!.state, '重试后 active').toBe('active');
+  });
+
+  it('destroyed 会话拒绝新命令：send 触发 onReject，不建树', async () => {
+    const { controller } = await setup();
+    const rejects: string[] = [];
+    const hooks: ConversationHooks = {
+      onEvent: () => {},
+      onError: () => {},
+      onTreeUpdated: () => {},
+      onTreeCreated: () => {},
+      onReject: (_rid, reason) => rejects.push(reason),
+    };
+    controller.createSession('sess1', 'mock', null);
+    await controller.destroySession('sess1');
+    // destroySession 已从 map 删除；重新登记一个 destroyed 态 ctx 不现实，
+    // 故验证入口：已销毁 session 的 getSession 返回 undefined，send 静默忽略（withSession 拦截）
+    controller.send('sess1', '你好', { requestId: 'turn1' }, hooks);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(controller.getSession('sess1'), '销毁后 session 已移除').toBeUndefined();
+    expect(rejects.length, '入口拦截，未进入 doSend').toBe(0);
+  });
+
+  it('竞态：send 入队后、doSend 执行前 destroySession → 队列任务被终态守卫拦截，不懒建树', async () => {
+    const { sm, controller } = await setup();
+    const rejects: { requestId?: string; reason: string }[] = [];
+    const hooks: ConversationHooks = {
+      ...noopHooks,
+      onReject: (requestId, reason) => rejects.push({ requestId, reason }),
+    };
+    // 监视 createTree：守卫生效时根本不该被调用（不白建树）
+    const realCreateTree = sm.createTree.bind(sm);
+    let createTreeCalls = 0;
+    sm.createTree = (async (opts: Parameters<typeof realCreateTree>[0]) => {
+      createTreeCalls++;
+      return realCreateTree(opts);
+    }) as typeof sm.createTree;
+
+    const ctx = controller.createSession('sess1', 'mock', null);
+    // 阻塞前置任务卡住结构队列：为「入队后、doSend 执行前」留出 destroy 窗口
+    const rt = controller.getRuntime('sess1')!;
+    let release!: () => void;
+    rt.queue = rt.queue.then(() => new Promise<void>((r) => (release = r)));
+
+    controller.send('sess1', '你好', { requestId: 'turn1' }, hooks);
+    // 入口守卫（withSession + rejectIfDestroyed）此刻通过：尚未 destroyed，任务已排入队列
+    expect(rejects.length, '入口未拒绝，任务已入队').toBe(0);
+
+    // 排队期间销毁：ctx.state 推进 destroyed，队列任务仍持有该 ctx 引用
+    await controller.destroySession('sess1');
+    release();
+    await rt.queue; // 等被放行的 doSend 跑完（session 已从 map 删除，flush 拿不到 runtime）
+
+    expect(rejects.length, 'doSend 内终态守卫经 onReject 拒绝').toBe(1);
+    expect(rejects[0].requestId, '拒绝携带原 requestId').toBe('turn1');
+    expect(rejects[0].reason).toBe('session 已销毁，拒绝新命令');
+    expect(ctx.treeId, '被拦截的任务不懒建树').toBeNull();
+    expect(createTreeCalls, 'createTree 未被调用').toBe(0);
+  });
 });
 
 describe('ConversationController 参数数据流（模型/思考/上下文 + usage）', () => {

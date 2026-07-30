@@ -13,13 +13,20 @@ export type PipelineErrorCode =
   | Extract<SourceErrorCode, 'unsupported_operation' | 'unsupported_option' | 'invalid_state'>
   | 'middleware_failure';
 
+/** middleware 失败发生的拦截点：入向 prompt 变换 / 出向事件变换 */
+export type PipelinePhase = 'prompt' | 'transform';
+
 export interface PipelineErrorContext {
   /** 相关源 ID */
   sourceId?: string;
   /** 能力声明路径（如 'session.fork'）——调用方应据此门控 */
   capabilityPath?: string;
-  /** 失败的 middleware 名（code=middleware_failure 时） */
+  /** 失败的 middleware 名（code=middleware_failure 时）。兼容保留，新代码读 middlewareName */
   middleware?: string;
+  /** 触发错误的 middleware 名（与 middleware 同值，统一契约字段） */
+  middlewareName?: string;
+  /** 错误发生的拦截点：'prompt'（入向）/ 'transform'（出向） */
+  phase?: PipelinePhase;
   /** 原始错误 */
   cause?: unknown;
 }
@@ -49,11 +56,13 @@ export class PipelineError extends Error {
     return new PipelineError('unsupported_option', message, { capabilityPath, sourceId });
   }
 
-  /** middleware 抛错的类型化包装（不静默吞） */
-  static middlewareFailed(name: string, cause: unknown): PipelineError {
+  /** middleware 抛错的类型化包装（不静默吞）；phase 标识入向/出向拦截点 */
+  static middlewareFailed(name: string, cause: unknown, phase: PipelinePhase): PipelineError {
     const detail = cause instanceof Error ? cause.message : String(cause);
     return new PipelineError('middleware_failure', `middleware "${name}" 执行失败：${detail}`, {
       middleware: name,
+      middlewareName: name,
+      phase,
       cause,
     });
   }

@@ -9,6 +9,9 @@
  * 锁域 key：树存在用 treeId（多连接共享同一树的锁），树未创建时退化为 `session:<sid>`。
  */
 import type { SessionContext, TreeRuntime } from './types.js';
+import { advanceTreeRuntime, initialTreeRuntimeState } from './runtime-state.js';
+
+const noop = (): void => {};
 
 export class TreeRuntimeRegistry {
   private readonly runtimes = new Map<string, TreeRuntime>();
@@ -23,7 +26,12 @@ export class TreeRuntimeRegistry {
     const key = this.keyOf(ctx);
     let rt = this.runtimes.get(key);
     if (!rt) {
-      rt = { abortControllers: new Map(), queue: Promise.resolve(), streamQueues: new Map() };
+      rt = {
+        abortControllers: new Map(),
+        queue: Promise.resolve(),
+        streamQueues: new Map(),
+        state: initialTreeRuntimeState(),
+      };
       this.runtimes.set(key, rt);
     }
     return rt;
@@ -32,20 +40,40 @@ export class TreeRuntimeRegistry {
   /**
    * 将任务串入结构队列（树结构变更串行，避免 fork/addNode 交错）。
    * 仅包含快操作：流式部分由 scheduleStream 调度到分支队列，不占用本队列。
+   *
+   * 错误契约：返回的 promise 原样传播任务错误（caller 必须 await/catch）；
+   * 内部队列链另行吞错保护，保证错误不卡队列（后续任务照常执行）。
    */
   enqueue(ctx: SessionContext, task: () => Promise<void>): Promise<void> {
     const rt = this.of(ctx);
-    const run = rt.queue.then(task).catch(() => {});
-    rt.queue = run;
-    void run.finally(() => {
-      if (rt.queue === run) rt.queue = Promise.resolve();
-    });
+    rt.state = advanceTreeRuntime(rt.state, 'enqueue-task');
+    const run = rt.queue.then(task);
+    // 链上另行吞错：队列推进不受单个任务失败影响；错误经 run 传给 caller
+    const chained = run.then(noop, noop);
+    rt.queue = chained;
+    void run.then(
+      () => {
+        if (rt.queue === chained) {
+          rt.state = advanceTreeRuntime(rt.state, 'task-done');
+          rt.queue = Promise.resolve();
+        }
+      },
+      (err: unknown) => {
+        // failed 驻留到下次 enqueue（观测标记，不阻断后续任务）
+        rt.lastError = err;
+        rt.state = advanceTreeRuntime(rt.state, 'task-error');
+        if (rt.queue === chained) rt.queue = Promise.resolve();
+      },
+    );
     return run;
   }
 
   /**
    * 流式任务按分支串行、跨分支并行：同一源 session（= 分支）不能并发 prompt，
    * 不同线程/分支的回答同时推送，互不阻塞。锁域 per-tree，多连接共享。
+   *
+   * 错误契约：返回 void（fire-and-forget），流任务错误不再无痕吞掉——
+   * 记录到 rt.lastError 并推进 stream 维度到 failed（队列仍照常推进）。
    */
   scheduleStream(
     ctx: SessionContext,
@@ -55,10 +83,21 @@ export class TreeRuntimeRegistry {
     const rt = this.of(ctx);
     const key = branchId ?? '__default__';
     const prev = rt.streamQueues.get(key) ?? Promise.resolve();
-    const run = prev.then(task).catch(() => {});
+    rt.state = advanceTreeRuntime(rt.state, 'stream-start');
+    const run = prev.then(task).then(noop, (err: unknown) => {
+      rt.lastError = err;
+      rt.state = advanceTreeRuntime(rt.state, 'stream-error');
+    });
     rt.streamQueues.set(key, run);
     void run.finally(() => {
-      if (rt.streamQueues.get(key) === run) rt.streamQueues.delete(key);
+      // 旧队尾被覆盖后不再是队尾，完成时不动 map；只有当前队尾才清理条目
+      if (rt.streamQueues.get(key) === run) {
+        rt.streamQueues.delete(key);
+        // 全部分支排空才算 stream 维度归位（failed 驻留：非法转换保持原态）
+        if (rt.streamQueues.size === 0) {
+          rt.state = advanceTreeRuntime(rt.state, 'stream-done');
+        }
+      }
     });
   }
 
