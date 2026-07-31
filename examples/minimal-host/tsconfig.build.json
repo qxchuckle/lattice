@@ -1,0 +1,19 @@
+{
+  // refs 层构建配置：仅 tsc -b 类型检查用（示例宿主，无运行产物构建）
+  "extends": ["./tsconfig.json", "../../tsconfig.refs.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-types"
+  },
+  "references": [
+    {
+      "path": "../../packages/agent-protocol/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/agent-source/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/agent-pipeline/tsconfig.build.json"
+    }
+  ]
+}

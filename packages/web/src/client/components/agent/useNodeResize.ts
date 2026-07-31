@@ -5,6 +5,7 @@
 import { useCallback } from 'react';
 import { useStoreApi, type NodeChange } from '@xyflow/react';
 import { agentStore, liveResizeNode, setNodeSize, getChildIds } from './agentStore';
+import { isVisibleTurnStatus } from './turnState';
 import { layoutTree, type LayoutNode } from './agentLayout';
 
 export function useNodeResize(nodeId: string) {
@@ -16,7 +17,7 @@ export function useNodeResize(nodeId: string) {
 
       // 与画布布局同口径：排除 hidden（已删除不参与布局），否则重布局位置会偏移
       const layoutNodes: LayoutNode[] = [...agentStore.turns.values()]
-        .filter((t) => t.status !== 'hidden')
+        .filter((t) => isVisibleTurnStatus(t.status))
         .map((t) => {
           const u = agentStore.ui.get(t.id);
           return {

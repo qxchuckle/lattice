@@ -172,7 +172,7 @@ export {
 export type { ProtocolErrorCode } from './constants.js';
 
 // ── Guards ──
-export { isClientMessage, isServerMessage, isSourceEvent } from './guards.js';
+export { isClientMessage, isServerMessage, isSourceEvent, assertNever } from './guards.js';
 
 // ── 事件→内容转换（唯一实现，server/client 共用） ──
 export { StreamAccumulator, applyEventToContent } from './source/content-builder.js';
@@ -186,6 +186,7 @@ export {
   advanceViewStatus,
   isTerminalViewStatus,
   projectNodeCapabilities,
+  isValidNodeCapabilities,
   projectViewStatus,
   resolveSettledNodeStatus,
   deriveTurnViewStatus,

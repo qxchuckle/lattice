@@ -1,0 +1,26 @@
+{
+  // Project References 共享基座（仅供各包 tsconfig.build.json 二段 extends）：
+  // - composite + emitDeclarationOnly：refs 层只发射 d.ts 到各包 dist-types/，
+  //   运行产物 dist/ 仍由 tsup/vite 生成，互不干扰
+  // - paths 把全部 workspace 包映射到源码：跨包 import 会解析到对方源码，
+  //   若对方工程未列入 references，tsc 直接报 TS6307 —— 编译期强制包边界
+  // - paths 相对本文件（仓库根）解析，对任意层级的包生效
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "paths": {
+      "@qcqx/lattice-agent-protocol": ["./packages/agent-protocol/src/index.ts"],
+      "@qcqx/lattice-agent-protocol/*": ["./packages/agent-protocol/src/*"],
+      "@qcqx/lattice-agent-source": ["./packages/agent-source/src/index.ts"],
+      "@qcqx/lattice-agent-source/testing": ["./packages/agent-source/src/testing/index.ts"],
+      "@qcqx/lattice-agent-source/*": ["./packages/agent-source/src/*"],
+      "@qcqx/lattice-agent-pipeline": ["./packages/agent-pipeline/src/index.ts"],
+      "@qcqx/lattice-agent": ["./packages/agent/src/index.ts"],
+      "@qcqx/lattice-agent/*": ["./packages/agent/src/*"],
+      "@qcqx/lattice-core": ["./packages/core/src/index.ts"],
+      "@qcqx/lattice-core/*": ["./packages/core/src/*"],
+      "@qcqx/lattice-web": ["./packages/web/src/server/index.ts"]
+    }
+  }
+}

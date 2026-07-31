@@ -2,6 +2,7 @@
  * WebSocket 连接管理 + SourceEvent 流式处理
  */
 import type { SourceEvent, ServerMessage, ClientMessage } from '@qcqx/lattice-agent-protocol';
+import { isTerminalViewStatus, assertNever } from '@qcqx/lattice-agent-protocol';
 import {
   timer,
   retry,
@@ -79,9 +80,9 @@ export function handleSourceEvent(event: SourceEvent, requestId?: string): void 
   const turn = agentStore.turns.get(turnId);
   if (!turn) return;
 
-  // 只读防护：turn 已被撤销/删除（乐观标记或 tree.updated 重建）→ 丢弃迟到的流事件，
+  // 只读防护（状态机单一真相）：turn 已被撤销/删除（乐观标记或 tree.updated 重建）→ 丢弃迟到的流事件，
   // 尤其 done 不能把已删除节点的状态改回 'done' 导致节点复活
-  if (turn.status === 'undone' || turn.status === 'hidden') {
+  if (isTerminalViewStatus(turn.status)) {
     if ((event.type === 'done' || event.type === 'error') && requestId) {
       streamingMap.delete(requestId);
     }
@@ -420,7 +421,12 @@ function handleServerMessage(msg: ServerMessage): void {
       resetLastAppliedRev();
       if (msg.treeId) loadTree(msg.treeId);
       break;
+    case 'tree.error':
+      break; // 树级错误提示（fork 降级告知等）：由发起端操作路径自行处理，广播侧暂不呈现
     case 'pong':
       break; // 心跳响应（存活检测已在 onmessage 统一更新 lastPongAt）
+    default:
+      // exhaustiveness 兜底：ServerMessage 新增变体而本 switch 未补 → 编译报错
+      assertNever(msg);
   }
 }

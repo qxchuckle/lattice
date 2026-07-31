@@ -167,10 +167,9 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
   });
 
   // WebSocket 终端端点
-  // @fastify/websocket 扩展了 FastifyInstance 的 get 方法支持 websocket 选项，
-  // 但 TypeScript 类型声明需要运行时注册后才完整，这里用类型断言注册
-
-  (app as any).get(
+  // @fastify/websocket 已增广 fastify 类型（websocket: true 重载），无需断言；
+  // 回调内只依赖 socket 的最小结构面，ws 的 WebSocket 类型与之兼容
+  app.get(
     '/api/terminal/ws',
     { websocket: true },
 

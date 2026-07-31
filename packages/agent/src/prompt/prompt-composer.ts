@@ -9,7 +9,7 @@
  *   - inline-ref：携带内容直接注入；不可解析引用降级为显示文本
  */
 import type { PromptSegment, ContentBlock } from '@qcqx/lattice-agent-protocol';
-import { segmentsToDisplayText } from '@qcqx/lattice-agent-protocol';
+import { segmentsToDisplayText, assertNever } from '@qcqx/lattice-agent-protocol';
 
 export interface PromptComposerDeps {
   /** 本地命令名 → 模板正文；null = 非本地命令（源级命令透传 slash 文本） */
@@ -97,6 +97,10 @@ export async function composePrompt(
           `--- Ref ${seg.refType}: ${seg.display} ---\n${clip(seg.content)}\n--- End Ref ---`,
         );
         break;
+
+      default:
+        // exhaustiveness 兜底：PromptSegment 新增段类型而本 switch 未补 → 编译报错
+        assertNever(seg);
     }
   }
   flushText();

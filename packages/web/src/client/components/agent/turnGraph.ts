@@ -14,7 +14,7 @@ import {
   isTerminalViewStatus,
 } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode } from './types';
-import { deriveTurnStatus } from './turnState';
+import { deriveTurnStatus, isVisibleTurnStatus } from './turnState';
 
 /**
  * 从持久化节点重建客户端 turn 视图。
@@ -93,7 +93,7 @@ export function restoreStreamingTurns(
 ): void {
   for (const [id, blocks] of liveStreaming) {
     const turn = turns.get(id);
-    if (turn && turn.blocks.length === 0 && turn.status !== 'undone' && turn.status !== 'hidden') {
+    if (turn && turn.blocks.length === 0 && !isTerminalViewStatus(turn.status)) {
       turn.blocks = [...blocks];
       turn.status = 'streaming';
     }
@@ -133,13 +133,13 @@ export function applyStreamEvent(turn: TurnNode, event: SourceEvent): void {
 
 /** 可见 turn（排除 hidden/已删除——delete = 树中不展示） */
 export function getVisibleTurns(turns: TurnNode[]): TurnNode[] {
-  return turns.filter((t) => t.status !== 'hidden');
+  return turns.filter((t) => isVisibleTurnStatus(t.status));
 }
 
 /** 某 turn 的可见子 turn ID（排除 hidden，按时间序） */
 export function getVisibleChildIds(turns: TurnNode[], turnId: string): string[] {
   return turns
-    .filter((t) => t.parentTurnId === turnId && t.status !== 'hidden')
+    .filter((t) => t.parentTurnId === turnId && isVisibleTurnStatus(t.status))
     .sort((a, b) => a.timestamp - b.timestamp)
     .map((t) => t.id);
 }

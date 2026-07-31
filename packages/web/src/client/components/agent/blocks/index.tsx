@@ -10,6 +10,7 @@ import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { NodeContent, TokenUsage } from '@qcqx/lattice-agent-protocol';
+import { assertNever } from '@qcqx/lattice-agent-protocol';
 import { groupToolBlocks } from '../turnSummary';
 import { Collapsible } from './Collapsible';
 import { ThinkingBlock } from './ThinkingBlock';
@@ -295,6 +296,14 @@ function ContentBlockRenderer({ block, streaming }: { block: NodeContent; stream
       );
     case 'notice':
       return <NoticeBlock level={block.level} text={block.text} />;
+    case 'tool_call':
+    case 'tool_result':
+      // 已由 groupToolBlocks 配对为 tool-group 卡片（ContentRenderer 分支）；
+      // 此处仅处理孤儿块，无独立视觉（保持既有行为：不渲染）
+      return null;
+    default:
+      // exhaustiveness 兜底：NodeContent 新增块类型而本 switch 未补 → 编译报错
+      return assertNever(block);
   }
 }
 

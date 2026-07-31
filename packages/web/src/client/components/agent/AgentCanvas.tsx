@@ -28,6 +28,7 @@ import {
 } from './agentStore';
 import { layoutTree, type LayoutNode } from './agentLayout';
 import { getVisibleTurns, getVisibleChildIds } from './turnGraph';
+import { isStreamingStatus } from './turnState';
 import { ConversationNodeComponent } from './ConversationNodeComponent';
 import { RootInputNode } from './RootInputNode';
 
@@ -143,7 +144,7 @@ function AgentCanvasInner() {
           source: t.id,
           target: childId,
           type: 'smoothstep',
-          animated: childTurn?.status === 'streaming',
+          animated: isStreamingStatus(childTurn?.status),
           style: { stroke: 'var(--brand-color)', strokeWidth: 1.5 },
         });
       }

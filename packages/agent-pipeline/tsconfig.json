@@ -1,18 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "noEmit": true,
     "outDir": "./dist",
     "paths": {
-      "@qcqx/lattice-agent-protocol": [
-        "../agent-protocol/src/index.ts"
-      ],
-      "@qcqx/lattice-agent-protocol/*": [
-        "../agent-protocol/src/*"
-      ]
+      "@qcqx/lattice-agent-protocol": ["../agent-protocol/src/index.ts"],
+      "@qcqx/lattice-agent-protocol/*": ["../agent-protocol/src/*"]
     }
   },
-  "include": [
-    "src",
-    "tests"
-  ]
+  "include": ["src", "tests"]
 }

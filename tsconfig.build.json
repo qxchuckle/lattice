@@ -1,0 +1,32 @@
+{
+  // Solution 文件：tsc -b 编排全仓类型检查（Project References）
+  // 各包 refs 层配置为 tsconfig.build.json（composite + emitDeclarationOnly），
+  // 仅发射 d.ts 到各包 dist-types/；运行产物 dist/ 仍由 tsup/vite 生成，互不干扰。
+  "files": [],
+  "references": [
+    {
+      "path": "packages/agent-protocol/tsconfig.build.json"
+    },
+    {
+      "path": "packages/agent-source/tsconfig.build.json"
+    },
+    {
+      "path": "packages/agent-pipeline/tsconfig.build.json"
+    },
+    {
+      "path": "packages/agent/tsconfig.build.json"
+    },
+    {
+      "path": "packages/core/tsconfig.build.json"
+    },
+    {
+      "path": "packages/web/tsconfig.build.json"
+    },
+    {
+      "path": "packages/cli/tsconfig.build.json"
+    },
+    {
+      "path": "examples/minimal-host/tsconfig.build.json"
+    }
+  ]
+}

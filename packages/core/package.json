@@ -22,7 +22,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist dist-types tsconfig.tsbuildinfo",
     "prepublishOnly": "tsup"
   },
   "files": [

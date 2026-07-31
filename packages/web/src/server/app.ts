@@ -1,4 +1,4 @@
-import Fastify, { type FastifyError } from 'fastify';
+import Fastify, { type FastifyError, type FastifyReply } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
@@ -11,6 +11,11 @@ import { authGuard } from './auth';
 import { initDb } from '@qcqx/lattice-core';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+/** 统一的 404 响应（生产/开发两条路径共用，行为单一真相） */
+function sendNotFound(req: { url: string }, reply: FastifyReply): void {
+  reply.code(404).send({ code: 'not_found', message: `Route ${req.url} not found` });
+}
 
 /** 创建 Fastify 实例并注册所有插件和路由 */
 export async function createServer() {
@@ -48,21 +53,17 @@ export async function createServer() {
       });
     }
 
-    // SPA fallback：非 /api 请求返回 index.html
+    // SPA fallback：非 /api 请求返回 index.html，其余走统一 404
     app.setNotFoundHandler((req, reply) => {
-      if (!req.url.startsWith('/api')) {
-        if (existsSync(indexPath)) {
-          const html = readFileSync(indexPath, 'utf-8');
-          return reply.type('text/html').send(html);
-        }
+      if (!req.url.startsWith('/api') && existsSync(indexPath)) {
+        const html = readFileSync(indexPath, 'utf-8');
+        return reply.type('text/html').send(html);
       }
-      reply.code(404).send({ code: 'not_found', message: `Route ${req.url} not found` });
+      sendNotFound(req, reply);
     });
   } else {
     // 开发模式：Vite dev server 提供前端，Fastify 只提供 API
-    app.setNotFoundHandler((req, reply) => {
-      reply.code(404).send({ code: 'not_found', message: `Route ${req.url} not found` });
-    });
+    app.setNotFoundHandler(sendNotFound);
   }
 
   // 全局错误处理兜底（不泄漏堆栈，只返回错误码和消息）

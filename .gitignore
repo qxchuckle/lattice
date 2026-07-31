@@ -1,8 +1,12 @@
 out
 dist
+dist-types
 node_modules
 *.tsbuildinfo
 .pnpm-store/
+
+# tsc 误发射到源码目录的声明产物
+packages/*/src/**/*.d.ts.map
 
 # test coverage 报告（pnpm test:coverage 自动生成）
 coverage/

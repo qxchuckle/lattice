@@ -129,6 +129,31 @@ export interface NodeCapabilityContext {
 const PERMISSIVE_CTX: NodeCapabilityContext = { fork: { atMessage: true }, isTail: true };
 
 /**
+ * 能力不变量校验（状态机铁律，投影返回前断言）：
+ * - streaming：canAbort 必开，结构操作（branch/undo/delete/retry/continue）全关；
+ * - 非流式：canAbort 必关；
+ * - undone（只读）：仅 canDelete 合法（undone→hidden），其余全关；
+ * - hidden（只读终态）：全关。
+ */
+export function isValidNodeCapabilities(viewStatus: ViewStatus, caps: NodeCapabilities): boolean {
+  const streaming = viewStatus === 'streaming';
+  if (caps.canAbort !== streaming) return false;
+  if (streaming) {
+    return (
+      !caps.canBranch && !caps.canUndo && !caps.canDelete && !caps.canRetry && !caps.canContinue
+    );
+  }
+  if (viewStatus === 'undone' || viewStatus === 'hidden') {
+    if (caps.canBranch || caps.canUndo || caps.canRetry || caps.canContinue || caps.canFollowup) {
+      return false;
+    }
+    // delete 对 undone 合法（降级为 hidden）；hidden 不可重复删除
+    return viewStatus === 'undone' || !caps.canDelete;
+  }
+  return true;
+}
+
+/**
  * 从视图状态 + 源能力投影节点能力（与 canApplyOperation 语义一致：
  * undone/hidden 只读；delete 对 undone 合法；流式中禁止结构操作）。
  * streaming 是客户端瞬时态，故基于 ViewStatus 而非持久化状态。
@@ -157,7 +182,7 @@ export function projectNodeCapabilities(
   // 后者对应的产品事实：该源只支持线形对话，非末尾节点不能再分支。
   const isTail = ctx.isTail ?? true;
   const forkable = ctx.fork !== false && (ctx.fork.atMessage || isTail);
-  return {
+  const caps: NodeCapabilities = {
     canBranch: !streaming && !isReadOnly(persisted) && forkable,
     canUndo: !streaming && canApplyOperation('undo', persisted),
     canDelete: !streaming && canApplyOperation('delete', persisted),
@@ -166,6 +191,13 @@ export function projectNodeCapabilities(
     canFollowup: !isReadOnly(persisted),
     canAbort: streaming,
   };
+  // 不变量断言：投影规则与状态机铁律漂移即抛错（fail-fast，防错误能力下发至客户端）
+  if (!isValidNodeCapabilities(viewStatus, caps)) {
+    throw new Error(
+      `projectNodeCapabilities invariant violation: ${viewStatus} -> ${JSON.stringify(caps)}`,
+    );
+  }
+  return caps;
 }
 
 /**

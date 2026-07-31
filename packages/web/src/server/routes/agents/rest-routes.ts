@@ -15,7 +15,7 @@ import { getUsername, listProjects } from '@qcqx/lattice-core';
 import { isPathSafe, ok, fail } from '../shared';
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { readCustomModels } from './index';
+import { readCustomModels } from './shared';
 
 export function registerAgentRestRoutes(
   app: FastifyInstance,

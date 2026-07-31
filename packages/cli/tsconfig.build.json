@@ -1,0 +1,29 @@
+{
+  // refs 层构建配置：仅 tsc -b 类型检查用，运行产物构建仍走 tsup（读 tsconfig.json）
+  // 直接依赖：core / web（动态 import）；web 的 d.ts 会带出 agent 系类型，故列传递引用
+  "extends": ["./tsconfig.json", "../../tsconfig.refs.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-types"
+  },
+  "references": [
+    {
+      "path": "../core/tsconfig.build.json"
+    },
+    {
+      "path": "../web/tsconfig.build.json"
+    },
+    {
+      "path": "../agent/tsconfig.build.json"
+    },
+    {
+      "path": "../agent-protocol/tsconfig.build.json"
+    },
+    {
+      "path": "../agent-source/tsconfig.build.json"
+    },
+    {
+      "path": "../agent-pipeline/tsconfig.build.json"
+    }
+  ]
+}

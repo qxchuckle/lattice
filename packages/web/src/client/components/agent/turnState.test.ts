@@ -5,7 +5,13 @@
  * 投影优先级：undone > hidden > error(内容) > interrupted > done
  */
 import { describe, it, expect } from 'vitest';
-import { deriveTurnStatus } from './turnState';
+import {
+  deriveTurnStatus,
+  viewToNodeStatus,
+  isStreamingStatus,
+  isVisibleTurnStatus,
+  turnStyleFlags,
+} from './turnState';
 import {
   isReadOnly,
   canApplyOperation,
@@ -166,5 +172,58 @@ describe('共享状态机（protocol/node-state）', () => {
     const hidden = projectNodeCapabilities('hidden');
     expect(hidden.canDelete).toBe(false);
     expect(hidden.canFollowup).toBe(false);
+  });
+});
+
+describe('客户端谓词适配（turnState 薄层，单一真相在 protocol/node-state）', () => {
+  it('viewToNodeStatus：done → active（投影反向适配），其余同名透传', () => {
+    expect(viewToNodeStatus('done')).toBe('active');
+    expect(viewToNodeStatus('streaming')).toBe('streaming');
+    expect(viewToNodeStatus('error')).toBe('error');
+    expect(viewToNodeStatus('interrupted')).toBe('interrupted');
+    expect(viewToNodeStatus('undone')).toBe('undone');
+    expect(viewToNodeStatus('hidden')).toBe('hidden');
+  });
+
+  it('viewToNodeStatus 与 canApplyOperation 组合：done 可操作，终态只读', () => {
+    expect(canApplyOperation('undo', viewToNodeStatus('done'))).toBe(true);
+    expect(canApplyOperation('undo', viewToNodeStatus('undone'))).toBe(false);
+    expect(canApplyOperation('delete', viewToNodeStatus('undone'))).toBe(true);
+    expect(canApplyOperation('delete', viewToNodeStatus('hidden'))).toBe(false);
+  });
+
+  it('isStreamingStatus：仅 streaming 为真（含 undefined 兑底）', () => {
+    expect(isStreamingStatus('streaming')).toBe(true);
+    expect(isStreamingStatus('done')).toBe(false);
+    expect(isStreamingStatus('hidden')).toBe(false);
+    expect(isStreamingStatus(undefined)).toBe(false);
+  });
+
+  it('isVisibleTurnStatus：仅 hidden 不可见（undefined 视为可见）', () => {
+    expect(isVisibleTurnStatus('hidden')).toBe(false);
+    expect(isVisibleTurnStatus('done')).toBe(true);
+    expect(isVisibleTurnStatus('undone')).toBe(true);
+    expect(isVisibleTurnStatus('streaming')).toBe(true);
+    expect(isVisibleTurnStatus(undefined)).toBe(true);
+  });
+
+  it('turnStyleFlags：各状态恰有对应标志为真，互斥', () => {
+    expect(turnStyleFlags('streaming')).toEqual({
+      isStreaming: true,
+      isError: false,
+      isInterrupted: false,
+      isUndone: false,
+      isHidden: false,
+    });
+    expect(turnStyleFlags('error').isError).toBe(true);
+    expect(turnStyleFlags('interrupted').isInterrupted).toBe(true);
+    expect(turnStyleFlags('undone').isUndone).toBe(true);
+    expect(turnStyleFlags('hidden').isHidden).toBe(true);
+    // done / undefined：全假（普通完成态样式）
+    const done = turnStyleFlags('done');
+    const none = turnStyleFlags(undefined);
+    for (const f of [done, none]) {
+      expect(Object.values(f).every((v) => v === false)).toBe(true);
+    }
   });
 });

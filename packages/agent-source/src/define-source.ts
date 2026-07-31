@@ -8,7 +8,7 @@
  * - 握手管线：→ ./handshake.ts（declared + probe → ResolvedManifest）
  * - 能力守卫：fork/rename 缺口抛 unsupported_operation / unsupported_option（纵深防御）
  * - signal 接线：唯一取消真相 → handle.abort()
- * - 契约版本校验：CONTRACT_VERSION 偏斜在 defineSource 调用时即抛错
+ * - 契约版本校验：CONTRACT_VERSION 偏斜在 handshake 入口落 failed manifest（available:false，不炸 Registry）
  * - 资源缓存：per-cwd TTL（菜单频繁开合免重扫）
  */
 import { resolve } from 'node:path';
@@ -135,6 +135,15 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   async handshake(): Promise<ResolvedManifest> {
     const declared = this.describe();
     const resolvedAt = Date.now();
+
+    // 契约版本守门：偏斜 = 握手失败（available:false + 双方版本可见），不抛不炸 Registry；
+    // 与 auth/probe 失败同一表达出口（错误处理契约：握手失败用 failed manifest，无需熔断）
+    if (this.driver.contractVersion !== CONTRACT_VERSION) {
+      const message = `Driver "${this.driver.info.id}" 的契约版本 v${this.driver.contractVersion} 与宿主 protocol v${CONTRACT_VERSION} 不一致，请升级 driver 或对齐 @qcqx/lattice-agent-protocol 版本`;
+      console.warn(`[Source:${this.driver.info.id}] handshake refused: ${message}`);
+      this.manifest = buildFailedManifest(declared, message, resolvedAt);
+      return this.manifest;
+    }
 
     // probe 独立容错：probe 失败不影响 auth 判定的 available；无 probe = declared 即 verified
     let probeReport: DriverProbeReport | undefined;
@@ -452,20 +461,9 @@ function filterResourceKinds(
 }
 
 /**
- * driver → ISource。contractVersion 偏斜在此即抛（fail-fast，不等运行期）。
+ * driver → ISource。contractVersion 偏斜不在此抛：握手时落 available:false（见 handshake），
+ * 保证第三方 driver 版本偏斜不会炸掉宿主注册流程。
  */
 export function defineSource<H extends DriverSessionHandle>(driver: SourceDriver<H>): ISource {
-  if (driver.contractVersion !== CONTRACT_VERSION) {
-    throw new SourceError(
-      'unsupported_operation',
-      `Driver "${driver.info.id}" 的契约版本 ${driver.contractVersion} 与宿主 protocol v${CONTRACT_VERSION} 不一致`,
-      {
-        sourceId: driver.info.id,
-        sourceName: driver.info.displayName,
-        operation: 'init',
-        suggestion: '升级 driver 或对齐 @qcqx/lattice-agent-protocol 版本',
-      },
-    );
-  }
   return new DefinedSource(driver);
 }

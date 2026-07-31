@@ -29,6 +29,7 @@ import {
   type NodeUiState,
 } from './agentStore';
 import { useNodeResize } from './useNodeResize';
+import { turnStyleFlags } from './turnState';
 import { ContentRenderer, UsageFooter, FileChangeSummary } from './blocks';
 
 interface NodeData {
@@ -61,18 +62,13 @@ function ConversationNodeInner({ data }: NodeProps) {
 
   const width = ui?.width ?? 340;
   const height = ui?.height ?? 260;
+  // 样式标志单点投影（turnState.turnStyleFlags）：仅作边框/配色/占位映射，不参与交互入口判断
+  const { isStreaming, isError, isInterrupted, isUndone, isHidden } = turnStyleFlags(turn?.status);
   // 能力数据驱动：优先用 server 下发的投影（与接口守卫同源，含源能力维度）。
   // 例外：streaming 是客户端瞬时态（未入快照），本地投影作过渡；快照未到时同理。
-  const caps =
-    turn?.status === 'streaming'
-      ? projectNodeCapabilities('streaming')
-      : (agentStore.turnCaps.get(turnId) ?? projectNodeCapabilities(turn?.status ?? 'done'));
-  // 以下仅作样式映射（边框/配色/占位），不参与交互入口判断
-  const isStreaming = turn?.status === 'streaming';
-  const isError = turn?.status === 'error';
-  const isInterrupted = turn?.status === 'interrupted';
-  const isUndone = turn?.status === 'undone';
-  const isHidden = turn?.status === 'hidden';
+  const caps = isStreaming
+    ? projectNodeCapabilities('streaming')
+    : (agentStore.turnCaps.get(turnId) ?? projectNodeCapabilities(turn?.status ?? 'done'));
 
   // 流式自动滚动
   useEffect(() => {

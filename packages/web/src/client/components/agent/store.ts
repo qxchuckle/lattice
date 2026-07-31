@@ -10,6 +10,7 @@ import type {
 } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode, NodeUiState, ConversationEntry } from './types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
+import { isVisibleTurnStatus } from './turnState';
 
 /**
  * 客户端源信息（server 下发 SourceListItem 的 UI 消费形态）。
@@ -158,7 +159,7 @@ export function ensureUi(nodeId: string): NodeUiState {
 export function getChildIds(nodeId: string): string[] {
   const children: string[] = [];
   for (const [id, turn] of agentStore.turns) {
-    if (turn.parentTurnId === nodeId && turn.status !== 'hidden') children.push(id);
+    if (turn.parentTurnId === nodeId && isVisibleTurnStatus(turn.status)) children.push(id);
   }
   return children.sort(
     (a, b) => agentStore.turns.get(a)!.timestamp - agentStore.turns.get(b)!.timestamp,
@@ -170,7 +171,9 @@ export function getSiblings(nodeId: string): string[] {
   if (!node) return [];
   const siblings: string[] = [];
   for (const [id, turn] of agentStore.turns) {
-    if (turn.parentTurnId === node.parentTurnId && turn.status !== 'hidden') siblings.push(id);
+    if (turn.parentTurnId === node.parentTurnId && isVisibleTurnStatus(turn.status)) {
+      siblings.push(id);
+    }
   }
   return siblings.sort(
     (a, b) => agentStore.turns.get(a)!.timestamp - agentStore.turns.get(b)!.timestamp,

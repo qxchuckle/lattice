@@ -6,8 +6,10 @@
  */
 import type { LatticeAgent, ConversationHooks } from '@qcqx/lattice-agent';
 import type { ClientMessage, ServerMessage, PresenceState } from '@qcqx/lattice-agent-protocol';
+import { assertNever } from '@qcqx/lattice-agent-protocol';
+import { clientMessageSchema } from '@qcqx/lattice-agent-protocol/schemas';
 import { randomUUID } from 'node:crypto';
-import type { WsSocket, AgentConn } from './index';
+import type { WsSocket, AgentConn } from './shared';
 
 /** 命令分发所需的全部上下文（由 ws-handler 构建并注入） */
 export interface WsCommandContext {
@@ -27,73 +29,24 @@ export interface WsCommandContext {
   socketRequestIds: Set<string>;
 }
 
-// ── P1-#11: 入站参数守卫 ──────────────────────────────────────────
-
-/** 防止超长/超大 payload 耗尽服务端资源 */
-const MAX_TREE_ID_LEN = 256;
-const MAX_SESSION_ID_LEN = 256;
-const MAX_BRANCH_NAME_LEN = 256;
-const MAX_NODE_ID_LEN = 256;
-const MAX_NODE_IDS_COUNT = 1000;
-const MAX_MESSAGE_CHARS = 200_000; // ~200KB 文本
-
-function validateStringField(value: unknown, field: string, maxLen: number): string | null {
-  if (typeof value !== 'string') return null;
-  if (value.length > maxLen) {
-    return `${field} exceeds maximum length (${maxLen})`;
-  }
-  return null;
-}
-
-function validateCommonFields(msg: ClientMessage): string | null {
-  if ('treeId' in msg && msg.treeId) {
-    const err = validateStringField(msg.treeId, 'treeId', MAX_TREE_ID_LEN);
-    if (err) return err;
-  }
-  if ('sessionId' in msg && msg.sessionId) {
-    const err = validateStringField(msg.sessionId, 'sessionId', MAX_SESSION_ID_LEN);
-    if (err) return err;
-  }
-  if ('branchId' in msg && msg.branchId) {
-    const err = validateStringField(msg.branchId, 'branchId', MAX_BRANCH_NAME_LEN);
-    if (err) return err;
-  }
-  if ('branchName' in msg && msg.branchName) {
-    const err = validateStringField(msg.branchName, 'branchName', MAX_BRANCH_NAME_LEN);
-    if (err) return err;
-  }
-  if ('nodeId' in msg && msg.nodeId) {
-    const err = validateStringField(msg.nodeId, 'nodeId', MAX_NODE_ID_LEN);
-    if (err) return err;
-  }
-  if ('nodeIds' in msg && Array.isArray(msg.nodeIds)) {
-    if (msg.nodeIds.length > MAX_NODE_IDS_COUNT) {
-      return `nodeIds exceeds maximum count (${MAX_NODE_IDS_COUNT})`;
-    }
-    for (const id of msg.nodeIds) {
-      const err = validateStringField(id, 'nodeIds[]', MAX_NODE_ID_LEN);
-      if (err) return err;
-    }
-  }
-  if ('message' in msg && typeof msg.message === 'string') {
-    if (msg.message.length > MAX_MESSAGE_CHARS) {
-      return `message exceeds maximum length (${MAX_MESSAGE_CHARS} chars)`;
-    }
-  }
-  return null;
-}
+// ── P1-#11: 入站参数守卫 ──────────────────────────────────
+// parse, don't validate：形状/类型/长度/嵌套校验全部下沉 protocol schema（单一真相，
+// 见 protocol/schemas 的 clientMessageSchema 与 WS_INBOUND_LIMITS），本文件只做入口
+// safeParse（check-only：通过后继续用原对象，未知键透传）。
 
 export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage): Promise<void> {
   const { latticeAgent, send, broadcastTree, broadcastSnapshot, makeHooks, conn } = ctx;
   const { conversation, session, sources, permission } = latticeAgent;
 
-  // P1-#11: 入站参数守卫
-  const validationError = validateCommonFields(msg);
-  if (validationError) {
+  // P1-#11: 入站参数守卫（类型不符/缺必填/超长/嵌套非法均在此拒绝）
+  const parsed = clientMessageSchema.safeParse(msg);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const detail = issue ? `${issue.path.join('.')}: ${issue.message}` : 'malformed message';
     send({
       type: 'session.error',
-      sessionId: (msg as any).sessionId ?? '',
-      message: `Invalid parameters: ${validationError}`,
+      sessionId: 'sessionId' in msg ? (msg.sessionId ?? '') : '',
+      message: `Invalid parameters: ${detail}`,
     });
     return;
   }
@@ -305,5 +258,9 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
       send({ type: 'pong' });
       break;
     }
+
+    default:
+      // exhaustiveness 兜底：ClientMessage 新增变体而本 switch 未补 → 编译报错
+      assertNever(msg);
   }
 }

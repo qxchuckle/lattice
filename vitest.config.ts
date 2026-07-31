@@ -37,6 +37,16 @@ export default defineConfig({
       ],
       reporter: ['text', 'html'],
       reportsDirectory: './coverage',
+      // 覆盖率门槛（防回退水位）：目标 lines≥85% / branches≥75%
+      // 当前基线（2026-07-31）：Stmts 16.45% / Branch 15.49% / Funcs 19.6% / Lines 16.48%
+      // cli 为 E2E 只测 dist 子进程（src 无插桩）、web 客户端组件覆盖不足，现状远低于目标，
+      // 故先按略低于现状设防回退门槛，随覆盖率提升逐步上调至目标值
+      thresholds: {
+        statements: 15.5,
+        branches: 14.5,
+        functions: 18.5,
+        lines: 15.5,
+      },
     },
   },
 });

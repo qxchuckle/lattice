@@ -33,6 +33,8 @@ import type {
   CapabilityDowngrade,
   SourcePermissionRequest,
   PermissionDecision,
+  PromptSegment,
+  ClientMessage,
 } from './index.js';
 import type { JsonValue } from './source/manifest.js';
 
@@ -238,3 +240,151 @@ export const permissionDecisionSchema = z.object({
   scope: z.enum(['once', 'session']).optional(),
   message: z.string().optional(),
 }) satisfies z.ZodType<PermissionDecision>;
+
+// ── WS 入站（ClientMessage，parse don't validate） ──
+
+/**
+ * 入站资源上限（迁自 web/ws-commands 手写守卫，防超长/超大 payload 耗尽服务端资源）。
+ * 单一来源：server 入口守卫与契约测试均引用本常量。
+ */
+export const WS_INBOUND_LIMITS = {
+  /** treeId/sessionId/nodeId/branchId/branchName 等标识符 */
+  ID_MAX_LEN: 256,
+  /** tree.delete 批量节点数 / segments 段数 */
+  ARRAY_MAX_COUNT: 1000,
+  /** 自由文本（message / inline-ref content 等），~200KB */
+  TEXT_MAX_CHARS: 200_000,
+} as const;
+
+/** 标识符字段：string 且 ≤256 */
+const boundedId = z
+  .string()
+  .max(WS_INBOUND_LIMITS.ID_MAX_LEN, `exceeds maximum length (${WS_INBOUND_LIMITS.ID_MAX_LEN})`);
+
+/** 自由文本字段：string 且 ≤200_000 */
+const boundedText = z
+  .string()
+  .max(
+    WS_INBOUND_LIMITS.TEXT_MAX_CHARS,
+    `exceeds maximum length (${WS_INBOUND_LIMITS.TEXT_MAX_CHARS} chars)`,
+  );
+
+const boundedArray = <T extends z.ZodTypeAny>(item: T) =>
+  z
+    .array(item)
+    .max(
+      WS_INBOUND_LIMITS.ARRAY_MAX_COUNT,
+      `exceeds maximum count (${WS_INBOUND_LIMITS.ARRAY_MAX_COUNT})`,
+    );
+
+/** 结构化 prompt 输入段（嵌套递归校验：未知段 type/字段类型不符/超长均拒） */
+export const promptSegmentSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), text: boundedText }),
+  z.object({ type: z.literal('command'), name: boundedId, args: boundedText.optional() }),
+  z.object({
+    type: z.literal('image'),
+    data: z.string(),
+    mimeType: boundedId,
+    name: boundedId.optional(),
+  }),
+  z.object({
+    type: z.literal('ref'),
+    refType: z.enum(['file', 'spec', 'task']),
+    id: boundedText,
+    display: boundedText,
+  }),
+  z.object({
+    type: z.literal('inline-ref'),
+    refType: z.enum(['selection', 'node']),
+    display: boundedText,
+    content: boundedText,
+  }),
+]) satisfies z.ZodType<PromptSegment>;
+
+/**
+ * ClientMessage 递归校验（WS 入站命令的唯一入口守卫）。
+ * check-only：safeParse 判定形状，通过后继续使用原对象（未知键透传）。
+ */
+export const clientMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('session.create'),
+    agentId: boundedId.optional(),
+    cwd: boundedText.optional(),
+    taskId: boundedId.optional(),
+    treeId: boundedId.optional(),
+  }),
+  z.object({
+    type: z.literal('session.send'),
+    sessionId: boundedId,
+    message: boundedText,
+    segments: boundedArray(promptSegmentSchema).optional(),
+    parentNodeId: boundedId.nullable().optional(),
+    branchId: boundedId.optional(),
+    requestId: boundedId.optional(),
+    model: boundedId.optional(),
+    thinkingLevel: boundedId.optional(),
+    contextWindow: z.number().optional(),
+    sourceId: boundedId.optional(),
+  }),
+  z.object({
+    type: z.literal('session.continue'),
+    sessionId: boundedId,
+    nodeId: boundedId,
+    requestId: boundedId.optional(),
+  }),
+  z.object({
+    type: z.literal('session.retry'),
+    sessionId: boundedId,
+    nodeId: boundedId,
+    requestId: boundedId.optional(),
+  }),
+  z.object({ type: z.literal('session.undo'), sessionId: boundedId, nodeId: boundedId }),
+  z.object({ type: z.literal('session.delete'), sessionId: boundedId, nodeId: boundedId }),
+  z.object({
+    type: z.literal('session.abort'),
+    sessionId: boundedId,
+    requestId: boundedId.optional(),
+  }),
+  z.object({ type: z.literal('session.destroy'), sessionId: boundedId }),
+  z.object({
+    type: z.literal('tree.fork'),
+    treeId: boundedId,
+    nodeId: boundedId,
+    branchName: boundedId.optional(),
+  }),
+  z.object({ type: z.literal('tree.delete'), treeId: boundedId, nodeIds: boundedArray(boundedId) }),
+  z.object({
+    type: z.literal('tree.merge'),
+    treeId: boundedId,
+    branchId: boundedId,
+    targetNodeId: boundedId,
+    mode: z.enum(['squash', 'cherry-pick', 'reference']).optional(),
+  }),
+  z.object({ type: z.literal('tree.switchHead'), treeId: boundedId, nodeId: boundedId }),
+  z.object({ type: z.literal('tree.setDefault'), treeId: boundedId, branchId: boundedId }),
+  z.object({ type: z.literal('permission.respond'), requestId: boundedId, allowed: z.boolean() }),
+  z.object({
+    type: z.literal('tree.subscribe'),
+    treeId: boundedId,
+    sinceRev: z.number().optional(),
+    clientKind: boundedId.optional(),
+  }),
+  z.object({ type: z.literal('tree.unsubscribe'), treeId: boundedId }),
+  z.object({
+    type: z.literal('presence.update'),
+    treeId: boundedId,
+    focusNodeId: boundedId.nullable().optional(),
+    typing: z.boolean().optional(),
+  }),
+  z.object({ type: z.literal('ping') }),
+]) satisfies z.ZodType<ClientMessage>;
+
+// 双向编译期钉死（与 guards.ts 同模式）：satisfies 只防多不防漏——
+// ClientMessage 新增变体而 schema 未补 → 此处编译报错
+type _MissingClientMessageTypes = Exclude<
+  ClientMessage['type'],
+  z.infer<typeof clientMessageSchema>['type']
+>;
+const _assertNoMissingClientMessageTypes: _MissingClientMessageTypes extends never ? true : never =
+  true;
+void _assertNoMissingClientMessageTypes;

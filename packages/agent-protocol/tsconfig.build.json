@@ -1,0 +1,8 @@
+{
+  // refs 层构建配置：仅 tsc -b 类型检查用，运行产物构建仍走 tsup（读 tsconfig.json）
+  "extends": ["./tsconfig.json", "../../tsconfig.refs.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-types"
+  }
+}

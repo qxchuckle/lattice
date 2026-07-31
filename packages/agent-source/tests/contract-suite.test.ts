@@ -61,12 +61,26 @@ describe('conformance 规则（负例）', () => {
     expect(issues.map((i) => i.rule)).toContain('permission-default');
   });
 
-  it('契约版本偏斜 → contract-version error + defineSource 直接抛', () => {
+  it('契约版本偏斜 → contract-version error；握手落 available:false + reason 含双方版本', async () => {
     const skewed = { ...createScriptedDriver(), contractVersion: CONTRACT_VERSION + 1 };
     expect(checkDriverConformance(skewed as never).map((i) => i.rule)).toContain(
       'contract-version',
     );
-    expect(() => defineSource(skewed)).toThrow(SourceError);
+    // 版本偏斜不炸工厂/Registry：握手时表达为 failed manifest（与 auth/probe 失败同一出口）
+    const source = defineSource(skewed);
+    await source.init();
+    const manifest = await source.handshake();
+    expect(manifest.available).toBe(false);
+    expect(manifest.unavailableReason?.code).toBe('handshake-failed');
+    expect(manifest.unavailableReason?.message).toContain(String(CONTRACT_VERSION + 1));
+    expect(manifest.unavailableReason?.message).toContain(String(CONTRACT_VERSION));
+  });
+
+  it('契约版本一致 → 握手不受影响（available:true）', async () => {
+    const source = defineSource(createScriptedDriver());
+    await source.init();
+    const manifest = await source.handshake();
+    expect(manifest.available).toBe(true);
   });
 });
 

@@ -1,20 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "noEmit": true,
     "paths": {
-      "@qcqx/lattice-core": [
-        "../core/src/index.ts"
-      ],
-      "@qcqx/lattice-core/*": [
-        "../core/src/*"
-      ],
-      "@qcqx/lattice-web": [
-        "../web/src/server/index.ts"
-      ]
+      "@qcqx/lattice-core": ["../core/src/index.ts"],
+      "@qcqx/lattice-core/*": ["../core/src/*"],
+      "@qcqx/lattice-web": ["../web/src/server/index.ts"]
     }
   },
-  "include": [
-    "src",
-    "../../types"
-  ]
+  "include": ["src", "../../types"]
 }

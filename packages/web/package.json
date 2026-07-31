@@ -24,7 +24,7 @@
     "build:server": "tsup",
     "test": "vitest run",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist dist-types tsconfig.tsbuildinfo"
   },
   "files": [
     "dist",
@@ -78,7 +78,8 @@
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
     "rxjs": "^7.8.2",
-    "valtio": "^2.0.0"
+    "valtio": "^2.0.0",
+    "zod": "^3.25.0"
   },
   "optionalDependencies": {
     "@homebridge/node-pty-prebuilt-multiarch": "^0.11.14"

@@ -45,7 +45,14 @@ export type { AgentClientConfig } from './api';
 
 // ── Actions（高层操作，组合 store + connection + api） ──
 
-import { agentStore, ensureUi, putTurn, clearNodeDataCache, pickActiveSourceId } from './store';
+import {
+  agentStore,
+  ensureUi,
+  putTurn,
+  clearNodeDataCache,
+  pickActiveSourceId,
+  sourceUnavailableHint,
+} from './store';
 import {
   sendWs,
   isWsReady,
@@ -60,24 +67,30 @@ import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from 
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
 import { timer, type Subscription } from 'rxjs';
-import { advanceViewStatus } from '@qcqx/lattice-agent-protocol';
+import {
+  advanceViewStatus,
+  canApplyOperation,
+  shouldSkipDescendantMark,
+} from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
+import { viewToNodeStatus } from './turnState';
 
 // ── 提交消息 ──
 
-/** 连接/session 就绪超时：落一个 error 态 turn（用户可见 + 可重试） */
+/** 连接/session 就绪超时或提交前置校验失败：落一个 error 态 turn（用户可见 + 可重试） */
 function failTurn(
   parentTurnId: string | null,
   message: string,
   sourceId: string,
   modelId: string,
+  errorText = '连接服务器失败，请检查 server 是否运行',
 ): void {
   const turnId = crypto.randomUUID();
   const turn: TurnNode = {
     id: turnId,
     parentTurnId,
     userMessage: message.trim(),
-    blocks: [{ type: 'error', message: '连接服务器失败，请检查 server 是否运行' }],
+    blocks: [{ type: 'error', message: errorText }],
     status: 'error',
     timestamp: Date.now(),
     sourceId,
@@ -106,6 +119,24 @@ export function submitFromNode(
   const contextWindow = parentTurn
     ? parentTurn.contextWindow
     : agentStore.activeContextWindow || undefined;
+
+  // fork/追问前置校验：线程源不可换（server 沿祖先链解析），继承源不存在/不可用时
+  // 回退无意义，直接落 error turn 提示（与连接失败同一交互模式）。
+  // 源目录未加载（sources 空）不拦截，避免启动早期误伤。
+  if (parentTurn && agentStore.sources.length > 0) {
+    const source = agentStore.sources.find((s) => s.id === sourceId);
+    if (!source || !source.available) {
+      const reason = source ? sourceUnavailableHint(source) : '源已从配置中移除';
+      failTurn(
+        parentTurnId,
+        message,
+        sourceId,
+        modelId,
+        `该线程的源 ${sourceId} 不可用：${reason}`,
+      );
+      return null;
+    }
+  }
 
   // 懒创建 session：新对话发消息时才连接
   if (!agentStore.sessionId) {
@@ -199,6 +230,8 @@ export function abortStream(turnId?: string): void {
 export function continueTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
+  // 操作守卫（状态机单一真相）：只读终态 no-op，不发送不改态
+  if (!canApplyOperation('continue', viewToNodeStatus(turn.status))) return;
 
   // 状态机 start 信号：拉回 streaming（终止态 undone/hidden 不会被拉回）。在原节点续写
   turn.status = advanceViewStatus(turn.status, 'start');
@@ -219,6 +252,8 @@ export function continueTurn(turnId: string): void {
 export function retryTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
+  // 操作守卫：只读终态 no-op（否则会清空 undone 节点的 blocks 并误发送）
+  if (!canApplyOperation('retry', viewToNodeStatus(turn.status))) return;
 
   // 重置 turn 以展示重新生成的流式内容（旧回复 server 会标记 undone）
   turn.blocks = [];
@@ -247,7 +282,8 @@ function markLocalSubtree(turnId: string, status: 'undone' | 'hidden'): void {
   const mark = (id: string): void => {
     const t = agentStore.turns.get(id);
     if (!t) return;
-    if (!(status === 'undone' && t.status === 'hidden')) t.status = status;
+    // 后代标记跳过规则（与 server markNodes 同一谓词）：undo 不复活已 hidden 后代
+    if (!shouldSkipDescendantMark(status, viewToNodeStatus(t.status))) t.status = status;
     for (const [cid, c] of agentStore.turns) {
       if (c.parentTurnId === id) mark(cid);
     }
@@ -259,6 +295,8 @@ function markLocalSubtree(turnId: string, status: 'undone' | 'hidden'): void {
 export function undoTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
+  // 操作守卫：undone/hidden 不可再撤销
+  if (!canApplyOperation('undo', viewToNodeStatus(turn.status))) return;
 
   sendWs({
     type: 'session.undo',
@@ -273,6 +311,8 @@ export function undoTurn(turnId: string): void {
 export function deleteTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
+  // 操作守卫：undone→hidden 合法，已 hidden 不可重复删
+  if (!canApplyOperation('delete', viewToNodeStatus(turn.status))) return;
 
   sendWs({
     type: 'session.delete',

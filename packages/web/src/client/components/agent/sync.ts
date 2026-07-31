@@ -22,6 +22,7 @@ import { applyEventToContent } from '@qcqx/lattice-agent-protocol';
 import { advanceViewStatus, isTerminalViewStatus } from '@qcqx/lattice-agent-protocol';
 import { agentStore, putTurn, ensureUi } from './store';
 import { buildTurnsFromNodes } from './turnGraph';
+import { isStreamingStatus } from './turnState';
 import type { TurnNode, ConversationEntry } from './types';
 
 /** 他端在途流缓冲 TTL：超时视为异常中止，丢弃缓冲 */
@@ -67,7 +68,7 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
   // 保护本端在途流式 turn：快照重建不得覆盖未落盘的 live 累积
   for (const [id, t] of turns) {
     const cur = agentStore.turns.get(id);
-    if (cur && cur.status === 'streaming') {
+    if (cur && isStreamingStatus(cur.status)) {
       t.blocks = cur.blocks;
       t.status = 'streaming';
     }
@@ -76,7 +77,7 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
   // 恢复他端在途流（快照含 streaming 中间态 + 本地 live 累积）
   for (const s of msg.streaming ?? []) {
     const turn = turns.get(s.parentId);
-    if (turn && turn.blocks.length === 0 && turn.status !== 'undone' && turn.status !== 'hidden') {
+    if (turn && turn.blocks.length === 0 && !isTerminalViewStatus(turn.status)) {
       turn.blocks = [...s.content];
       turn.status = 'streaming';
     }
@@ -90,7 +91,7 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
       continue;
     }
     const turn = turns.get(rid);
-    if (turn && turn.blocks.length === 0 && turn.status !== 'undone' && turn.status !== 'hidden') {
+    if (turn && turn.blocks.length === 0 && !isTerminalViewStatus(turn.status)) {
       turn.blocks = [...entry.blocks];
       turn.status = 'streaming';
     }

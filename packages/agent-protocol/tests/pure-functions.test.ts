@@ -6,7 +6,7 @@
  * server 守卫与 UI 渲染的单一真相（接口行为 ≡ 视图）。
  */
 import { describe, it, expect } from 'vitest';
-import type { SourceErrorCode, ViewStatus, NodeStatus } from '../src/index.js';
+import type { SourceErrorCode, ViewStatus, NodeStatus, NodeCapabilities } from '../src/index.js';
 import {
   errorCategory,
   projectNodeCapabilities,
@@ -18,6 +18,8 @@ import {
   advanceViewStatus,
   isTerminalViewStatus,
   resolveSettledNodeStatus,
+  isValidNodeCapabilities,
+  assertNever,
 } from '../src/index.js';
 import type { ViewSignal } from '../src/index.js';
 
@@ -219,6 +221,86 @@ describe('操作守卫与视图投影（server 侧纵深防御的同一真相）
       if (caps.canContinue) expect(canApplyOperation('continue', persisted)).toBe(true);
       if (caps.canRetry) expect(canApplyOperation('retry', persisted)).toBe(true);
     }
+  });
+});
+
+describe('isValidNodeCapabilities：能力不变量校验（projectNodeCapabilities 返回前断言）', () => {
+  const ALL: ViewStatus[] = ['streaming', 'done', 'error', 'interrupted', 'undone', 'hidden'];
+  const CTXS = [
+    undefined,
+    { fork: false as const },
+    { fork: { atMessage: true } },
+    { fork: { atMessage: false }, isTail: true },
+    { fork: { atMessage: false }, isTail: false },
+  ];
+
+  it('投影输出全矩阵满足不变量（projectNodeCapabilities 不 throw）', () => {
+    for (const s of ALL) {
+      for (const ctx of CTXS) {
+        const caps = projectNodeCapabilities(s, ctx);
+        expect(isValidNodeCapabilities(s, caps), `${s} × ${JSON.stringify(ctx)}`).toBe(true);
+      }
+    }
+  });
+
+  const caps = (overrides: Partial<NodeCapabilities>): NodeCapabilities => ({
+    canBranch: false,
+    canUndo: false,
+    canDelete: false,
+    canRetry: false,
+    canContinue: false,
+    canFollowup: false,
+    canAbort: false,
+    ...overrides,
+  });
+
+  it('streaming：仅 canAbort——结构操作任一开启即违反不变量', () => {
+    expect(isValidNodeCapabilities('streaming', caps({ canAbort: true }))).toBe(true);
+    expect(isValidNodeCapabilities('streaming', caps({ canAbort: false }))).toBe(false); // 流式必可中止
+    for (const key of ['canBranch', 'canUndo', 'canDelete', 'canRetry', 'canContinue'] as const) {
+      expect(
+        isValidNodeCapabilities('streaming', caps({ canAbort: true, [key]: true })),
+        `streaming + ${key} 应违反不变量`,
+      ).toBe(false);
+    }
+  });
+
+  it('非流式态 canAbort 必须关闭', () => {
+    for (const s of ['done', 'error', 'interrupted', 'undone', 'hidden'] as ViewStatus[]) {
+      expect(isValidNodeCapabilities(s, caps({ canAbort: true }))).toBe(false);
+    }
+  });
+
+  it('只读态结构操作全关：undone 仅 canDelete 合法（undone→hidden）；hidden 全关', () => {
+    expect(isValidNodeCapabilities('undone', caps({ canDelete: true }))).toBe(true);
+    for (const key of ['canBranch', 'canUndo', 'canRetry', 'canContinue', 'canFollowup'] as const) {
+      expect(isValidNodeCapabilities('undone', caps({ [key]: true }))).toBe(false);
+      expect(isValidNodeCapabilities('hidden', caps({ [key]: true }))).toBe(false);
+    }
+    expect(isValidNodeCapabilities('hidden', caps({ canDelete: true }))).toBe(false); // 不可重复 delete
+    expect(isValidNodeCapabilities('hidden', caps({}))).toBe(true);
+  });
+});
+
+describe('assertNever：判别联合 exhaustiveness 兜底', () => {
+  it('运行时被触达即抛错（携带违规值便于定位）', () => {
+    expect(() => assertNever('unexpected' as never)).toThrow(/unexpected/);
+  });
+
+  it('编译期收窄：穷尽 switch 的 default 分支可传入 never', () => {
+    type Shape = { kind: 'a' } | { kind: 'b' };
+    const handle = (s: Shape): string => {
+      switch (s.kind) {
+        case 'a':
+          return 'a';
+        case 'b':
+          return 'b';
+        default:
+          return assertNever(s); // s 已收窄为 never；漏 case 时此处编译报错
+      }
+    };
+    expect(handle({ kind: 'a' })).toBe('a');
+    expect(handle({ kind: 'b' })).toBe('b');
   });
 });
 

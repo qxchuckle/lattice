@@ -11,7 +11,7 @@ import type { ServerMessage, ClientMessage } from '@qcqx/lattice-agent-protocol'
 import type { LatticeAgent } from '@qcqx/lattice-agent';
 import { handleWsCommand, type WsCommandContext } from './ws-commands';
 import { forwardPermissionRequest, type PermissionRequestPayload } from './ws-handler';
-import type { AgentConn, WsSocket } from './index';
+import type { AgentConn, WsSocket } from './shared';
 
 // ── Mock 工厂 ──────────────────────────────────────────────────────
 
@@ -110,9 +110,9 @@ function makeCtx(overrides?: Partial<WsCommandContext>) {
   return { ctx, sent, conn, latticeAgent, permissionRespond, conversationSend };
 }
 
-// ── P1-#11: WS 参数验证 ────────────────────────────────────────────
+// ── P1-#11: WS 参数验证（zod schema 入口守卫，parse don't validate） ──────
 
-describe('handleWsCommand 参数验证 (P1-#11)', () => {
+describe('handleWsCommand 参数验证 (P1-#11 / zod schema)', () => {
   it('treeId 超长（>256 字符）返回 session.error', async () => {
     const { ctx, sent } = makeCtx();
     const longTreeId = 'x'.repeat(300);
@@ -190,20 +190,20 @@ describe('handleWsCommand 参数验证 (P1-#11)', () => {
     expect(conversationSend).toHaveBeenCalledOnce();
   });
 
-  it('非字符串 treeId（number）不崩溃，不触发 session.error', async () => {
+  it("非字符串 treeId（number）被 schema 拒绝，返回 session.error（parse, don't validate）", async () => {
     const { ctx, sent } = makeCtx();
-    // treeId 为 number 时 validateStringField 返回 null（跳过），不应崩溃
+    // 旧手写守卫对非 string 放行留给业务判断；zod 化后类型不符在入口即拒
     const msg = { type: 'session.create', treeId: 12345 } as unknown as ClientMessage;
 
     await expect(handleWsCommand(ctx, msg)).resolves.not.toThrow();
-    // 不应因类型错误而发出 session.error（validateStringField 对非字符串返回 null = 放行）
     const validationErrors = sent.filter(
       (m) => m.type === 'session.error' && (m as { message: string }).message.includes('treeId'),
     );
-    expect(validationErrors).toHaveLength(0);
+    expect(validationErrors).toHaveLength(1);
+    expect((validationErrors[0] as { message: string }).message).toContain('Invalid parameters');
   });
 
-  it('非字符串 treeId（null）不崩溃', async () => {
+  it('非字符串 treeId（null）被 schema 拒绝，不崩溃', async () => {
     const { ctx, sent } = makeCtx();
     const msg = { type: 'session.create', treeId: null } as unknown as ClientMessage;
 
@@ -211,7 +211,26 @@ describe('handleWsCommand 参数验证 (P1-#11)', () => {
     const validationErrors = sent.filter(
       (m) => m.type === 'session.error' && (m as { message: string }).message.includes('treeId'),
     );
-    expect(validationErrors).toHaveLength(0);
+    expect(validationErrors).toHaveLength(1);
+  });
+
+  it('嵌套 segments 递归校验：未知段 type 被拒绝', async () => {
+    const { ctx, sent, conversationSend } = makeCtx();
+    const msg = {
+      type: 'session.send',
+      sessionId: 's1',
+      message: 'hi',
+      segments: [{ type: 'bogus', text: 'x' }],
+    } as unknown as ClientMessage;
+
+    await handleWsCommand(ctx, msg);
+
+    expect(conversationSend).not.toHaveBeenCalled();
+    const errors = sent.filter((m) => m.type === 'session.error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { message: string }).message).toContain('segments');
+    // 保留现有错误响应形态：session.error 带 'sessionId' in msg 提取的 sessionId
+    expect((errors[0] as { sessionId: string }).sessionId).toBe('s1');
   });
 });
 
@@ -280,16 +299,18 @@ describe('permission.respond 归属校验 (P1-#12)', () => {
     expect((errors[0] as { message: string }).message).toContain('Unauthorized');
   });
 
-  it('无 requestId 的 permission.respond 被忽略，不抛异常且不调用 permission.respond', async () => {
+  it('无 requestId 的 permission.respond 被 schema 拒绝（入口即拒，不进入 switch）', async () => {
     const conn = makeConn();
     const { ctx, sent, permissionRespond } = makeCtx({ conn });
 
-    const msg = { type: 'permission.respond' } as unknown as ClientMessage;
+    const msg = { type: 'permission.respond', allowed: true } as unknown as ClientMessage;
 
     await expect(handleWsCommand(ctx, msg)).resolves.not.toThrow();
     expect(permissionRespond).not.toHaveBeenCalled();
-    // 无 requestId 时直接 break，不发 session.error
-    expect(sent).toHaveLength(0);
+    // zod 化后缺必填在入口回 session.error（旧手写守卫是静默 break）
+    const errors = sent.filter((m) => m.type === 'session.error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { message: string }).message).toContain('Invalid parameters');
   });
 });
 

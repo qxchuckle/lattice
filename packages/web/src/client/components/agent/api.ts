@@ -7,6 +7,7 @@ import { ApiError } from '../../../shared/api';
 import { agentStore, ensureUi, putTurn, type ClientSourceInfo } from './store';
 import type { ConversationEntry } from './types';
 import { buildTurnsFromNodes, restoreStreamingTurns, fillInterruptedStreams } from './turnGraph';
+import { isStreamingStatus } from './turnState';
 
 // ── 对话树加载 ──
 
@@ -23,7 +24,7 @@ export async function loadTree(treeId: string): Promise<void> {
     const liveStreaming = new Map<string, NodeContent[]>();
     for (const [id, t] of agentStore.turns) {
       // 只要处于流式态就捕获（包括尚未收到首 token、blocks 为空的）
-      if (t.status === 'streaming') liveStreaming.set(id, t.blocks);
+      if (isStreamingStatus(t.status)) liveStreaming.set(id, t.blocks);
     }
 
     // 纯函数重建 + 流式恢复 + 中断填充（数据逻辑见 turnGraph.ts，可独立测试）
@@ -32,9 +33,10 @@ export async function loadTree(treeId: string): Promise<void> {
     if (data.interruptedStreams.length) {
       fillInterruptedStreams(turns, data.interruptedStreams);
     }
-    // 能力数据驱动：REST 与 WS 快照同源，reload 后立即可用（不本地重算）
+    // 能力数据驱动：REST 与 WS 快照同源，reload 后立即可用（不本地重算）；
+    // 旧版 server 无此字段时降级为空——渲染侧 turnCaps 缺失时回退本地推导（向后兼容）
     agentStore.turnCaps.clear();
-    for (const [turnId, caps] of Object.entries(data.turnCapabilities)) {
+    for (const [turnId, caps] of Object.entries(data.turnCapabilities ?? {})) {
       agentStore.turnCaps.set(turnId, caps);
     }
 
