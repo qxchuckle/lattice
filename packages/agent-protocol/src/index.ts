@@ -184,6 +184,7 @@ export {
   isTerminalViewStatus,
   projectNodeCapabilities,
   projectViewStatus,
+  resolveSettledNodeStatus,
   deriveTurnViewStatus,
   projectTurnCapabilities,
 } from './source/node-state.js';

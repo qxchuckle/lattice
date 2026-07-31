@@ -27,8 +27,9 @@ import type {
 } from '@qcqx/lattice-agent-protocol';
 import { SourceEventStream, CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
 import { defer, from, timer, throwError, firstValueFrom, retry } from 'rxjs';
-import type { SourceDriver, DriverSessionHandle, DriverEmit } from './driver.js';
+import type { SourceDriver, DriverSessionHandle, DriverEmit, DriverProbeReport } from './driver.js';
 import { SourceError } from './types/error.js';
+import type { SourceErrorContext } from './types/error.js';
 import { buildResolvedManifest, buildFailedManifest } from './handshake.js';
 
 /** 资源发现缓存 TTL */
@@ -39,19 +40,33 @@ const MAX_CONNECT_RETRIES = 3;
 const CONNECT_BACKOFF_BASE_MS = 200;
 const CONNECT_BACKOFF_CAP_MS = 3_000;
 
-/** 非 SourceError 的 driver 异常 → 类型化包装 */
+/**
+ * 工厂唯一错误包装点：driver 异常 → 类型化 SourceError。
+ *
+ * 规则（禁止看错误内容/文本/code 分类）：
+ * - SourceError 透传：高级 driver 可选主动抛精确语义，不二次包装；
+ * - 其他异常按「哪个边界失败」赋语义：源设施路径（init/probe/握手/connect）
+ *   → source_unavailable（state，retryable=false）；运行时边界 → unknown。
+ */
+type ErrorBoundary = 'facility' | 'runtime';
+
 function toSourceError(
   err: unknown,
   driver: SourceDriver<DriverSessionHandle>,
-  operation: 'prompt' | 'forkSession' | 'renameSession' | 'destroySession' | 'handshake',
+  operation: SourceErrorContext['operation'],
+  boundary: ErrorBoundary,
 ): SourceError {
   if (err instanceof SourceError) return err;
-  return new SourceError('unknown', err instanceof Error ? err.message : String(err), {
-    sourceId: driver.info.id,
-    sourceName: driver.info.displayName,
-    operation,
-    cause: err instanceof Error ? err : undefined,
-  });
+  return new SourceError(
+    boundary === 'facility' ? 'source_unavailable' : 'unknown',
+    err instanceof Error ? err.message : String(err),
+    {
+      sourceId: driver.info.id,
+      sourceName: driver.info.displayName,
+      operation,
+      cause: err instanceof Error ? err : undefined,
+    },
+  );
 }
 
 class DefinedSource<H extends DriverSessionHandle> implements ISource {
@@ -70,16 +85,38 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   // ── 生命周期 ──
 
   async init(config?: Record<string, unknown>): Promise<void> {
-    await this.driver.init?.(config);
+    try {
+      await this.driver.init?.(config);
+    } catch (err) {
+      // 源设施边界：init 失败 = 源不可用（registry.initAll 据此落 available:false + warn）
+      throw toSourceError(err, this.driver, 'init', 'facility');
+    }
     this.initialized = true;
   }
 
   async dispose(): Promise<void> {
-    for (const handle of this.handles.values()) await handle.close?.();
+    for (const [id, handle] of this.handles) {
+      try {
+        await handle.close?.();
+      } catch (err) {
+        console.warn(
+          `[Source:${this.driver.info.id}] handle "${id}" close failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
     this.handles.clear();
     this.sessionAliases.clear();
     this.resourceCache.clear();
-    await this.driver.dispose?.();
+    try {
+      await this.driver.dispose?.();
+    } catch (err) {
+      // dispose 边界：收尾失败不抛（避免阻断其他源退出），但必须可观测
+      console.warn(
+        `[Source:${this.driver.info.id}] driver dispose failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
     this.initialized = false;
   }
 
@@ -97,28 +134,63 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   async handshake(): Promise<ResolvedManifest> {
     const declared = this.describe();
     const resolvedAt = Date.now();
+
+    // probe 独立容错：probe 失败不影响 auth 判定的 available；无 probe = declared 即 verified
+    let probeReport: DriverProbeReport | undefined;
+    let probeError: Error | undefined;
+    if (this.driver.probe) {
+      try {
+        probeReport = await this.driver.probe();
+      } catch (err) {
+        probeError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+
     try {
       const auth = await this.driver.checkAuth();
-      const probe = await this.driver.probe?.();
+
+      // probe 失败 → available: false，与 auth 失败区分；铁律：永不静默降级，必须可观测
+      if (probeError) {
+        console.warn(
+          `[Source:${this.driver.info.id}] probe failed: ${probeError.message}. Marked unavailable.`,
+        );
+        const failed: ResolvedManifest = {
+          info: declared.info,
+          capabilities: declared.capabilities,
+          available: false,
+          unavailableReason: { code: 'probe-failed', message: probeError.message },
+          authSnapshot: auth,
+          downgrades: [],
+          resolvedAt,
+        };
+        this.manifest = failed;
+        return failed;
+      }
+
       // 模型快照仅展示用途（权威通道 listModels），失败不影响握手
       const modelsSnapshot =
         auth.status === 'configured'
           ? await this.driver.listModels().catch((err) => {
-              console.debug(`[Source:${this.driver.info.id}] listModels failed during handshake:`, err?.message ?? err);
+              // 非致命但不静默：快照缺省，握手继续（权威通道是运行期 listModels）
+              console.warn(
+                `[Source:${this.driver.info.id}] listModels failed during handshake (snapshot omitted):`,
+                err?.message ?? err,
+              );
               return undefined;
             })
           : undefined;
       this.manifest = buildResolvedManifest({
         declared,
         auth,
-        probe,
+        probe: probeReport,
         modelsSnapshot,
         resolvedAt,
       });
     } catch (err) {
+      // checkAuth 失败 = 握手失败（源设施边界）：available:false + 原因，不抛出
       this.manifest = buildFailedManifest(
         declared,
-        toSourceError(err, this.driver, 'handshake').message,
+        toSourceError(err, this.driver, 'handshake', 'facility').message,
         resolvedAt,
       );
     }
@@ -149,8 +221,13 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       this.pruneResourceCache(); // 顺手清过期项，防 per-cwd 缓存只增不删
       this.resourceCache.set(cwd, { at: Date.now(), resources });
       return filterResourceKinds(resources, query?.kinds);
-    } catch {
-      return []; // 契约：发现类 API 失败不抛错
+    } catch (err) {
+      // 契约：发现类 API 失败不抛错——但铁律「源永不静默降级」：降级必可观测
+      console.warn(
+        `[Source:${this.driver.info.id}] scanResources failed (resources omitted):`,
+        err instanceof Error ? err.message : err,
+      );
+      return [];
     }
   }
 
@@ -209,7 +286,8 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
         ts: Date.now(),
       });
     } catch (err) {
-      const se = toSourceError(err, this.driver, 'prompt');
+      // 运行时边界：prompt 失败 → unknown（connectWithRetry 内已按 facility 包装的除外）
+      const se = toSourceError(err, this.driver, 'prompt', 'runtime');
       stream.push(
         this.stamp({
           type: 'error',
@@ -238,24 +316,31 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
    * 重试门：仅 SourceError.retryable（network/timeout/rate_limited）；其余（如二进制缺失 ENOENT
    * 被包为 unknown）立即抛出——重试无意义。退避：200ms × 2^n，封顶 3s。
    * 尊重取消信号：退避等待期间 signal 中止则不再重试（避免用户已取消却继续重连）。
+   *
+   * 最终失败（重试耗尽或不可重试）按源设施边界包装 → source_unavailable
+   *（connect 是与源建立通道的设施路径；上层据此熔断，与 prompt 运行时失败区分）。
    */
-  private connectWithRetry(sessionId: string | null, opts: PromptOpts): Promise<H> {
-    return firstValueFrom(
-      defer(() => from(this.driver.connect(sessionId, opts))).pipe(
-        retry({
-          count: MAX_CONNECT_RETRIES,
-          delay: (err: unknown, attempt: number) => {
-            const retryable = err instanceof SourceError && err.retryable;
-            if (!retryable || opts.signal?.aborted) return throwError(() => err);
-            const backoff = Math.min(
-              CONNECT_BACKOFF_BASE_MS * 2 ** (attempt - 1),
-              CONNECT_BACKOFF_CAP_MS,
-            );
-            return timer(backoff);
-          },
-        }),
-      ),
-    );
+  private async connectWithRetry(sessionId: string | null, opts: PromptOpts): Promise<H> {
+    try {
+      return await firstValueFrom(
+        defer(() => from(this.driver.connect(sessionId, opts))).pipe(
+          retry({
+            count: MAX_CONNECT_RETRIES,
+            delay: (err: unknown, attempt: number) => {
+              const retryable = err instanceof SourceError && err.retryable;
+              if (!retryable || opts.signal?.aborted) return throwError(() => err);
+              const backoff = Math.min(
+                CONNECT_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+                CONNECT_BACKOFF_CAP_MS,
+              );
+              return timer(backoff);
+            },
+          }),
+        ),
+      );
+    } catch (err) {
+      throw toSourceError(err, this.driver, 'prompt', 'facility');
+    }
   }
 
   // ── 会话原子操作（能力守卫 = 纵深防御，正确用法是查声明而非 catch） ──
@@ -276,7 +361,7 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     try {
       return await this.driver.forkNative(sessionId, atMessage);
     } catch (err) {
-      throw toSourceError(err, this.driver, 'forkSession');
+      throw toSourceError(err, this.driver, 'forkSession', 'runtime');
     }
   }
 
@@ -288,7 +373,7 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     try {
       await this.driver.renameNative(sessionId, title);
     } catch (err) {
-      throw toSourceError(err, this.driver, 'renameSession');
+      throw toSourceError(err, this.driver, 'renameSession', 'runtime');
     }
   }
 
@@ -297,14 +382,21 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     const realId = this.resolveSessionId(sessionId);
     const handle = this.handles.get(realId);
     if (handle) {
-      await handle.close?.();
+      try {
+        await handle.close?.();
+      } catch (err) {
+        console.warn(
+          `[Source:${this.driver.info.id}] handle "${realId}" close failed in destroySession:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
       this.handles.delete(realId);
     }
     this.pruneAliases(realId);
     try {
       await this.driver.destroyNative?.(realId);
     } catch (err) {
-      throw toSourceError(err, this.driver, 'destroySession');
+      throw toSourceError(err, this.driver, 'destroySession', 'runtime');
     }
   }
 

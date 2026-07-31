@@ -46,16 +46,16 @@ describe('ConversationController 编排核心', () => {
     expect(assistant!.metadata?.sourceMessageId, 'sourceMessageId 已持久化').toBeTruthy();
   });
 
-  it('interrupted：source 不发 done → status=interrupted', async () => {
-    const { sm, controller } = await setup(false); // 不发 done
+  it('error：source 报错断流（error 事件）→ status=error（v2：区别于用户中止的 interrupted）', async () => {
+    const { sm, controller } = await setup(false); // prompt 抛错 → 工厂发 error 事件
     controller.createSession('sess2', 'mock', null);
-    controller.send('sess2', '测试中断', { requestId: 'turn-int' }, noopHooks);
+    controller.send('sess2', '测试源报错', { requestId: 'turn-int' }, noopHooks);
     await flush(controller, 'sess2');
     const treeId = controller.getSession('sess2')!.treeId!;
     const asst = sm
       .getNodes(treeId)
       .find((n) => n.role === 'assistant' && n.parentId === 'turn-int');
-    expect(asst?.status, '未收到 done → interrupted').toBe('interrupted');
+    expect(asst?.status, '源报错 → error').toBe('error');
   });
 
   it('retry：旧 assistant undone + 新建 active + user 节点复用', async () => {

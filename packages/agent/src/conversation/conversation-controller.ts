@@ -329,7 +329,17 @@ export class ConversationController {
           branch = newBranch;
           sourceSessionId = forkedSessionId;
           autoForked = true;
-        } catch {
+        } catch (err) {
+          // 铁律：不静默降级——fork 失败回退到当前分支继续对话，但必须告知（上下文将共用原会话）
+          hooks.onEvent(
+            {
+              type: 'notice',
+              level: 'warning',
+              message: `自动分支失败（${err instanceof Error ? err.message : String(err)}），已回退到当前分支继续对话`,
+              ts: Date.now(),
+            },
+            opts.requestId,
+          );
           if (newBranch) {
             await this.deps.session.removeBranch(tree.id, newBranch.id).catch(() => {});
           }

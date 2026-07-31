@@ -25,6 +25,7 @@ import type {
   DriverSessionHandle,
   DriverEmit,
   DriverPromptOutcome,
+  DriverProbeReport,
 } from '../../driver.js';
 import { defineSource } from '../../define-source.js';
 import { mapPiEvent } from './map-event.js';
@@ -101,12 +102,30 @@ function asPiSessionManager(value: unknown): PiSessionManager {
   return value as PiSessionManager;
 }
 
+/** Pi SDK 的 Node 版本下限：undici@8.5 顶层调用 markAsUncloneable（Node 22+ API） */
+const PI_MIN_NODE_MAJOR = 22;
+
 /**
- * SDK 惰性加载（模块级普通 async 函数）
+ * Node 版本门禁：低版本下 import Pi SDK 会同时从 import rejection 与
+ * uncaughtException 双通道爆炸（绕过 try-catch），必须在 import 前拦截。
+ * 裸抛原生 Error：错误语义由工厂按边界统一赋予（driver 零负担）。
+ */
+function assertPiNodeSupported(): void {
+  const major = parseInt(process.version.slice(1).split('.')[0], 10);
+  if (major < PI_MIN_NODE_MAJOR) {
+    throw new Error(
+      `Pi SDK 需要 Node >= ${PI_MIN_NODE_MAJOR}（当前 ${process.version}），升级 Node 后重试`,
+    );
+  }
+}
+
+/**
+ * SDK 惰性加载（模块级普通 async 函数）；import 前先过 Node 版本门禁。
  * 注意：不要在 async 函数体外直接 `await import()` —— vite-node 不重写
  * async generator 内的动态 import，测试的模块 mock 会失效（拿到真实 SDK）
  */
-function loadSdk() {
+async function loadSdk() {
+  assertPiNodeSupported();
   return import('@earendil-works/pi-coding-agent');
 }
 
@@ -163,6 +182,14 @@ class PiDriver implements SourceDriver<PiHandle> {
 
   scanResources(query?: SourceResourceQuery): Promise<SourceResourceInfo[]> {
     return scanPiResources(query);
+  }
+
+  async probe(): Promise<DriverProbeReport> {
+    // 裸抛：版本不满足/SDK 加载失败直接抛原生 Error，由工厂 handshake
+    // 落 manifest.available=false + 原因（并 console.warn）——铁律：永不静默降级
+    const sdk = await loadSdk(); // 内含 Node 版本门禁（<22 抛）
+    const sdkVersion = (sdk as Record<string, unknown>).version;
+    return typeof sdkVersion === 'string' ? { sdkVersion } : {};
   }
 
   // ── 会话 ──
@@ -294,7 +321,10 @@ class PiDriver implements SourceDriver<PiHandle> {
       await rename(branchedPath, join(newDir, basename(branchedPath)));
     } else {
       // 全量 fork：拷贝父会话完整历史
-      const files = await readdir(parentDir).catch((err) => { console.debug('[Pi] fork readdir failed:', err?.message ?? err); return [] as string[]; });
+      const files = await readdir(parentDir).catch((err) => {
+        console.debug('[Pi] fork readdir failed:', err?.message ?? err);
+        return [] as string[];
+      });
       const parentFile = files.find((f) => f.endsWith('.jsonl'));
       if (!parentFile) {
         throw new Error(`Cannot fork: no persisted session for ${sessionId}`);

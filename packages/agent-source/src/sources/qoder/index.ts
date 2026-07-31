@@ -77,6 +77,9 @@ class QoderDriver implements SourceDriver<QoderHandle> {
   }
 
   async probe(): Promise<DriverProbeReport> {
+    // SDK 可加载性是硬前提：失败裸抛原生 Error，由工厂落 available:false + 原因（永不静默降级）
+    await loadSdk();
+    // CLI 版本仅展示用途：缺 CLI 不致不可用（env PAT 模式无需 CLI，可用性由 checkAuth 判定）
     try {
       const { execFileSync } = await import('node:child_process');
       const out = execFileSync('qodercli', ['--version'], { stdio: 'pipe' }).toString().trim();

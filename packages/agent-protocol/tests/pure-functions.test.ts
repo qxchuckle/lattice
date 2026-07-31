@@ -17,6 +17,7 @@ import {
   shouldSkipDescendantMark,
   advanceViewStatus,
   isTerminalViewStatus,
+  resolveSettledNodeStatus,
 } from '../src/index.js';
 import type { ViewSignal } from '../src/index.js';
 
@@ -35,6 +36,7 @@ describe('errorCategory：全 code 归类（穷尽）', () => {
     ['source_not_initialized', 'state'],
     ['session_not_found', 'state'],
     ['session_expired', 'state'],
+    ['source_unavailable', 'state'],
     ['unsupported_operation', 'capability'],
     ['unsupported_option', 'capability'],
     ['invalid_state', 'state'],
@@ -148,6 +150,7 @@ describe('操作守卫与视图投影（server 侧纵深防御的同一真相）
     for (const op of ['continue', 'retry', 'undo'] as const) {
       expect(canApplyOperation(op, 'active')).toBe(true);
       expect(canApplyOperation(op, 'interrupted')).toBe(true);
+      expect(canApplyOperation(op, 'error')).toBe(true); // error 非只读：可重试/撤销
       expect(canApplyOperation(op, 'undone')).toBe(false);
       expect(canApplyOperation(op, 'hidden')).toBe(false);
     }
@@ -168,19 +171,43 @@ describe('操作守卫与视图投影（server 侧纵深防御的同一真相）
     expect(shouldSkipDescendantMark('hidden', 'hidden')).toBe(false);
   });
 
-  it('projectViewStatus：undone > hidden > error(内容) > interrupted > done', () => {
+  it('projectViewStatus：undone > hidden > error(持久化态/内容) > interrupted > done', () => {
     expect(projectViewStatus('undone', true)).toBe('undone');
     expect(projectViewStatus('hidden', true)).toBe('hidden');
     expect(projectViewStatus('interrupted', true)).toBe('error'); // 内容有错优先于中断
     expect(projectViewStatus('interrupted', false)).toBe('interrupted');
+    expect(projectViewStatus('error', false)).toBe('error'); // 持久化 error 态（无错误内容块也成立）
+    expect(projectViewStatus('error', true)).toBe('error');
     expect(projectViewStatus('active', false)).toBe('done');
     expect(projectViewStatus(undefined, false)).toBe('done');
+  });
+
+  it('resolveSettledNodeStatus：用户中止 > 源报错 > 源未完成 > 正常', () => {
+    // 用户中止保持 interrupted（即使流内出现过 error 事件）
+    expect(
+      resolveSettledNodeStatus({ userAborted: true, hasError: true, sourceIncomplete: true }),
+    ).toBe('interrupted');
+    // 源报错 → error
+    expect(
+      resolveSettledNodeStatus({ userAborted: false, hasError: true, sourceIncomplete: false }),
+    ).toBe('error');
+    expect(
+      resolveSettledNodeStatus({ userAborted: false, hasError: true, sourceIncomplete: true }),
+    ).toBe('error');
+    // 源未完成（无 done 断流）→ interrupted
+    expect(
+      resolveSettledNodeStatus({ userAborted: false, hasError: false, sourceIncomplete: true }),
+    ).toBe('interrupted');
+    // 正常完成 → active
+    expect(
+      resolveSettledNodeStatus({ userAborted: false, hasError: false, sourceIncomplete: false }),
+    ).toBe('active');
   });
 
   it('投影与守卫不矛盾：投影允许的操作，守卫必须也允许（接口行为 ≡ 视图）', () => {
     const cases: Array<[ViewStatus, NodeStatus]> = [
       ['done', 'active'],
-      ['error', 'active'],
+      ['error', 'error'],
       ['interrupted', 'interrupted'],
       ['undone', 'undone'],
       ['hidden', 'hidden'],

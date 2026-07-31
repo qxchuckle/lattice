@@ -99,8 +99,13 @@ export function setupAgentWs(
         graceTimers.delete(treeId);
         const s = treeSubscribers.get(treeId);
         if (s && s.size > 0) return;
-        const ag = await getAgent();
-        ag.conversation.abortTreeStreams(treeId);
+        // 定时器回调无调用方 catch：异常会以 unhandledRejection 形态逃逸，仅日志不抛
+        try {
+          const ag = await getAgent();
+          ag.conversation.abortTreeStreams(treeId);
+        } catch (err) {
+          console.error(`[ws] grace timer abort failed for tree ${treeId}:`, err);
+        }
       }, STREAM_GRACE_MS),
     );
   }

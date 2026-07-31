@@ -153,14 +153,41 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
   }
 
   async init(): Promise<void> {
-    const { client, methods } = await loadSdk();
-    // 启动子进程
+    // 先 spawn 子进程（在 SDK 加载前），确保 spawn 失败优先于 SDK 加载失败
     const child = spawn(this.opts.command, this.opts.args ?? [], {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: this.opts.cwd,
       env: this.opts.env ? { ...process.env, ...this.opts.env } : process.env,
     });
     this.child = child;
+
+    // spawn 安全：监听 'error' 事件防止 uncaughtException，并 reject init()
+    //（裸抛原生 Error：init 是源设施边界，由工厂包为 source_unavailable）
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: Error) => {
+        cleanup();
+        this.child = null;
+        reject(new Error(`spawn ${this.opts.command} failed: ${err.message}`, { cause: err }));
+      };
+      const onSpawnReady = () => {
+        cleanup();
+        resolve();
+      };
+      const cleanup = () => {
+        child.removeListener('error', onError);
+        child.removeListener('spawn', onSpawnReady);
+      };
+      child.once('error', onError);
+      child.once('spawn', onSpawnReady);
+    });
+
+    // spawn 成功后的持久监听：子进程后期仍可能异步报错（被杀/EPIPE 等），
+    // 无监听则以 uncaughtException 形态逃逸炸宿主——这里只记日志不抛
+    child.on('error', (err) => {
+      console.warn(`[Source:${this.info.id}] child process error: ${err.message}`);
+    });
+
+    const { client, methods } = await loadSdk();
 
     // 构建 SDK client（注册全部反向调用处理器）
     const app = client({ name: 'lattice' })

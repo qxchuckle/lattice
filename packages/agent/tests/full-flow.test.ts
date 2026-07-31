@@ -72,17 +72,20 @@ describe('场景 2: 自动 fork（父节点已有 user 子节点 → 兄弟分�
 });
 
 describe('场景 3: 中断 + 继续（status: interrupted → active）', () => {
-  it('未收到 done → interrupted；continue 追加并转 active', async () => {
-    const { sm, state, controller } = await setup(false); // 不发 done
+  it('用户中止 → interrupted；continue 追加并转 active', async () => {
+    const { sm, state, controller } = await setup(); // v2：真实用户中止路径（源报错另落 error）
+    state.hangUntilAbort = true; // 发完文本后挂起，等用户中止
     controller.createSession('s3', 'mock', null);
     controller.send('s3', '会中断的提问', { requestId: 'ti' }, noopHooks);
+    await new Promise((r) => setTimeout(r, 30)); // 等流进入挂起态
+    controller.abort('s3', 'ti');
     await flush(controller, 's3');
     const tid = controller.getSession('s3')!.treeId!;
     const asst = sm.getNodes(tid).find((n) => n.role === 'assistant' && n.parentId === 'ti')!;
-    expect(asst.status, '未收到 done → interrupted').toBe('interrupted');
+    expect(asst.status, '用户中止 → interrupted').toBe('interrupted');
 
-    // 恢复后继续（源开始发 done）
-    state.emitDone = true;
+    // 恢复后继续（源正常完成）
+    state.hangUntilAbort = false;
     const lenBefore = asst.content.length;
     controller.continue('s3', 'ti', 'ti-cont', noopHooks);
     await flush(controller, 's3');

@@ -6,7 +6,9 @@
  * 新 SDK 接入 = 实现本接口（预估 150~250 行）+ 一行注册。
  *
  * 行为铁律（契约套件验证）：
- * - 永不静默降级：要么精确执行、要么抛 SourceError；近似执行必须 emit notice 事件
+ * - driver 可抛任意异常（原生 Error 即可）：工厂在每个接口调用边界统一转 SourceError
+ *   （SourceError 透传不二次包装）；需要精确语义时可选主动抛 SourceError（高级出口，非强制）
+ * - 「源永不静默降级」的责任主体是工厂：排除/降级必 warn/notice；driver 近似执行仍须 emit notice 事件
  * - driver 不 emit done（工厂合成）；致命失败 throw（工厂发 error 事件并 fail，result() reject）；
  *   非致命错误（SDK 流内 error，轮次仍正常结束）可 emit error 内容事件后正常返回 outcome
  * - abort 语义：工厂在 signal 触发时调 handle.abort()；SDK 因中止产生的异常由
@@ -79,6 +81,10 @@ export interface SourceDriver<H extends DriverSessionHandle = DriverSessionHandl
   dispose?(): Promise<void>;
 
   // ── 握手实探（可选；无 probe = declared 即 verified） ──
+
+  /** 原子探测（可选）：driver 内部自行实探（如尝试加载自家 SDK、检查运行时版本），
+   *  失败直接抛（原生 Error 即可）：工厂 handshake 落 available:false + 'probe-failed'
+   *  并 console.warn（永不静默）。SDK 加载是 driver 私有实现细节，不进接口契约 */
   probe?(): Promise<DriverProbeReport>;
 
   // ── 动态通道 ──
@@ -86,7 +92,7 @@ export interface SourceDriver<H extends DriverSessionHandle = DriverSessionHandl
   listModels(): Promise<ModelInfo[]>;
 
   /** 资源枚举（capabilities.resources=false 时工厂不调用，恒返 []）；
-   *  实现失败应 throw，由工厂吞掉转 []（发现类 API 不致命） */
+   *  实现失败应 throw，由工厂 console.warn 后转 []（发现类 API 不致命，但不静默） */
   scanResources?(query?: SourceResourceQuery): Promise<SourceResourceInfo[]>;
 
   // ── 会话原子操作 ──
@@ -95,7 +101,7 @@ export interface SourceDriver<H extends DriverSessionHandle = DriverSessionHandl
    *  opts.tools（会话工具装配）在此消费——工具属于会话，不是源级状态 */
   connect(sessionId: string | null, opts: PromptOpts): Promise<H>;
 
-  /** 执行一轮 prompt：内容事件推 emit，正常结局返回 outcome，异常 throw SourceError。
+  /** 执行一轮 prompt：内容事件推 emit，正常结局返回 outcome，异常直接 throw（工厂包装）。
    *  中止（signal→handle.abort()）视为正常结局：吞 SDK 中止异常并返回 outcome */
   prompt(
     session: H,

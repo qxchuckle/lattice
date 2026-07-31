@@ -27,6 +27,8 @@ export type SourceErrorCode =
   | 'unsupported_operation' // 能力缺口（该源版本永久性），suggestion 指向对应 capability 字段
   | 'unsupported_option' // 操作支持但选项不支持（如 fork 无 atMessage）
   | 'invalid_state' // 时序前置条件不满足（如 fork 需首 turn 落盘）——状态非能力，声明层表达不了
+  // 源不可用（按调用边界分类：probe/loadSdk/connect 等源设施路径失败，不感知 SDK/实现细节）
+  | 'source_unavailable'
   // 其他
   | 'unknown';
 
@@ -50,6 +52,7 @@ const ERROR_CATEGORY: Record<SourceErrorCode, SourceErrorCategory> = {
   unsupported_operation: 'capability',
   unsupported_option: 'capability',
   invalid_state: 'state',
+  source_unavailable: 'state',
   unknown: 'transient',
 };
 

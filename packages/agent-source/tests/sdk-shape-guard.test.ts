@@ -43,11 +43,15 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
 
 let createPiSource: typeof import('../src/sources/pi/index.js').createPiSource;
 
+// Pi SDK 硬依赖 Node >= 22（driver 内版本门禁先于 SDK import）：低版本下 connect
+// 路径被门禁拦截，形状受检逻辑根本不会执行——明示 skip，不静默空跑
+const PI_NODE_SUPPORTED = parseInt(process.version.slice(1).split('.')[0], 10) >= 22;
+
 beforeEach(async () => {
   ({ createPiSource } = await import('../src/sources/pi/index.js'));
 });
 
-describe('pi driver：SDK 形状受检', () => {
+describe.skipIf(!PI_NODE_SUPPORTED)('pi driver：SDK 形状受检', () => {
   it('SessionManager 缺方法 → 首次 connect 即抛「SDK 版本不兼容」而非运行时崩溃', async () => {
     const source = createPiSource({ sessionsRoot: '/tmp/pi-shape-test' });
     await source.init();
@@ -67,5 +71,12 @@ describe('pi driver：SDK 形状受检', () => {
     for await (const e of stream) events.push(e.type);
     await expect(stream.result()).rejects.toBeInstanceOf(Error);
     expect(events).toContain('error');
+  });
+});
+
+// 占位用例：低版本 Node 下上方套件整体 skip，此处显式证明「跳过是版本门禁所致」
+describe.skipIf(PI_NODE_SUPPORTED)('pi driver：SDK 形状受检（Node < 22 占位）', () => {
+  it('版本门禁生效：connect 前即被拦截，形状受检用例无法在当前 Node 运行', () => {
+    expect(PI_NODE_SUPPORTED).toBe(false);
   });
 });

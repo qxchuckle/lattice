@@ -66,8 +66,8 @@ export interface FileChange {
   status: 'pending' | 'accepted' | 'rejected';
 }
 
-/** 节点状态（树形对话操作体系） */
-export type NodeStatus = 'active' | 'streaming' | 'interrupted' | 'undone' | 'hidden';
+/** 节点状态（树形对话操作体系）；error = 源报错落盘态（用户中止仍为 interrupted） */
+export type NodeStatus = 'active' | 'streaming' | 'interrupted' | 'error' | 'undone' | 'hidden';
 
 export interface ConversationNode {
   id: string;

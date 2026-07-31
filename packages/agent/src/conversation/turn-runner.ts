@@ -13,7 +13,11 @@ import type {
   ContentBlock,
   SourceEvent,
 } from '@qcqx/lattice-agent-protocol';
-import { StreamAccumulator, isReadOnly } from '@qcqx/lattice-agent-protocol';
+import {
+  StreamAccumulator,
+  isReadOnly,
+  resolveSettledNodeStatus,
+} from '@qcqx/lattice-agent-protocol';
 import { runPrompt as runPipelinePrompt } from '@qcqx/lattice-agent-pipeline';
 import {
   auditTime,
@@ -29,7 +33,7 @@ import {
 import type { ConversationControllerDeps, ConversationHooks, SessionContext } from './types.js';
 import type { TreeRuntimeRegistry } from './tree-runtime.js';
 import type { StreamLifecycleState } from './stream-lifecycle.js';
-import { advanceStreamLifecycle, isInterruptedStreamState } from './stream-lifecycle.js';
+import { advanceStreamLifecycle } from './stream-lifecycle.js';
 
 /**
  * 流式持久化节流窗口（ms）。
@@ -130,7 +134,11 @@ export class TurnRunner {
     const canResume = this.deps.profiles.get(source.id)?.capabilities.session.resume !== false;
     const sourceSessionId = canResume ? persistedSessionId : null;
 
-    const { accumulator, lifecycle: settled } = await this.streamSource(
+    const {
+      accumulator,
+      lifecycle: settled,
+      hasError,
+    } = await this.streamSource(
       ctx,
       source,
       sourceSessionId,
@@ -141,22 +149,26 @@ export class TurnRunner {
       { model: opts.model, thinkingLevel: opts.thinkingLevel, contextWindow: opts.contextWindow },
       lifecycle,
     );
-    // 对外「中断」由终态派生：aborted（用户中止）与 source-incomplete（源侧未完成）同为中断
-    const interrupted = isInterruptedStreamState(settled);
+    // 终态判定走共享状态机（server/client 一致）：用户中止 > 源错误 > 源侧未完成 > 正常
+    const settledStatus = resolveSettledNodeStatus({
+      userAborted: settled === 'aborted',
+      hasError,
+      sourceIncomplete: settled === 'source-incomplete',
+    });
 
     // 捕获新 sessionId（新建时源返回，续写时不变）+ 同步分支源标记
     await this.ctxDeps.syncBranchSession(treeId, opts.branch, accumulator.sessionId, sourceId);
 
     // 持久化 assistant 节点
-    // 中断时即使无内容（如首 token 前中止）也要落盘 interrupted 节点，
-    // 否则 reload 后会因缺少 assistant 节点被误判为 done 空节点，丢失中断态与继续按钮
+    // 非正常终态（interrupted/error）即使无内容（如首 token 前中止）也要落盘对应状态节点，
+    // 否则 reload 后会因缺少 assistant 节点被误判为 done 空节点，丢失终态与继续按钮
     // 只读竞态防护：流式期间 user 节点可能已被撤销/删除（undo/delete 立即执行不排队），
     // assistant 以同样的只读状态落盘保持子树一致，且不推进 head（head 已被 markNodes 回退）
     const userNode = this.deps.session.getNode(treeId, opts.userNodeId);
     const readOnlyStatus = userNode && isReadOnly(userNode.status) ? userNode.status : undefined;
 
     let headNodeId: string | null = opts.userNodeId;
-    if (accumulator.content.length > 0 || interrupted) {
+    if (accumulator.content.length > 0 || settledStatus !== 'active') {
       const node = await this.deps.session.addNode(treeId, {
         parentId: opts.userNodeId,
         role: 'assistant',
@@ -171,8 +183,8 @@ export class TurnRunner {
         },
         ...(readOnlyStatus
           ? { status: readOnlyStatus, advanceHead: false }
-          : interrupted
-            ? { status: 'interrupted' as const }
+          : settledStatus !== 'active'
+            ? { status: settledStatus }
             : {}),
       });
       headNodeId = node.id;
@@ -216,7 +228,11 @@ export class TurnRunner {
     // 排队后取最新源 session（同分支前序流可能刚更新 sourceSessionId）
     const sourceSessionId = opts.branch?.sourceSessionId ?? null;
 
-    const { accumulator, lifecycle: settled } = await this.streamSource(
+    const {
+      accumulator,
+      lifecycle: settled,
+      hasError,
+    } = await this.streamSource(
       ctx,
       opts.source,
       sourceSessionId,
@@ -231,7 +247,12 @@ export class TurnRunner {
       },
       lifecycle,
     );
-    const interrupted = isInterruptedStreamState(settled);
+    // 终态判定与 runTurn 同源（共享纯函数）：live 与 reload 投影一致
+    const settledStatus = resolveSettledNodeStatus({
+      userAborted: settled === 'aborted',
+      hasError,
+      sourceIncomplete: settled === 'source-incomplete',
+    });
 
     if (accumulator.content.length > 0) {
       // 落盘前重读：流式期间被撤销/删除则不追加内容、不覆盖只读状态
@@ -241,7 +262,7 @@ export class TurnRunner {
         await this.deps.session.updateNode(treeId, opts.targetNodeId, {
           content: [...existingContent, ...accumulator.content],
           metadata: { ...latest.metadata, ...accumulator.nodeMetadata },
-          status: interrupted ? 'interrupted' : 'active',
+          status: settledStatus,
         });
       }
     }
@@ -251,8 +272,9 @@ export class TurnRunner {
 
   /**
    * 流式调用源 + 每 delta 写 streaming 文件（崩溃恢复用）
-   * 返回累加器与生命周期终态（completed / aborted / source-incomplete，
-   * 调用方经 isInterruptedStreamState 派生对外中断语义）；
+   * 返回累加器、生命周期终态（completed / aborted / source-incomplete）与
+   * hasError（本轮是否出现 error 事件/管线错误），调用方经
+   * resolveSettledNodeStatus 派生节点终态；
    * 正常结束（含优雅中止）后清理 streaming 文件
    */
   private async streamSource(
@@ -265,7 +287,11 @@ export class TurnRunner {
     hooks: ConversationHooks,
     promptOpts: TurnModelOpts,
     lifecycleIn: StreamLifecycleState,
-  ): Promise<{ accumulator: StreamAccumulator; lifecycle: StreamLifecycleState }> {
+  ): Promise<{
+    accumulator: StreamAccumulator;
+    lifecycle: StreamLifecycleState;
+    hasError: boolean;
+  }> {
     // preflight → streaming：前置检查已由调用方完成
     let lifecycle = advanceStreamLifecycle(lifecycleIn, 'stream');
     const accumulator = new StreamAccumulator();
@@ -303,9 +329,22 @@ export class TurnRunner {
       raw.ts === undefined ? { ...raw, ts: Date.now() } : raw;
 
     // 转发/累积：同步即时（不被磁盘 IO 阻塞，避免用户看到的流式卡顿）
+    // 源 error 事件在此消费（源错误走事件通道后流正常 complete，不进下方 catch）：
+    // - 补发 onError 闭合客户端请求生命周期（用户中止不发，保持 interrupted 不被覆盖）
+    // - 熔断唯一触发点：source_unavailable 只由工厂在源设施边界（connect 最终失败等）
+    //   生成（retryable 恒为 false）；prompt 运行时失败包为 unknown，天然不触发。
+    //   消费的是工厂赋予的语义 code（非重新分类）；恢复路径：rehandshake 成功 → markAvailable
+    let hasError = false;
     const applyEventToState = (event: SourceEvent): void => {
       accumulator.apply(event);
       hooks.onEvent(event, requestId);
+      if (event.type === 'error') {
+        hasError = true;
+        if (!abortController.signal.aborted) hooks.onError(event.message, requestId);
+        if (event.code === 'source_unavailable') {
+          this.deps.sources.registry.markUnavailable(source.id, event.message);
+        }
+      }
     };
 
     // 铁律：不静默降级——写盘失败意味着崩溃恢复凭据不可用（进程挂了就丢在途回复），
@@ -364,9 +403,11 @@ export class TurnRunner {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       // 仅真实错误（非用户中止）记入内容并通知客户端：
-      //   落盘 error 内容块 → reload 后投影为 error，与 live（session.error 设 'error'）一致；
+      //   落盘 error 内容块 + 节点 error 状态 → reload 后投影为 error，与 live 一致；
       //   用户中止保持 interrupted（客户端已乐观设置，不发 error 避免覆盖）。
+      //   此处只接管线/入向 middleware 错误（源错误走 error 事件通道，不双发）。
       if (!abortController.signal.aborted) {
+        hasError = true;
         accumulator.apply({
           type: 'error',
           message: errMsg,
@@ -402,6 +443,6 @@ export class TurnRunner {
       await this.deps.session.clearStreaming(treeId, requestId);
     }
 
-    return { accumulator, lifecycle };
+    return { accumulator, lifecycle, hasError };
   }
 }

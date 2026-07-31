@@ -6,7 +6,7 @@
  * 确保状态规则单点维护、不分散、不漂移。纯函数、零依赖。
  *
  * 持久化节点状态（ConversationNode.status）：
- *   active(默认/undefined) | interrupted | undone | hidden
+ *   active(默认/undefined) | interrupted | error | undone | hidden
  *   （streaming 仅类型保留，不落盘——流式是客户端瞬时态）
  */
 import type { NodeStatus } from './conversation.js';
@@ -141,13 +141,15 @@ export function projectNodeCapabilities(
   ctx: NodeCapabilityContext = PERMISSIVE_CTX,
 ): NodeCapabilities {
   const streaming = viewStatus === 'streaming';
-  // ViewStatus 的 undone/hidden 与持久化状态同名同义，其余视图态均映射自活跃节点
+  // ViewStatus 的 undone/hidden/error/interrupted 与持久化状态同名同义，其余视图态均映射自活跃节点
   const persisted: NodeStatus =
     viewStatus === 'undone' || viewStatus === 'hidden'
       ? viewStatus
       : viewStatus === 'interrupted'
         ? 'interrupted'
-        : 'active';
+        : viewStatus === 'error'
+          ? 'error'
+          : 'active';
   // 分支/重试 = 从锚点重问，需源具备 fork 能力。
   // 两个粒度都要门：
   //   fork === false          → 根本不能分叉
@@ -167,9 +169,9 @@ export function projectNodeCapabilities(
 }
 
 /**
- * 视图投影优先级：undone > hidden > error(内容) > interrupted > done。
+ * 视图投影优先级：undone > hidden > error(持久化态/内容) > interrupted > done。
  * streaming 为客户端流式瞬时态，不参与本投影（由连接层单独设置）。
- * error 依据内容块判定（source 真实报错），优先于 interrupted，保证 live/reload 一致。
+ * error 依据持久化 error 态或内容块判定（source 真实报错），优先于 interrupted，保证 live/reload 一致。
  */
 export function projectViewStatus(
   nodeStatus: NodeStatus | undefined,
@@ -177,9 +179,27 @@ export function projectViewStatus(
 ): ViewStatus {
   if (nodeStatus === 'undone') return 'undone';
   if (nodeStatus === 'hidden') return 'hidden';
-  if (hasError) return 'error';
+  if (nodeStatus === 'error' || hasError) return 'error';
   if (nodeStatus === 'interrupted') return 'interrupted';
   return 'done';
+}
+
+/**
+ * 流结束后的持久化状态归置（单一真相，禁止调用方内联判断）：
+ * - 用户中止 → interrupted（用户意图优先，即使流内出现过 error 事件）
+ * - 源报错（error 事件）→ error
+ * - 源未完成（无 done 断流）→ interrupted
+ * - 正常完成 → active
+ */
+export function resolveSettledNodeStatus(outcome: {
+  userAborted: boolean;
+  hasError: boolean;
+  sourceIncomplete: boolean;
+}): NodeStatus {
+  if (outcome.userAborted) return 'interrupted';
+  if (outcome.hasError) return 'error';
+  if (outcome.sourceIncomplete) return 'interrupted';
+  return 'active';
 }
 
 // ── turn 级投影（UI 以 turn 为单位渲染：user 节点 + 其 assistant 子节点） ──

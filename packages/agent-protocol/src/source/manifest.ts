@@ -57,7 +57,10 @@ export interface ResolvedManifest {
   /** 源整体可用性：握手失败不炸 Registry，落为 false + reason */
   available: boolean;
   /** available=false 时的机器可读原因 */
-  unavailableReason?: { code: 'auth' | 'sdk-missing' | 'handshake-failed'; message: string };
+  unavailableReason?: {
+    code: 'auth' | 'sdk-missing' | 'handshake-failed' | 'probe-failed';
+    message: string;
+  };
   /** 握手时刻认证快照（展示用途；权威通道 = checkAuth()） */
   authSnapshot: AuthStatus;
   /** 握手时刻模型目录快照（展示用途；权威通道 = listModels()） */

@@ -213,7 +213,7 @@ export const resolvedManifestSchema = z.object({
   available: z.boolean(),
   unavailableReason: z
     .object({
-      code: z.enum(['auth', 'sdk-missing', 'handshake-failed']),
+      code: z.enum(['auth', 'sdk-missing', 'handshake-failed', 'probe-failed']),
       message: z.string(),
     })
     .optional(),

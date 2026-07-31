@@ -17,6 +17,26 @@ import type {
 export class SourceRegistry implements ISourceRegistry {
   private sources = new Map<string, ISource>();
   private manifests = new Map<string, ResolvedManifest>();
+  /** 熔断状态：id → 原因 */
+  private runtimeUnavailable = new Map<string, string>();
+
+  /** 标记源不可用（熔断）；铁律：不静默降级——熔断必须可观测 */
+  markUnavailable(id: string, reason: string): void {
+    if (!this.runtimeUnavailable.has(id)) {
+      console.warn(`[SourceRegistry] Source "${id}" marked unavailable: ${reason}`);
+    }
+    this.runtimeUnavailable.set(id, reason);
+  }
+
+  /** 恢复源可用 */
+  markAvailable(id: string): void {
+    this.runtimeUnavailable.delete(id);
+  }
+
+  /** 查询熔断原因 */
+  getUnavailableReason(id: string): string | undefined {
+    return this.runtimeUnavailable.get(id);
+  }
 
   register(source: ISource): void {
     if (this.sources.has(source.id)) {
@@ -33,6 +53,7 @@ export class SourceRegistry implements ISourceRegistry {
   getSource<K extends keyof LatticeSourceMap & string>(id: K): LatticeSourceMap[K] | undefined;
   getSource(id: string): ISource | undefined;
   getSource(id: string): ISource | undefined {
+    if (this.runtimeUnavailable.has(id)) return undefined;
     return this.sources.get(id);
   }
 
@@ -44,12 +65,17 @@ export class SourceRegistry implements ISourceRegistry {
     return this.manifests.get(id);
   }
 
-  /** 重新握手（登录态变更/SDK 升级后调用），更新缓存并返回新 manifest */
+  /**
+   * 重新握手（登录态变更/SDK 升级后调用），更新缓存并返回新 manifest。
+   * 不重新 import 模块——ESM 失败模块会被缓存（node #58945），只重握手；
+   * 握手成功（available）即解除熔断（熔断恢复的唯一正途）。
+   */
   async rehandshake(id: string): Promise<ResolvedManifest> {
     const source = this.sources.get(id);
     if (!source) throw new Error(`Source "${id}" not found`);
     const manifest = await source.handshake();
     this.manifests.set(id, manifest);
+    if (manifest.available) this.markAvailable(id);
     return manifest;
   }
 
@@ -114,7 +140,15 @@ export class SourceRegistry implements ISourceRegistry {
   }
 
   async disposeAll(): Promise<void> {
-    await Promise.allSettled([...this.sources.values()].map((s) => s.dispose()));
+    const entries = [...this.sources.entries()];
+    const results = await Promise.allSettled(entries.map(([, s]) => s.dispose()));
+    // 单源 dispose 失败不炸整体，但必须可观测（铁律：不静默）
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        console.warn(`[SourceRegistry] Source "${entries[i][0]}" dispose failed: ${reason}`);
+      }
+    });
     this.manifests.clear();
   }
 }

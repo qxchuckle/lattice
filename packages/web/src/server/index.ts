@@ -127,6 +127,17 @@ function removePidFile(): void {
 }
 
 export async function startServer(opts?: StartServerOptions): Promise<void> {
+  // 全局兜底：未被任何边界接住的异常/rejection 只记日志不退出——
+  // web 服务承载多树多连接在途对话，单条逃逸异常（如源 SDK 内部异步报错）
+  // 不应炸掉整个进程、丢掉全部用户的在途回复；各边界已有自己的错误通道，
+  // 走到这里的属漏网之鱼，保留日志供排查（逻辑极简，不做任何恢复动作）
+  process.on('uncaughtException', (err) => {
+    console.error('[lattice-web] uncaughtException:', err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[lattice-web] unhandledRejection:', reason);
+  });
+
   const requestedPort = opts?.port ?? 14527;
   const shouldAutoOpen = opts?.open ?? !process.env.LATTICE_WEB_NO_OPEN;
 

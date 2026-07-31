@@ -24,6 +24,13 @@ export interface ISourceRegistry {
   /** 重新握手（登录态变更/SDK 升级后调用），返回新 manifest 并更新缓存 */
   rehandshake(id: string): Promise<ResolvedManifest>;
 
+  /** 运行时熔断：标记源不可用（getSource 过滤；恢复走 markAvailable/rehandshake 成功） */
+  markUnavailable(id: string, reason: string): void;
+  /** 解除熔断 */
+  markAvailable(id: string): void;
+  /** 查询熔断原因（未熔断 = undefined） */
+  getUnavailableReason(id: string): string | undefined;
+
   /** 聚合资源发现：指定源返回该源列表，不指定返回按源分组映射（未实现/失败的源 = []） */
   listResources(
     sourceId?: string,
