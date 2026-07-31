@@ -23,6 +23,7 @@ import type {
   ResolvedManifest,
   SourceResourceInfo,
   SourceResourceQuery,
+  SourceResourceScanResult,
   SourceEvent,
 } from '@qcqx/lattice-agent-protocol';
 import { SourceEventStream, CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
@@ -151,8 +152,9 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
 
       // probe 失败 → available: false，与 auth 失败区分；铁律：永不静默降级，必须可观测
       if (probeError) {
+        // 文案与熔断（registry "marked unavailable"）区分：这里只落 manifest available:false，不走 markUnavailable
         console.warn(
-          `[Source:${this.driver.info.id}] probe failed: ${probeError.message}. Marked unavailable.`,
+          `[Source:${this.driver.info.id}] probe failed: ${probeError.message}. Manifest set to available:false (probe-failed).`,
         );
         const failed: ResolvedManifest = {
           info: declared.info,
@@ -207,27 +209,29 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     return this.driver.checkAuth();
   }
 
-  async listResources(query?: SourceResourceQuery): Promise<SourceResourceInfo[]> {
+  async listResources(query?: SourceResourceQuery): Promise<SourceResourceScanResult> {
     // 能力握手后以 verified 为准；未握手退 declared
     const caps = this.manifest?.capabilities ?? this.driver.capabilities;
-    if (caps.resources === false || !this.driver.scanResources) return [];
+    if (caps.resources === false || !this.driver.scanResources) return { resources: [] };
     const cwd = resolve(query?.cwd ?? homedir());
     const cached = this.resourceCache.get(cwd);
     if (cached && Date.now() - cached.at < RESOURCE_CACHE_TTL_MS) {
-      return filterResourceKinds(cached.resources, query?.kinds);
+      return { resources: filterResourceKinds(cached.resources, query?.kinds) };
     }
     try {
       const resources = await this.driver.scanResources(query);
       this.pruneResourceCache(); // 顺手清过期项，防 per-cwd 缓存只增不删
       this.resourceCache.set(cwd, { at: Date.now(), resources });
-      return filterResourceKinds(resources, query?.kinds);
+      return { resources: filterResourceKinds(resources, query?.kinds) };
     } catch (err) {
-      // 契约：发现类 API 失败不抛错——但铁律「源永不静默降级」：降级必可观测
+      // 契约：发现类 API 失败不抛错——但铁律「源永不静默降级」：
+      // 日志可观测 + warning 随返回值结构化上报（聚合层/UI 据此告知用户）
+      const message = err instanceof Error ? err.message : String(err);
       console.warn(
         `[Source:${this.driver.info.id}] scanResources failed (resources omitted):`,
-        err instanceof Error ? err.message : err,
+        message,
       );
-      return [];
+      return { resources: [], warning: message };
     }
   }
 

@@ -5,7 +5,15 @@
  * useSnapshot（流式 delta、缩放折叠只重渲染对应节点，不广播全节点）。
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { agentStore, putTurn, ensureUi, getChildIds, getSiblings } from './store';
+import {
+  agentStore,
+  putTurn,
+  ensureUi,
+  getChildIds,
+  getSiblings,
+  sourceUnavailableHint,
+  pickActiveSourceId,
+} from './store';
 import type { TurnNode } from './types';
 
 function turn(
@@ -63,5 +71,59 @@ describe('store 可见性查询（排除 hidden）', () => {
 
   it('getSiblings 排除 hidden 兄弟', () => {
     expect(getSiblings('u2')).toEqual(['u2']);
+  });
+});
+
+describe('源可用性纯函数', () => {
+  it('sourceUnavailableHint：可用源返 undefined（不禁用）', () => {
+    expect(sourceUnavailableHint({ available: true })).toBeUndefined();
+    // available:true 时即使残留 reason 也不提示（以 available 为准）
+    expect(
+      sourceUnavailableHint({
+        available: true,
+        unavailableReason: { code: 'probe-failed', message: 'x' },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('sourceUnavailableHint：不可用源返 unavailableReason.message', () => {
+    expect(
+      sourceUnavailableHint({
+        available: false,
+        unavailableReason: { code: 'probe-failed', message: '需要 Node ≥ 22' },
+      }),
+    ).toBe('需要 Node ≥ 22');
+  });
+
+  it('sourceUnavailableHint：不可用且无 reason 时有兜底文案（不返空串）', () => {
+    expect(sourceUnavailableHint({ available: false })).toBeTruthy();
+  });
+
+  const sources = [
+    { id: 'pi', available: false },
+    { id: 'qoder', available: true },
+    { id: 'acp', available: true },
+  ];
+
+  it('pickActiveSourceId：首选可用 → 用首选', () => {
+    expect(pickActiveSourceId(sources, 'acp', 'qoder')).toBe('acp');
+  });
+
+  it('pickActiveSourceId：首选不可用/不存在 → 退当前选中', () => {
+    expect(pickActiveSourceId(sources, 'pi', 'qoder')).toBe('qoder');
+    expect(pickActiveSourceId(sources, 'ghost', 'qoder')).toBe('qoder');
+    expect(pickActiveSourceId(sources, undefined, 'qoder')).toBe('qoder');
+  });
+
+  it('pickActiveSourceId：首选与当前均不可用 → 首个可用源', () => {
+    expect(pickActiveSourceId(sources, 'pi', 'pi')).toBe('qoder');
+  });
+
+  it('pickActiveSourceId：全部不可用 → 保持 current（不静默换源，UI 禁用态呈现）', () => {
+    const allDown = [
+      { id: 'pi', available: false },
+      { id: 'qoder', available: false },
+    ];
+    expect(pickActiveSourceId(allDown, 'pi', 'qoder')).toBe('qoder');
   });
 });

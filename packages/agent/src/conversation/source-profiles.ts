@@ -64,8 +64,8 @@ export function createSourceProfileProvider(
         for (const s of deps.listLocalSkills()) skills.set(s.name, s);
         // 源已把自己的 skills 列进 system prompt 时不再枚举源级，避免双份清单
         if (!nativeSkills) {
-          const sourceSkills = await deps.registry.listResources(sourceId, { kinds: ['skill'] });
-          for (const r of Array.isArray(sourceSkills) ? sourceSkills : []) {
+          const { bySource } = await deps.registry.listResources(sourceId, { kinds: ['skill'] });
+          for (const r of bySource[sourceId] ?? []) {
             if (!skills.has(r.name))
               skills.set(r.name, { name: r.name, description: r.description });
           }

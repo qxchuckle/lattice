@@ -5,12 +5,13 @@
  * 消费层直接操作源实例。可用性是数据（ResolvedManifest.available）而非硬编码。
  */
 import type {
+  AggregatedSourceResources,
   ISource,
   ISourceRegistry,
   LatticeSourceMap,
   ResolvedManifest,
-  SourceResourceInfo,
   SourceResourceQuery,
+  SourceResourceScanResult,
   SourceResourcesMap,
 } from '@qcqx/lattice-agent-protocol';
 
@@ -79,26 +80,31 @@ export class SourceRegistry implements ISourceRegistry {
     return manifest;
   }
 
-  /** 聚合资源发现：未实现/失败的源 = []（契约：不抛错） */
+  /** 聚合资源发现：统一返回 bySource + warnings（契约：不抛错，失败入 warnings 清单） */
   async listResources(
     sourceId?: string,
     query?: SourceResourceQuery,
-  ): Promise<SourceResourcesMap | SourceResourceInfo[]> {
-    const enumerate = (source: ISource): Promise<SourceResourceInfo[]> =>
-      source.listResources(query).catch(() => []);
-    if (sourceId !== undefined) {
-      const source = this.sources.get(sourceId);
-      return source ? enumerate(source) : [];
-    }
-    const map: SourceResourcesMap = {};
+  ): Promise<AggregatedSourceResources> {
+    // 防御：源层契约是不抛错，若第三方 ISource 实现违约抛出，同样降为 warning
+    const enumerate = (source: ISource): Promise<SourceResourceScanResult> =>
+      source.listResources(query).catch((err) => ({
+        resources: [],
+        warning: err instanceof Error ? err.message : String(err),
+      }));
+    const bySource: SourceResourcesMap = {};
+    const warnings: AggregatedSourceResources['warnings'] = [];
     // 快照展开在 await 前完成（同步），不受后续异步期间 register/unregister 影响
-    const entries = [...this.sources.entries()];
+    const entries = [...this.sources.entries()].filter(
+      ([id]) => sourceId === undefined || id === sourceId,
+    );
     await Promise.all(
       entries.map(async ([id, source]) => {
-        map[id] = await enumerate(source);
+        const result = await enumerate(source);
+        bySource[id] = result.resources;
+        if (result.warning !== undefined) warnings.push({ sourceId: id, message: result.warning });
       }),
     );
-    return map;
+    return { bySource, warnings };
   }
 
   /**
@@ -113,9 +119,10 @@ export class SourceRegistry implements ISourceRegistry {
           this.manifests.set(source.id, await source.handshake());
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          // 铁律：不静默降级——失败必须可观测（registry 层无 EventBus，console.warn 保底）
+          // 铁律：不静默降级——失败必须可观测（registry 层无 EventBus，console.warn 保底）；
+          // 文案与熔断（markUnavailable 的 "marked unavailable"）区分：这里只落 manifest
           console.warn(
-            `[SourceRegistry] Source "${source.id}" init failed: ${message}. Marked unavailable.`,
+            `[SourceRegistry] Source "${source.id}" init failed: ${message}. Manifest set to available:false (handshake-failed).`,
           );
           // handshake() 内部自兜不抛；能走到这里的是 init 失败
           const declared = source.describe();

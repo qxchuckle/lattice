@@ -131,7 +131,7 @@ export function createFakeSource(
     handshake: async () => manifestOf(id, PI_LIKE),
     listModels: async () => [],
     checkAuth: async () => ({ status: 'configured' }),
-    listResources: async () => [],
+    listResources: async () => ({ resources: [] }),
     prompt: (sessionId, message, opts = {}) => {
       calls.prompts.push({ sessionId, message, opts });
       const stream = new SourceEventStream();

@@ -14,6 +14,7 @@ import type {
   ModelInfo,
   AuthStatus,
   SourceResourceQuery,
+  SourceResourceScanResult,
 } from '@qcqx/lattice-agent-protocol';
 import { EventStream, SourceEventStream } from '@qcqx/lattice-agent-protocol';
 import { defineSource } from '../src/define-source.js';
@@ -116,11 +117,11 @@ describe('工厂资源发现', () => {
     { kind: 'skill', name: 's1', scope: 'user' },
   ];
 
-  it('resources 能力=false → 不调 driver.scanResources，恒返 []', async () => {
+  it('resources 能力=false → 不调 driver.scanResources，恒返 { resources: [] }', async () => {
     const scan = vi.fn().mockResolvedValue(resources);
     const source = defineSource({ ...createScriptedDriver(), scanResources: scan });
     await source.init();
-    expect(await source.listResources()).toEqual([]);
+    expect(await source.listResources()).toEqual({ resources: [] });
     expect(scan).not.toHaveBeenCalled();
   });
 
@@ -131,18 +132,20 @@ describe('工厂资源发现', () => {
       scanResources: scan,
     });
     await source.init();
-    expect(await source.listResources({ cwd: '/tmp/x' })).toHaveLength(2);
-    expect(await source.listResources({ cwd: '/tmp/x', kinds: ['skill'] })).toEqual([resources[1]]);
+    expect((await source.listResources({ cwd: '/tmp/x' })).resources).toHaveLength(2);
+    expect(await source.listResources({ cwd: '/tmp/x', kinds: ['skill'] })).toEqual({
+      resources: [resources[1]],
+    });
     expect(scan).toHaveBeenCalledTimes(1);
   });
 
-  it('scanResources 抛错 → 返 []（发现类 API 不致命）', async () => {
+  it('scanResources 抛错 → resources=[] + warning 结构化上报（发现类 API 不致命、不静默）', async () => {
     const source = defineSource({
       ...createScriptedDriver({ capabilities: { resources: { kinds: ['command'] } } }),
       scanResources: vi.fn().mockRejectedValue(new Error('fs 失败')),
     });
     await source.init();
-    expect(await source.listResources()).toEqual([]);
+    expect(await source.listResources()).toEqual({ resources: [], warning: 'fs 失败' });
   });
 
   it('握手降准 resources=false 后，listResources 立即停止扫描（verified 优先）', async () => {
@@ -158,7 +161,7 @@ describe('工厂资源发现', () => {
     const manifest = await source.handshake();
     expect(manifest.capabilities.resources).toBe(false);
     expect(manifest.downgrades).toHaveLength(1);
-    expect(await source.listResources()).toEqual([]);
+    expect(await source.listResources()).toEqual({ resources: [] });
     expect(scan).not.toHaveBeenCalled();
   });
 });
@@ -344,8 +347,8 @@ function createMockSource(overrides: Partial<ISource> & { id: string }): ISource
     async checkAuth(): Promise<AuthStatus> {
       return { status: 'configured' };
     },
-    async listResources(_query?: SourceResourceQuery): Promise<SourceResourceInfo[]> {
-      return [];
+    async listResources(_query?: SourceResourceQuery): Promise<SourceResourceScanResult> {
+      return { resources: [] };
     },
     prompt() {
       return new EventStream<any, any>(
@@ -451,16 +454,19 @@ describe('listResources 并发安全', () => {
   it('异步期间 unregister 不影响遍历（entries 快照在 await 前展开）', async () => {
     const sourceA = createMockSource({
       id: 'source-a',
-      async listResources(): Promise<SourceResourceInfo[]> {
+      async listResources(): Promise<SourceResourceScanResult> {
         return new Promise((resolve) =>
-          setTimeout(() => resolve([{ kind: 'command', name: 'cmd-a', scope: 'user' }]), 50),
+          setTimeout(
+            () => resolve({ resources: [{ kind: 'command', name: 'cmd-a', scope: 'user' }] }),
+            50,
+          ),
         );
       },
     });
     const sourceB = createMockSource({
       id: 'source-b',
-      async listResources(): Promise<SourceResourceInfo[]> {
-        return [{ kind: 'skill', name: 'skill-b', scope: 'user' }];
+      async listResources(): Promise<SourceResourceScanResult> {
+        return { resources: [{ kind: 'skill', name: 'skill-b', scope: 'user' }] };
       },
     });
 
@@ -473,11 +479,68 @@ describe('listResources 并发安全', () => {
     // 在 A 的慢 Promise 等待期间 unregister B
     registry.unregister('source-b');
 
-    // 最终返回的 map 仍含 B 的结果（快照已展开，不受后续 unregister 影响）
-    const result = (await listPromise) as Record<string, SourceResourceInfo[]>;
-    expect(result).toHaveProperty('source-a');
-    expect(result).toHaveProperty('source-b');
-    expect(result['source-a']).toEqual([{ kind: 'command', name: 'cmd-a', scope: 'user' }]);
-    expect(result['source-b']).toEqual([{ kind: 'skill', name: 'skill-b', scope: 'user' }]);
+    // 最终返回的 bySource 仍含 B 的结果（快照已展开，不受后续 unregister 影响）
+    const { bySource, warnings } = await listPromise;
+    expect(bySource).toHaveProperty('source-a');
+    expect(bySource).toHaveProperty('source-b');
+    expect(bySource['source-a']).toEqual([{ kind: 'command', name: 'cmd-a', scope: 'user' }]);
+    expect(bySource['source-b']).toEqual([{ kind: 'skill', name: 'skill-b', scope: 'user' }]);
+    expect(warnings).toEqual([]);
+  });
+
+  it('单源失败入 warnings 清单，其余源正常返回（聚合层不静默吞错）', async () => {
+    const good = createMockSource({
+      id: 'source-good',
+      async listResources(): Promise<SourceResourceScanResult> {
+        return { resources: [{ kind: 'command', name: 'ok', scope: 'user' }] };
+      },
+    });
+    // 源层已把 scanResources 失败降为 warning（工厂层行为）
+    const degraded = createMockSource({
+      id: 'source-degraded',
+      async listResources(): Promise<SourceResourceScanResult> {
+        return { resources: [], warning: '扫描失败：目录不可读' };
+      },
+    });
+    // 违约抛错的第三方 ISource 实现：聚合层防御降为 warning
+    const throwing = createMockSource({
+      id: 'source-throwing',
+      async listResources(): Promise<SourceResourceScanResult> {
+        throw new Error('违约抛错');
+      },
+    });
+
+    registry.register(good);
+    registry.register(degraded);
+    registry.register(throwing);
+
+    const { bySource, warnings } = await registry.listResources();
+    expect(bySource['source-good']).toEqual([{ kind: 'command', name: 'ok', scope: 'user' }]);
+    expect(bySource['source-degraded']).toEqual([]);
+    expect(bySource['source-throwing']).toEqual([]);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        { sourceId: 'source-degraded', message: '扫描失败：目录不可读' },
+        { sourceId: 'source-throwing', message: '违约抛错' },
+      ]),
+    );
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('指定 sourceId 只查该源；未知 sourceId 返空 bySource', async () => {
+    const sourceA = createMockSource({
+      id: 'source-a',
+      async listResources(): Promise<SourceResourceScanResult> {
+        return { resources: [{ kind: 'command', name: 'cmd-a', scope: 'user' }] };
+      },
+    });
+    registry.register(sourceA);
+    registry.register(createMockSource({ id: 'source-b' }));
+
+    const only = await registry.listResources('source-a');
+    expect(Object.keys(only.bySource)).toEqual(['source-a']);
+
+    const unknown = await registry.listResources('nope');
+    expect(unknown).toEqual({ bySource: {}, warnings: [] });
   });
 });

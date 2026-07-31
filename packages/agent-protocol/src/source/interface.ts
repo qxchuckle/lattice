@@ -19,7 +19,7 @@ import type { ContentBlock } from './messages.js';
 import type { ModelInfo } from './models.js';
 import type { AuthStatus } from './auth.js';
 import type { ToolDefinition } from './tools.js';
-import type { SourceResourceInfo, SourceResourceQuery } from './resources.js';
+import type { SourceResourceQuery, SourceResourceScanResult } from './resources.js';
 import type { SourceManifest, ResolvedManifest } from './manifest.js';
 import type { PermissionRequestHandler } from './permission.js';
 
@@ -81,8 +81,9 @@ export interface ISource {
 
   /** 枚举源环境可发现资源（command/agent/skill/rule）。
    *  实现手段是源层私有知识；query.cwd 缺省 = 用户主目录；
-   *  失败返回 []，不抛错；capabilities.resources=false 的源恒返 [] */
-  listResources(query?: SourceResourceQuery): Promise<SourceResourceInfo[]>;
+   *  失败不抛错：resources=[] + warning 结构化上报（源永不静默降级）；
+   *  capabilities.resources=false 的源恒返 { resources: [] } */
+  listResources(query?: SourceResourceQuery): Promise<SourceResourceScanResult>;
 
   // 核心交互：传 sessionId 继续对话，传 null 新建
   prompt(sessionId: string | null, message: ContentBlock[], opts?: PromptOpts): SourceEventStream;

@@ -10,7 +10,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Dropdown, Image } from 'antd';
 import { DownOutlined, EditOutlined } from '@ant-design/icons';
-import type { ModelListItem, ResourceListItem, PromptSegment } from '@qcqx/lattice-agent-protocol';
+import type {
+  GetResourcesResponse,
+  ModelListItem,
+  ResourceListItem,
+  PromptSegment,
+} from '@qcqx/lattice-agent-protocol';
 import { segmentsToDisplayText } from '@qcqx/lattice-agent-protocol';
 import { apiGet } from '../../lib';
 import {
@@ -44,16 +49,27 @@ export const chipStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-/** 菜单项内容：标签 + 可选费率小字 + 可选后置操作图标（阻止冒泡避免触发项选中） */
+/** 菜单项内容：可选前置状态图标 + 标签 + 可选费率小字 + 可选后置操作图标（阻止冒泡避免触发项选中） */
 export function MenuRow(props: {
   label: string;
   selected: boolean;
   extra?: string;
+  /** 禁用态（如不可用源）：文字置灰；点击拦截由 antd 菜单项 disabled 负责 */
+  disabled?: boolean;
+  /** 前置状态图标（如不可用源的错误图标） */
+  statusIcon?: React.ReactNode;
   action?: { icon: React.ReactNode; title: string; onClick: () => void };
 }) {
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
-      <span style={{ fontWeight: props.selected ? 600 : 400 }}>{props.label}</span>
+      <span
+        style={{
+          fontWeight: props.selected ? 600 : 400,
+          color: props.disabled ? 'var(--text-secondary)' : undefined,
+        }}>
+        {props.label}
+      </span>
+      {props.statusIcon}
       {props.selected && <span style={{ color: 'var(--brand-color)', fontSize: 11 }}>✓</span>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         {props.extra && (
@@ -178,6 +194,8 @@ export function ChatInputBox(props: {
   const [input, setInput] = useState('');
   const [chips, setChips] = useState<ChipItem[]>([]);
   const [resources, setResources] = useState<ResourceListItem[] | null>(null);
+  // 源级资源枚举失败清单（REST warnings 透出）：菜单顶部警示行，非仅控制台
+  const [resourceWarnings, setResourceWarnings] = useState<GetResourcesResponse['warnings']>([]);
   const [fileResults, setFileResults] = useState<FileSearchResult[] | null>(null);
   const [menuIdx, setMenuIdx] = useState(0);
   const [menuSuppressed, setMenuSuppressed] = useState(false);
@@ -191,9 +209,11 @@ export function ChatInputBox(props: {
   useEffect(() => {
     if (kw === null || resources !== null) return;
     let cancelled = false;
-    apiGet<{ resources: ResourceListItem[] }>('/api/agent/resources?kinds=command')
+    apiGet<GetResourcesResponse>('/api/agent/resources?kinds=command')
       .then((res) => {
-        if (!cancelled) setResources(res.resources);
+        if (cancelled) return;
+        setResources(res.resources);
+        setResourceWarnings(res.warnings ?? []);
       })
       .catch(() => {
         if (!cancelled) setResources([]);
@@ -252,6 +272,8 @@ export function ChatInputBox(props: {
     }
     return [];
   })();
+  // 警示行仅 / 命令态展示（warnings 来自命令资源聚合）；即使命令列表为空也要让用户看到失败原因
+  const warningsVisible = !menuSuppressed && kw !== null && resourceWarnings.length > 0;
   const menuVisible = menuEntries.length > 0;
 
   const insertEntry = useCallback((entry: MenuEntry) => {
@@ -353,8 +375,8 @@ export function ChatInputBox(props: {
       style={{ position: 'relative' }}
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}>
-      {/* 补全菜单（输入框上方浮层）：/ 命令 或 @ 文件/选区 */}
-      {menuVisible && (
+      {/* 补全菜单（输入框上方浮层）：/ 命令 或 @ 文件/选区；另含源资源枚举失败警示行 */}
+      {(menuVisible || warningsVisible) && (
         <div
           style={{
             position: 'absolute',
@@ -370,6 +392,35 @@ export function ChatInputBox(props: {
             boxShadow: 'var(--shadow)',
             zIndex: 30,
           }}>
+          {warningsVisible &&
+            resourceWarnings.map((w) => (
+              <div
+                key={`__warning__${w.sourceId}`}
+                title={w.message}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 8,
+                  padding: '5px 10px',
+                  fontSize: 11,
+                  color: '#ff4d4f',
+                  borderBottom: '1px solid var(--border)',
+                  cursor: 'default',
+                }}>
+                <span style={{ whiteSpace: 'nowrap' }}>⚠ 源 {w.sourceId} 资源枚举失败</span>
+                <span
+                  style={{
+                    color: 'var(--text-secondary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginLeft: 'auto',
+                    minWidth: 0,
+                  }}>
+                  {w.message}
+                </span>
+              </div>
+            ))}
           {menuEntries.map((entry, i) => {
             const active = i === menuIdx;
             const rowStyle: React.CSSProperties = {

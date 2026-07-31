@@ -32,3 +32,20 @@ export interface SourceResourceQuery {
 
 /** 按源分组的资源映射（registry 聚合查询用） */
 export type SourceResourcesMap = Record<string, SourceResourceInfo[]>;
+
+/**
+ * 单源资源枚举结果（ISource.listResources 返回形状）。
+ * 契约：发现类 API 失败不抛错——但铁律「源永不静默降级」：
+ * 失败以 warning 随数据结构化上报（resources=[]），聚合层/UI 据此告知用户。
+ */
+export interface SourceResourceScanResult {
+  resources: SourceResourceInfo[];
+  /** 枚举失败原因（成功时缺省） */
+  warning?: string;
+}
+
+/** registry 聚合结果：per-source 列表 + 枚举失败清单（UI 可见提示的数据来源） */
+export interface AggregatedSourceResources {
+  bySource: SourceResourcesMap;
+  warnings: Array<{ sourceId: string; message: string }>;
+}

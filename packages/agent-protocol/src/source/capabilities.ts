@@ -103,7 +103,7 @@ export interface ModelsCapability {
 
 // ── resources / skills ──
 
-/** 可发现资源种类；false=源无可发现资源（listResources 恒返 []） */
+/** 可发现资源种类；false=源无可发现资源（listResources 恒返 { resources: [] }） */
 export type ResourcesCapability = { kinds: SourceResourceKind[] } | false;
 
 export interface SkillsCapability {

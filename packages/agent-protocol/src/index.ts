@@ -86,6 +86,8 @@ export type {
   SourceResourceInfo,
   SourceResourceQuery,
   SourceResourcesMap,
+  SourceResourceScanResult,
+  AggregatedSourceResources,
 } from './source/resources.js';
 
 export type { PromptSegment } from './source/prompt-input.js';

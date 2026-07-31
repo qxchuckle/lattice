@@ -5,7 +5,7 @@
  * 消费层直接操作源实例。旧同步僵尸 API（listModels/checkAuth/getBuiltinTools 同步版）已删除：
  * 动态事实走源实例的异步通道，静态声明走 manifest。
  */
-import type { SourceResourceInfo, SourceResourceQuery, SourceResourcesMap } from './resources.js';
+import type { AggregatedSourceResources, SourceResourceQuery } from './resources.js';
 import type { ISource, LatticeSourceMap } from './interface.js';
 import type { ResolvedManifest } from './manifest.js';
 
@@ -31,11 +31,9 @@ export interface ISourceRegistry {
   /** 查询熔断原因（未熔断 = undefined） */
   getUnavailableReason(id: string): string | undefined;
 
-  /** 聚合资源发现：指定源返回该源列表，不指定返回按源分组映射（未实现/失败的源 = []） */
-  listResources(
-    sourceId?: string,
-    query?: SourceResourceQuery,
-  ): Promise<SourceResourcesMap | SourceResourceInfo[]>;
+  /** 聚合资源发现：指定源只查该源，不指定查全部；统一返回按源分组映射 +
+   *  枚举失败清单（未实现/能力关 = []，失败 = [] + warnings 条目，UI 据此提示用户） */
+  listResources(sourceId?: string, query?: SourceResourceQuery): Promise<AggregatedSourceResources>;
 
   /** init + handshake 全部源：并行（allSettled），单源失败落 manifest.available=false，不炸整体 */
   initAll(): Promise<void>;

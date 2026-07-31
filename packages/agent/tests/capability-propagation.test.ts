@@ -45,7 +45,7 @@ async function setupWithCaps(override: (caps: SourceCapabilities) => SourceCapab
     registry: {
       getSource: (id: string) => (id === 'mock' ? source : undefined),
       getManifest: (id: string) => (id === 'mock' ? manifest : undefined),
-      listResources: async () => [],
+      listResources: async () => ({ bySource: {}, warnings: [] }),
     },
   } as unknown as AgentSourceInstance;
   const profiles = createSourceProfileProvider({

@@ -97,4 +97,6 @@ export interface ResourceListItem extends SourceResourceInfo {
 
 export interface GetResourcesResponse {
   resources: ResourceListItem[];
+  /** 源级资源枚举失败清单（源在但 scanResources 失败；UI 据此提示用户，非静默降级） */
+  warnings: Array<{ sourceId: string; message: string }>;
 }

@@ -3,6 +3,8 @@
  */
 import { proxy } from 'valtio';
 import type { ModelListItem, PresenceState, NodeCapabilities } from '@qcqx/lattice-agent-protocol';
+import type { TurnNode, NodeUiState, ConversationEntry } from './types';
+import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
 
 /**
  * 客户端源信息（server 下发 SourceListItem 的 UI 消费形态）。
@@ -20,8 +22,32 @@ export interface ClientSourceInfo {
   downgrades?: Array<{ path: string; declared: unknown; actual: unknown; reason?: string }>;
   capabilities?: Record<string, Record<string, unknown>>;
 }
-import type { TurnNode, NodeUiState, ConversationEntry } from './types';
-import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
+
+// ── 源可用性纯函数（UI 禁用/提示与默认源选择共用，可独立测试） ──
+
+/** 不可用源的悬浮提示文案；可用源返回 undefined（据此判断是否禁用） */
+export function sourceUnavailableHint(
+  source: Pick<ClientSourceInfo, 'available' | 'unavailableReason'>,
+): string | undefined {
+  if (source.available) return undefined;
+  return source.unavailableReason?.message || '源不可用（未提供具体原因）';
+}
+
+/**
+ * 选定生效源：配置首选 > 当前选中 > 首个可用源，均要求 available；
+ * 全部不可用时保持 current（UI 由禁用态呈现，不静默换源）。
+ */
+export function pickActiveSourceId(
+  sources: ReadonlyArray<Pick<ClientSourceInfo, 'id' | 'available'>>,
+  preferred: string | undefined,
+  current: string,
+): string {
+  const usable = (id: string | undefined): id is string =>
+    !!id && sources.some((s) => s.id === id && s.available);
+  if (usable(preferred)) return preferred;
+  if (usable(current)) return current;
+  return sources.find((s) => s.available)?.id ?? current;
+}
 
 export const agentStore = proxy({
   turns: new Map<string, TurnNode>(),

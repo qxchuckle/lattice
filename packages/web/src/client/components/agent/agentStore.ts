@@ -27,6 +27,8 @@ export {
   getTotalUsage,
   stableNodeData,
   clearNodeDataCache,
+  sourceUnavailableHint,
+  pickActiveSourceId,
 } from './store';
 export { connectAgentWs, disconnectAgentWs } from './connection';
 export {
@@ -42,7 +44,7 @@ export type { AgentClientConfig } from './api';
 
 // ── Actions（高层操作，组合 store + connection + api） ──
 
-import { agentStore, ensureUi, putTurn, clearNodeDataCache } from './store';
+import { agentStore, ensureUi, putTurn, clearNodeDataCache, pickActiveSourceId } from './store';
 import {
   sendWs,
   isWsReady,
@@ -316,6 +318,9 @@ export function setNodeSize(nodeId: string, width: number, height: number): void
 // ── 源/模型 ──
 
 export function setSource(sourceId: string): void {
+  // 防御：不可用源不可选（菜单项已禁用，此处兜底直达调用）
+  const target = agentStore.sources.find((s) => s.id === sourceId);
+  if (target && !target.available) return;
   agentStore.activeSourceId = sourceId;
   agentStore.activeModelId = '';
   agentStore.activeThinkingLevel = '';
@@ -386,11 +391,13 @@ export async function initAgent(): Promise<void> {
     // WS 最先连接：对话/历史不被源模型目录加载阻塞（首次动态目录需起 CLI，秒级）
     connectAgentWs();
     await loadSources();
-    // 应用配置页的默认源/默认模型（local config agent 段）
+    // 应用配置页的默认源/默认模型（local config agent 段）；不可用源不入选（首选/当前不可用时回退首个可用源）
     const cfg = await loadAgentConfig();
-    if (cfg.defaultSource && agentStore.sources.some((s) => s.id === cfg.defaultSource)) {
-      agentStore.activeSourceId = cfg.defaultSource;
-    }
+    agentStore.activeSourceId = pickActiveSourceId(
+      agentStore.sources,
+      cfg.defaultSource,
+      agentStore.activeSourceId,
+    );
     await loadModels(agentStore.activeSourceId);
     if (cfg.defaultModel && agentStore.models.some((m) => m.id === cfg.defaultModel)) {
       agentStore.activeModelId = cfg.defaultModel;

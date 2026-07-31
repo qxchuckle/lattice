@@ -8,7 +8,6 @@ import type { FastifyInstance } from 'fastify';
 import type { LatticeAgent } from '@qcqx/lattice-agent';
 import type {
   ResourceListItem,
-  SourceResourceInfo,
   SourceResourceQuery,
   ModelInfo,
 } from '@qcqx/lattice-agent-protocol';
@@ -116,17 +115,15 @@ export function registerAgentRestRoutes(
       resources.push({ ...r, origin: 'local' });
     }
     const query: SourceResourceQuery = { ...(cwd ? { cwd } : {}), ...(kinds ? { kinds } : {}) };
-    const result = await latticeAgent.sources.registry.listResources(q.sourceId, query);
-    if (Array.isArray(result)) {
-      for (const r of result) resources.push({ ...r, origin: 'source', sourceId: q.sourceId });
-    } else {
-      for (const [sid, list] of Object.entries(result)) {
-        for (const r of list as SourceResourceInfo[]) {
-          resources.push({ ...r, origin: 'source', sourceId: sid });
-        }
-      }
+    const { bySource, warnings } = await latticeAgent.sources.registry.listResources(
+      q.sourceId,
+      query,
+    );
+    for (const [sid, list] of Object.entries(bySource)) {
+      for (const r of list) resources.push({ ...r, origin: 'source', sourceId: sid });
     }
-    return ok({ resources });
+    // warnings 透出：某源枚举失败时前端菜单可见提示（源永不静默降级）
+    return ok({ resources, warnings });
   });
 
   // @ 文件引用搜索：在全部注册项目范围内按文件名模糊匹配（浅层遍历，上限 20 条）

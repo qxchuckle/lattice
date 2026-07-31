@@ -11,8 +11,8 @@ import type {
   ResolvedManifest,
   ModelInfo,
   AuthStatus,
-  SourceResourceInfo,
   SourceResourceQuery,
+  SourceResourceScanResult,
 } from '@qcqx/lattice-agent-protocol';
 import { EventStream } from '@qcqx/lattice-agent-protocol';
 import { SourceRegistry } from '../src/registry.js';
@@ -61,8 +61,8 @@ function createMockSource(overrides: Partial<ISource> & { id: string }): ISource
     async checkAuth(): Promise<AuthStatus> {
       return { status: 'configured' };
     },
-    async listResources(_query?: SourceResourceQuery): Promise<SourceResourceInfo[]> {
-      return [];
+    async listResources(_query?: SourceResourceQuery): Promise<SourceResourceScanResult> {
+      return { resources: [] };
     },
     prompt() {
       return new EventStream<any, any>(

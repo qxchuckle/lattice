@@ -14,7 +14,6 @@ import {
   createPiSource,
   createQoderSource,
   type LatticeAgent,
-  type AgentSourceInstance,
 } from '@qcqx/lattice-agent';
 import type { ServerMessage } from '@qcqx/lattice-agent-protocol';
 import { getSessionsCacheDir, getUsername, readLocalConfig } from '@qcqx/lattice-core';
@@ -68,37 +67,39 @@ export interface AgentConn {
 // ── 路由注册 ──
 
 export function registerAgentRoutes(app: FastifyInstance): void {
-  let agent: LatticeAgent | null = null;
-  let sourcesInstance: AgentSourceInstance | null = null;
+  // 并发安全的懒初始化：首批请求（/sources、/models、WS 等）会同时到达，
+  // 若只判 `if (!agent)` 会各自 createAgentSource → 多次 initAll/handshake/probe（日志重复、资源浪费）。
+  // 缓存 Promise 本身，保证全局只构建一次。
+  let agentPromise: Promise<LatticeAgent> | null = null;
 
-  const getAgent = async (): Promise<LatticeAgent> => {
-    if (!agent) {
-      if (!sourcesInstance) {
-        sourcesInstance = await createAgentSource({
-          sources: [
-            createPiSource(),
-            createQoderSource({ authMode: 'cli', permissionMode: 'acceptEdits' }),
-          ],
-        });
-      }
-      agent = createLatticeAgent({
-        storage: { baseDir: getSessionsCacheDir() },
-        sources: sourcesInstance,
-        promptDeps: {
-          resolveRef: async (refType, id) => {
-            if (refType === 'file') return null;
-            try {
-              const username = await getUsername();
-              const path = await resolveFilePath(refType === 'spec' ? 'spec' : 'prd', id, username);
-              return path ? await readFile(path, 'utf-8') : null;
-            } catch {
-              return null;
-            }
-          },
+  const buildAgent = async (): Promise<LatticeAgent> => {
+    const sourcesInstance = await createAgentSource({
+      sources: [
+        createPiSource(),
+        createQoderSource({ authMode: 'cli', permissionMode: 'acceptEdits' }),
+      ],
+    });
+    return createLatticeAgent({
+      storage: { baseDir: getSessionsCacheDir() },
+      sources: sourcesInstance,
+      promptDeps: {
+        resolveRef: async (refType, id) => {
+          if (refType === 'file') return null;
+          try {
+            const username = await getUsername();
+            const path = await resolveFilePath(refType === 'spec' ? 'spec' : 'prd', id, username);
+            return path ? await readFile(path, 'utf-8') : null;
+          } catch {
+            return null;
+          }
         },
-      });
-    }
-    return agent;
+      },
+    });
+  };
+
+  const getAgent = (): Promise<LatticeAgent> => {
+    agentPromise ??= buildAgent();
+    return agentPromise;
   };
 
   // WS 路由（含多端同步状态）；返回 cleanupTree 供 REST DELETE 使用

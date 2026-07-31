@@ -8,9 +8,16 @@
 import { useState, memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { useSnapshot } from 'valtio';
-import { Dropdown } from 'antd';
-import { SettingOutlined, DownOutlined } from '@ant-design/icons';
-import { agentStore, submitFromNode, setSource, setModel, loadModels } from './agentStore';
+import { Dropdown, Tooltip } from 'antd';
+import { SettingOutlined, DownOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import {
+  agentStore,
+  submitFromNode,
+  setSource,
+  setModel,
+  loadModels,
+  sourceUnavailableHint,
+} from './agentStore';
 import { ModelTuningModal, fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip, MenuRow, chipStyle } from './ChatInputBar';
 
@@ -35,24 +42,44 @@ function RootInputInner() {
     .filter(Boolean)
     .join(' · ');
 
-  const sourceMenuItems = snap.sources.map((s) => ({
-    key: s.id,
-    label: (
-      <MenuRow
-        label={`∞ ${s.displayName}`}
-        selected={s.id === snap.activeSourceId}
-        action={{
-          icon: <SettingOutlined style={{ fontSize: 12 }} />,
-          title: '源配置',
-          onClick: () => {
-            setSourceMenuOpen(false);
-            agentStore.settingsFocusSourceId = s.id;
-            agentStore.settingsOpen = true;
-          },
-        }}
-      />
-    ),
-  }));
+  const sourceMenuItems = snap.sources.map((s) => {
+    // 不可用源：禁选（antd disabled 拦截点击）+ 错误图标 + Tooltip 展示原因；配置入口一并隐藏
+    const hint = sourceUnavailableHint(s);
+    return {
+      key: s.id,
+      disabled: hint !== undefined,
+      label: (
+        <Tooltip title={hint} placement='right'>
+          {/* Tooltip 需要可接受事件的实体子元素（禁用项上 antd 仍渲染 label） */}
+          <span style={{ display: 'block' }}>
+            <MenuRow
+              label={`∞ ${s.displayName}`}
+              selected={s.id === snap.activeSourceId}
+              disabled={hint !== undefined}
+              statusIcon={
+                hint !== undefined ? (
+                  <ExclamationCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+                ) : undefined
+              }
+              action={
+                hint === undefined
+                  ? {
+                      icon: <SettingOutlined style={{ fontSize: 12 }} />,
+                      title: '源配置',
+                      onClick: () => {
+                        setSourceMenuOpen(false);
+                        agentStore.settingsFocusSourceId = s.id;
+                        agentStore.settingsOpen = true;
+                      },
+                    }
+                  : undefined
+              }
+            />
+          </span>
+        </Tooltip>
+      ),
+    };
+  });
 
   return (
     <div className='nowheel nopan' style={{ width: '100%', height: '100%' }}>

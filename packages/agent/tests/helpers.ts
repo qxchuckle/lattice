@@ -175,7 +175,7 @@ export async function setup(emitDone = true): Promise<TestContext> {
     registry: {
       getSource: (id: string) => (id === 'mock' ? source : undefined),
       getManifest: (id: string) => (id === 'mock' ? mockManifest(source) : undefined),
-      listResources: async () => [],
+      listResources: async () => ({ bySource: {}, warnings: [] }),
     },
   } as unknown as AgentSourceInstance;
   // 能力消费层真走 pipeline（与生产一致）：管线、守卫、归一化均生效
