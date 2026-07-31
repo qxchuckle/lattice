@@ -28,6 +28,7 @@ export {
   stableNodeData,
   clearNodeDataCache,
   sourceUnavailableHint,
+  computeSourceOptions,
   pickActiveSourceId,
 } from './store';
 export { connectAgentWs, disconnectAgentWs } from './connection';

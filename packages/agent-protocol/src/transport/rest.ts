@@ -48,6 +48,18 @@ export interface GetSourcesResponse {
   sources: SourceListItem[];
 }
 
+/**
+ * 源选项投影结构（数据驱动 UI 禁选/提示/图标），对标 projectNodeCapabilities 投影模式：
+ * 单一真相，消费侧禁止重推导（不得再按 available/unavailableReason 逐点判断）
+ */
+export interface SourceOption {
+  id: string;
+  label: string;
+  disabled: boolean;
+  disabledReason?: string;
+  configurable: boolean;
+}
+
 // ── GET /api/agent/models ──
 
 import type { ModelTuning, ModelCapabilities } from '../source/models.js';

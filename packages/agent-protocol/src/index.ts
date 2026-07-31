@@ -151,6 +151,7 @@ export type {
   GetTreeNotFoundResponse,
   SourceListItem,
   GetSourcesResponse,
+  SourceOption,
   ModelListItem,
   GetModelsResponse,
   AuthStatusItem,

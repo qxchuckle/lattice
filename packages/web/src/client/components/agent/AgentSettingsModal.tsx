@@ -4,12 +4,12 @@
  *   agent.defaultSource / agent.defaultModel / agent.customModels.<sourceId>
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Modal, Tabs, Select, Input, Button, Tag, App } from 'antd';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { Modal, Tabs, Select, Input, Button, Tag, App, Tooltip } from 'antd';
+import { DeleteOutlined, PlusOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
 import type { ModelListItem } from '@qcqx/lattice-agent-protocol';
 import { getAdapter } from '../../adapters';
-import { agentStore } from './store';
+import { agentStore, computeSourceOptions, pickActiveSourceId } from './store';
 import { fetchModels, loadAgentConfig, loadModels, clearModelListCache } from './api';
 
 const labelStyle: React.CSSProperties = {
@@ -94,16 +94,22 @@ export function AgentSettingsModal() {
     async (value: string | undefined) => {
       setDefaultSource(value);
       setDefaultModel(undefined);
+      // 持久化写用户所选原值（源恢复可用后配置自然生效）
       await persist('agent.defaultSource', value);
       await persist('agent.defaultModel', undefined);
-      // 虚拟根始终可换源：直接应用为当前选择（下一段新对话生效）
+      // 虚拟根始终可换源：应用为当前选择（下一段新对话生效）；
+      // 经 pickActiveSourceId 防御不可用源（与 initAgent 同口径），降级必须提示，永不静默
       if (value) {
-        agentStore.activeSourceId = value;
+        const selected = pickActiveSourceId(agentStore.sources, value, agentStore.activeSourceId);
+        if (selected !== value) {
+          message.warning(`源 ${value} 当前不可用，已回退到 ${selected}`);
+        }
+        agentStore.activeSourceId = selected;
         agentStore.activeModelId = '';
-        loadModels(value);
+        loadModels(selected);
       }
     },
-    [persist],
+    [persist, message],
   );
 
   const handleDefaultModelChange = useCallback(
@@ -163,9 +169,23 @@ export function AgentSettingsModal() {
     [viewSourceId, customModels, persist, refreshAfterCustomChange],
   );
 
-  const sourceOptions = snap.sources.map((s) => ({
-    value: s.id,
-    label: `${s.displayName} (${s.modelPolicy})`,
+  // 选项完全消费 computeSourceOptions 投影（单一真相）：不可用源禁选，原因统一用
+  // 图标 + 悬浮 Tooltip 展示（与 RootInputNode 源菜单一致，避免内联文字被下拉宽度截断）；
+  // modelPolicy 后缀为展示信息，非可用性推导
+  const sourceOptions = computeSourceOptions(snap.sources).map((opt) => ({
+    value: opt.id,
+    disabled: opt.disabled,
+    label: (
+      <Tooltip title={opt.disabledReason} placement='right'>
+        {/* Tooltip 包整行（同 RootInputNode）：禁用项上 antd 仍渲染 label，hover 即可见完整原因 */}
+        <span style={{ display: 'block' }}>
+          {opt.label} ({snap.sources.find((s) => s.id === opt.id)?.modelPolicy})
+          {opt.disabled && (
+            <ExclamationCircleOutlined style={{ fontSize: 12, color: '#ff4d4f', marginLeft: 6 }} />
+          )}
+        </span>
+      </Tooltip>
+    ),
   }));
 
   const generalTab = (

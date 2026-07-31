@@ -12,6 +12,7 @@ import {
   getChildIds,
   getSiblings,
   sourceUnavailableHint,
+  computeSourceOptions,
   pickActiveSourceId,
 } from './store';
 import type { TurnNode } from './types';
@@ -125,5 +126,72 @@ describe('源可用性纯函数', () => {
       { id: 'qoder', available: false },
     ];
     expect(pickActiveSourceId(allDown, 'pi', 'qoder')).toBe('qoder');
+  });
+});
+
+describe('computeSourceOptions 投影（单一真相，消费侧禁止重推导）', () => {
+  const sources = [
+    { id: 'qoder', displayName: 'Qoder', available: true },
+    {
+      id: 'pi',
+      displayName: 'Pi',
+      available: false,
+      unavailableReason: { code: 'probe-failed', message: '需要 Node ≥ 22' },
+    },
+    { id: 'acp', displayName: 'ACP', available: false },
+  ];
+
+  it('可用源：disabled=false / configurable=true / 无 disabledReason', () => {
+    const [qoder] = computeSourceOptions(sources);
+    expect(qoder).toEqual({
+      id: 'qoder',
+      label: 'Qoder',
+      disabled: false,
+      disabledReason: undefined,
+      configurable: true,
+    });
+  });
+
+  it('不可用源：disabled=true 且 disabledReason=unavailableReason.message，不可配置', () => {
+    const pi = computeSourceOptions(sources)[1];
+    expect(pi.disabled).toBe(true);
+    expect(pi.disabledReason).toBe('需要 Node ≥ 22');
+    expect(pi.configurable).toBe(false);
+  });
+
+  it('不可用且无 reason：兜底文案（含“源不可用”，不留空）', () => {
+    const acp = computeSourceOptions(sources)[2];
+    expect(acp.disabled).toBe(true);
+    expect(acp.disabledReason).toContain('源不可用');
+  });
+
+  it('输出数量与顺序与输入一致（不过滤不重排，禁用态由 UI 呈现）', () => {
+    const opts = computeSourceOptions(sources);
+    expect(opts.map((o) => o.id)).toEqual(['qoder', 'pi', 'acp']);
+  });
+
+  it('空输入 → 空输出', () => {
+    expect(computeSourceOptions([])).toEqual([]);
+  });
+});
+
+describe('默认源降级（preferred 指向不可用源时回退可用源）', () => {
+  const sources = [
+    { id: 'pi', available: false },
+    { id: 'qoder', available: true },
+    { id: 'acp', available: true },
+  ];
+
+  it('initAgent 语义：持久化 defaultSource 不可用 → 回退当前选中的可用源', () => {
+    // 对应 initAgent：pickActiveSourceId(sources, cfg.defaultSource, activeSourceId)
+    expect(pickActiveSourceId(sources, 'pi', 'qoder')).toBe('qoder');
+  });
+
+  it('设置页变更语义：用户所选值不可用且当前也不可用 → 回退首个可用源（selected !== value，UI 须提示）', () => {
+    // 对应 handleDefaultSourceChange：pickActiveSourceId(sources, value, activeSourceId)
+    const value = 'pi';
+    const selected = pickActiveSourceId(sources, value, 'pi');
+    expect(selected).toBe('qoder');
+    expect(selected).not.toBe(value); // 降级发生 → 消费侧必须非静默提示
   });
 });

@@ -16,7 +16,7 @@ import {
   setSource,
   setModel,
   loadModels,
-  sourceUnavailableHint,
+  computeSourceOptions,
 } from './agentStore';
 import { ModelTuningModal, fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip, MenuRow, chipStyle } from './ChatInputBar';
@@ -42,44 +42,42 @@ function RootInputInner() {
     .filter(Boolean)
     .join(' · ');
 
-  const sourceMenuItems = snap.sources.map((s) => {
-    // 不可用源：禁选（antd disabled 拦截点击）+ 错误图标 + Tooltip 展示原因；配置入口一并隐藏
-    const hint = sourceUnavailableHint(s);
-    return {
-      key: s.id,
-      disabled: hint !== undefined,
-      label: (
-        <Tooltip title={hint} placement='right'>
-          {/* Tooltip 需要可接受事件的实体子元素（禁用项上 antd 仍渲染 label） */}
-          <span style={{ display: 'block' }}>
-            <MenuRow
-              label={`∞ ${s.displayName}`}
-              selected={s.id === snap.activeSourceId}
-              disabled={hint !== undefined}
-              statusIcon={
-                hint !== undefined ? (
-                  <ExclamationCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
-                ) : undefined
-              }
-              action={
-                hint === undefined
-                  ? {
-                      icon: <SettingOutlined style={{ fontSize: 12 }} />,
-                      title: '源配置',
-                      onClick: () => {
-                        setSourceMenuOpen(false);
-                        agentStore.settingsFocusSourceId = s.id;
-                        agentStore.settingsOpen = true;
-                      },
-                    }
-                  : undefined
-              }
-            />
-          </span>
-        </Tooltip>
-      ),
-    };
-  });
+  // 菜单项完全消费 computeSourceOptions 投影（单一真相）：禁选/原因/配置入口均由投影驱动，
+  // 不在组件内重推导。不可用源：禁选（antd disabled 拦截点击）+ 错误图标 + Tooltip 展示原因
+  const sourceMenuItems = computeSourceOptions(snap.sources).map((opt) => ({
+    key: opt.id,
+    disabled: opt.disabled,
+    label: (
+      <Tooltip title={opt.disabledReason} placement='right'>
+        {/* Tooltip 需要可接受事件的实体子元素（禁用项上 antd 仍渲染 label） */}
+        <span style={{ display: 'block' }}>
+          <MenuRow
+            label={`∞ ${opt.label}`}
+            selected={opt.id === snap.activeSourceId}
+            disabled={opt.disabled}
+            statusIcon={
+              opt.disabled ? (
+                <ExclamationCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+              ) : undefined
+            }
+            action={
+              opt.configurable
+                ? {
+                    icon: <SettingOutlined style={{ fontSize: 12 }} />,
+                    title: '源配置',
+                    onClick: () => {
+                      setSourceMenuOpen(false);
+                      agentStore.settingsFocusSourceId = opt.id;
+                      agentStore.settingsOpen = true;
+                    },
+                  }
+                : undefined
+            }
+          />
+        </span>
+      </Tooltip>
+    ),
+  }));
 
   return (
     <div className='nowheel nopan' style={{ width: '100%', height: '100%' }}>

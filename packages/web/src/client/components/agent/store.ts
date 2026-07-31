@@ -2,7 +2,12 @@
  * Agent 状态（valtio proxy）+ 纯查询函数
  */
 import { proxy } from 'valtio';
-import type { ModelListItem, PresenceState, NodeCapabilities } from '@qcqx/lattice-agent-protocol';
+import type {
+  ModelListItem,
+  PresenceState,
+  NodeCapabilities,
+  SourceOption,
+} from '@qcqx/lattice-agent-protocol';
 import type { TurnNode, NodeUiState, ConversationEntry } from './types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
 
@@ -25,12 +30,38 @@ export interface ClientSourceInfo {
 
 // ── 源可用性纯函数（UI 禁用/提示与默认源选择共用，可独立测试） ──
 
-/** 不可用源的悬浮提示文案；可用源返回 undefined（据此判断是否禁用） */
+/**
+ * 不可用源的悬浮提示文案；可用源返回 undefined。
+ * 仅作为 computeSourceOptions 的内部辅助保留导出（历史测试覆盖）；
+ * UI 组件禁止直接调用它做禁选判断，应消费 computeSourceOptions 的投影结果。
+ */
 export function sourceUnavailableHint(
   source: Pick<ClientSourceInfo, 'available' | 'unavailableReason'>,
 ): string | undefined {
   if (source.available) return undefined;
   return source.unavailableReason?.message || '源不可用（未提供具体原因）';
+}
+
+/**
+ * 源选项投影（单一真相，对标 projectNodeCapabilities 模式）：
+ * 所有源选择 UI（RootInputNode 下拉、设置页 Select 等）只消费本函数输出，
+ * 禁止在消费侧再按 source.available 逐点推导禁用/提示/配置入口。
+ */
+export function computeSourceOptions(
+  sources: ReadonlyArray<
+    Pick<ClientSourceInfo, 'id' | 'displayName' | 'available' | 'unavailableReason'>
+  >,
+): SourceOption[] {
+  return sources.map((s) => {
+    const hint = sourceUnavailableHint(s);
+    return {
+      id: s.id,
+      label: s.displayName,
+      disabled: hint !== undefined,
+      disabledReason: hint,
+      configurable: hint === undefined,
+    };
+  });
 }
 
 /**
