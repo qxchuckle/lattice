@@ -9,13 +9,9 @@
  *   - ws-commands.ts：18 个 ClientMessage 命令分发
  */
 import type { FastifyInstance } from 'fastify';
-import {
-  createLatticeAgent,
-  createAgentSource,
-  createPiSource,
-  createQoderSource,
-  type LatticeAgent,
-} from '@qcqx/lattice-agent';
+import { createLatticeAgent, type LatticeAgent } from '@qcqx/lattice-agent';
+import { createAgentSource } from '@qcqx/lattice-agent-source';
+import { createPiSource, createQoderSource } from '@qcqx/lattice-agent-source-builtins';
 import { getSessionsCacheDir, getUsername } from '@qcqx/lattice-core';
 import { readFile } from 'node:fs/promises';
 import { resolveFilePath } from '../shared';

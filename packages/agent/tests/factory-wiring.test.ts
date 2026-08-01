@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentSourceInstance } from '../src/index.js';
+import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { createLatticeAgent } from '../src/index.js';
 import { defineSource } from '@qcqx/lattice-agent-source';
 import { createScriptedDriver } from '@qcqx/lattice-agent-source/testing';

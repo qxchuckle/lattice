@@ -11,45 +11,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineSource } from '../src/define-source.js';
 import { createScriptedDriver } from '../src/testing/index.js';
-import { SourceError } from '../src/types/error.js';
 import type { DriverProbeReport } from '../src/driver.js';
-
-// ── Pi SDK mock（与 sources-behavior.test.ts 同模式） ──
-
-vi.mock('@earendil-works/pi-coding-agent', () => {
-  return {
-    version: '9.9.9-mock',
-    DefaultResourceLoader: class {
-      async reload(): Promise<void> {}
-      getPrompts() {
-        return { prompts: [], diagnostics: [] };
-      }
-      getSkills() {
-        return { skills: [], diagnostics: [] };
-      }
-      getAgentsFiles() {
-        return { agentsFiles: [] };
-      }
-    },
-    getAgentDir: () => '/tmp/pi-agent-dir',
-    SessionManager: {
-      continueRecent: () => ({
-        getLeafId: () => null,
-        createBranchedSession: () => undefined,
-        getSessionFile: () => undefined,
-      }),
-      forkFrom: () => undefined,
-    },
-    createAgentSession: async () => ({
-      session: {
-        subscribe: () => () => {},
-        prompt: async () => {},
-        abort: async () => {},
-        dispose: () => {},
-      },
-    }),
-  };
-});
 
 // ── 1. 无 probe = declared 即 verified（不存在工厂默认 probe） ──
 
@@ -65,45 +27,6 @@ describe('无 probe 时的握手行为', () => {
     // 无 probe：不因缺 probe 降级，也没有任何默认探测填充 sdkVersion
     expect(manifest.available).toBe(true);
     expect(manifest.info.sdkVersion).toBeUndefined();
-  });
-});
-
-// ── 2. PiDriver probe（driver 私有 loadSdk + 裸抛） ──
-
-describe('PiDriver probe', () => {
-  let originalVersion: string;
-
-  beforeEach(() => {
-    originalVersion = process.version;
-  });
-
-  afterEach(() => {
-    // 恢复 process.version
-    Object.defineProperty(process, 'version', { value: originalVersion, configurable: true });
-  });
-
-  it('Node 版本 < 22 时裸抛原生 Error（非 SourceError，语义由工厂赋予）', async () => {
-    // 模拟 Node 20
-    Object.defineProperty(process, 'version', { value: 'v20.18.0', configurable: true });
-
-    const { createPiDriver } = await import('../src/sources/pi/index.js');
-    const driver = createPiDriver();
-    expect(driver.probe).toBeDefined();
-
-    await expect(driver.probe!()).rejects.toThrow(/Node >= 22/);
-    await expect(driver.probe!()).rejects.not.toBeInstanceOf(SourceError);
-  });
-
-  it('Node 版本 >= 22 时加载 SDK 并返回 sdkVersion', async () => {
-    // 模拟 Node 22
-    Object.defineProperty(process, 'version', { value: 'v22.5.0', configurable: true });
-
-    const { createPiDriver } = await import('../src/sources/pi/index.js');
-    const driver = createPiDriver();
-    expect(driver.probe).toBeDefined();
-
-    const report = await driver.probe!();
-    expect(report.sdkVersion).toBe('9.9.9-mock');
   });
 });
 

@@ -234,6 +234,13 @@ export function clearLiveStream(requestId: string): void {
   liveStreams.delete(requestId);
 }
 
+/**
+ * 清空全部他端在途流缓冲（切换会话/树时调用，防旧树条目残留至 TTL）。
+ */
+export function clearAllLiveStreams(): void {
+  liveStreams.clear();
+}
+
 /** 仅测试用：查询 liveStreams 是否含某 requestId（不导出给生产消费方） */
 export function __hasLiveStreamForTest(requestId: string): boolean {
   return liveStreams.has(requestId);
@@ -242,4 +249,10 @@ export function __hasLiveStreamForTest(requestId: string): boolean {
 // 模块加载时启动周期 GC（生产/测试 jsdom 环境；fake timers 由测试接管）
 if (typeof window !== 'undefined') {
   startLiveStreamGc();
+}
+
+// HMR 重载时停止旧 GC timer，防泄漏（Vite 开发模式）
+const viteHot = (import.meta as { hot?: { dispose: (cb: () => void) => void } }).hot;
+if (viteHot) {
+  viteHot.dispose(() => stopLiveStreamGc());
 }

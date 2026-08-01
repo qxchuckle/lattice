@@ -4,6 +4,9 @@
  * 第三方 driver 作者跑同一套验证（LSP/ACP conformance 传统）：
  * - checkDriverConformance：静态一致性——声明什么就必须实现什么，未声明的必须缺席或由工厂守卫
  * - createScriptedDriver：脚本化 fake driver——宿主离线测试编排逻辑，不碰真实 SDK
+ * - createDriverTestHarness：一键搭建 driver 测试环境（init+handshake+prompt+dispose）
+ * - assertDriverBehavior：行为级断言（abort 幂等、prompt 返回 outcome、connect 返回有效 handle）
+ * - mockPromptContext：构造标准化测试输入（string→ContentBlock、opts 填充默认 signal）
  *
  * 框架无关：返回 issue 列表 / 纯对象，宿主用任意断言库消费。
  */
@@ -13,6 +16,8 @@ import type {
   AuthStatus,
   ModelInfo,
   SourceCapabilities,
+  ISource,
+  SourceEvent,
 } from '@qcqx/lattice-agent-protocol';
 import { CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
 import { sourceManifestSchema } from '@qcqx/lattice-agent-protocol/schemas';
@@ -23,6 +28,8 @@ import type {
   DriverEmit,
   DriverPromptOutcome,
 } from '../driver.js';
+import { defineSource } from '../define-source.js';
+import assert from 'node:assert/strict';
 
 // ── 静态一致性检查 ──
 
@@ -214,4 +221,162 @@ export function createScriptedDriver(options: ScriptedDriverOptions = {}): Sourc
     ...(capabilities.session.rename ? { renameNative: async () => {} } : {}),
     ...(capabilities.resources !== false ? { scanResources: async () => [] } : {}),
   };
+}
+
+// ── Driver 测试环境（一键搭建） ──
+
+export interface DriverTestHarness<H extends DriverSessionHandle> {
+  /** 初始化源（init + handshake） */
+  init(): Promise<void>;
+  /** 执行一轮 prompt，收集所有事件 */
+  prompt(
+    message: string | ContentBlock[],
+    opts?: Partial<PromptOpts>,
+  ): Promise<{ events: SourceEvent[]; outcome: DriverPromptOutcome }>;
+  /** 获取 ISource 实例 */
+  getSource(): ISource;
+  /** 销毁 */
+  dispose(): Promise<void>;
+}
+
+/**
+ * 一键搭建 driver 测试环境：内部调用 defineSource(driver) 创建 ISource，
+ * init() 完成 init+handshake，prompt() 收集所有事件并返回 outcome，
+ * dispose() 释放资源。自动跟踪 sessionId（首轮 null 新建，后续轮 resume）。
+ */
+export function createDriverTestHarness<H extends DriverSessionHandle>(
+  driver: SourceDriver<H>,
+): DriverTestHarness<H> {
+  const source = defineSource(driver);
+  let sessionId: string | null = null;
+
+  return {
+    async init(): Promise<void> {
+      await source.init();
+      await source.handshake();
+    },
+
+    async prompt(
+      message: string | ContentBlock[],
+      opts?: Partial<PromptOpts>,
+    ): Promise<{ events: SourceEvent[]; outcome: DriverPromptOutcome }> {
+      const ctx = mockPromptContext(message, opts);
+      const stream = source.prompt(sessionId, ctx.message, ctx.opts);
+      const events: SourceEvent[] = [];
+      for await (const event of stream) {
+        events.push(event);
+      }
+      const result = await stream.result();
+      sessionId = result.sessionId;
+      const outcome: DriverPromptOutcome = {
+        sessionId: result.sessionId,
+        usage: result.usage,
+        sourceMessageId: result.sourceMessageId,
+        summary: result.summary,
+      };
+      return { events, outcome };
+    },
+
+    getSource(): ISource {
+      return source;
+    },
+
+    async dispose(): Promise<void> {
+      await source.dispose();
+    },
+  };
+}
+
+// ── 行为级断言 ──
+
+export interface BehaviorAssertions {
+  /** abort 应幂等：多次调用不报错 */
+  abortIsIdempotent(): Promise<void>;
+  /** prompt 应返回 outcome */
+  promptReturnsOutcome(message?: string): Promise<void>;
+  /** connect 应返回有效 handle（有 id 和 abort） */
+  connectReturnsHandle(): Promise<void>;
+}
+
+/**
+ * 行为级断言：内部用 createDriverTestHarness 搭建环境，
+ * 每个方法执行行为并用 node:assert/strict 检查，失败时抛出 AssertionError。
+ * 每个断言自管理生命周期（init → assert → dispose），互不干扰。
+ */
+export function assertDriverBehavior<H extends DriverSessionHandle>(
+  driver: SourceDriver<H>,
+): BehaviorAssertions {
+  /** 每个断言自管理生命周期，互不干扰 */
+  async function withHarness<T>(fn: (harness: DriverTestHarness<H>) => Promise<T>): Promise<T> {
+    const harness = createDriverTestHarness(driver);
+    await harness.init();
+    try {
+      return await fn(harness);
+    } finally {
+      await harness.dispose();
+    }
+  }
+
+  return {
+    async connectReturnsHandle(): Promise<void> {
+      await withHarness(async () => {
+        const ctx = mockPromptContext('connect-test');
+        const handle = await driver.connect(null, ctx.opts);
+        assert.ok(handle, 'connect() 返回了空值');
+        assert.ok(handle.id, 'handle.id 必须是非空字符串');
+        assert.strictEqual(typeof handle.abort, 'function', 'handle.abort 必须是函数');
+        await handle.close?.();
+      });
+    },
+
+    async abortIsIdempotent(): Promise<void> {
+      await withHarness(async () => {
+        const ctx = mockPromptContext('abort-test');
+        const handle = await driver.connect(null, ctx.opts);
+        assert.strictEqual(typeof handle.abort, 'function', 'handle.abort 必须是函数');
+        // abort 幂等：多次调用不报错（同步或异步均覆盖）
+        for (let i = 0; i < 3; i++) {
+          try {
+            await Promise.resolve(handle.abort());
+          } catch (err) {
+            assert.fail(
+              `abort() 第 ${i + 1} 次调用抛错: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        await handle.close?.();
+      });
+    },
+
+    async promptReturnsOutcome(message = 'hello'): Promise<void> {
+      await withHarness(async (harness) => {
+        const { events, outcome } = await harness.prompt(message);
+        assert.ok(events.length > 0, 'prompt() 未返回任何事件');
+        assert.ok(outcome.sessionId, 'outcome.sessionId 必须存在且非空');
+      });
+    },
+  };
+}
+
+// ── 标准化测试输入构造 ──
+
+/**
+ * 构造标准化测试输入：string 自动包装为 ContentBlock[{ type: 'text', text }]，
+ * opts 填充默认 signal（非 aborted 的 AbortSignal），返回可直接传给 driver.prompt() 的标准格式。
+ */
+export function mockPromptContext(
+  message: string | ContentBlock[],
+  opts: Partial<PromptOpts> = {},
+): { message: ContentBlock[]; opts: PromptOpts } {
+  const blocks: ContentBlock[] =
+    typeof message === 'string' ? [{ type: 'text', text: message }] : [...message];
+
+  // 默认 signal：非 aborted，调用方可通过 opts.signal 覆盖
+  const controller = new AbortController();
+  const merged: PromptOpts = { signal: controller.signal };
+  for (const [key, value] of Object.entries(opts)) {
+    if (value !== undefined) (merged as Record<string, unknown>)[key] = value;
+  }
+
+  return { message: blocks, opts: merged };
 }

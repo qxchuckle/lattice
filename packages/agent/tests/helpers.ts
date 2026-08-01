@@ -14,7 +14,8 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager, ConversationController } from '../src/index.js';
-import type { ConversationHooks, AgentSourceInstance } from '../src/index.js';
+import type { ConversationHooks } from '../src/index.js';
+import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { createSourceProfileProvider } from '../src/conversation/source-profiles.js';
 import type {
   ISource,

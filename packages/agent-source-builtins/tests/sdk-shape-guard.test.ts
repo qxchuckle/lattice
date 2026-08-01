@@ -41,14 +41,14 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
   }),
 }));
 
-let createPiSource: typeof import('../src/sources/pi/index.js').createPiSource;
+let createPiSource: typeof import('../src/pi/index.js').createPiSource;
 
 // Pi SDK 硬依赖 Node >= 22（driver 内版本门禁先于 SDK import）：低版本下 connect
 // 路径被门禁拦截，形状受检逻辑根本不会执行——明示 skip，不静默空跑
 const PI_NODE_SUPPORTED = parseInt(process.version.slice(1).split('.')[0], 10) >= 22;
 
 beforeEach(async () => {
-  ({ createPiSource } = await import('../src/sources/pi/index.js'));
+  ({ createPiSource } = await import('../src/pi/index.js'));
 });
 
 describe.skipIf(!PI_NODE_SUPPORTED)('pi driver：SDK 形状受检', () => {

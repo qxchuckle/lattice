@@ -1,0 +1,4 @@
+.tmp-e2e-home/
+node_modules/
+test-results/
+playwright-report/

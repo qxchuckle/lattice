@@ -49,6 +49,7 @@ export {
   getCacheDir,
   getDbPath,
   getSessionsCacheDir,
+  getAgentCommandsDir,
   getConfigDir,
   getGlobalConfigPath,
   getLocalConfigPath,

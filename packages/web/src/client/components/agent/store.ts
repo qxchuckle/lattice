@@ -17,6 +17,18 @@ import { isVisibleTurnStatus } from './turnState';
  * capabilities 用浅型 Record：valtio DeepReadonly 递归完整 SourceCapabilities（8 组嵌套）
  * 会触发 TS2589 类型实例化过深；UI 只读几个布尔字段，无需完整递归类型。
  */
+/**
+ * 待应答的权限请求（server 下发 permission.request 后挂起；
+ * 30s TTL 到期收到 permission.expired 或客户端发 permission.respond 后移除）。
+ * UI 可据此 Map 渲染/撤销权限确认对话框。
+ */
+export interface PendingPermission {
+  requestId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  level: 'allow' | 'ask' | 'deny';
+}
+
 export interface ClientSourceInfo {
   id: string;
   displayName: string;
@@ -109,6 +121,8 @@ export const agentStore = proxy({
   settingsOpen: false,
   /** 同树其他在场端（多端同步 presence） */
   peers: [] as PresenceState[],
+  /** 待应答的权限请求（requestId → 详情），UI 据此渲染/撤销权限对话框 */
+  pendingPermissions: new Map<string, PendingPermission>(),
 });
 
 // ── 内部辅助 ──
@@ -180,6 +194,7 @@ export function getSiblings(nodeId: string): string[] {
   );
 }
 
+// TODO(待接入): metrics 消费方——getTotalUsage 的 token 用量统计尚未对接 UI 消费方（状态栏/设置页用量展示）
 export function getTotalUsage(): { input: number; output: number } {
   let input = 0,
     output = 0;

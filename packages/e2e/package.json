@@ -1,0 +1,29 @@
+{
+  "name": "@qcqx/lattice-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lattice E2E 测试：Playwright 多 browser context + 真实 agent+web 服务（mock AI SDK 源）",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "check-types": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/static": "^8.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "@playwright/test": "^1.62.1",
+    "@qcqx/lattice-agent": "workspace:*",
+    "@qcqx/lattice-agent-protocol": "workspace:*",
+    "@qcqx/lattice-agent-source": "workspace:*",
+    "@qcqx/lattice-core": "workspace:*",
+    "@qcqx/lattice-web": "workspace:*",
+    "@types/node": "^22.15.0",
+    "fastify": "^5.9.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

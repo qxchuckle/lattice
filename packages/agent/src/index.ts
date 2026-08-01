@@ -24,7 +24,7 @@ export type {
   MergeMode,
 } from './types.js';
 
-export type { SourceEvent } from '@qcqx/lattice-agent-protocol';
+export type { SourceEvent, SourceManifest, ResolvedManifest } from '@qcqx/lattice-agent-protocol';
 
 // ── Event Bus ──
 export { EventBus } from './events/event-bus.js';
@@ -70,21 +70,6 @@ export type { ToolFilter } from './tools/tool-registry.js';
 // ── Permission Guard ──
 export { PermissionGuard } from './permission/permission-guard.js';
 export type { PermissionRule, ScopeConfig } from './permission/permission-guard.js';
-
-// ── Agent Source（re-export 供 web 等消费方使用） ──
-export {
-  createAgentSource,
-  createPiSource,
-  createQoderSource,
-  SourceRegistry,
-  defineSource,
-} from '@qcqx/lattice-agent-source';
-export type {
-  AgentSourceInstance,
-  PiSourceOptions,
-  QoderSourceOptions,
-  SourceDriver,
-} from '@qcqx/lattice-agent-source';
 
 // ── Context Engine ──
 export { ContextEngine } from './context/context-engine.js';

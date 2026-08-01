@@ -8,6 +8,7 @@
  *   - 能力声明（ACP 残缺面如实标注）
  */
 import type {
+  ISource,
   SourceInfo,
   SourceCapabilities,
   AuthRequirement,
@@ -23,7 +24,8 @@ import type {
   DriverEmit,
   DriverPromptOutcome,
   DriverProbeReport,
-} from '../../driver.js';
+} from '@qcqx/lattice-agent-source';
+import { defineSource } from '@qcqx/lattice-agent-source';
 import type {
   ClientConnection,
   ActiveSession,
@@ -364,7 +366,7 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
     const cwd = this.opts.cwd ?? process.cwd();
 
     // 恢复已有会话的 SDK 能力缺口：
-    // session/load 只能让 agent 重放历史，但 SDK 把“从已知 sessionId 构造 ActiveSession”
+    // session/load 只能让 agent 重放历史，但 SDK 把"从已知 sessionId 构造 ActiveSession"
     // 的 attachSession 定为私有，无公开入口。先调 load 再 buildSession 会**多建一个新会话**，
     // 且 nextUpdate() 监听的是新会话——恢复语义实际不成立。
     // 故目前一律新建，并在 probe 里将 session.resume 降准为 false（声明与实现一致）。
@@ -527,6 +529,6 @@ class AcpDriver implements SourceDriver<AcpSessionHandle> {
 
 // ── 工厂 ──
 
-export function createAcpSource(options: AcpSourceOptions): SourceDriver<AcpSessionHandle> {
-  return new AcpDriver(options);
+export function createAcpSource(options: AcpSourceOptions): ISource {
+  return defineSource(new AcpDriver(options));
 }

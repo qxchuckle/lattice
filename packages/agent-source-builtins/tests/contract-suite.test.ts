@@ -8,11 +8,10 @@
 import { describe, it, expect } from 'vitest';
 import type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 import { CONTRACT_VERSION } from '@qcqx/lattice-agent-protocol';
-import { defineSource } from '../src/define-source.js';
-import { SourceError } from '../src/types/error.js';
-import { checkDriverConformance, createScriptedDriver } from '../src/testing/index.js';
-import { createPiDriver } from '../src/sources/pi/index.js';
-import { createQoderDriver } from '../src/sources/qoder/index.js';
+import { defineSource, SourceError } from '@qcqx/lattice-agent-source';
+import { checkDriverConformance, createScriptedDriver } from '@qcqx/lattice-agent-source/testing';
+import { createPiDriver } from '../src/pi/index.js';
+import { createQoderDriver } from '../src/qoder/index.js';
 
 async function collect(iter: AsyncIterable<SourceEvent>): Promise<SourceEvent[]> {
   const out: SourceEvent[] = [];

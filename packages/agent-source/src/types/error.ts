@@ -22,7 +22,7 @@ export class SourceError extends Error {
   readonly context: SourceErrorContext;
 
   constructor(code: SourceErrorCode, message: string, context: SourceErrorContext) {
-    super(`[${context.sourceId}] ${message}`);
+    super(`[${context.sourceId}] ${message}`, { cause: context.cause });
     this.name = 'SourceError';
     this.code = code;
     this.context = context;

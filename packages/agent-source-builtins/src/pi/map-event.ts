@@ -2,7 +2,7 @@
  * Pi 事件 → SourceEvent 映射（纯函数）
  * 返回数组：一个 SDK 事件可映射出多个标准事件（如写入类工具调用 → tool_call + file_edit）
  */
-import type { DriverEvent } from '../../driver.js';
+import type { DriverEvent } from '@qcqx/lattice-agent-source';
 
 /** 从工具参数提取文件路径（Pi 写入类工具统一用 `path` 参数） */
 function extractPath(args: Record<string, unknown>): string | undefined {

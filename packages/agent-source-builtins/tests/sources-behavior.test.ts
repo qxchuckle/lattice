@@ -110,8 +110,8 @@ vi.mock('@qoder-ai/qoder-agent-sdk', () => ({
   },
 }));
 
-import { createPiSource } from '../src/sources/pi/index.js';
-import { createQoderSource } from '../src/sources/qoder/index.js';
+import { createPiSource } from '../src/pi/index.js';
+import { createQoderSource } from '../src/qoder/index.js';
 
 // Pi SDK 硬依赖 Node >= 22（driver 内版本门禁先于 SDK import）：低版本下
 // connect 路径被门禁拦截，事件时序用例无法运行——明示 skip，不静默空跑

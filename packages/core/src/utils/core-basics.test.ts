@@ -8,7 +8,12 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { nowISO, todayDateForId } from './time';
-import { toKebabCase, getLatticeRoot, getFastStartLogFileName } from '../paths';
+import {
+  toKebabCase,
+  getLatticeRoot,
+  getAgentCommandsDir,
+  getFastStartLogFileName,
+} from '../paths';
 import { generateTaskId } from '../task';
 
 describe('nowISO / todayDateForId（统一时间格式约定）', () => {
@@ -50,6 +55,29 @@ describe('getLatticeRoot（LATTICE_HOME 覆盖）', () => {
   it('未设置时回退 ~/.lattice', () => {
     delete process.env.LATTICE_HOME;
     expect(getLatticeRoot()).toBe(join(homedir(), '.lattice'));
+  });
+});
+
+describe('getAgentCommandsDir（agent 命令目录单一真相）', () => {
+  const original = process.env.LATTICE_HOME;
+  afterEach(() => {
+    if (original === undefined) delete process.env.LATTICE_HOME;
+    else process.env.LATTICE_HOME = original;
+  });
+
+  it('默认回退到 ~/.lattice/agent/commands（与 getLatticeRoot 同源）', () => {
+    delete process.env.LATTICE_HOME;
+    expect(getAgentCommandsDir()).toBe(join(homedir(), '.lattice', 'agent', 'commands'));
+  });
+
+  it('LATTICE_HOME 覆盖时落在自定义根下（测试/CI 隔离）', () => {
+    process.env.LATTICE_HOME = '/tmp/lattice-test-home';
+    expect(getAgentCommandsDir()).toBe('/tmp/lattice-test-home/agent/commands');
+  });
+
+  it('始终是 getLatticeRoot() 的子路径（不内联 ~/.lattice，单一真相）', () => {
+    delete process.env.LATTICE_HOME;
+    expect(getAgentCommandsDir().startsWith(getLatticeRoot())).toBe(true);
   });
 });
 

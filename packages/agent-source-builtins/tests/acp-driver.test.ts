@@ -7,9 +7,8 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createAcpSource } from '../src/sources/acp/index.js';
-import { defineSource } from '../src/define-source.js';
-import { mapAcpUpdate } from '../src/sources/acp/event-map.js';
+import { createAcpSource } from '../src/acp/index.js';
+import { mapAcpUpdate } from '../src/acp/event-map.js';
 
 // ── mock ACP server 脚本（JSON-RPC over stdio） ──
 
@@ -83,8 +82,7 @@ function createMockServerPath(): string {
 describe('AcpDriver 全链路', () => {
   it('init 握手 + listModels（从 configOptions 提取）', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
 
     // init 触发 initialize 握手
     await source.init();
@@ -98,8 +96,7 @@ describe('AcpDriver 全链路', () => {
 
   it('prompt 流式事件映射：text/thinking/tool_call/tool_result', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
     await source.init();
 
     const stream = source.prompt(null, [{ type: 'text', text: 'hi' }]);
@@ -130,8 +127,7 @@ describe('AcpDriver 全链路', () => {
 
   it('fork：返回新 session ID', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'mock-acp' });
     await source.init();
 
     // 先建会话
@@ -149,12 +145,12 @@ describe('AcpDriver 全链路', () => {
   });
 
   it('能力声明：ACP 残缺面正确标注', () => {
-    const driver = createAcpSource({ command: 'echo', id: 'test' });
-    expect(driver.capabilities.prompt.systemPrompt.override).toBe(false);
-    expect(driver.capabilities.context.compaction).toBe(false);
-    expect(driver.capabilities.resources).toBe(false);
-    expect(driver.capabilities.session.fork).toEqual({ atMessage: false });
-    expect(driver.capabilities.execution.mode).toBe('delegated');
+    const source = createAcpSource({ command: 'echo', id: 'test' });
+    expect(source.describe().capabilities.prompt.systemPrompt.override).toBe(false);
+    expect(source.describe().capabilities.context.compaction).toBe(false);
+    expect(source.describe().capabilities.resources).toBe(false);
+    expect(source.describe().capabilities.session.fork).toEqual({ atMessage: false });
+    expect(source.describe().capabilities.execution.mode).toBe('delegated');
   });
 
   it('进程退出 → 在途请求立即 reject（不挂到超时）', async () => {
@@ -173,12 +169,11 @@ describe('AcpDriver 全链路', () => {
         '});',
       ].join('\n'),
     );
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [script],
       id: 'exit-acp',
     });
-    const source = defineSource(driver);
     await source.init();
 
     // 等进程退出
@@ -195,13 +190,12 @@ describe('R4.3 协议完整度', () => {
   it('abort → agent 确实收到 session/cancel（不只停本地路由）', async () => {
     const script = createMockServerPath();
     const marker = join(mkdtempSync(join(tmpdir(), 'acp-cancel-')), 'cancelled.txt');
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [script],
       id: 'cancel-acp',
       env: { CANCEL_MARKER: marker },
     });
-    const source = defineSource(driver);
     await source.init();
 
     const ctrl = new AbortController();
@@ -233,8 +227,7 @@ describe('R4.3 协议完整度', () => {
         '});',
       ].join('\n'),
     );
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'auth-acp' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'auth-acp' });
     await source.init();
 
     const auth = await source.checkAuth();
@@ -250,8 +243,7 @@ describe('R4.3 协议完整度', () => {
 
   it('checkAuth 无 authMethods → configured', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'noauth-acp' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'noauth-acp' });
     await source.init();
     expect((await source.checkAuth()).status).toBe('configured');
     await source.dispose();
@@ -260,13 +252,12 @@ describe('R4.3 协议完整度', () => {
   it('恢复会话：传入 sessionId 时走 session/load（而非直接新建）', async () => {
     const script = createMockServerPath();
     const marker = join(mkdtempSync(join(tmpdir(), 'acp-load-')), 'loaded.txt');
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [script],
       id: 'load-acp',
       env: { LOAD_MARKER: marker },
     });
-    const source = defineSource(driver);
     await source.init();
 
     // 传已知 sessionId → driver 应先发 session/load
@@ -280,8 +271,7 @@ describe('R4.3 协议完整度', () => {
   });
 
   it('进程启动失败（命令不存在）→ 报错而非卡住', async () => {
-    const driver = createAcpSource({ command: 'definitely-not-a-real-cmd-xyz', id: 'bad' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'definitely-not-a-real-cmd-xyz', id: 'bad' });
     const start = Date.now();
     await expect(source.init()).rejects.toThrow();
     expect(Date.now() - start).toBeLessThan(5000);
@@ -291,8 +281,7 @@ describe('R4.3 协议完整度', () => {
 
   it('stopReason=end_turn → 无 notice（正常完成不扰民）', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'stop-ok' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'stop-ok' });
     await source.init();
 
     const stream = source.prompt(null, [{ type: 'text', text: 'hi' }]);
@@ -310,13 +299,12 @@ describe('R4.3 协议完整度', () => {
     ['refusal', /拒绝/],
   ])('stopReason=%s → 发 warning notice（用户不会误以为回答完整）', async (reason, pattern) => {
     const script = createMockServerPath();
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [script],
       id: `stop-${reason}`,
       env: { STOP_REASON: reason },
     });
-    const source = defineSource(driver);
     await source.init();
 
     const stream = source.prompt(null, [{ type: 'text', text: 'hi' }]);
@@ -333,13 +321,12 @@ describe('R4.3 协议完整度', () => {
 
   it('未知 stopReason → 仍发 notice（兼容协议演进，不静默吃掉）', async () => {
     const script = createMockServerPath();
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [script],
       id: 'stop-future',
       env: { STOP_REASON: 'some_future_reason' },
     });
-    const source = defineSource(driver);
     await source.init();
 
     const stream = source.prompt(null, [{ type: 'text', text: 'hi' }]);
@@ -381,20 +368,19 @@ describe('能力握手降准（ACP：未声明 = 不支持）', () => {
   }
 
   it('agent 不声明能力 → resume/images 双降准并留痕', async () => {
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [serverWithCaps('{}')],
       id: 'caps-none',
     });
-    const source = defineSource(driver);
     await source.init();
 
-    const report = await driver.probe!();
-    const paths = report.overrides!.map((o) => o.path);
+    const manifest = await source.handshake();
+    const paths = manifest.downgrades.map((d) => d.path);
     expect(paths).toContain('session.resume');
     expect(paths).toContain('prompt.images');
     expect(
-      report.overrides!.every((o) => o.reason.length > 0),
+      manifest.downgrades.every((d) => d.reason.length > 0),
       '降准理由必可读',
     ).toBe(true);
 
@@ -402,32 +388,30 @@ describe('能力握手降准（ACP：未声明 = 不支持）', () => {
   });
 
   it('agent 声明 image → 图片不降准；resume 仍降准（SDK 无重建 ActiveSession 入口）', async () => {
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [serverWithCaps('{ "loadSession": true, "promptCapabilities": { "image": true } }')],
       id: 'caps-full',
     });
-    const source = defineSource(driver);
     await source.init();
 
-    const report = await driver.probe!();
-    const paths = report.overrides!.map((o) => o.path);
+    const manifest = await source.handshake();
+    const paths = manifest.downgrades.map((d) => d.path);
     expect(paths, 'image 已声明 → 不应降准').not.toContain('prompt.images');
     // resume 一律降准：声明与实现保持一致（不声明自己做不到的事）
     expect(paths).toContain('session.resume');
-    const resumeOverride = report.overrides!.find((o) => o.path === 'session.resume');
-    expect(resumeOverride!.reason, '理由应说明是 SDK 入口缺口而非 agent 不支持').toContain('SDK');
+    const resumeDowngrade = manifest.downgrades.find((d) => d.path === 'session.resume');
+    expect(resumeDowngrade!.reason, '理由应说明是 SDK 入口缺口而非 agent 不支持').toContain('SDK');
 
     await source.dispose();
   });
 
   it('图片能力未声明 → 丢图但发 notice（不静默降级）', async () => {
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'node',
       args: [serverWithCaps('{}')],
       id: 'noimg',
     });
-    const source = defineSource(driver);
     await source.init();
 
     const stream = source.prompt(null, [
@@ -460,8 +444,7 @@ describe('能力握手降准（ACP：未声明 = 不支持）', () => {
         '});',
       ].join('\n'),
     );
-    const driver = createAcpSource({ command: 'node', args: [script], id: 'ver-mismatch' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [script], id: 'ver-mismatch' });
     await expect(source.init()).rejects.toThrow(/版本不匹配/);
   });
 });
@@ -508,8 +491,7 @@ describe('lattice 跨分支并行边界', () => {
   }
 
   it('两个会话并行时权限回调不串台（per-session 隔离）', async () => {
-    const driver = createAcpSource({ command: 'node', args: [permissionServer()], id: 'perm' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [permissionServer()], id: 'perm' });
     await source.init();
 
     // 两个并行轮次：A 授权、B 拒绝——若 handler 串台，两边会拿到同一个决定
@@ -535,8 +517,7 @@ describe('lattice 跨分支并行边界', () => {
   });
 
   it('一个会话结束不影响另一个在途会话的权限通道', async () => {
-    const driver = createAcpSource({ command: 'node', args: [permissionServer()], id: 'perm2' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'node', args: [permissionServer()], id: 'perm2' });
     await source.init();
 
     // 先跑完一轮（其 finally 会清自己的 handler）

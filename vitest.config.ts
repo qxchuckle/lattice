@@ -12,12 +12,15 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
+    // e2e 包走 Playwright（pnpm e2e），不进 vitest；此 exclude 为纵深防御
+    exclude: ['packages/e2e/**'],
     projects: [
       'packages/core',
       'packages/cli',
       'packages/agent',
       'packages/agent-protocol',
       'packages/agent-source',
+      'packages/agent-source-builtins',
       'packages/agent-pipeline',
       'packages/web',
       'examples/minimal-host',

@@ -27,15 +27,15 @@ import type {
   DriverEmit,
   DriverPromptOutcome,
   DriverProbeReport,
-} from '../../driver.js';
-import { defineSource } from '../../define-source.js';
+} from '@qcqx/lattice-agent-source';
+import { defineSource } from '@qcqx/lattice-agent-source';
 import { mapQoderMessage } from './map-message.js';
 import { buildMcpServers } from './mcp-tools.js';
 import { scanCommandDir, scanFlatMdDir, scanSkillDir } from '../resource-scan.js';
 import { QODER_INFO, QODER_CAPABILITIES, QODER_AUTH_REQUIREMENTS } from './capabilities.js';
 import { ModelCatalog } from './models.js';
 import { makeQoderPrompt } from './prompt-input.js';
-import { isRecord, stringField } from '../../internal/shape.js';
+import { isRecord, stringField } from '../internal/shape.js';
 
 /**
  * SDK 惰性加载（optionalDependencies：未安装时不致模块顶层崩溃）

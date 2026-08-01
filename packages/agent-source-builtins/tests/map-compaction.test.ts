@@ -5,8 +5,8 @@
  * 各源的压缩消息统一映射为 SourceEvent 'compaction'（透传观察，不改 fork/resume 语义）。
  */
 import { describe, it, expect } from 'vitest';
-import { mapQoderMessage } from '../src/sources/qoder/map-message.js';
-import { mapPiEvent } from '../src/sources/pi/map-event.js';
+import { mapQoderMessage } from '../src/qoder/map-message.js';
+import { mapPiEvent } from '../src/pi/map-event.js';
 
 const src = { id: 'test', name: 'Test' };
 

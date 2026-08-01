@@ -37,11 +37,6 @@
     "rxjs": "^7.8.2",
     "zod": "^3.25.0"
   },
-  "optionalDependencies": {
-    "@agentclientprotocol/sdk": "^1.3.0",
-    "@earendil-works/pi-coding-agent": "^0.80.0",
-    "@qoder-ai/qoder-agent-sdk": "^1.0.15"
-  },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "tsup": "^8.5.0",

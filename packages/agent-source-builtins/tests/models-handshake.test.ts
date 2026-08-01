@@ -15,15 +15,15 @@ import {
   FALLBACK_MODELS,
   MODEL_CACHE_TTL_MS,
   type SdkModelLike,
-} from '../src/sources/qoder/models.js';
+} from '../src/qoder/models.js';
 import {
   getPath,
   setPath,
   applyProbeOverrides,
   buildResolvedManifest,
   buildFailedManifest,
-} from '../src/handshake.js';
-import { QODER_CAPABILITIES, QODER_INFO } from '../src/sources/qoder/capabilities.js';
+} from '@qcqx/lattice-agent-source';
+import { QODER_CAPABILITIES, QODER_INFO } from '../src/qoder/capabilities.js';
 
 // ── qoder models：纯函数 ──
 

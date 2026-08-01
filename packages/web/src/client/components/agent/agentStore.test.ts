@@ -25,10 +25,17 @@ import type {
   ClientMessage,
   ConversationNode,
   TreeSnapshotMessage,
+  StreamEventMessage,
 } from '@qcqx/lattice-agent-protocol';
 import { sendWs } from './connection';
 import type { ClientSourceInfo } from './store';
-import { applySnapshot, resetLastAppliedRev, __hasLiveStreamForTest } from './sync';
+import {
+  applySnapshot,
+  resetLastAppliedRev,
+  __hasLiveStreamForTest,
+  handleStreamEvent,
+  startLiveStreamGc,
+} from './sync';
 import {
   agentStore,
   putTurn,
@@ -37,6 +44,9 @@ import {
   deleteTurn,
   retryTurn,
   continueTurn,
+  switchConversation,
+  newConversation,
+  cleanupAgentStore,
   type TurnNode,
 } from './agentStore';
 
@@ -262,5 +272,66 @@ describe('节点删除/撤销清理他端在途流缓冲（liveStreams 传递性
     deleteTurn('u1'); // 子树标 hidden → markLocalSubtree 递归清理
     expect(__hasLiveStreamForTest('u1')).toBe(false);
     expect(__hasLiveStreamForTest('u2'), '子节点 liveStream 同步清理').toBe(false);
+  });
+});
+
+// ── 断连/会话切换清理：pendingPermissions + liveStreams 防孤儿/防残留 ──
+
+describe('🔴 断连/切换清理（pendingPermissions + liveStreams）', () => {
+  beforeEach(() => {
+    agentStore.turns.clear();
+    agentStore.ui.clear();
+    agentStore.turnCaps.clear();
+    agentStore.sessionId = 'sess-1';
+    agentStore.treeId = 'tree-1';
+    agentStore.sources = [src('qoder', true)];
+    agentStore.activeSourceId = 'qoder';
+    agentStore.activeModelId = 'auto';
+    agentStore.pendingPermissions.clear();
+    vi.clearAllMocks();
+    // cleanupAgentStore 会停 GC，需在每轮测试前确保 GC 运行
+    startLiveStreamGc();
+  });
+
+  /** 构造他端 stream.event（treeId 匹配但 turn 不存在 → 缓冲入 liveStreams） */
+  function streamEvent(rid: string): StreamEventMessage {
+    return {
+      type: 'stream.event',
+      treeId: 'tree-1',
+      requestId: rid,
+      event: { type: 'text', content: 'hello' },
+    } as StreamEventMessage;
+  }
+
+  it('cleanupAgentStore 清空 pendingPermissions（页面卸载/登出不留孤儿）', () => {
+    agentStore.pendingPermissions.set('perm-clean-1', {
+      requestId: 'perm-clean-1',
+      tool: 'writeFile',
+      args: {},
+      level: 'ask',
+    });
+    expect(agentStore.pendingPermissions.has('perm-clean-1')).toBe(true);
+
+    cleanupAgentStore();
+
+    expect(agentStore.pendingPermissions.size).toBe(0);
+  });
+
+  it('switchConversation 清空 liveStreams（防旧树条目残留至 TTL）', () => {
+    handleStreamEvent(streamEvent('rid-sw-1'));
+    expect(__hasLiveStreamForTest('rid-sw-1')).toBe(true);
+
+    switchConversation('tree-new');
+
+    expect(__hasLiveStreamForTest('rid-sw-1')).toBe(false);
+  });
+
+  it('newConversation 清空 liveStreams', () => {
+    handleStreamEvent(streamEvent('rid-nc-1'));
+    expect(__hasLiveStreamForTest('rid-nc-1')).toBe(true);
+
+    newConversation();
+
+    expect(__hasLiveStreamForTest('rid-nc-1')).toBe(false);
   });
 });

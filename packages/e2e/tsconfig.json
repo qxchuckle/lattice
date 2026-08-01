@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "@qcqx/lattice-agent-protocol": ["../../packages/agent-protocol/src/index.ts"],
+      "@qcqx/lattice-agent-protocol/*": ["../../packages/agent-protocol/src/*"],
+      "@qcqx/lattice-agent-source": ["../../packages/agent-source/src/index.ts"],
+      "@qcqx/lattice-agent-source/testing": ["../../packages/agent-source/src/testing/index.ts"],
+      "@qcqx/lattice-agent-source/*": ["../../packages/agent-source/src/*"],
+      "@qcqx/lattice-agent": ["../../packages/agent/src/index.ts"],
+      "@qcqx/lattice-agent/*": ["../../packages/agent/src/*"],
+      "@qcqx/lattice-core": ["../../packages/core/src/index.ts"],
+      "@qcqx/lattice-core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["src", "fixtures", "utils", "tests", "playwright.config.ts"]
+}

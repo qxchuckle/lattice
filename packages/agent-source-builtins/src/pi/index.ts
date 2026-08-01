@@ -26,13 +26,13 @@ import type {
   DriverEmit,
   DriverPromptOutcome,
   DriverProbeReport,
-} from '../../driver.js';
-import { defineSource } from '../../define-source.js';
+} from '@qcqx/lattice-agent-source';
+import { defineSource } from '@qcqx/lattice-agent-source';
 import { mapPiEvent } from './map-event.js';
 import { checkPiAuth, discoverPiModels } from './auth.js';
 import { PI_INFO, PI_CAPABILITIES, PI_AUTH_REQUIREMENTS } from './capabilities.js';
 import { scanPiResources } from './resources.js';
-import { isRecord } from '../../internal/shape.js';
+import { isRecord } from '../internal/shape.js';
 import {
   fromEventPattern,
   from,

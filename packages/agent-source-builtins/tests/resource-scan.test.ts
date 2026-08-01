@@ -11,7 +11,7 @@ import {
   scanSkillDir,
   filterKinds,
   parseFrontmatterAttrs,
-} from '../src/sources/resource-scan.js';
+} from '../src/resource-scan.js';
 import type { SourceResourceInfo } from '@qcqx/lattice-agent-protocol';
 
 let root: string;

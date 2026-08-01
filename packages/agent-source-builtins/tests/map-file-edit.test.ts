@@ -6,8 +6,8 @@
  * （壳层凭此汇总改动文件，不认识工具名）。
  */
 import { describe, it, expect } from 'vitest';
-import { mapQoderMessage } from '../src/sources/qoder/map-message.js';
-import { mapPiEvent } from '../src/sources/pi/map-event.js';
+import { mapQoderMessage } from '../src/qoder/map-message.js';
+import { mapPiEvent } from '../src/pi/map-event.js';
 
 const src = { id: 'test', name: 'Test' };
 

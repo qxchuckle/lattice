@@ -31,6 +31,17 @@ export function getSessionsIndexPath(): string {
   return pathJoin(getSessionsCacheDir(), 'index.json');
 }
 
+/**
+ * Agent 本地命令模板目录（用户级 ~/.lattice/agent/commands）。
+ *
+ * 这是 agent/workflow-engine 的 commandDirs 的单一真相来源：壳层（web/cli）
+ * 经此 getter 注入到 createLatticeAgent 的 workflowConfig.commandDirs，
+ * agent 包自身不依赖 core、不内联 ~/.lattice 路径（分层约束 + 去硬编码）。
+ */
+export function getAgentCommandsDir(): string {
+  return pathJoin(getLatticeRoot(), 'agent', 'commands');
+}
+
 // ─── fast-start 日志 ───
 
 export function getFastStartLogDir(username: string): string {

@@ -62,7 +62,13 @@ import {
   unsubscribeTree,
   waitForSessionReady,
 } from './connection';
-import { resetLastAppliedRev, clearLiveStream, startLiveStreamGc, stopLiveStreamGc } from './sync';
+import {
+  resetLastAppliedRev,
+  clearLiveStream,
+  clearAllLiveStreams,
+  startLiveStreamGc,
+  stopLiveStreamGc,
+} from './sync';
 import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
@@ -249,6 +255,7 @@ export function continueTurn(turnId: string): void {
 
 // ── 重试（对 user 节点丢弃后代并重新生成） ──
 
+// TODO(预留): pipeline 重试无跨事件总预算——retryTurn 连续触发时无累计上限，归批次四补跨事件 retry 预算守卫
 export function retryTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
@@ -386,6 +393,7 @@ export async function switchConversation(treeId: string): Promise<void> {
   if (agentStore.treeId) unsubscribeTree(agentStore.treeId); // 退订旧树（不拆树资源）
   resetLastAppliedRev(); // 重置 rev 基线（新树从 0 计）
   clearNodeDataCache();
+  clearAllLiveStreams(); // 清旧树在途流缓冲，防残留至 TTL
   agentStore.sessionId = null;
   agentStore.turns.clear();
   agentStore.ui.clear();
@@ -406,6 +414,7 @@ export function newConversation(): void {
   if (agentStore.treeId) unsubscribeTree(agentStore.treeId); // 退订旧树（与 switchConversation 一致）
   resetLastAppliedRev();
   clearNodeDataCache();
+  clearAllLiveStreams(); // 清旧树在途流缓冲，防残留至 TTL
   agentStore.sessionId = null;
   agentStore.treeId = null;
   agentStore.turns.clear();
@@ -464,6 +473,7 @@ export function cleanupAgentStore(): void {
   presenceSub?.unsubscribe();
   presenceSub = null;
   pendingPresence = {};
+  agentStore.pendingPermissions.clear(); // 断连后不再收到 permission.expired，防孤儿
   stopLiveStreamGc();
   disconnectAgentWs();
 }

@@ -278,6 +278,9 @@ function onOpen(): void {
 
 function onClose(): void {
   agentStore.sessionId = null; // 清除旧 session，重连后重新 session.create
+  // 断连后 server closeConnection 已清 TTL timer，不再发 permission.expired →
+  // 客户端须主动清 pendingPermissions，防权限对话框成孤儿
+  agentStore.pendingPermissions.clear();
   // 保留 subscribedTrees：server 侧订阅已丢失，但 client 侧记录需重连后恢复
   // 状态置 disconnected（若因错误将进入 reconnecting，retry.delay 会接管）；心跳随状态订阅停止
   if (connectionStateSubject.value.type === 'connected') setConnState({ type: 'disconnected' });
@@ -373,6 +376,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     case 'session.error': {
       // 尝试通过 requestId 定位，否则广播给所有活跃流
+      // TODO(预留): validation_error 能力——session.error 携带 validationError 字段时走专用 UX 路径（归批次四）
       const rid = msg.requestId;
       if (rid) {
         clearLiveStream(rid); // 主动清理他端在途流缓冲（防御：requestId 可能对应他端流残留）
@@ -399,6 +403,18 @@ function handleServerMessage(msg: ServerMessage): void {
       }
       break;
     case 'permission.request':
+      // 挂起权限请求：UI 据此渲染权限确认对话框；30s TTL 或 permission.respond 后移除
+      // TODO(批次四): permission.respond 客户端正向应答 UI——允许/拒绝按钮 → sendWs permission.respond + 移除 pendingPermissions 条目
+      agentStore.pendingPermissions.set(msg.requestId, {
+        requestId: msg.requestId,
+        tool: msg.tool,
+        args: msg.args,
+        level: msg.level,
+      });
+      break;
+    case 'permission.expired':
+      // server 30s TTL 到期：按 requestId 移除挂起的权限请求，UI 对话框自动关闭
+      agentStore.pendingPermissions.delete(msg.requestId);
       break;
     case 'session.closed':
       agentStore.sessionId = null;

@@ -6,9 +6,8 @@
  *   SourceError source_unavailable（retryable=false）。
  */
 import { describe, it, expect, vi } from 'vitest';
-import { createAcpSource } from '../src/sources/acp/index.js';
-import { defineSource } from '../src/define-source.js';
-import { SourceError } from '../src/types/error.js';
+import { createAcpSource } from '../src/acp/index.js';
+import { SourceError } from '@qcqx/lattice-agent-source';
 
 describe('ACP spawn 安全', () => {
   it('spawn 后子进程 error 事件被监听（不导致 uncaughtException）', async () => {
@@ -17,8 +16,7 @@ describe('ACP spawn 安全', () => {
     process.on('uncaughtException', uncaughtHandler);
 
     // 使用不存在的命令触发 spawn error
-    const driver = createAcpSource({ command: 'definitely-not-a-real-cmd-xyz', id: 'spawn-test' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'definitely-not-a-real-cmd-xyz', id: 'spawn-test' });
 
     // init 应该 reject
     await expect(source.init()).rejects.toThrow();
@@ -33,11 +31,10 @@ describe('ACP spawn 安全', () => {
   });
 
   it('spawn 失败（ENOENT）→ init() reject SourceError source_unavailable（工厂按边界包装）', async () => {
-    const driver = createAcpSource({
+    const source = createAcpSource({
       command: 'definitely-not-a-real-cmd-xyz',
       id: 'spawn-enoent',
     });
-    const source = defineSource(driver);
 
     try {
       await source.init();
@@ -60,8 +57,7 @@ describe('ACP spawn 安全', () => {
     const handler = (err: Error) => errors.push(err);
     process.on('uncaughtException', handler);
 
-    const driver = createAcpSource({ command: 'another-fake-cmd-12345', id: 'spawn-safety' });
-    const source = defineSource(driver);
+    const source = createAcpSource({ command: 'another-fake-cmd-12345', id: 'spawn-safety' });
 
     // init 会失败
     await expect(source.init()).rejects.toThrow();

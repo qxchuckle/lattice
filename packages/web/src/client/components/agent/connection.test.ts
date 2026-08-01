@@ -95,6 +95,7 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
     FakeWebSocket.instances = [];
     __setWebSocketCtorForTest(asCtor());
     agentStore.sessionId = null;
+    agentStore.pendingPermissions.clear();
   });
 
   afterEach(() => {
@@ -301,6 +302,89 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
   it('waitForSessionReady：已就绪则立即 resolve（不等事件）', async () => {
     agentStore.sessionId = 'already';
     await expect(waitForSessionReady(10)).resolves.toBe('already');
+  });
+
+  // ── 权限请求生命周期：permission.request 挂起 → permission.expired 30s 后撤销 ──
+
+  it('🔴 permission.request 到达 → 存入 agentStore.pendingPermissions（UI 可据此渲染对话框）', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    FakeWebSocket.last.simulateMessage({
+      type: 'permission.request',
+      requestId: 'perm-1',
+      tool: 'writeFile',
+      args: { path: '/repo/a.ts' },
+      level: 'ask',
+    });
+
+    expect(agentStore.pendingPermissions.has('perm-1')).toBe(true);
+    const entry = agentStore.pendingPermissions.get('perm-1');
+    expect(entry).toMatchObject({
+      requestId: 'perm-1',
+      tool: 'writeFile',
+      args: { path: '/repo/a.ts' },
+      level: 'ask',
+    });
+  });
+
+  it('🔴 permission.expired 到达 → 按 requestId 从 pendingPermissions 移除（对话框自动关闭）', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    // 先收到 permission.request 挂起
+    FakeWebSocket.last.simulateMessage({
+      type: 'permission.request',
+      requestId: 'perm-exp-1',
+      tool: 'writeFile',
+      args: { path: '/repo/b.ts' },
+      level: 'ask',
+    });
+    expect(agentStore.pendingPermissions.has('perm-exp-1')).toBe(true);
+
+    // 模拟 30s TTL 到期：server 发来 permission.expired
+    vi.advanceTimersByTime(30_000);
+    FakeWebSocket.last.simulateMessage({
+      type: 'permission.expired',
+      requestId: 'perm-exp-1',
+    });
+
+    // pendingPermissions 中该条已移除 → UI 对话框关闭
+    expect(agentStore.pendingPermissions.has('perm-exp-1')).toBe(false);
+  });
+
+  it('🔴 permission.expired 对未知 requestId 安全 noop（不抛错不断连）', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    // 未先收到 permission.request，直接收到 expired（如重连后迟到的过期通知）
+    FakeWebSocket.last.simulateMessage({
+      type: 'permission.expired',
+      requestId: 'perm-unknown-1',
+    });
+
+    expect(getConnectionState().type).toBe('connected');
+    expect(agentStore.pendingPermissions.has('perm-unknown-1')).toBe(false);
+  });
+
+  it('🔴 断连时清空 pendingPermissions（防孤儿：server closeConnection 后不再发 permission.expired）', () => {
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+
+    // 收到 permission.request → 存入 pendingPermissions
+    FakeWebSocket.last.simulateMessage({
+      type: 'permission.request',
+      requestId: 'perm-disc-1',
+      tool: 'writeFile',
+      args: { path: '/repo/a.ts' },
+      level: 'ask',
+    });
+    expect(agentStore.pendingPermissions.has('perm-disc-1')).toBe(true);
+
+    // 模拟异常断连 → onClose → pendingPermissions 清空
+    FakeWebSocket.last.simulateAbnormalClose();
+    expect(agentStore.pendingPermissions.has('perm-disc-1')).toBe(false);
+    expect(agentStore.pendingPermissions.size).toBe(0);
   });
 
   it('🔴 未知 ServerMessage type 不抛错不断连（滚动发布容错：default console.warn 而非 assertNever）', () => {

@@ -9,6 +9,8 @@
  * - 能力守卫：fork/rename 缺口抛 unsupported_operation / unsupported_option（纵深防御）
  * - signal 接线：唯一取消真相 → handle.abort()
  * - 契约版本校验：CONTRACT_VERSION 偏斜在 handshake 入口落 failed manifest（available:false，不炸 Registry）
+ * - 超时守卫：所有 driver 方法调用均包装 withTimeout，超时落 SourceError('timeout') 不 crash 宿主
+ * - 事件形状校验：driver emit 的事件必须含 type 字段，不合法事件丢弃 + warn
  * - 资源缓存：per-cwd TTL（菜单频繁开合免重扫）
  */
 import { resolve } from 'node:path';
@@ -35,6 +37,61 @@ import { buildResolvedManifest, buildFailedManifest } from './handshake.js';
 
 /** 资源发现缓存 TTL */
 const RESOURCE_CACHE_TTL_MS = 60_000;
+
+/** 各 driver 方法的默认超时（ms） */
+const DEFAULT_TIMEOUTS = {
+  init: 30_000,
+  handshake: 30_000,
+  connect: 15_000,
+  prompt: 300_000, // 5 分钟（AI 生成可能较长）
+  abortAfterSignal: 10_000, // abort 后等 prompt 返回的超时
+  checkAuth: 10_000,
+  listModels: 10_000,
+  dispose: 10_000,
+} as const;
+
+/**
+ * 超时守卫：为 driver 方法调用加超时包装。
+ * 超时不 crash 宿主，而是抛出 SourceError('timeout')。
+ *
+ * @param operation  用于 SourceError 的 operation 字段（受类型约束）
+ * @param label      用于错误消息的操作名（自由文本，更精确描述）
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operation: SourceErrorContext['operation'],
+  label: string,
+  sourceId: string,
+  sourceName: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const tid = setTimeout(() => {
+        reject(
+          new SourceError('timeout', `${label} timed out after ${ms}ms`, {
+            sourceId,
+            sourceName,
+            operation,
+          }),
+        );
+      }, ms);
+      // 确保 timer 不阻止进程退出
+      if (tid.unref) tid.unref();
+    }),
+  ]);
+}
+
+/**
+ * 事件形状校验：driver 推送的事件必须是含 type 字段的对象。
+ * 不合法事件丢弃并 warn，不中断流。
+ */
+function isValidSourceEvent(event: unknown): event is SourceEvent {
+  return (
+    typeof event === 'object' && event !== null && typeof (event as SourceEvent).type === 'string'
+  );
+}
 
 /** 连接重试：仅对**可重试**错误（network/timeout/rate_limited）指数退避重连 */
 const MAX_CONNECT_RETRIES = 3;
@@ -87,7 +144,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
 
   async init(config?: Record<string, unknown>): Promise<void> {
     try {
-      await this.driver.init?.(config);
+      await withTimeout(
+        this.driver.init?.(config) ?? Promise.resolve(),
+        DEFAULT_TIMEOUTS.init,
+        'init',
+        'init',
+        this.driver.info.id,
+        this.driver.info.displayName,
+      );
     } catch (err) {
       // 源设施边界：init 失败 = 源不可用（registry.initAll 据此落 available:false + warn）
       throw toSourceError(err, this.driver, 'init', 'facility');
@@ -98,7 +162,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   async dispose(): Promise<void> {
     for (const [id, handle] of this.handles) {
       try {
-        await handle.close?.();
+        await withTimeout(
+          handle.close?.() ?? Promise.resolve(),
+          DEFAULT_TIMEOUTS.dispose,
+          'destroySession',
+          'handle close',
+          this.driver.info.id,
+          this.driver.info.displayName,
+        );
       } catch (err) {
         console.warn(
           `[Source:${this.driver.info.id}] handle "${id}" close failed:`,
@@ -110,7 +181,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     this.sessionAliases.clear();
     this.resourceCache.clear();
     try {
-      await this.driver.dispose?.();
+      await withTimeout(
+        this.driver.dispose?.() ?? Promise.resolve(),
+        DEFAULT_TIMEOUTS.dispose,
+        'destroySession',
+        'dispose',
+        this.driver.info.id,
+        this.driver.info.displayName,
+      );
     } catch (err) {
       // dispose 边界：收尾失败不抛（避免阻断其他源退出），但必须可观测
       console.warn(
@@ -150,14 +228,28 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     let probeError: Error | undefined;
     if (this.driver.probe) {
       try {
-        probeReport = await this.driver.probe();
+        probeReport = await withTimeout(
+          this.driver.probe(),
+          DEFAULT_TIMEOUTS.handshake,
+          'handshake',
+          'probe',
+          this.driver.info.id,
+          this.driver.info.displayName,
+        );
       } catch (err) {
         probeError = err instanceof Error ? err : new Error(String(err));
       }
     }
 
     try {
-      const auth = await this.driver.checkAuth();
+      const auth = await withTimeout(
+        this.driver.checkAuth(),
+        DEFAULT_TIMEOUTS.checkAuth,
+        'checkAuth',
+        'checkAuth',
+        this.driver.info.id,
+        this.driver.info.displayName,
+      );
 
       // probe 失败 → available: false，与 auth 失败区分；铁律：永不静默降级，必须可观测
       if (probeError) {
@@ -181,7 +273,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       // 模型快照仅展示用途（权威通道 listModels），失败不影响握手
       const modelsSnapshot =
         auth.status === 'configured'
-          ? await this.driver.listModels().catch((err) => {
+          ? await withTimeout(
+              this.driver.listModels(),
+              DEFAULT_TIMEOUTS.listModels,
+              'listModels',
+              'listModels',
+              this.driver.info.id,
+              this.driver.info.displayName,
+            ).catch((err) => {
               // 非致命但不静默：快照缺省，握手继续（权威通道是运行期 listModels）
               console.warn(
                 `[Source:${this.driver.info.id}] listModels failed during handshake (snapshot omitted):`,
@@ -211,11 +310,25 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   // ── 动态通道 ──
 
   listModels(): Promise<ModelInfo[]> {
-    return this.driver.listModels();
+    return withTimeout(
+      this.driver.listModels(),
+      DEFAULT_TIMEOUTS.listModels,
+      'listModels',
+      'listModels',
+      this.driver.info.id,
+      this.driver.info.displayName,
+    );
   }
 
   checkAuth(): Promise<AuthStatus> {
-    return this.driver.checkAuth();
+    return withTimeout(
+      this.driver.checkAuth(),
+      DEFAULT_TIMEOUTS.checkAuth,
+      'checkAuth',
+      'checkAuth',
+      this.driver.info.id,
+      this.driver.info.displayName,
+    );
   }
 
   async listResources(query?: SourceResourceQuery): Promise<SourceResourceScanResult> {
@@ -277,8 +390,24 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
       if (opts.signal?.aborted) onAbort();
       else opts.signal?.addEventListener('abort', onAbort, { once: true });
 
-      const emit: DriverEmit = (event) => stream.push(this.stamp(event));
-      const outcome = await this.driver.prompt(handle, message, opts, emit);
+      const emit: DriverEmit = (event) => {
+        if (!isValidSourceEvent(event)) {
+          console.warn(
+            `[Source:${this.driver.info.id}] invalid event shape, discarded:`,
+            typeof event === 'object' ? JSON.stringify(event) : String(event),
+          );
+          return;
+        }
+        stream.push(this.stamp(event));
+      };
+      const outcome = await withTimeout(
+        this.driver.prompt(handle, message, opts, emit),
+        DEFAULT_TIMEOUTS.prompt,
+        'prompt',
+        'prompt',
+        this.driver.info.id,
+        this.driver.info.displayName,
+      );
 
       // 无状态源的真实会话 ID 在流中才产生：以 outcome 回填为准，同时重写 handle.id 与句柄表
       //（只换 Map key 不够——driver 下一轮从 handle.id 读会话身份，不同步会导致 resume 断链）
@@ -336,7 +465,18 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
   private async connectWithRetry(sessionId: string | null, opts: PromptOpts): Promise<H> {
     try {
       return await firstValueFrom(
-        defer(() => from(this.driver.connect(sessionId, opts))).pipe(
+        defer(() =>
+          from(
+            withTimeout(
+              this.driver.connect(sessionId, opts),
+              DEFAULT_TIMEOUTS.connect,
+              'prompt',
+              'connect',
+              this.driver.info.id,
+              this.driver.info.displayName,
+            ),
+          ),
+        ).pipe(
           retry({
             count: MAX_CONNECT_RETRIES,
             delay: (err: unknown, attempt: number) => {
@@ -396,7 +536,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     const handle = this.handles.get(realId);
     if (handle) {
       try {
-        await handle.close?.();
+        await withTimeout(
+          handle.close?.() ?? Promise.resolve(),
+          DEFAULT_TIMEOUTS.dispose,
+          'destroySession',
+          'handle close',
+          this.driver.info.id,
+          this.driver.info.displayName,
+        );
       } catch (err) {
         console.warn(
           `[Source:${this.driver.info.id}] handle "${realId}" close failed in destroySession:`,
@@ -407,7 +554,14 @@ class DefinedSource<H extends DriverSessionHandle> implements ISource {
     }
     this.pruneAliases(realId);
     try {
-      await this.driver.destroyNative?.(realId);
+      await withTimeout(
+        this.driver.destroyNative?.(realId) ?? Promise.resolve(),
+        DEFAULT_TIMEOUTS.dispose,
+        'destroySession',
+        'destroyNative',
+        this.driver.info.id,
+        this.driver.info.displayName,
+      );
     } catch (err) {
       throw toSourceError(err, this.driver, 'destroySession', 'runtime');
     }

@@ -5,6 +5,8 @@
     "paths": {
       "@qcqx/lattice-core": ["../core/src/index.ts"],
       "@qcqx/lattice-core/*": ["../core/src/*"],
+      "@qcqx/lattice-agent-source": ["../agent-source/src/index.ts"],
+      "@qcqx/lattice-agent-source-builtins": ["../agent-source-builtins/src/index.ts"],
       "@qcqx/lattice-web": ["../web/src/server/index.ts"]
     }
   },

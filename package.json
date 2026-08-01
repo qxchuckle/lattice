@@ -58,6 +58,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:report": "open coverage/index.html",
+    "e2e": "pnpm --filter @qcqx/lattice-e2e exec playwright test",
     "rag:benchmark": "node scripts/rag-benchmark.mjs",
     "clean": "pnpm -r run clean"
   },
@@ -70,6 +71,7 @@
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.15.2",
     "@vitest/coverage-v8": "^4.1.10",
     "dependency-cruiser": "^16.10.4",

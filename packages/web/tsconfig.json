@@ -2,51 +2,23 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "node"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
-      "@/*": [
-        "./src/client/*"
-      ],
-      "@qcqx/lattice-core": [
-        "../core/src/index.ts"
-      ],
-      "@qcqx/lattice-core/*": [
-        "../core/src/*"
-      ],
-      "@qcqx/lattice-agent": [
-        "../agent/src/index.ts"
-      ],
-      "@qcqx/lattice-agent/*": [
-        "../agent/src/*"
-      ],
-      "@qcqx/lattice-agent-protocol": [
-        "../agent-protocol/src/index.ts"
-      ],
-      "@qcqx/lattice-agent-protocol/*": [
-        "../agent-protocol/src/*"
-      ],
-      "@qcqx/lattice-agent-source": [
-        "../agent-source/src/index.ts"
-      ],
-      "@qcqx/lattice-agent-source/*": [
-        "../agent-source/src/*"
-      ]
+      "@/*": ["./src/client/*"],
+      "@qcqx/lattice-core": ["../core/src/index.ts"],
+      "@qcqx/lattice-core/*": ["../core/src/*"],
+      "@qcqx/lattice-agent": ["../agent/src/index.ts"],
+      "@qcqx/lattice-agent/*": ["../agent/src/*"],
+      "@qcqx/lattice-agent-protocol": ["../agent-protocol/src/index.ts"],
+      "@qcqx/lattice-agent-protocol/*": ["../agent-protocol/src/*"],
+      "@qcqx/lattice-agent-source": ["../agent-source/src/index.ts"],
+      "@qcqx/lattice-agent-source/*": ["../agent-source/src/*"],
+      "@qcqx/lattice-agent-source-builtins": ["../agent-source-builtins/src/index.ts"]
     }
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules"]
 }
