@@ -21,6 +21,9 @@
       "path": "../agent-source/tsconfig.build.json"
     },
     {
+      "path": "../agent-source-builtins/tsconfig.build.json"
+    },
+    {
       "path": "../agent-pipeline/tsconfig.build.json"
     }
   ]

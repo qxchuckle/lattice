@@ -2,6 +2,10 @@
  * postinstall — 安装后自动检测 agent 文档注入状态
  *
  * 纯 Node ESM 脚本，不依赖构建产物（安装时 dist 可能尚未存在）。
+ * ⚠ 防漂移：latticeRoot 路径逻辑（LATTICE_HOME 覆盖 → ~/.lattice）必须与
+ *   @qcqx/lattice-core 的 getLatticeRoot() 保持一致。core 是单一真相源，
+ *   此处为零依赖副本（postinstall 不能 import core：安装时 dist 尚未构建）。
+ *   防漂移测试见 cli/src/utils/postinstall-drift.test.ts。
  * 逻辑：
  *   1. ~/.lattice 不存在 → 静默跳过（用户尚未 init）
  *   2. ~/.lattice/.cache/init-meta.json 不存在 → 老版本，提示 init

@@ -42,4 +42,4 @@ export {
 } from './handshake.js';
 
 // ── 源发现 ──
-export { scanSources } from './source-discovery/index.js';
+export { scanSources, discoverAndRegister, readAgentConfig } from './source-discovery/index.js';

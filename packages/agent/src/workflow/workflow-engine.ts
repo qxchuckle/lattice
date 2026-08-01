@@ -13,8 +13,8 @@ import { scanLocalCommands, stripFrontmatter } from './command-scan.js';
 import type { LocalCommand } from './command-scan.js';
 
 export interface WorkflowConfig {
-  /** 自动化级别 */
-  automation: 'full' | 'semi' | 'manual';
+  /** 自动化级别（缺省 'semi'，由 WorkflowEngine 构造器回填） */
+  automation?: 'full' | 'semi' | 'manual';
   /** skill 搜索目录 */
   skillDirs?: string[];
   /** 本地命令模板目录（缺省 ~/.lattice/agent/commands；项目级由 loadLocalCommands(cwd) 追加） */

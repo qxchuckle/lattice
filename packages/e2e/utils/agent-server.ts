@@ -15,8 +15,9 @@ import { resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { createLatticeAgent, createAgentSource, defineSource } from '@qcqx/lattice-agent';
+import { createLatticeAgent, createAgentSource } from '@qcqx/lattice-agent';
 import type { LatticeAgent } from '@qcqx/lattice-agent';
+import { defineSource } from '@qcqx/lattice-agent-source';
 import { createScriptedDriver } from '@qcqx/lattice-agent-source/testing';
 import { initDb, getSessionsCacheDir } from '@qcqx/lattice-core';
 

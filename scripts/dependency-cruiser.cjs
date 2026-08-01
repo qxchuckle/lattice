@@ -7,11 +7,12 @@
  *   agent-protocol（契约层：根出口零运行时依赖，/schemas 子出口带 zod）
  *       ↑                    ↖
  *   agent-source          agent-pipeline（只依赖 protocol，不依赖 agent-source）
+ *       ↑
+ *   agent-source-builtins（内置源合集：只依赖 source + protocol）
  *       ↖                    ↗
- *              agent（lattice 宿主编排）
+ *              agent（lattice 宿主编排，依赖 pipeline + source + protocol）
  *                 ↑
- *        web / cli / acp-gateway（壳层）
- *
+ *        web / cli / acp-gateway（壳层；web 另依赖 core + agent-source + builtins）
  * 说明：
  * - cli / core 不在本规则的分层范围内（见任务约定），仅参与全仓禁循环与
  *   deep-import 检查；规则一律用 pathNot 放行，避免误报。
@@ -58,6 +59,11 @@ module.exports = {
           // spec：agent-source 的 /testing 子出口（契约套件 / 离线 fake 源）
           '^packages/agent-source/dist/testing/index\\.(js|d\\.ts)$',
           '^packages/agent-source/src/testing/index\\.ts$',
+          // spec：agent-source-builtins 出口（根出口 + pi/qoder/acp 子出口，按需 tree-shake）
+          '^packages/agent-source-builtins/dist/index\\.(js|d\\.ts)$',
+          '^packages/agent-source-builtins/src/index\\.ts$',
+          '^packages/agent-source-builtins/dist/(pi|qoder|acp)/index\\.(js|d\\.ts)$',
+          '^packages/agent-source-builtins/src/(pi|qoder|acp)/index\\.ts$',
           // web 包出口指向 dist/server/index.*（cli 经此挂载 web 服务）
           '^packages/web/dist/server/index\\.(js|d\\.ts)$',
           '^packages/web/src/server/index\\.ts$',
@@ -95,7 +101,7 @@ module.exports = {
       to: { path: '^packages/agent-protocol/src/schemas\\.ts$' },
     },
 
-    /* ── agent-source（源实现层）──────────────────────────── */
+    /* ── agent-source（源抽象层）──────────────────────────── */
     {
       name: 'source-only-depends-on-protocol',
       severity: 'error',
@@ -104,6 +110,24 @@ module.exports = {
       to: {
         path: '^packages/',
         pathNot: ['^packages/agent-source/', '^packages/agent-protocol/'],
+      },
+    },
+
+    /* ── agent-source-builtins（内置源合集层）────────────────── */
+    {
+      name: 'builtins-only-depends-on-source-and-protocol',
+      severity: 'error',
+      comment:
+        'spec：agent-source-builtins 只依赖 agent-source + agent-protocol（内置源合集，不含编排逻辑）；' +
+        '不得依赖 agent / pipeline / web / cli / core（禁被低层依赖）',
+      from: { path: '^packages/agent-source-builtins/src' },
+      to: {
+        path: '^packages/',
+        pathNot: [
+          '^packages/agent-source-builtins/',
+          '^packages/agent-source/',
+          '^packages/agent-protocol/',
+        ],
       },
     },
 
@@ -144,8 +168,8 @@ module.exports = {
       name: 'web-shell-allowed-deps-only',
       severity: 'error',
       comment:
-        'spec：壳层从 agent 或 protocol import；web server 侧另依赖 core（领域中心）。' +
-        '不得绕过 agent 直接依赖 agent-source / agent-pipeline，更不得依赖 cli',
+        'spec：壳层从 agent 或 protocol import；web server 侧另依赖 core（领域中心）+ agent-source + builtins。' +
+        '不得绕过 agent 直接依赖 agent-pipeline，更不得依赖 cli',
       from: { path: '^packages/web/src' },
       to: {
         path: '^packages/',
@@ -153,6 +177,8 @@ module.exports = {
           '^packages/web/',
           '^packages/agent/',
           '^packages/agent-protocol/',
+          '^packages/agent-source/',
+          '^packages/agent-source-builtins/',
           '^packages/core/',
         ],
       },

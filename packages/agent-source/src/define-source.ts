@@ -65,10 +65,11 @@ function withTimeout<T>(
   sourceId: string,
   sourceName: string,
 ): Promise<T> {
+  let tid: NodeJS.Timeout | undefined;
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      const tid = setTimeout(() => {
+      tid = setTimeout(() => {
         reject(
           new SourceError('timeout', `${label} timed out after ${ms}ms`, {
             sourceId,
@@ -80,7 +81,10 @@ function withTimeout<T>(
       // 确保 timer 不阻止进程退出
       if (tid.unref) tid.unref();
     }),
-  ]);
+  ]).finally(() => {
+    // Promise.race 结束后清理定时器，避免泄漏
+    if (tid) clearTimeout(tid);
+  });
 }
 
 /**

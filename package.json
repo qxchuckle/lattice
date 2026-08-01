@@ -47,7 +47,7 @@
     "release": "node scripts/release.mjs",
     "lint": "eslint . && pnpm run depcruise",
     "lint:fix": "eslint . --fix",
-    "depcruise": "depcruise packages/agent-protocol/src packages/agent-source/src packages/agent-pipeline/src packages/agent/src packages/web/src packages/cli/src packages/core/src --config scripts/dependency-cruiser.cjs",
+    "depcruise": "depcruise packages/agent-protocol/src packages/agent-source/src packages/agent-source-builtins/src packages/agent-pipeline/src packages/agent/src packages/web/src packages/cli/src packages/core/src --config scripts/dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint-staged": "lint-staged",

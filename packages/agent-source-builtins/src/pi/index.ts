@@ -151,7 +151,7 @@ interface PiHandle extends DriverSessionHandle {
 }
 
 export interface PiSourceOptions {
-  /** 会话持久化根目录（通用 SDK 不绑 lattice 目录——宿主可注入；缺省保持既有路径） */
+  /** 会话持久化根目录（Pi 自身约定 ~/.pi/sessions，不绑 lattice 目录——宿主可注入覆盖） */
   sessionsRoot?: string;
 }
 
@@ -164,8 +164,7 @@ class PiDriver implements SourceDriver<PiHandle> {
   private readonly sessionsRoot: string;
 
   constructor(options?: PiSourceOptions) {
-    this.sessionsRoot =
-      options?.sessionsRoot ?? join(homedir(), '.lattice', 'agent-sessions', 'pi');
+    this.sessionsRoot = options?.sessionsRoot ?? join(homedir(), '.pi', 'sessions');
   }
 
   private sessionDir(id: string): string {

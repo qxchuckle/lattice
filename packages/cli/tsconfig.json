@@ -7,6 +7,8 @@
       "@qcqx/lattice-core/*": ["../core/src/*"],
       "@qcqx/lattice-agent-source": ["../agent-source/src/index.ts"],
       "@qcqx/lattice-agent-source-builtins": ["../agent-source-builtins/src/index.ts"],
+      "@qcqx/lattice-agent": ["../agent/src/index.ts"],
+      "@qcqx/lattice-agent-pipeline": ["../agent-pipeline/src/index.ts"],
       "@qcqx/lattice-web": ["../web/src/server/index.ts"]
     }
   },

@@ -83,6 +83,9 @@ export type { WorkflowConfig, TriggerResult, SkillDefinition } from './workflow/
 export { createLatticeAgent } from './factory.js';
 export type { LatticeAgent, LatticeAgentDeps } from './factory.js';
 
+// ── 源工厂（壳层组装用，经 agent 统一依赖面，不绕过分层直依赖 agent-source） ──
+export { createAgentSource } from '@qcqx/lattice-agent-source';
+
 // ── Lattice Workflow Tool Provider ──
 export { LatticeWorkflowProvider } from './tools/lattice-provider.js';
 export type { LatticeToolDeps } from './tools/lattice-provider.js';

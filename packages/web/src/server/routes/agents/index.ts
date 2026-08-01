@@ -9,10 +9,9 @@
  *   - ws-commands.ts：18 个 ClientMessage 命令分发
  */
 import type { FastifyInstance } from 'fastify';
-import { createLatticeAgent, type LatticeAgent } from '@qcqx/lattice-agent';
-import { createAgentSource } from '@qcqx/lattice-agent-source';
+import { createLatticeAgent, createAgentSource, type LatticeAgent } from '@qcqx/lattice-agent';
 import { createPiSource, createQoderSource } from '@qcqx/lattice-agent-source-builtins';
-import { getSessionsCacheDir, getUsername } from '@qcqx/lattice-core';
+import { getAgentCommandsDir, getSessionsCacheDir, getUsername } from '@qcqx/lattice-core';
 import { readFile } from 'node:fs/promises';
 import { resolveFilePath } from '../shared';
 import { registerAgentRestRoutes } from './rest-routes';
@@ -36,6 +35,8 @@ export function registerAgentRoutes(app: FastifyInstance): void {
     return createLatticeAgent({
       storage: { baseDir: getSessionsCacheDir() },
       sources: sourcesInstance,
+      // 壳层注入 agent 命令目录（单一真相在 core getAgentCommandsDir，agent 包不内联 ~/.lattice）
+      workflowConfig: { commandDirs: [getAgentCommandsDir()] },
       promptDeps: {
         resolveRef: async (refType, id) => {
           if (refType === 'file') return null;
