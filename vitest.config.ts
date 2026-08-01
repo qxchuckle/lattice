@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'node:path';
 
 /**
  * 全仓统一测试入口（vitest projects）
@@ -7,10 +8,26 @@ import { defineConfig } from 'vitest/config';
  * - examples/minimal-host：三包宿主故事线的验收测试（脚本化 driver，不碰真实 SDK）
  * - web：jsdom 环境（配置在 packages/web/vite.config.ts 的 test 段）
  * - 运行：pnpm test（全量）/ pnpm vitest --project <name>（单包）
- * - 约定：先 pnpm build 再 pnpm test（cli E2E 只读 dist，不触发构建）
+ * - 跨包引用通过 resolve.alias 直指源码，改完即测，无需先 build
  * - coverage 仅在根配置（projects 不支持局部 coverage）
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      // 子路径在前（前缀匹配优先）
+      '@qcqx/lattice-agent-protocol/schemas': resolve(
+        __dirname,
+        'packages/agent-protocol/src/schemas.ts',
+      ),
+      '@qcqx/lattice-agent-source/testing': resolve(
+        __dirname,
+        'packages/agent-source/src/testing/index.ts',
+      ),
+      '@qcqx/lattice-agent-protocol': resolve(__dirname, 'packages/agent-protocol/src/index.ts'),
+      '@qcqx/lattice-agent-source': resolve(__dirname, 'packages/agent-source/src/index.ts'),
+      '@qcqx/lattice-agent-pipeline': resolve(__dirname, 'packages/agent-pipeline/src/index.ts'),
+    },
+  },
   test: {
     // e2e 包走 Playwright（pnpm e2e），不进 vitest；此 exclude 为纵深防御
     exclude: ['packages/e2e/**'],
