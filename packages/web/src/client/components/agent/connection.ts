@@ -2,7 +2,7 @@
  * WebSocket 连接管理 + SourceEvent 流式处理
  */
 import type { SourceEvent, ServerMessage, ClientMessage } from '@qcqx/lattice-agent-protocol';
-import { isTerminalViewStatus, assertNever } from '@qcqx/lattice-agent-protocol';
+import { isTerminalViewStatus } from '@qcqx/lattice-agent-protocol';
 import {
   timer,
   retry,
@@ -426,7 +426,9 @@ function handleServerMessage(msg: ServerMessage): void {
     case 'pong':
       break; // 心跳响应（存活检测已在 onmessage 统一更新 lastPongAt）
     default:
-      // exhaustiveness 兜底：ServerMessage 新增变体而本 switch 未补 → 编译报错
-      assertNever(msg);
+      // 滚动发布容错：未来版本出现未知 ServerMessage type 时不抛错断连，仅 warn 后忽略，
+      // 保 client/server 版本不一致时旧 client 不因新消息类型崩溃（assertNever 会击穿 rxjs 流）
+      console.warn('[agent] unknown ServerMessage type, ignoring', (msg as { type?: string }).type);
+      break;
   }
 }

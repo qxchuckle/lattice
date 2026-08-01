@@ -184,9 +184,15 @@ export function setupAgentWs(
     };
 
     const broadcastSnapshot = (treeId: string): void => {
-      void buildSnapshot(treeId).then((snap) => {
-        if (snap) broadcastTree(treeId, snap);
-      });
+      void buildSnapshot(treeId)
+        .then((snap) => {
+          if (snap) broadcastTree(treeId, snap);
+        })
+        .catch((err) => {
+          // buildSnapshot 可能抛（如 projectNodeCapabilities invariant throw）；
+          // fire-and-forget 链须兜住，否则 unhandledRejection 会炸进程
+          req.log.error({ err, treeId }, 'broadcastSnapshot failed');
+        });
     };
 
     // 本 socket 进行中的请求（断开时只 abort 自己的）

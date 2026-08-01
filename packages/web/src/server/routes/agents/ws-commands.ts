@@ -46,6 +46,8 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
     send({
       type: 'session.error',
       sessionId: 'sessionId' in msg ? (msg.sessionId ?? '') : '',
+      // 透传原消息 requestId（若携带），便于客户端将校验失败路由到对应 turn
+      requestId: 'requestId' in msg ? (msg.requestId as string) : undefined,
       message: `Invalid parameters: ${detail}`,
     });
     return;

@@ -302,6 +302,21 @@ describe('WS 连接生命周期（注入 WebSocketCtor + fake timers）', () => 
     agentStore.sessionId = 'already';
     await expect(waitForSessionReady(10)).resolves.toBe('already');
   });
+
+  it('🔴 未知 ServerMessage type 不抛错不断连（滚动发布容错：default console.warn 而非 assertNever）', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    connectAgentWs();
+    FakeWebSocket.last.simulateOpen();
+    expect(getConnectionState().type).toBe('connected');
+
+    // 推送一个未来版本/未知类型的 ServerMessage：旧版 default assertNever 会抛 → 触发 rxjs error 通道重连；
+    // 滚动发布容错改为 console.warn + break：未知消息不中断连接
+    FakeWebSocket.last.simulateMessage({ type: 'totally-unknown-future-msg' });
+
+    expect(getConnectionState().type).toBe('connected');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
 
 describe('重连后树订阅恢复', () => {

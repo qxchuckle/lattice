@@ -9,6 +9,7 @@
  *
  * 穷尽轴是「请求模式」（Record<RequestKind, Planner>）；能力侧是 boolean，类型已穷尽。
  */
+import { assertNever } from '@qcqx/lattice-agent-protocol';
 import type {
   ContentBlock,
   PromptPayload,
@@ -102,6 +103,9 @@ export function applySystemPromptRequest(
         payload,
         rejection: { capabilityPath: plan.capabilityPath, reason: plan.reason },
       };
+    default:
+      // exhaustiveness 兜底：SystemPromptPlan 新增 kind 而本 switch 未补 → 编译报错；运行时触达即抛错
+      assertNever(plan);
   }
 }
 

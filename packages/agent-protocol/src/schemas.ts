@@ -301,6 +301,16 @@ export const promptSegmentSchema = z.discriminatedUnion('type', [
   }),
 ]) satisfies z.ZodType<PromptSegment>;
 
+// 双向编译期钉死：satisfies 只防多不防漏——
+// PromptSegment 新增变体而 schema 未补 → 此处编译报错
+type _MissingPromptSegmentTypes = Exclude<
+  PromptSegment['type'],
+  z.infer<typeof promptSegmentSchema>['type']
+>;
+const _assertNoMissingPromptSegmentTypes: _MissingPromptSegmentTypes extends never ? true : never =
+  true;
+void _assertNoMissingPromptSegmentTypes;
+
 /**
  * ClientMessage 递归校验（WS 入站命令的唯一入口守卫）。
  * check-only：safeParse 判定形状，通过后继续使用原对象（未知键透传）。

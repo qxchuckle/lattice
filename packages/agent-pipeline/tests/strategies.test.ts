@@ -84,6 +84,12 @@ describe('fork 策略表', () => {
       PipelineError,
     );
   });
+
+  it('🔴 未知 ForkPlan.kind 触达 default → assertNever reject（不静默 fall-through 返回 undefined）', async () => {
+    const { source } = createFakeSource();
+    const bogus = { kind: '__bogus_kind__' } as unknown as Parameters<typeof executeForkPlan>[1];
+    await expect(executeForkPlan(source, bogus)).rejects.toThrow(/__bogus_kind__|Unexpected/);
+  });
 });
 
 describe('compaction 策略表', () => {

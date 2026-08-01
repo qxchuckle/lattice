@@ -4,6 +4,7 @@
  * P1 模型：segments = [chips...] + 尾部自由文本。
  * chip 原子性由渲染层保证（独立元素整体删除）；数据层只是数组操作。
  */
+import { assertNever } from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment, ResourceListItem } from '@qcqx/lattice-agent-protocol';
 
 /** 编辑器内的 chip 项（key 供 React 渲染，segment 为序列化载荷） */
@@ -64,6 +65,9 @@ export function chipDisplay(segment: PromptSegment): string {
       return `@${segment.display}`;
     case 'text':
       return segment.text;
+    default:
+      // exhaustiveness 兜底：PromptSegment 新增变体而本 switch 未补 → 编译报错；运行时触达即抛错
+      return assertNever(segment);
   }
 }
 

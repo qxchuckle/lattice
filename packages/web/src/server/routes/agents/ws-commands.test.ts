@@ -232,6 +232,35 @@ describe('handleWsCommand 参数验证 (P1-#11 / zod schema)', () => {
     // 保留现有错误响应形态：session.error 带 'sessionId' in msg 提取的 sessionId
     expect((errors[0] as { sessionId: string }).sessionId).toBe('s1');
   });
+
+  it('safeParse 失败的 session.error 透传原消息 requestId（携带时回传，便于客户端路由到对应 turn）', async () => {
+    const { ctx, sent } = makeCtx();
+    // session.send 带 requestId 但 message 超长 → safeParse 失败
+    const msg = {
+      type: 'session.send',
+      sessionId: 'sess-rid',
+      message: 'x'.repeat(200_001),
+      requestId: 'req-xyz',
+    } as ClientMessage;
+
+    await handleWsCommand(ctx, msg);
+
+    const errors = sent.filter((m) => m.type === 'session.error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { requestId?: string }).requestId).toBe('req-xyz');
+  });
+
+  it('safeParse 失败且原消息无 requestId → session.error.requestId 为 undefined（类型可选，不报错）', async () => {
+    const { ctx, sent } = makeCtx();
+    // session.create 无 requestId 字段，且 treeId 超长 → safeParse 失败
+    const msg = { type: 'session.create', treeId: 'x'.repeat(300) } as ClientMessage;
+
+    await handleWsCommand(ctx, msg);
+
+    const errors = sent.filter((m) => m.type === 'session.error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { requestId?: string }).requestId).toBeUndefined();
+  });
 });
 
 // ── P1-#12: permission.respond 归属校验 ────────────────────────────

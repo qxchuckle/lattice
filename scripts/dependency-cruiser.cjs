@@ -50,12 +50,17 @@ module.exports = {
         pathNot: [
           '^packages/$1/',
           '^packages/[^/]+/dist/index\\.(js|mjs|cjs|d\\.ts|d\\.mts|d\\.cts)$',
+          // 源码根出口（tsConfig 用 refs.base.json 的 paths 解析到 src，fresh clone 无 dist 亦合法）
+          '^packages/[^/]+/src/index\\.ts$',
           // spec：protocol 双出口，/schemas 子出口承载 zod schema
           '^packages/agent-protocol/dist/schemas\\.(js|d\\.ts)$',
+          '^packages/agent-protocol/src/schemas\\.ts$',
           // spec：agent-source 的 /testing 子出口（契约套件 / 离线 fake 源）
           '^packages/agent-source/dist/testing/index\\.(js|d\\.ts)$',
+          '^packages/agent-source/src/testing/index\\.ts$',
           // web 包出口指向 dist/server/index.*（cli 经此挂载 web 服务）
           '^packages/web/dist/server/index\\.(js|d\\.ts)$',
+          '^packages/web/src/server/index\\.ts$',
         ],
       },
     },
@@ -175,7 +180,7 @@ module.exports = {
     },
     // 把 type-only import 也纳入图（分层规则对类型依赖同样生效）
     tsPreCompilationDeps: true,
-    tsConfig: { fileName: 'tsconfig.base.json' },
+    tsConfig: { fileName: 'tsconfig.refs.base.json' },
     enhancedResolveOptions: {
       exportsFields: ['exports'],
       conditionNames: ['types', 'import', 'require', 'node', 'default'],

@@ -7,6 +7,7 @@
  * 铁律：源永不静默降级。锚点被丢弃（源不支持 atMessage）时计划里带 notice，
  * 由宿主决定「照做并提示」还是「拒绝」——降级是编排层特权，不是源的。
  */
+import { assertNever } from '@qcqx/lattice-agent-protocol';
 import type { ForkCapability, ISource } from '@qcqx/lattice-agent-protocol';
 import { PipelineError } from '../errors.js';
 
@@ -81,5 +82,8 @@ export async function executeForkPlan(source: ISource, plan: ForkPlan): Promise<
     }
     case 'unsupported':
       throw PipelineError.unsupported(plan.capabilityPath, plan.reason, source.id);
+    default:
+      // exhaustiveness 兜底：ForkPlan 新增 kind 而本 switch 未补 → 编译报错；运行时触达即抛错
+      assertNever(plan);
   }
 }

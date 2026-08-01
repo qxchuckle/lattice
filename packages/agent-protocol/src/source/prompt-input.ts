@@ -4,6 +4,7 @@
  * web 输入框 → server → agent 编排层三层流转；
  * 展开为最终 ContentBlock[] 由编排层 PromptComposer 完成，源永远只收纯内容。
  */
+import { assertNever } from '../exhaustiveness.js';
 
 /** 结构化 prompt 输入段（判别联合） */
 export type PromptSegment =
@@ -36,6 +37,9 @@ export function segmentsToDisplayText(segments: PromptSegment[]): string {
           return `@${seg.display}`;
         case 'inline-ref':
           return `@${seg.display}`;
+        default:
+          // exhaustiveness 兜底：PromptSegment 新增变体而本 switch 未补 → 编译报错；运行时触达即抛错
+          return assertNever(seg);
       }
     })
     .join('')

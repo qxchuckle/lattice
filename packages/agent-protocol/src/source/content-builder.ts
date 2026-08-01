@@ -12,6 +12,7 @@
  */
 import type { SourceEvent, TokenUsage } from './events.js';
 import type { NodeContent, ToolCallRecord, FileChange } from './conversation.js';
+import { assertNever } from '../guards.js';
 
 /** 合并连续同类型文本块（text/thinking）；thinking 额外吸收事件 ts 为 startedAt/endedAt */
 function appendMerge(
@@ -106,6 +107,9 @@ export function applyEventToContent(content: NodeContent[], event: SourceEvent):
       break;
     case 'done':
       break;
+    default:
+      // exhaustiveness 兜底：SourceEvent 新增变体而本 switch 未补 → 编译报错；运行时触达即抛错
+      assertNever(event);
   }
 }
 
