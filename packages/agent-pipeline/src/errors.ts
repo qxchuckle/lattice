@@ -11,7 +11,8 @@ import type { SourceErrorCode } from '@qcqx/lattice-agent-protocol';
 
 export type PipelineErrorCode =
   | Extract<SourceErrorCode, 'unsupported_operation' | 'unsupported_option' | 'invalid_state'>
-  | 'middleware_failure';
+  | 'middleware_failure'
+  | 'validation_error';
 
 /** middleware 失败发生的拦截点：入向 prompt 变换 / 出向事件变换 */
 export type PipelinePhase = 'prompt' | 'transform';
@@ -66,4 +67,12 @@ export class PipelineError extends Error {
       cause,
     });
   }
+}
+
+/** 可重试的错误码集合（middleware 瞬时失败可重试；确定性错误重试无益） */
+const RETRYABLE_CODES: ReadonlySet<PipelineErrorCode> = new Set(['middleware_failure']);
+
+/** 判断 PipelineError.code 是否可重试（消费层据此决定重试或熔断） */
+export function isRetryableCode(code: PipelineErrorCode): boolean {
+  return RETRYABLE_CODES.has(code);
 }

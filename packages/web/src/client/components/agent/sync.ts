@@ -183,3 +183,63 @@ export function handlePresenceState(msg: PresenceStateMessage): void {
   if (msg.treeId !== agentStore.treeId) return;
   agentStore.peers = msg.peers as PresenceState[];
 }
+
+// ── 他端在途流缓冲 GC（定时回收超期条目，防内存泄漏） ──
+
+/** GC 扫描周期：每分钟一次（与心跳 timer 同量级，低频扫描小 Map） */
+const LIVE_STREAM_GC_INTERVAL_MS = 60_000;
+
+let liveStreamGcTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * 清理超期他端在途流缓冲（at + LIVE_STREAM_TTL_MS < now），并同步移除对应 turn 的孤儿
+ * streaming 占位：turn 仍停 streaming 但对应在途流已超期未收到 done/error/abort，
+ * 视为异常中止 → 转 interrupted（与 handleStreamAborted 同一处置，状态机单一真相）。
+ */
+export function gcLiveStreams(): void {
+  const now = Date.now();
+  for (const [rid, entry] of liveStreams) {
+    if (now - entry.at > LIVE_STREAM_TTL_MS) {
+      liveStreams.delete(rid);
+      // 同步移除对应 turn 的孤儿 streaming 占位（与 handleStreamAborted 同一处置）：
+      // 在途流超期未收到 done/error/abort → turn 仍停 streaming 视为异常中止 → interrupted
+      const turn = agentStore.turns.get(rid) as TurnNode | undefined;
+      if (turn && isStreamingStatus(turn.status)) {
+        turn.status = advanceViewStatus(turn.status, 'abort');
+        agentStore.version++;
+      }
+    }
+  }
+}
+
+/** 启动周期 GC（模块加载时自动启动；测试可手动调用）。幂等：重复调用无副作用。 */
+export function startLiveStreamGc(): void {
+  if (liveStreamGcTimer !== null) return;
+  liveStreamGcTimer = setInterval(gcLiveStreams, LIVE_STREAM_GC_INTERVAL_MS);
+}
+
+/** 停止周期 GC（模块清理/卸载时调用）。幂等。 */
+export function stopLiveStreamGc(): void {
+  if (liveStreamGcTimer !== null) {
+    clearInterval(liveStreamGcTimer);
+    liveStreamGcTimer = null;
+  }
+}
+
+/**
+ * 主动清理指定 requestId 的他端在途流缓冲。
+ * 节点删除/撤销（deleteTurn/undoTurn）时调用——对应流不再需要，防残留驻留至 TTL。
+ */
+export function clearLiveStream(requestId: string): void {
+  liveStreams.delete(requestId);
+}
+
+/** 仅测试用：查询 liveStreams 是否含某 requestId（不导出给生产消费方） */
+export function __hasLiveStreamForTest(requestId: string): boolean {
+  return liveStreams.has(requestId);
+}
+
+// 模块加载时启动周期 GC（生产/测试 jsdom 环境；fake timers 由测试接管）
+if (typeof window !== 'undefined') {
+  startLiveStreamGc();
+}

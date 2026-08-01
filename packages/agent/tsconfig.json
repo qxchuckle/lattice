@@ -8,9 +8,7 @@
       "@qcqx/lattice-agent-protocol": ["../agent-protocol/src/index.ts"],
       "@qcqx/lattice-agent-protocol/*": ["../agent-protocol/src/*"],
       "@qcqx/lattice-agent-source": ["../agent-source/src/index.ts"],
-      "@qcqx/lattice-agent-source/*": ["../agent-source/src/*"],
-      "@qcqx/lattice-core": ["../core/src/index.ts"],
-      "@qcqx/lattice-core/*": ["../core/src/*"]
+      "@qcqx/lattice-agent-source/*": ["../agent-source/src/*"]
     }
   },
   "include": ["src", "../../types", "tests"]

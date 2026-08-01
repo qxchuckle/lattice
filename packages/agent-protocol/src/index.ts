@@ -70,7 +70,7 @@ export type {
 
 // 事件流（共享纯工具）
 export { EventStream, SourceEventStream } from './source/event-stream.js';
-export type { PromptResult } from './source/event-stream.js';
+export type { PromptResult, EventStreamMetrics } from './source/event-stream.js';
 
 // middleware 契约（runner 在 @qcqx/lattice-agent-pipeline）
 export { MIDDLEWARE_PHASES } from './source/middleware.js';
@@ -131,6 +131,7 @@ export type {
   TreeUpdatedMessage,
   TreeErrorMessage,
   PermissionRequestMessage,
+  PermissionExpiredMessage,
   TreeSubscribeMessage,
   TreeUnsubscribeMessage,
   PresenceUpdateMessage,

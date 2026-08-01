@@ -19,6 +19,8 @@ import { send, type WsSocket, type AgentConn } from './shared';
 import { handleWsCommand, type WsCommandContext } from './ws-commands';
 
 const STREAM_GRACE_MS = 30000;
+/** 权限请求 TTL：30s 未应答自动过期并通知客户端 */
+const PERMISSION_TTL_MS = 30000;
 
 /** permission:request 事件 payload（与 permission-guard emit 对齐） */
 export interface PermissionRequestPayload {
@@ -53,6 +55,42 @@ export function forwardPermissionRequest(
     level: request.level,
   });
   conn.pendingPermissions.add(request.id);
+  // 30s TTL：未应答自动过期，通知客户端撤销权限对话框
+  const timer = setTimeout(() => {
+    if (conn.pendingPermissions.delete(request.id)) {
+      conn.permissionTimers.delete(request.id);
+      send({ type: 'permission.expired', requestId: request.id });
+    }
+  }, PERMISSION_TTL_MS);
+  conn.permissionTimers.set(request.id, timer);
+}
+
+/** closeConnection 所需的清理依赖（由 ws-handler 注入，便于独立测试） */
+export interface CloseConnectionDeps {
+  /** 退订单棵树（移除订阅者 + presence + 广播 + 宽限计时器） */
+  unsubscribeConn: (conn: AgentConn, treeId: string) => void;
+  socketRequestIds: Set<string>;
+  abortByRequestId: (rid: string) => void;
+  unsubPermission?: () => void;
+}
+
+/**
+ * 连接关闭清理：退订全部树、中止在途请求、清权限记账与 TTL 定时器（防内存泄漏）。
+ * 提取为独立函数便于测试——断连后 treeSubscribers/treePresence/pendingPermissions
+ * 不含该连接的引用，permissionTimers 全部清除。退订委托 unsubscribeConn 保持
+ * broadcastPresence / maybeStartGrace 副作用不丢。
+ */
+export function closeConnection(conn: AgentConn, deps: CloseConnectionDeps): void {
+  deps.unsubPermission?.();
+  for (const rid of deps.socketRequestIds) deps.abortByRequestId(rid);
+  deps.socketRequestIds.clear();
+  // 清除全部权限 TTL 定时器
+  for (const timer of conn.permissionTimers.values()) clearTimeout(timer);
+  conn.permissionTimers.clear();
+  conn.pendingPermissions.clear();
+  conn.sessions.clear();
+  // 退订全部树（移除订阅者 + presence + 广播 + 宽限计时器）
+  for (const treeId of [...conn.subscribed]) deps.unsubscribeConn(conn, treeId);
 }
 
 export function setupAgentWs(
@@ -149,6 +187,7 @@ export function setupAgentWs(
       clientKind: 'web',
       subscribed: new Set(),
       pendingPermissions: new Set(),
+      permissionTimers: new Map(),
       sessions: new Set(),
     };
 
@@ -298,16 +337,18 @@ export function setupAgentWs(
     });
 
     socket.on('close', () => {
-      unsubPermission();
-      for (const rid of socketRequestIds) conversation.abortByRequestId(rid);
-      socketRequestIds.clear();
-      conn.pendingPermissions.clear();
-      conn.sessions.clear();
-      for (const treeId of [...conn.subscribed]) unsubscribeConn(conn, treeId);
+      closeConnection(conn, {
+        unsubscribeConn,
+        socketRequestIds,
+        abortByRequestId: (rid: string) => conversation.abortByRequestId(rid),
+        unsubPermission,
+      });
     });
     socket.on('error', (err) => {
       req.log.error({ err, connId: conn.id }, 'agent ws socket error');
-      unsubPermission();
+      // error 后 close 会随之触发（ws 保证），此处先清权限定时器防 race
+      for (const timer of conn.permissionTimers.values()) clearTimeout(timer);
+      conn.permissionTimers.clear();
       conn.pendingPermissions.clear();
       conn.sessions.clear();
     });

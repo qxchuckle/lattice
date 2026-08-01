@@ -31,6 +31,7 @@ export {
   transformEvents,
   sortMiddlewares,
   type RunPromptArgs,
+  type RetryOptions,
 } from './pipeline.js';
 
 // 通用 middleware
@@ -69,6 +70,7 @@ export {
 // 错误
 export {
   PipelineError,
+  isRetryableCode,
   type PipelineErrorCode,
   type PipelineErrorContext,
   type PipelinePhase,

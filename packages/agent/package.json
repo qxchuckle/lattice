@@ -30,7 +30,6 @@
     "@qcqx/lattice-agent-pipeline": "workspace:*",
     "@qcqx/lattice-agent-protocol": "workspace:*",
     "@qcqx/lattice-agent-source": "workspace:*",
-    "@qcqx/lattice-core": "workspace:*",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {

@@ -62,7 +62,7 @@ import {
   unsubscribeTree,
   waitForSessionReady,
 } from './connection';
-import { resetLastAppliedRev } from './sync';
+import { resetLastAppliedRev, clearLiveStream, startLiveStreamGc, stopLiveStreamGc } from './sync';
 import { loadModels, loadSources, deleteConversationApi, loadAgentConfig } from './api';
 import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from './types';
 import type { TurnNode } from './types';
@@ -284,6 +284,9 @@ function markLocalSubtree(turnId: string, status: 'undone' | 'hidden'): void {
     if (!t) return;
     // 后代标记跳过规则（与 server markNodes 同一谓词）：undo 不复活已 hidden 后代
     if (!shouldSkipDescendantMark(status, viewToNodeStatus(t.status))) t.status = status;
+    // 传递性清理：节点删除/撤销时同步清理对应他端在途流缓冲（requestId===turnId），
+    // 防该流缓冲残留驻留至 TTL（spec/resource-lifecycle：资源销毁须传递性清理指向它的引用）
+    clearLiveStream(id);
     for (const [cid, c] of agentStore.turns) {
       if (c.parentTurnId === id) mark(cid);
     }
@@ -429,6 +432,8 @@ export async function initAgent(): Promise<void> {
   if (initializing) return;
   initializing = true;
   try {
+    // 确保 liveStreams 周期 GC 运行（防御登出后重启 init 场景；幂等：重复调用无副作用）
+    startLiveStreamGc();
     // WS 最先连接：对话/历史不被源模型目录加载阻塞（首次动态目录需起 CLI，秒级）
     connectAgentWs();
     await loadSources();
@@ -459,6 +464,7 @@ export function cleanupAgentStore(): void {
   presenceSub?.unsubscribe();
   presenceSub = null;
   pendingPresence = {};
+  stopLiveStreamGc();
   disconnectAgentWs();
 }
 

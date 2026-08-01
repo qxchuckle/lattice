@@ -44,6 +44,7 @@ export const ServerMessageType = {
   TreeUpdated: 'tree.updated',
   TreeError: 'tree.error',
   PermissionRequest: 'permission.request',
+  PermissionExpired: 'permission.expired',
   // 多端同步（per-tree 广播模型）
   TreeSnapshot: 'tree.snapshot',
   TreeEvent: 'tree.event',

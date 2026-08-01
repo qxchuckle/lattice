@@ -21,9 +21,14 @@ vi.mock('./connection', () => ({
   waitForSessionReady: vi.fn(() => new Promise<string>(() => {})),
 }));
 
-import type { ClientMessage } from '@qcqx/lattice-agent-protocol';
+import type {
+  ClientMessage,
+  ConversationNode,
+  TreeSnapshotMessage,
+} from '@qcqx/lattice-agent-protocol';
 import { sendWs } from './connection';
 import type { ClientSourceInfo } from './store';
+import { applySnapshot, resetLastAppliedRev, __hasLiveStreamForTest } from './sync';
 import {
   agentStore,
   putTurn,
@@ -186,5 +191,76 @@ describe('操作守卫（canApplyOperation，只读终态 no-op）', () => {
     expect(agentStore.turns.get('t1')!.status).toBe('undone');
     expect(agentStore.turns.get('t2')!.status).toBe('hidden');
     expect(agentStore.turns.get('t3')!.status).toBe('undone');
+  });
+});
+
+describe('节点删除/撤销清理他端在途流缓冲（liveStreams 传递性清理）', () => {
+  beforeEach(() => {
+    agentStore.turns.clear();
+    agentStore.ui.clear();
+    agentStore.turnCaps.clear();
+    agentStore.sessionId = 'sess-1';
+    agentStore.treeId = 'tree-1';
+    agentStore.sources = [src('qoder', true)];
+    agentStore.activeSourceId = 'qoder';
+    agentStore.activeModelId = 'auto';
+    resetLastAppliedRev();
+    vi.clearAllMocks();
+  });
+
+  function userNode(id: string, parentId: string | null = null): ConversationNode {
+    return {
+      id,
+      parentId,
+      branchId: 'b',
+      role: 'user',
+      content: [{ type: 'text', text: `q-${id}` }],
+      timestamp: 1,
+    };
+  }
+
+  /** 快照携带 streaming 中间态 → turn 进入 streaming + liveStreams 注入条目 */
+  function snapWithStreaming(nodes: ConversationNode[], requestIds: string[]): TreeSnapshotMessage {
+    return {
+      type: 'tree.snapshot',
+      treeId: 'tree-1',
+      rev: 1,
+      nodes,
+      branches: [],
+      headNodeId: null,
+      streaming: requestIds.map((id) => ({
+        requestId: id,
+        parentId: id,
+        content: [{ type: 'text', text: '流式ing' }],
+      })),
+    };
+  }
+
+  it('deleteTurn 主动清理对应他端在途流缓冲（requestId===turnId）', () => {
+    applySnapshot(snapWithStreaming([userNode('u1')], ['u1']));
+    expect(agentStore.turns.get('u1')!.status).toBe('streaming');
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+
+    deleteTurn('u1'); // delete 守卫仅排除 hidden → streaming 合法
+    expect(__hasLiveStreamForTest('u1'), 'deleteTurn 后 liveStream 条目清理').toBe(false);
+    expect(agentStore.turns.get('u1')!.status).toBe('hidden');
+  });
+
+  it('undoTurn 主动清理对应他端在途流缓冲', () => {
+    applySnapshot(snapWithStreaming([userNode('u1')], ['u1']));
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+
+    undoTurn('u1'); // undo 守卫仅排除只读终态 → streaming 合法
+    expect(__hasLiveStreamForTest('u1'), 'undoTurn 后 liveStream 条目清理').toBe(false);
+  });
+
+  it('删除子树时递归清理子节点在途流缓冲', () => {
+    applySnapshot(snapWithStreaming([userNode('u1'), userNode('u2', 'u1')], ['u1', 'u2']));
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+    expect(__hasLiveStreamForTest('u2')).toBe(true);
+
+    deleteTurn('u1'); // 子树标 hidden → markLocalSubtree 递归清理
+    expect(__hasLiveStreamForTest('u1')).toBe(false);
+    expect(__hasLiveStreamForTest('u2'), '子节点 liveStream 同步清理').toBe(false);
   });
 });

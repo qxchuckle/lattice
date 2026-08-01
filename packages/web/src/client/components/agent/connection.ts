@@ -26,6 +26,7 @@ import {
   handleStreamAborted,
   handlePresenceState,
   resetLastAppliedRev,
+  clearLiveStream,
 } from './sync';
 
 // ── 流式状态（按 requestId 路由，支持并行） ──
@@ -374,6 +375,7 @@ function handleServerMessage(msg: ServerMessage): void {
       // 尝试通过 requestId 定位，否则广播给所有活跃流
       const rid = msg.requestId;
       if (rid) {
+        clearLiveStream(rid); // 主动清理他端在途流缓冲（防御：requestId 可能对应他端流残留）
         const turnId = streamingMap.get(rid);
         if (turnId) {
           const turn = agentStore.turns.get(turnId);

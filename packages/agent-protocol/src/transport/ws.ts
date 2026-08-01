@@ -259,6 +259,12 @@ export interface PermissionRequestMessage {
   level: 'allow' | 'ask' | 'deny';
 }
 
+/** 权限请求超时过期（30s 未应答自动通知客户端，便于 UI 撤销权限对话框） */
+export interface PermissionExpiredMessage {
+  type: 'permission.expired';
+  requestId: string;
+}
+
 // ── 多端同步（per-tree 广播） ──
 
 /** 全量快照（订阅时或 rev 缺口兜底） */
@@ -339,6 +345,7 @@ export type ServerMessage =
   | TreeUpdatedMessage
   | TreeErrorMessage
   | PermissionRequestMessage
+  | PermissionExpiredMessage
   | TreeSnapshotMessage
   | TreeEventMessage
   | TreeRejectMessage

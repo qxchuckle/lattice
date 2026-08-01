@@ -211,6 +211,12 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
         break;
       }
       conn.pendingPermissions.delete(msg.requestId);
+      // 清除 TTL 定时器（已应答，不再过期）
+      const timer = conn.permissionTimers.get(msg.requestId);
+      if (timer) {
+        clearTimeout(timer);
+        conn.permissionTimers.delete(msg.requestId);
+      }
       permission.respond(msg.requestId, msg.allowed);
       break;
     }

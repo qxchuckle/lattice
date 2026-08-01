@@ -9,13 +9,37 @@
  */
 import type { SourceEvent, TokenUsage } from './events.js';
 
+/** 背压监控指标快照（只读视图，反映 push 时的队列状态） */
+export interface EventStreamMetrics {
+  /** 当前队列长度（未消费事件数） */
+  readonly queueSize: number;
+  /** 队列长度历史峰值（消费后不重置） */
+  readonly maxQueueSize: number;
+  /** 是否触发过背压告警（queue 超 BACKPRESSURE_THRESHOLD 后 sticky true） */
+  readonly isBackpressured: boolean;
+}
+
 export class EventStream<T, R = T> implements AsyncIterable<T> {
+  /** 队列上界：push 时 queue 长度超过此值即标记背压告警 */
+  static readonly BACKPRESSURE_THRESHOLD = 1000;
+
   private queue: T[] = [];
   private waiters: Array<(r: IteratorResult<T>) => void> = [];
   private done = false;
   private resolveResult!: (value: R) => void;
   private rejectResult!: (err: unknown) => void;
   private readonly resultPromise: Promise<R>;
+  private _maxQueueSize = 0;
+  private _isBackpressured = false;
+
+  /** 背压监控指标（只读快照） */
+  get metrics(): EventStreamMetrics {
+    return {
+      queueSize: this.queue.length,
+      maxQueueSize: this._maxQueueSize,
+      isBackpressured: this._isBackpressured,
+    };
+  }
 
   constructor(
     private readonly isComplete: (event: T) => boolean,
@@ -41,6 +65,9 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
       waiter({ value: event, done: false });
     } else {
       this.queue.push(event);
+      // 背压监控：记录峰值 + 超阈值标记告警（sticky）
+      if (this.queue.length > this._maxQueueSize) this._maxQueueSize = this.queue.length;
+      if (this.queue.length > EventStream.BACKPRESSURE_THRESHOLD) this._isBackpressured = true;
     }
     if (this.done) this.flushWaiters();
   }

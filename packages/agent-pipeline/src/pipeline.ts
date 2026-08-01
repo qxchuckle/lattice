@@ -23,8 +23,18 @@ import type {
   SourceEventStream,
 } from '@qcqx/lattice-agent-protocol';
 import { MIDDLEWARE_PHASES } from '@qcqx/lattice-agent-protocol';
-import { Observable, defer, from, of, concatMap } from 'rxjs';
-import { PipelineError } from './errors.js';
+import { Observable, defer, from, of, concatMap, map } from 'rxjs';
+import { PipelineError, isRetryableCode, type PipelineErrorCode } from './errors.js';
+
+/** middleware 出向重试/熔断配置（可重试 code 重试，不可重试 code 直接抛） */
+export interface RetryOptions {
+  /** 最大重试次数（不含初始尝试）；默认 2 */
+  maxRetries?: number;
+  /** 退避基准延迟（ms），指数退避 = base * 2^attempt；默认 50 */
+  baseDelayMs?: number;
+}
+
+const DEFAULT_RETRY: Required<RetryOptions> = { maxRetries: 2, baseDelayMs: 50 };
 
 /** 按相位排序（稳定：同相位保持注册序） */
 export function sortMiddlewares(middlewares: readonly SourceMiddleware[]): SourceMiddleware[] {
@@ -71,6 +81,38 @@ function eventChainOf(middlewares: readonly SourceMiddleware[]): EventTransforme
   return chain.reverse(); // 出向逆序（洋葱）
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 带重试的事件变换链：middleware transformEvent 抛可重试 PipelineError 时按指数退避重试，
+ * 不可重试 code 直接抛（熔断）。maxRetries 耗尽后抛最后一次错误。
+ */
+async function applyChainWithRetry(
+  chain: readonly EventTransformer[],
+  event: SourceEvent,
+  ctx: MiddlewareContext,
+  retry: Required<RetryOptions>,
+): Promise<SourceEvent[]> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retry.maxRetries; attempt++) {
+    try {
+      return applyChain(chain, event, ctx);
+    } catch (err) {
+      lastErr = err;
+      const code: PipelineErrorCode | undefined =
+        err instanceof PipelineError ? err.code : undefined;
+      if (code && isRetryableCode(code) && attempt < retry.maxRetries) {
+        await sleep(retry.baseDelayMs * 2 ** attempt);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * 事件出向变换：from(raw) 桥接 AsyncIterable，concatMap 逐事件过链。
  * 无 transformEvent middleware 时直接 from(raw)（零变换）。
@@ -79,23 +121,29 @@ export function transformEvents(
   raw: SourceEventStream,
   middlewares: readonly SourceMiddleware[],
   ctx: MiddlewareContext,
+  retryOptions?: RetryOptions,
 ): Observable<SourceEvent> {
   const chain = eventChainOf(middlewares);
   if (chain.length === 0) return from(raw);
+  const retry: Required<RetryOptions> = { ...DEFAULT_RETRY, ...retryOptions };
   return from(raw).pipe(
-    concatMap((event) => {
-      // applyChain 抛 PipelineError('middleware_failure') → concatMap 使 Observable error
-      const produced = applyChain(chain, event, ctx);
-      if (event.type === 'done' && produced.filter((e) => e.type === 'done').length !== 1) {
-        throw new PipelineError(
-          'middleware_failure',
-          'middleware 吞掉或复制了 done 事件（终止事件不可增删）',
-          { sourceId: ctx.sourceId, phase: 'transform' },
-        );
-      }
-      // 一变多：按序发出；空数组 = 滤除（of() 不发值直接 complete）
-      return of(...produced);
-    }),
+    concatMap((event) =>
+      // from(applyChainWithRetry) → Promise<SourceEvent[]>；map 做终止事件不变式校验；concatMap 展开
+      from(applyChainWithRetry(chain, event, ctx, retry)).pipe(
+        map((produced) => {
+          if (event.type === 'done' && produced.filter((e) => e.type === 'done').length !== 1) {
+            throw new PipelineError(
+              'middleware_failure',
+              'middleware 吞掉或复制了 done 事件（终止事件不可增删）',
+              { sourceId: ctx.sourceId, phase: 'transform' },
+            );
+          }
+          return produced;
+        }),
+        // 一变多：按序发出；空数组 = 滤除（of() 不发值直接 complete）
+        concatMap((produced) => of(...produced)),
+      ),
+    ),
   );
 }
 
@@ -112,6 +160,8 @@ function applyChain(
       try {
         next.push(...transform(e, ctx));
       } catch (err) {
+        // PipelineError 原样上抛（保留 code 供重试决策），非 PipelineError 包装为 middleware_failure
+        if (err instanceof PipelineError) throw err;
         throw PipelineError.middlewareFailed(name, err, 'transform');
       }
     }
@@ -126,6 +176,8 @@ export interface RunPromptArgs {
   middlewares?: readonly SourceMiddleware[];
   /** sourceId 缺省取 source.id、cwd 缺省取 payload.opts.cwd；threadId/metadata 由宿主给 */
   ctx?: Partial<MiddlewareContext>;
+  /** middleware transformEvent 重试/熔断配置（缺省 maxRetries=2, baseDelayMs=50） */
+  retryOptions?: RetryOptions;
 }
 
 /**
@@ -148,6 +200,7 @@ export function runPrompt(args: RunPromptArgs): Observable<SourceEvent> {
         args.source.prompt(payload.sessionId, payload.message, payload.opts),
         middlewares,
         ctx,
+        args.retryOptions,
       ),
     ),
   );

@@ -44,6 +44,8 @@ export interface AgentConn {
   subscribed: Set<string>;
   /** P1-#12: 该连接有权 respond 的 permission requestId 集合 */
   pendingPermissions: Set<string>;
+  /** 权限请求 TTL 计时器（requestId → timer），30s 未应答自动过期 */
+  permissionTimers: Map<string, ReturnType<typeof setTimeout>>;
   /** P1-#12 fix: 该连接发起/持有的 session 集合，用于权限请求按 session 归属过滤 */
   sessions: Set<string>;
 }

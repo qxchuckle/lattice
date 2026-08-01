@@ -20,6 +20,9 @@ import {
   handlePresenceState,
   resetLastAppliedRev,
   getLastAppliedRev,
+  startLiveStreamGc,
+  stopLiveStreamGc,
+  __hasLiveStreamForTest,
 } from './sync';
 import type { TurnNode } from './types';
 
@@ -315,6 +318,25 @@ describe('sync.handleStreamAborted', () => {
     } as StreamAbortedMessage);
     expect(agentStore.turns.get('u1')!.status).toBe('undone');
   });
+
+  it('stream.aborted 清理对应 liveStream 缓冲条目', () => {
+    // 先缓冲他端流 delta（turn 未到）→ liveStreams 注入条目
+    handleStreamEvent({
+      type: 'stream.event',
+      treeId: TREE,
+      requestId: 'u1',
+      event: { type: 'text', content: '他端流' },
+    });
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+
+    handleStreamAborted({
+      type: 'stream.aborted',
+      treeId: TREE,
+      requestId: 'u1',
+      reason: 'undo',
+    } as StreamAbortedMessage);
+    expect(__hasLiveStreamForTest('u1'), 'abort 后 liveStream 条目清理').toBe(false);
+  });
 });
 
 describe('sync.handlePresenceState', () => {
@@ -487,5 +509,70 @@ describe('rev 守卫 undefined 安全', () => {
     expect(getLastAppliedRev(), 'lastAppliedRev 不回归').toBe(5);
     // 但快照内容正常应用
     expect(agentStore.turns.has('u2'), 'undefined rev 快照内容正常应用').toBe(true);
+  });
+});
+
+describe('liveStreams GC 周期清理', () => {
+  beforeEach(() => {
+    // 先停模块加载时启动的 real GC（防与 fake timers 错位：real setInterval 不被 advance 触发），
+    // 再在 fake timers 下重启，使周期 GC 回调可由 advanceTimersByTime 驱动
+    stopLiveStreamGc();
+    vi.useFakeTimers();
+    resetLastAppliedRev();
+    agentStore.treeId = TREE;
+    agentStore.turns.clear();
+    agentStore.peers = [];
+    startLiveStreamGc(); // fake timers 下注册周期 GC
+  });
+  afterEach(() => {
+    stopLiveStreamGc();
+    vi.useRealTimers();
+  });
+
+  function evt(requestId: string, content: string) {
+    return {
+      type: 'stream.event' as const,
+      treeId: TREE,
+      requestId,
+      event: { type: 'text' as const, content },
+    };
+  }
+
+  it('超期条目被 GC 周期清理（at + LIVE_STREAM_TTL_MS < now）', () => {
+    // 缓冲他端流 delta（turn 未到）→ liveStreams 注入条目
+    handleStreamEvent(evt('u1', '过期流'));
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+
+    // 推进超过 TTL + 一个 GC 周期，让周期回调在 now>TTL 时触发清理
+    vi.advanceTimersByTime(5 * 60_000 + 60_000);
+
+    expect(__hasLiveStreamForTest('u1'), '超期条目被 GC 周期清理').toBe(false);
+  });
+
+  it('未过期条目保留（不误清）', () => {
+    handleStreamEvent(evt('u1', '新鲜流'));
+    // 接近 TTL 但未超
+    vi.advanceTimersByTime(5 * 60_000 - 1000);
+    expect(__hasLiveStreamForTest('u1'), '未过期条目保留').toBe(true);
+  });
+
+  it('GC 清理超期条目时同步移除孤儿 streaming 占位（turn → interrupted）', () => {
+    // 快照携带 streaming 中间态 → turn u1 streaming + liveStreams 注入条目
+    applySnapshot(
+      snapshot(
+        [userNode('u1')],
+        [{ requestId: 'u1', parentId: 'u1', content: [{ type: 'text', text: '流式ing' }] }],
+      ),
+    );
+    expect(agentStore.turns.get('u1')!.status).toBe('streaming');
+    expect(__hasLiveStreamForTest('u1')).toBe(true);
+
+    // 推进超过 TTL + GC 周期 → GC 清理条目 + 孤儿 streaming 转 interrupted
+    vi.advanceTimersByTime(5 * 60_000 + 60_000);
+
+    expect(__hasLiveStreamForTest('u1')).toBe(false);
+    expect(agentStore.turns.get('u1')!.status, '孤儿 streaming 占位转 interrupted').toBe(
+      'interrupted',
+    );
   });
 });

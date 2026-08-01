@@ -30,6 +30,7 @@ function makeConn(overrides?: Partial<AgentConn>): AgentConn {
     clientKind: 'web',
     subscribed: new Set(),
     pendingPermissions: new Set(),
+    permissionTimers: new Map(),
     sessions: new Set(),
     ...overrides,
   };
