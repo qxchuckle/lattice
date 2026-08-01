@@ -10,6 +10,7 @@
  *   Level 3: loadTree — 全量加载（兜底）
  */
 import { randomUUID } from 'node:crypto';
+import { isReadOnly } from '@qcqx/lattice-agent-protocol';
 import type {
   ConversationNode,
   ConversationBranch,
@@ -287,6 +288,30 @@ export class SessionManager {
       current = current.parentId ? this.getNode(treeId, current.parentId) : undefined;
     }
     return path;
+  }
+
+  // ── 领域查询（消灭散落在 controller/tree-ops/guard 中的重复 .find() 模式） ──
+
+  /** 取某节点的活跃 assistant 子节点（非只读终态；retry 后可能多个，取第一个活跃者） */
+  getActiveAssistantChild(treeId: string, nodeId: string): ConversationNode | undefined {
+    return this.getNodes(treeId).find(
+      (n) => n.parentId === nodeId && n.role === 'assistant' && !isReadOnly(n.status),
+    );
+  }
+
+  /** 某节点是否有活跃 user 子节点（auto-fork 判定用） */
+  hasActiveUserChild(treeId: string, nodeId: string): boolean {
+    return this.getNodes(treeId).some(
+      (n) => n.parentId === nodeId && n.role === 'user' && !isReadOnly(n.status),
+    );
+  }
+
+  /** 解析节点所属分支对象（branchId 缺省回退默认分支） */
+  branchOf(
+    tree: ConversationTree,
+    node: ConversationNode | undefined,
+  ): ConversationBranch | undefined {
+    return tree.branches.find((b) => b.id === (node?.branchId ?? tree.defaultBranchId));
   }
 
   // ── 分支操作 ──

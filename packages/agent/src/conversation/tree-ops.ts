@@ -101,7 +101,7 @@ export class TreeOps {
     }
 
     const parentNode = node.parentId ? this.deps.session.getNode(treeId, node.parentId) : null;
-    const branch = tree.branches.find((b) => b.id === (node.branchId ?? tree.defaultBranchId));
+    const branch = this.deps.session.branchOf(tree, node);
     const sourceSessionId = branch?.sourceSessionId ?? null;
 
     // 0. 中止目标子树内的在途请求（requestId == user 节点 id，send/retry/continue 皆复用 turnId）：

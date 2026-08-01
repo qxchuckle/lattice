@@ -8,7 +8,7 @@ import type { PermissionLevel, PermissionRequest } from '../types.js';
 import type { EventBus } from '../events/event-bus.js';
 
 /** 未应答的权限请求自动拒绝时限（安全默认：不应答即拒绝） */
-const PERMISSION_TIMEOUT_MS = 60_000;
+const PERMISSION_TIMEOUT_MS = 30_000;
 
 export interface PermissionRule {
   /** tool 名称或通配符 '*' */

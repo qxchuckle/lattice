@@ -46,6 +46,9 @@ export interface LatticeAgent {
 
 /** 创建完整 Lattice Agent 实例 */
 export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
+  if (!deps.sources?.registry) {
+    throw new Error('createLatticeAgent: deps.sources (含 registry) 是唯一必选依赖，不可缺省');
+  }
   const events = new EventBus();
   const session = new SessionManager();
   const workflow = new WorkflowEngine(events, deps.workflowConfig);

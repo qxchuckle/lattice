@@ -68,15 +68,7 @@ export class TurnGuard {
 
   /** 取该 turn 的 assistant 子节点（retry 后可能多个，取非只读的活跃者） */
   private assistantOf(treeId: string, turnId: string): ConversationNode | undefined {
-    return this.deps.session
-      .getNodes(treeId)
-      .find(
-        (n) =>
-          n.parentId === turnId &&
-          n.role === 'assistant' &&
-          n.status !== 'undone' &&
-          n.status !== 'hidden',
-      );
+    return this.deps.session.getActiveAssistantChild(treeId, turnId);
   }
 
   /**

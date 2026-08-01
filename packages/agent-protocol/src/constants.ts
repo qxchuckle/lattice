@@ -1,6 +1,7 @@
 /**
  * 协议常量
  */
+import type { ClientMessage, ServerMessage } from './transport/ws.js';
 
 export const PROTOCOL_VERSION = '1.0';
 
@@ -66,6 +67,24 @@ export type ProtocolErrorCode =
   | 'session_not_found'
   | 'invalid_message'
   | 'internal_error';
+
+// ── 编译期双向钉死：ClientMessageType ↔ ClientMessage['type'] ──
+// 方向一（satisfies 在 ws.ts 的 ClientMessage 联合侧保证值合法）；
+// 方向二：ClientMessage 新增变体而 ClientMessageType 未补 → 此处编译报错。
+// 与 guards.ts 的 SourceEvent 钉死同模式，堵 isClientMessage 静默丢弃缺口。
+type _MissingClientTypes = Exclude<
+  ClientMessage['type'],
+  (typeof ClientMessageType)[keyof typeof ClientMessageType]
+>;
+const _assertNoMissingClientTypes: _MissingClientTypes extends never ? true : never = true;
+void _assertNoMissingClientTypes;
+
+type _MissingServerTypes = Exclude<
+  ServerMessage['type'],
+  (typeof ServerMessageType)[keyof typeof ServerMessageType]
+>;
+const _assertNoMissingServerTypes: _MissingServerTypes extends never ? true : never = true;
+void _assertNoMissingServerTypes;
 
 /** 合法 client 消息 type 值集合（供 guards 使用） */
 export const CLIENT_MESSAGE_TYPES: ReadonlySet<string> = new Set(Object.values(ClientMessageType));

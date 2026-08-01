@@ -639,11 +639,7 @@ export class ConversationController {
     // （已撤销/已删除的子节点不计入——那些回复路径已移除，重新提问复用当前分支即可）
     let autoForked = false;
     if (tree && actualParent && !opts.branchId && sourceSessionId) {
-      const hasUserChild = this.deps.session
-        .getNodes(tree.id)
-        .some(
-          (n) => n.parentId === actualParent.id && n.role === 'user' && isBranchableChild(n.status),
-        );
+      const hasUserChild = this.deps.session.hasActiveUserChild(tree.id, actualParent.id);
       if (hasUserChild) {
         const atMessage = actualParent.metadata?.sourceMessageId;
         let newBranch: ConversationBranch | undefined;
@@ -777,7 +773,7 @@ export class ConversationController {
       return;
     }
 
-    const branch = tree.branches.find((b) => b.id === (node.branchId ?? tree.defaultBranchId));
+    const branch = this.deps.session.branchOf(tree, node);
     const target = node;
 
     // 续写流调度到分支队列（跨分支并行，不占结构队列）；复用原节点模型/参数
@@ -829,7 +825,7 @@ export class ConversationController {
     }
 
     // 分支（首轮 user 节点无 branchId，回退默认分支）
-    const branch = tree.branches.find((b) => b.id === (userNode.branchId ?? tree.defaultBranchId));
+    const branch = this.deps.session.branchOf(tree, userNode);
     const sourceSessionId = branch?.sourceSessionId ?? null;
 
     // 1. 标记所有后代为 undone（跳过已删除 hidden 的后代，不复活——与 undo 一致）
