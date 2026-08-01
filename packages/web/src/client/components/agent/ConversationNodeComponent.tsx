@@ -69,9 +69,15 @@ function ConversationNodeInner({ data }: NodeProps) {
   const { isStreaming, isError, isInterrupted, isUndone, isHidden } = turnStyleFlags(turn?.status);
   // 能力数据驱动：优先用 server 下发的投影（与接口守卫同源，含源能力维度）。
   // 例外：streaming 是客户端瞬时态（未入快照），本地投影作过渡；快照未到时同理。
+  // 防陈旧：error 事件与新快照之间存在时间窗，turnCaps 仍为旧 streaming 投影（canAbort:true）；
+  // 非 streaming 态读到 canAbort:true 即判定陈旧，回退按当前状态本地推导（保证重试按钮即时出现）。
+  // （valtio Map 对 existing key 的 set 不触发重渲染，无法靠订阅 turnCaps 解决，故用状态一致性校验）
+  const serverCaps = agentStore.turnCaps.get(turnId);
   const caps = isStreaming
     ? projectNodeCapabilities('streaming')
-    : (agentStore.turnCaps.get(turnId) ?? projectNodeCapabilities(turn?.status ?? 'done'));
+    : serverCaps && !serverCaps.canAbort
+      ? serverCaps
+      : projectNodeCapabilities(turn?.status ?? 'done');
 
   // 流式自动滚动
   useEffect(() => {

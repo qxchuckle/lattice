@@ -26,6 +26,7 @@ vi.mock('./agentStore', async (importOriginal) => {
 
 import { agentStore, putTurn, continueTurn, retryTurn, abortStream } from './agentStore';
 import { applyStreamEvent } from './turnGraph';
+import { projectNodeCapabilities } from '@qcqx/lattice-agent-protocol';
 import { ConversationNodeComponent } from './ConversationNodeComponent';
 import type { TurnNode } from './types';
 
@@ -179,5 +180,39 @@ describe('ConversationNodeComponent 流式渲染', () => {
 
     applyStreamEvent(turnProxy, { type: 'text', content: '，第二段' });
     expect(await screen.findByText(/第一段，第二段/)).toBeInTheDocument();
+  });
+});
+
+describe('ConversationNodeComponent turnCaps 防陈旧（重试按钮竞态回归）', () => {
+  beforeEach(() => {
+    cleanup();
+    agentStore.turns.clear();
+    agentStore.turnCaps.clear();
+    vi.clearAllMocks();
+  });
+
+  it('turnCaps 陈旧（streaming 投影 canAbort:true）时 error 事件后重试按钮立即出现', async () => {
+    // 1. server 快照先下发 streaming 能力（canAbort:true, canRetry:false）
+    agentStore.turnCaps.set('t1', projectNodeCapabilities('streaming'));
+    renderNode(makeTurn('streaming', []));
+    const turnProxy = agentStore.turns.get('t1')!;
+
+    // 2. 源报错：error 事件改 turn 状态触发重渲染；此时 turnCaps 仍为陈旧 streaming 投影，
+    //    组件应检测到 canAbort:true 与当前 error 态不一致 → 回退本地推导 → 重试按钮立即出现
+    applyStreamEvent(turnProxy, {
+      type: 'error',
+      message: '额度不足',
+      code: 'unknown',
+      retryable: false,
+      source: { id: 'qoder', name: 'Qoder' },
+    });
+    expect(await screen.findByText(/额度不足/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /重试/ })).toBeInTheDocument();
+  });
+
+  it('turnCaps 为新快照（error 投影 canAbort:false）时优先用 server caps', async () => {
+    agentStore.turnCaps.set('t1', projectNodeCapabilities('error'));
+    renderNode(makeTurn('error', [{ type: 'error', message: '出错了' }]));
+    expect(btn(/重试/)).toBeInTheDocument();
   });
 });

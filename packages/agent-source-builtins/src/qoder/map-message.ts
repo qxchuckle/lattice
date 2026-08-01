@@ -2,7 +2,7 @@
  * Qoder 消息 → SourceEvent 映射（纯函数）
  */
 import type { DriverEvent } from '@qcqx/lattice-agent-source';
-import { recordField } from '../internal/shape.js';
+import { recordField, stringField } from '../internal/shape.js';
 
 /** 从工具参数提取文件路径（Qoder 写入类工具用 `file_path` 参数） */
 function extractPath(args: Record<string, unknown>): string | undefined {
@@ -58,11 +58,18 @@ export function mapQoderMessage(
       ...(meta?.pre_tokens !== undefined ? { preTokens: meta.pre_tokens } : {}),
     });
   } else if (type === 'result') {
-    const subtype = msg.subtype as string;
-    if (subtype === 'error') {
+    // SDK 错误 result 的 subtype 为 error_during_execution / error_max_turns /
+    // error_max_budget_usd / error_max_structured_output_retries（永不为 'error'），
+    // 且 SDKResultSuccess 也可能携带 is_error=true；故以 is_error 或 error 前缀判定。
+    const subtype = typeof msg.subtype === 'string' ? msg.subtype : '';
+    if (msg.is_error === true || subtype.startsWith('error')) {
+      // 错误文案：SDKResultError 用 errors: string[]；SDKResultSuccess(is_error) 用 result: string
+      const errors = Array.isArray(msg.errors)
+        ? msg.errors.filter((e): e is string => typeof e === 'string' && e !== '').join('\n')
+        : '';
       events.push({
         type: 'error',
-        message: (msg.error as string) ?? 'Unknown error',
+        message: errors || stringField(msg, 'result') || 'Unknown error',
         code: 'unknown',
         retryable: false,
         source,
