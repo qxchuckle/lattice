@@ -3,8 +3,9 @@
  * 左侧边栏：Activity Bar（图标条）+ 历史面板（可收起/展开，不自动消失）
  * 顶栏：标题 + 状态 + 关闭
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useSnapshot } from 'valtio';
+import { App as AntdApp } from 'antd';
 import { AgentCanvas } from './AgentCanvas';
 import { AgentSettingsModal } from './AgentSettingsModal';
 import {
@@ -15,7 +16,10 @@ import {
   deleteConversation,
   abortStream,
   getTotalUsage,
+  ConnectionIndicator,
+  PermissionDialog,
 } from './agentStore';
+import { AGENT_PANEL_BAR_WIDTH } from '../../constants/layout';
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -25,18 +29,34 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400000)}天前`;
 }
 
-const ACTIVITY_BAR_WIDTH = 40;
+// Agent 面板自身侧栏宽度（从 constants/layout 集中管理）
+const ACTIVITY_BAR_WIDTH = AGENT_PANEL_BAR_WIDTH;
 
 export function AgentPanel() {
   const snap = useSnapshot(agentStore);
+  const { message } = AntdApp.useApp();
+  const lastRetryWarningRef = useRef('');
 
   useEffect(() => {
     if (snap.visible) loadConversations();
   }, [snap.visible]);
 
-  // Esc 中止流式
+  // 重试超限 UI 提示（retryWarning 由 retryTurn 设置，消费后复位）
+  useEffect(() => {
+    if (snap.retryWarning && snap.retryWarning !== lastRetryWarningRef.current) {
+      message.warning(snap.retryWarning);
+      lastRetryWarningRef.current = snap.retryWarning;
+      agentStore.retryWarning = '';
+    }
+  }, [snap.retryWarning, message]);
+
+  // Esc 中止流式（PermissionDialog 打开时跳过，避免误中止）
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') abortStream();
+    if (e.key === 'Escape') {
+      // 有挂起权限对话框时不中止流（ESC 由 PermissionDialog 自身处理）
+      if (agentStore.pendingPermissions.size > 0) return;
+      abortStream();
+    }
   }, []);
 
   useEffect(() => {
@@ -49,7 +69,12 @@ export function AgentPanel() {
   if (!snap.visible) return null;
 
   const usage = getTotalUsage();
-  const fmtTok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const fmtTok = (n: number) =>
+    n >= 1_000_000
+      ? `${(n / 1e6).toFixed(1)}M`
+      : n >= 1000
+        ? `${(n / 1000).toFixed(1)}k`
+        : String(n);
 
   return (
     <div
@@ -75,18 +100,9 @@ export function AgentPanel() {
         }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>Agent 对话树</span>
 
-        {/* 连接状态 */}
-        <span
-          style={{
-            fontSize: 10,
-            padding: '1px 6px',
-            borderRadius: 8,
-            marginLeft: 'auto',
-            background: snap.connected ? '#f6ffed' : '#fff2f0',
-            color: snap.connected ? '#52c41a' : '#ff4d4f',
-            border: `1px solid ${snap.connected ? '#b7eb8f' : '#ffccc7'}`,
-          }}>
-          {snap.connected ? '● 在线' : '○ 离线'}
+        {/* 连接状态指示器（批次四：订阅 connectionState$ + 可操作错误反馈） */}
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <ConnectionIndicator />
         </span>
 
         <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{snap.turns.size} 节点</span>
@@ -307,6 +323,9 @@ export function AgentPanel() {
 
       {/* Agent 设置（通用/模型两个 tab） */}
       <AgentSettingsModal />
+
+      {/* 权限确认对话框（批次四：permission.respond 正向应答 UI） */}
+      <PermissionDialog />
     </div>
   );
 }

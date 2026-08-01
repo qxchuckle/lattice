@@ -5,6 +5,7 @@
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { NodeRole } from '../types.js';
+import { getSessionsCacheDir, getSessionsIndexPath } from '@qcqx/lattice-foundation';
 
 // ── 索引数据结构 ──
 
@@ -28,13 +29,13 @@ export interface SessionIndex {
 // ── Session Index Manager ──
 
 export class SessionIndexManager {
-  private indexPath: string;
-  private baseDir: string;
+  private readonly indexPath: string;
+  private readonly baseDir: string;
   private index: SessionIndex | null = null;
 
-  constructor(opts: { indexPath: string; baseDir: string }) {
-    this.indexPath = opts.indexPath;
-    this.baseDir = opts.baseDir;
+  constructor() {
+    this.indexPath = getSessionsIndexPath();
+    this.baseDir = getSessionsCacheDir();
   }
 
   /** 加载索引（内存缓存，不存在则返回空） */

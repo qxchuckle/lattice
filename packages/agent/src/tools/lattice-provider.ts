@@ -1,6 +1,6 @@
 /**
  * Lattice Workflow Tool Provider — 将 lattice 工作流能力暴露为 Agent tools
- * 通过 LatticeToolDeps 依赖注入（不直接依赖 @qcqx/lattice-core）
+ * 通过 LatticeToolDeps 依赖注入（行为/能力接口，避免紧耦合具体实现）
  */
 import type { IToolProvider, AgentToolDefinition, AgentToolResult } from '../types.js';
 

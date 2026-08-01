@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre';
 import dayjs from 'dayjs';
 import { tokens } from './theme';
+import { CYTO_NODE_WIDTH, CYTO_NODE_HEIGHT } from './constants/layout';
 import type { LatticeNode, LatticeEdge } from './types/graph';
 import type { ProjectMeta } from '@qcqx/lattice-core';
 import { selectPrimaryId } from '@qcqx/lattice-core';
@@ -39,8 +40,8 @@ export function layoutGraph(
   edges: LatticeEdge[],
   direction: 'TB' | 'LR' = 'LR',
 ): LatticeNode[] {
-  const nodeWidth = 220;
-  const nodeHeight = 80;
+  const nodeWidth = CYTO_NODE_WIDTH;
+  const nodeHeight = CYTO_NODE_HEIGHT;
 
   // 无边时用网格布局，均匀利用画布空间
   if (edges.length === 0) {

@@ -4,6 +4,7 @@
  * 避免 AgentCanvas ↔ ConversationNodeComponent 循环依赖
  */
 import dagre from '@dagrejs/dagre';
+import { NODE_GAP as NODE_GAP_CONST, RANK_GAP as RANK_GAP_CONST } from '../../constants/layout';
 
 /** 布局所需的最小节点接口 */
 export interface LayoutNode {
@@ -15,8 +16,8 @@ export interface LayoutNode {
 }
 
 /** 节点最小间距（同层水平间距 / 父子层间距） */
-export const NODE_GAP = 40;
-export const RANK_GAP = 60;
+export const NODE_GAP = NODE_GAP_CONST;
+export const RANK_GAP = RANK_GAP_CONST;
 
 /** 计算每个节点的树深度（根 = 0），用于同层顶对齐 */
 function computeDepths(nodes: LayoutNode[]): Map<string, number> {

@@ -27,13 +27,15 @@ const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
   dirs.length = 0;
+  delete process.env.LATTICE_HOME;
 });
 
 /** 用指定能力覆盖搭一套编排环境（能力差异是唯一变量） */
 async function setupWithCaps(override: (caps: SourceCapabilities) => SourceCapabilities) {
-  const baseDir = await mkdtemp(join(tmpdir(), 'lattice-caps-'));
-  dirs.push(baseDir);
-  const sm = new SessionManager({ baseDir });
+  const tmpDir = await mkdtemp(join(tmpdir(), 'lattice-caps-'));
+  dirs.push(tmpDir);
+  process.env.LATTICE_HOME = tmpDir;
+  const sm = new SessionManager();
   const state: MockState = { emitDone: true, hangUntilAbort: false, hangBeforeYield: false };
   const calls: MockCalls = { prompts: [], forks: [], aborts: [] };
   const source = makeMockSource(state, calls);

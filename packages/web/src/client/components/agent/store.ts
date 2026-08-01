@@ -123,6 +123,8 @@ export const agentStore = proxy({
   peers: [] as PresenceState[],
   /** 待应答的权限请求（requestId → 详情），UI 据此渲染/撤销权限对话框 */
   pendingPermissions: new Map<string, PendingPermission>(),
+  /** 重试超限提示（非空时 UI 层弹出 message.warning 并复位为 ''） */
+  retryWarning: '' as string,
 });
 
 // ── 内部辅助 ──
@@ -194,7 +196,7 @@ export function getSiblings(nodeId: string): string[] {
   );
 }
 
-// TODO(待接入): metrics 消费方——getTotalUsage 的 token 用量统计尚未对接 UI 消费方（状态栏/设置页用量展示）
+// 批次四已对接 UI 消费方：getTotalUsage 在 AgentPanel 顶栏显示总量，UsageFooter 在节点级显示 per-turn 用量
 export function getTotalUsage(): { input: number; output: number } {
   let input = 0,
     output = 0;

@@ -21,28 +21,23 @@ import type {
 import { SessionIndexManager } from './session-index.js';
 import type { SessionIndexEntry } from './session-index.js';
 import { SessionRepository } from './session-repository.js';
-import type { SessionStorage, StreamingState } from './session-repository.js';
+import type { StreamingState } from './session-repository.js';
 
-export type { SessionStorage, StreamingState };
+export type { StreamingState };
 
 export class SessionManager {
   private trees = new Map<string, ConversationTree>();
   private nodes = new Map<string, Map<string, ConversationNode>>(); // treeId → nodeId → node
   private repo: SessionRepository;
-  private indexManager: SessionIndexManager | null = null;
+  private indexManager: SessionIndexManager;
 
-  constructor(storage: SessionStorage) {
-    this.repo = new SessionRepository(storage);
-    if (storage.indexPath) {
-      this.indexManager = new SessionIndexManager({
-        indexPath: storage.indexPath,
-        baseDir: storage.baseDir,
-      });
-    }
+  constructor() {
+    this.repo = new SessionRepository();
+    this.indexManager = new SessionIndexManager();
   }
 
-  /** 获取索引管理器（可能为 null） */
-  getIndexManager(): SessionIndexManager | null {
+  /** 获取索引管理器 */
+  getIndexManager(): SessionIndexManager {
     return this.indexManager;
   }
 
@@ -165,9 +160,6 @@ export class SessionManager {
 
   /** 列出所有会话（通过索引，不读 JSONL 正文）；索引不存在时自动重建 */
   async listSessions(): Promise<SessionIndexEntry[]> {
-    if (!this.indexManager) {
-      return this.listSessionsFromDir();
-    }
     const sessions = await this.indexManager.listSessions();
     if (sessions.length === 0) {
       await this.indexManager.rebuild();
@@ -489,23 +481,5 @@ export class SessionManager {
 
   private async rewriteNodes(treeId: string): Promise<void> {
     await this.repo.writeNodes(treeId, this.getNodes(treeId));
-  }
-
-  /** 无索引时退化为目录遍历列出会话 */
-  private async listSessionsFromDir(): Promise<SessionIndexEntry[]> {
-    const entries: SessionIndexEntry[] = [];
-    for (const dir of await this.repo.listTreeDirs()) {
-      const tree = await this.repo.readTree(dir);
-      if (!tree) continue;
-      entries.push({
-        treeId: tree.id,
-        title: tree.title,
-        taskId: tree.taskId,
-        nodeCount: 0, // 不读 JSONL，未知
-        createdAt: tree.createdAt,
-        updatedAt: tree.updatedAt,
-      });
-    }
-    return entries.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 }

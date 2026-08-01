@@ -4,7 +4,7 @@
  */
 import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { EventBus } from './events/event-bus.js';
-import { SessionManager, type SessionStorage } from './session/session-manager.js';
+import { SessionManager } from './session/session-manager.js';
 import { ConversationController } from './conversation/conversation-controller.js';
 import type { PromptComposerDeps } from './prompt/prompt-composer.js';
 import { ToolRegistry } from './tools/tool-registry.js';
@@ -19,7 +19,6 @@ import {
 import { WorkflowEngine, type WorkflowConfig } from './workflow/workflow-engine.js';
 
 export interface LatticeAgentDeps {
-  storage: SessionStorage;
   /** agent-source 实例（由上层通过 createAgentSource 创建后注入） */
   sources: AgentSourceInstance;
   contextConfig?: ContextEngineConfig;
@@ -48,7 +47,7 @@ export interface LatticeAgent {
 /** 创建完整 Lattice Agent 实例 */
 export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
   const events = new EventBus();
-  const session = new SessionManager(deps.storage);
+  const session = new SessionManager();
   const workflow = new WorkflowEngine(events, deps.workflowConfig);
   workflow.loadLocalCommands(); // 用户级命令模板；项目级由上层带 cwd 重扫
   const permission = new PermissionGuard(events);

@@ -16,7 +16,7 @@
       "path": "../agent-pipeline/tsconfig.build.json"
     },
     {
-      "path": "../core/tsconfig.build.json"
+      "path": "../foundation/tsconfig.build.json"
     }
   ]
 }

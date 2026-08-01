@@ -26,12 +26,15 @@ export default defineConfig({
       '@qcqx/lattice-agent-protocol': resolve(__dirname, 'packages/agent-protocol/src/index.ts'),
       '@qcqx/lattice-agent-source': resolve(__dirname, 'packages/agent-source/src/index.ts'),
       '@qcqx/lattice-agent-pipeline': resolve(__dirname, 'packages/agent-pipeline/src/index.ts'),
+      '@qcqx/lattice-foundation': resolve(__dirname, 'packages/foundation/src/index.ts'),
+      '@qcqx/lattice-core': resolve(__dirname, 'packages/core/src/index.ts'),
     },
   },
   test: {
     // e2e 包走 Playwright（pnpm e2e），不进 vitest；此 exclude 为纵深防御
     exclude: ['packages/e2e/**'],
     projects: [
+      'packages/foundation',
       'packages/core',
       'packages/cli',
       'packages/agent',

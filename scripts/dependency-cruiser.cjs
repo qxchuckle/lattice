@@ -71,6 +71,22 @@ module.exports = {
       },
     },
 
+    /* ── foundation（零依赖基础层）──────────────────────── */
+    {
+      name: 'foundation-no-workspace-deps',
+      severity: 'error',
+      comment: 'spec：foundation 是零依赖基础层，不得 import 任何其他 @qcqx 包',
+      from: { path: '^packages/foundation/src' },
+      to: { path: '^packages/', pathNot: '^packages/foundation/' },
+    },
+    {
+      name: 'foundation-zero-npm-deps',
+      severity: 'error',
+      comment: 'spec：foundation 不得引入任何三方 npm 依赖（仅允许 node:* 内置模块）',
+      from: { path: '^packages/foundation/src' },
+      to: { path: 'node_modules' },
+    },
+
     /* ── agent-protocol（契约层）──────────────────────────── */
     {
       name: 'protocol-no-workspace-deps',
@@ -149,8 +165,7 @@ module.exports = {
       name: 'agent-allowed-deps-only',
       severity: 'error',
       comment:
-        'spec 依赖图：agent 的依赖面 = protocol + source + pipeline；不得依赖壳层（web/cli），' +
-        '也不引 core（spec 依赖图未含 core，当前 src 亦无此依赖）',
+        'spec 依赖图：agent 的依赖面 = protocol + source + pipeline + foundation；不得依赖壳层（web/cli）或 core',
       from: { path: '^packages/agent/src' },
       to: {
         path: '^packages/',
@@ -159,6 +174,7 @@ module.exports = {
           '^packages/agent-protocol/',
           '^packages/agent-source/',
           '^packages/agent-pipeline/',
+          '^packages/foundation/',
         ],
       },
     },
@@ -180,6 +196,7 @@ module.exports = {
           '^packages/agent-source/',
           '^packages/agent-source-builtins/',
           '^packages/core/',
+          '^packages/foundation/',
         ],
       },
     },

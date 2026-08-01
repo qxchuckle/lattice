@@ -1,0 +1,8 @@
+{
+  // foundation 是最底层基础包：不依赖任何 workspace 包，无 references
+  "extends": ["./tsconfig.json", "../../tsconfig.refs.base.json"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist-types"
+  }
+}

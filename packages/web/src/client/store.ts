@@ -1,6 +1,18 @@
 import type cytoscape from 'cytoscape';
 import { proxy } from 'valtio';
 import type { LatticeNodeData } from './types/graph';
+import {
+  ACTIVITY_BAR_WIDTH as ACTIVITY_BAR_WIDTH_CONST,
+  SIDEBAR_WIDTH_MIN,
+  SIDEBAR_WIDTH_MAX,
+  SIDEBAR_WIDTH_DEFAULT,
+  DETAIL_WIDTH_MIN,
+  DETAIL_WIDTH_MAX,
+  DETAIL_WIDTH_DEFAULT,
+  TERMINAL_HEIGHT_MIN,
+  TERMINAL_HEIGHT_MAX,
+  TERMINAL_HEIGHT_DEFAULT,
+} from './constants/layout';
 
 // ── 画布状态 ──
 
@@ -140,7 +152,7 @@ export interface SearchFilters {
 export type SidebarView = 'search' | 'filter';
 
 /** 左侧 Activity Bar 图标栏宽度（px，桌面端常驻，参与画布遮蔽计算） */
-export const ACTIVITY_BAR_WIDTH = 48;
+export const ACTIVITY_BAR_WIDTH = ACTIVITY_BAR_WIDTH_CONST;
 
 export const sidebarStore = proxy({
   /** 搜索关键词 */
@@ -162,7 +174,10 @@ export const sidebarStore = proxy({
    * 避免搜索时的自动展开/折叠污染普通树（浏览器匹配复用普通树节点 key）。 */
   searchExpandedKeys: {} as Record<string, boolean>,
   /** 侧栏宽度（px），持久化到 localStorage */
-  width: parseInt(localStorage.getItem('lattice-sidebar-width') || '260', 10),
+  width: parseInt(
+    localStorage.getItem('lattice-sidebar-width') || String(SIDEBAR_WIDTH_DEFAULT),
+    10,
+  ),
   /** 搜索面板筛选状态（会话级，不持久化） */
   searchFilters: {
     type: 'all' as FilterType,
@@ -179,7 +194,7 @@ export const detailStore = proxy({
   /** 详情面板是否临时收起（不丢失数据，点击展开恢复） */
   collapsed: false,
   /** 面板宽度（px），持久化到 localStorage */
-  width: parseInt(localStorage.getItem('lattice-detail-width') || '420', 10),
+  width: parseInt(localStorage.getItem('lattice-detail-width') || String(DETAIL_WIDTH_DEFAULT), 10),
   /** 当前查看的实体 ID */
   entityId: null as string | null,
   /** 当前查看的实体类型 */
@@ -344,7 +359,7 @@ export function toggleDetailCollapse(): void {
 
 /** 设置详情面板宽度（含 clamping + 持久化） */
 export function setDetailWidth(width: number): void {
-  const clamped = Math.max(320, Math.min(800, Math.round(width)));
+  const clamped = Math.max(DETAIL_WIDTH_MIN, Math.min(DETAIL_WIDTH_MAX, Math.round(width)));
   detailStore.width = clamped;
   localStorage.setItem('lattice-detail-width', String(clamped));
 }
@@ -357,7 +372,7 @@ export function setAnchor(id: string, mode: ViewMode): void {
 
 /** 设置侧栏宽度（含 clamping + 持久化） */
 export function setSidebarWidth(width: number): void {
-  const clamped = Math.max(200, Math.min(480, Math.round(width)));
+  const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, Math.round(width)));
   sidebarStore.width = clamped;
   localStorage.setItem('lattice-sidebar-width', String(clamped));
 }
@@ -497,7 +512,10 @@ export const terminalStore = proxy({
   /** 移动端会话列表侧栏是否收起 */
   sidebarCollapsed: true,
   /** 面板高度（px，持久化到 localStorage） */
-  height: parseInt(localStorage.getItem('lattice-terminal-height') || '300', 10),
+  height: parseInt(
+    localStorage.getItem('lattice-terminal-height') || String(TERMINAL_HEIGHT_DEFAULT),
+    10,
+  ),
   /** 所有终端会话 */
   sessions: [] as TerminalSession[],
   /** 当前活动会话 ID */
@@ -598,7 +616,7 @@ export function toggleTerminalSidebar(): void {
 
 /** 设置终端面板高度（含 clamping + 持久化） */
 export function setTerminalHeight(height: number): void {
-  const clamped = Math.max(120, Math.min(800, Math.round(height)));
+  const clamped = Math.max(TERMINAL_HEIGHT_MIN, Math.min(TERMINAL_HEIGHT_MAX, Math.round(height)));
   terminalStore.height = clamped;
   localStorage.setItem('lattice-terminal-height', String(clamped));
 }

@@ -180,6 +180,11 @@ export function __setWebSocketCtorForTest(ctor: WsCtor | null): void {
   wsCtorOverride = ctor;
 }
 
+/** 仅测试用：注入连接状态（接缝函数，模拟状态机转换供 hook 行为测试验证） */
+export function __setConnStateForTest(state: ConnectionState): void {
+  setConnState(state);
+}
+
 /** 仅测试用：重置连接模块内部状态（退订、清空状态机；心跳随状态转 disconnected 联动停止） */
 export function __resetConnectionForTest(): void {
   connSub?.unsubscribe();
@@ -404,7 +409,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     case 'permission.request':
       // 挂起权限请求：UI 据此渲染权限确认对话框；30s TTL 或 permission.respond 后移除
-      // TODO(批次四): permission.respond 客户端正向应答 UI——允许/拒绝按钮 → sendWs permission.respond + 移除 pendingPermissions 条目
+      // 批次四已实现：PermissionDialog 组件渲染允许/拒绝按钮 → sendWs permission.respond + 移除 pendingPermissions 条目
       agentStore.pendingPermissions.set(msg.requestId, {
         requestId: msg.requestId,
         tool: msg.tool,

@@ -3,7 +3,6 @@
  * 将 lattice 工作流原生融入 Agent
  */
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SourceResourceInfo } from '@qcqx/lattice-agent-protocol';
 import type { SlashCommand } from '../types.js';
@@ -11,14 +10,13 @@ import type { SourceEvent } from '@qcqx/lattice-agent-protocol';
 import type { EventBus } from '../events/event-bus.js';
 import { scanLocalCommands, stripFrontmatter } from './command-scan.js';
 import type { LocalCommand } from './command-scan.js';
+import { getAgentCommandsDir } from '@qcqx/lattice-foundation';
 
 export interface WorkflowConfig {
   /** 自动化级别（缺省 'semi'，由 WorkflowEngine 构造器回填） */
   automation?: 'full' | 'semi' | 'manual';
   /** skill 搜索目录 */
   skillDirs?: string[];
-  /** 本地命令模板目录（缺省 ~/.lattice/agent/commands；项目级由 loadLocalCommands(cwd) 追加） */
-  commandDirs?: string[];
 }
 
 export interface TriggerResult {
@@ -53,12 +51,12 @@ export class WorkflowEngine {
   // ── 本地命令模板（origin='local'，PromptComposer 展开用） ──
 
   /**
-   * 扫描本地命令目录：用户级（config.commandDirs，缺省 ~/.lattice/agent/commands）
+   * 扫描本地命令目录：用户级（~/.lattice/agent/commands）
    * + 项目级（<cwd>/.lattice/commands）。同名后者覆盖前者。
    */
   loadLocalCommands(cwd?: string): number {
     this.localCommands.clear();
-    const userDirs = this.config.commandDirs ?? [join(homedir(), '.lattice', 'agent', 'commands')];
+    const userDirs = [getAgentCommandsDir()];
     const roots: Array<{ dir: string; scope: 'user' | 'project' }> = userDirs.map((dir) => ({
       dir,
       scope: 'user' as const,

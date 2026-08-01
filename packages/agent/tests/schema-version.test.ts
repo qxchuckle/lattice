@@ -10,16 +10,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRepository, SESSION_SCHEMA_VERSION } from '../src/session/session-repository.js';
 
+let tmpDir: string;
 let baseDir: string;
 
 beforeEach(async () => {
-  baseDir = await mkdtemp(join(tmpdir(), 'lattice-schema-'));
+  tmpDir = await mkdtemp(join(tmpdir(), 'lattice-schema-'));
+  process.env.LATTICE_HOME = tmpDir;
+  baseDir = join(tmpDir, '.cache', 'sessions');
 });
 afterEach(async () => {
-  await rm(baseDir, { recursive: true, force: true });
+  delete process.env.LATTICE_HOME;
+  await rm(tmpDir, { recursive: true, force: true });
 });
 
-const repoOf = () => new SessionRepository({ baseDir });
+const repoOf = () => new SessionRepository();
 
 async function writeRawTree(treeId: string, payload: Record<string, unknown>): Promise<void> {
   const dir = join(baseDir, treeId);

@@ -42,6 +42,10 @@ export {
   loadAgentConfig,
 } from './api';
 export type { AgentClientConfig } from './api';
+export { useSources, useModels, agentQueryKeys, getSourcesSync } from './hooks';
+export { useConnectionState } from './useConnectionState';
+export { ConnectionIndicator } from './ConnectionIndicator';
+export { PermissionDialog } from './PermissionDialog';
 
 // ── Actions（高层操作，组合 store + connection + api） ──
 
@@ -255,12 +259,25 @@ export function continueTurn(turnId: string): void {
 
 // ── 重试（对 user 节点丢弃后代并重新生成） ──
 
-// TODO(预留): pipeline 重试无跨事件总预算——retryTurn 连续触发时无累计上限，归批次四补跨事件 retry 预算守卫
+// 批次四最小守卫：per-turn retry 计数 + 跨事件预算上限
+// TODO(agent-pipeline): 真正的重试预算应在 agent-pipeline 层实现（含全局预算、退避策略等）
+const MAX_RETRY_PER_TURN = 5;
+const retryCounts = new Map<string, number>();
+
 export function retryTurn(turnId: string): void {
   const turn = agentStore.turns.get(turnId);
   if (!turn || !agentStore.sessionId) return;
   // 操作守卫：只读终态 no-op（否则会清空 undone 节点的 blocks 并误发送）
   if (!canApplyOperation('retry', viewToNodeStatus(turn.status))) return;
+
+  // 重试预算守卫：超过上限时 no-op + warn（防连续触发无累计上限）
+  const count = (retryCounts.get(turnId) ?? 0) + 1;
+  if (count > MAX_RETRY_PER_TURN) {
+    agentStore.retryWarning = `已达重试上限 (${MAX_RETRY_PER_TURN})`;
+    agentStore.version++;
+    return;
+  }
+  retryCounts.set(turnId, count);
 
   // 重置 turn 以展示重新生成的流式内容（旧回复 server 会标记 undone）
   turn.blocks = [];
@@ -394,6 +411,7 @@ export async function switchConversation(treeId: string): Promise<void> {
   resetLastAppliedRev(); // 重置 rev 基线（新树从 0 计）
   clearNodeDataCache();
   clearAllLiveStreams(); // 清旧树在途流缓冲，防残留至 TTL
+  retryCounts.clear(); // 会话切换时重置重试计数
   agentStore.sessionId = null;
   agentStore.turns.clear();
   agentStore.ui.clear();
@@ -415,6 +433,7 @@ export function newConversation(): void {
   resetLastAppliedRev();
   clearNodeDataCache();
   clearAllLiveStreams(); // 清旧树在途流缓冲，防残留至 TTL
+  retryCounts.clear(); // 新对话时重置重试计数
   agentStore.sessionId = null;
   agentStore.treeId = null;
   agentStore.turns.clear();
@@ -473,6 +492,7 @@ export function cleanupAgentStore(): void {
   presenceSub?.unsubscribe();
   presenceSub = null;
   pendingPresence = {};
+  retryCounts.clear(); // 全局清理时重置重试计数
   agentStore.pendingPermissions.clear(); // 断连后不再收到 permission.expired，防孤儿
   stopLiveStreamGc();
   disconnectAgentWs();

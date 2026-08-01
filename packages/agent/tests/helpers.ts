@@ -10,7 +10,7 @@
  *   sourceMessageId 为 `msg-<n>`
  * - forkSession 返回 `<sessionId>-fork<k>`（k 按 fork 次数递增）
  */
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager, ConversationController } from '../src/index.js';
@@ -162,12 +162,33 @@ export interface TestContext {
   state: MockState;
   calls: MockCalls;
   controller: ConversationController;
+  cleanup: () => Promise<void>;
+}
+
+/**
+ * 创建隔离测试环境：mkdtemp + 设置 LATTICE_HOME。
+ * 返回的 baseDir = $tmpDir/.cache/sessions（SessionManager 实际写入路径）。
+ * 清理函数恢复 LATTICE_HOME 并删除 tmpdir。
+ */
+export async function setupTestEnv(): Promise<{ baseDir: string; cleanup: () => Promise<void> }> {
+  const tmpDir = await mkdtemp(join(tmpdir(), 'lattice-test-'));
+  const prev = process.env.LATTICE_HOME;
+  process.env.LATTICE_HOME = tmpDir;
+  const baseDir = join(tmpDir, '.cache', 'sessions');
+  return {
+    baseDir,
+    cleanup: async () => {
+      if (prev === undefined) delete process.env.LATTICE_HOME;
+      else process.env.LATTICE_HOME = prev;
+      await rm(tmpDir, { recursive: true, force: true });
+    },
+  };
 }
 
 /** mkdtemp 隔离环境 + mock source + controller（目录清理交由 OS 临时目录策略） */
 export async function setup(emitDone = true): Promise<TestContext> {
-  const baseDir = await mkdtemp(join(tmpdir(), 'lattice-agent-test-'));
-  const sm = new SessionManager({ baseDir });
+  const { baseDir, cleanup } = await setupTestEnv();
+  const sm = new SessionManager();
   const state: MockState = { emitDone, hangUntilAbort: false, hangBeforeYield: false };
   const calls: MockCalls = { prompts: [], forks: [], aborts: [] };
   const source = makeMockSource(state, calls);
@@ -185,7 +206,7 @@ export async function setup(emitDone = true): Promise<TestContext> {
     listLocalSkills: () => [],
   });
   const controller = new ConversationController({ session: sm, sources, profiles });
-  return { baseDir, sm, state, calls, controller };
+  return { baseDir, sm, state, calls, controller, cleanup };
 }
 
 /** mock 源的握手产物（declared 能力即 verified，无降准） */

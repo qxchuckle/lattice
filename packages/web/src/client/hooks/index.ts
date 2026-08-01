@@ -1,4 +1,5 @@
 export { useGlobalGraph, useTaskGraph, useProjectGraph, useSpecGraph } from './graph';
+export { useDetailPanel } from './useDetailPanel';
 export {
   useEntityDetail,
   useProjectGitStatus,

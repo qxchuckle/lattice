@@ -4,11 +4,19 @@
  * 由 scripts/verify-tree-ops.ts + scripts/verify-retry-flow.ts 迁移。
  * 覆盖：updateNode 持久化、loadTree 恢复、后代收集、retry 复用 user 节点的 JSONL 行数不变量。
  */
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { describe, it, expect, afterEach } from 'vitest';
+import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SessionManager } from '../src/index.js';
+
+const dirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+  dirs.length = 0;
+  delete process.env.LATTICE_HOME;
+});
 
 function getDescendantIds(sm: SessionManager, treeId: string, nodeId: string): string[] {
   const nodes = sm.getNodes(treeId);
@@ -34,14 +42,17 @@ async function countNodeLines(baseDir: string, treeId: string, nodeId: string): 
 }
 
 async function newBase() {
-  return mkdtemp(join(tmpdir(), 'lattice-tree-ops-'));
+  const tmpDir = await mkdtemp(join(tmpdir(), 'lattice-tree-ops-'));
+  dirs.push(tmpDir);
+  process.env.LATTICE_HOME = tmpDir;
+  return join(tmpDir, '.cache', 'sessions');
 }
 
 describe('SessionManager 树操作', () => {
   it('后代收集 / updateNode 持久化 / 重载恢复 / active 选择 / hidden', async () => {
     const baseDir = await newBase();
     // ── 构建树：user1 → asst1 → user2 → asst2 ──
-    const sm = new SessionManager({ baseDir });
+    const sm = new SessionManager();
     const tree = await sm.createTree({ title: 'test' });
     const tid = tree.id;
 
@@ -84,7 +95,7 @@ describe('SessionManager 树操作', () => {
     // updateNode 持久化 status → 新 SessionManager 从磁盘重载验证
     await sm.updateNode(tid, 'user2', { status: 'undone' });
     await sm.updateNode(tid, 'asst2', { status: 'undone' });
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     expect(await sm2.loadTree(tid), '重载树成功').toBeTruthy();
     expect(sm2.getNode(tid, 'user2')?.status, '重载后 user2 undone 持久化').toBe('undone');
     expect(sm2.getNode(tid, 'asst2')?.status, '重载后 asst2 undone 持久化').toBe('undone');
@@ -98,7 +109,7 @@ describe('SessionManager 树操作', () => {
       ],
       metadata: { sourceMessageId: 'src-msg-1' },
     });
-    const sm3 = new SessionManager({ baseDir });
+    const sm3 = new SessionManager();
     await sm3.loadTree(tid);
     expect(sm3.getNode(tid, 'asst1')?.content.length, '续写内容已持久化').toBe(2);
 
@@ -118,7 +129,7 @@ describe('SessionManager 树操作', () => {
 
     // hidden 持久化
     await sm3.updateNode(tid, 'asst2-new', { status: 'hidden' });
-    const sm4 = new SessionManager({ baseDir });
+    const sm4 = new SessionManager();
     await sm4.loadTree(tid);
     expect(sm4.getNode(tid, 'asst2-new')?.status, 'hidden 状态已持久化').toBe('hidden');
   });
@@ -127,7 +138,7 @@ describe('SessionManager 树操作', () => {
 describe('retry JSONL 不变量', () => {
   it('retry 复用原 user 节点（不重复写入），只新增 assistant 子节点', async () => {
     const baseDir = await newBase();
-    const sm = new SessionManager({ baseDir });
+    const sm = new SessionManager();
     const tree = await sm.createTree({ title: 'retry test' });
     const tid = tree.id;
 
@@ -161,7 +172,7 @@ describe('retry JSONL 不变量', () => {
     expect(await countNodeLines(baseDir, tid, 'user1'), 'user1 只有 1 行（复用原节点）').toBe(1);
 
     // retry 后树结构：user1 有两个 assistant 子节点
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     await sm2.loadTree(tid);
     const assistantChildren = sm2
       .getNodes(tid)

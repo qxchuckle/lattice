@@ -237,7 +237,7 @@ describe('场景 9: 持久化重载一致性（新 SessionManager 从磁盘恢�
     await controller.undo('s9', 'p2', noopHooks);
 
     // 全新 SessionManager 从磁盘重载
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     const reloaded = await sm2.loadTree(tid);
     expect(reloaded, '重载树成功').toBeTruthy();
     expect(sm2.getNode(tid, 'p2')!.status, '重载后 undone 状态持久化').toBe('undone');
@@ -276,7 +276,7 @@ describe('源内部压缩透传：compaction/notice 事件 → 内容块落盘 �
     expect(calls.prompts.at(-1)!.sessionId, '压缩后仍 resume 原 session').toBe('sess-1');
 
     // 重载：压缩标记持久化（live/reload 一致）
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     await sm2.loadTree(tid);
     const reloaded = sm2.getNode(tid, asst.id)!;
     expect(
@@ -376,7 +376,7 @@ describe('场景 11: 删除对话树（deleteTree 统一清理）', () => {
     expect(await sm.loadTree(tid), '删除前树存在').toBeTruthy();
 
     await sm.deleteTree(tid);
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     expect(await sm2.loadTree(tid), 'deleteTree 后磁盘树已删除').toBeUndefined();
     expect(sm.getTree(tid), 'deleteTree 后内存缓存已清除').toBeUndefined();
   });
@@ -437,7 +437,7 @@ describe('场景 13: 首 token 前中止（空内容也持久化 interrupted 节
     expect(asst!.status).toBe('interrupted');
 
     // reload 一致性：重载后仍为 interrupted（不会误判为 done 空节点）
-    const sm2 = new SessionManager({ baseDir });
+    const sm2 = new SessionManager();
     await sm2.loadTree(tid);
     const reloaded = sm2.getNodes(tid).find((n) => n.role === 'assistant' && n.parentId === 'z1');
     expect(reloaded?.status, 'reload 后 interrupted 状态持久化').toBe('interrupted');

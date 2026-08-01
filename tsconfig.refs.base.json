@@ -20,6 +20,8 @@
       "@qcqx/lattice-agent-pipeline": ["./packages/agent-pipeline/src/index.ts"],
       "@qcqx/lattice-agent": ["./packages/agent/src/index.ts"],
       "@qcqx/lattice-agent/*": ["./packages/agent/src/*"],
+      "@qcqx/lattice-foundation": ["./packages/foundation/src/index.ts"],
+      "@qcqx/lattice-foundation/*": ["./packages/foundation/src/*"],
       "@qcqx/lattice-core": ["./packages/core/src/index.ts"],
       "@qcqx/lattice-core/*": ["./packages/core/src/*"],
       "@qcqx/lattice-web": ["./packages/web/src/server/index.ts"]

@@ -1,4 +1,4 @@
-// 类型定义
+// 类型定义（re-export from @qcqx/lattice-foundation）
 export type {
   ProjectMeta,
   TaskMeta,
@@ -41,14 +41,15 @@ export type {
   AncestorProjectInfo,
   FastStartLogEntry,
   FastStartLogFile,
-} from './types';
+} from '@qcqx/lattice-foundation';
 
-// 路径与文件工具
+// 路径与文件工具（re-export from @qcqx/lattice-foundation）
 export {
   getLatticeRoot,
   getCacheDir,
   getDbPath,
   getSessionsCacheDir,
+  getSessionsIndexPath,
   getAgentCommandsDir,
   getConfigDir,
   getGlobalConfigPath,
@@ -87,9 +88,9 @@ export {
   listUserDirs,
   findUpwards,
   findAllUpwards,
-} from './paths';
+} from '@qcqx/lattice-foundation';
 
-// 配置
+// 配置（re-export from @qcqx/lattice-foundation）
 export {
   getDefaultGlobalConfig,
   getDefaultLocalConfig,
@@ -107,7 +108,7 @@ export {
   writeWebAuth,
   clearWebAuth,
   isAuthEnabled,
-} from './config';
+} from '@qcqx/lattice-foundation';
 
 export {
   getByPath,
@@ -116,7 +117,7 @@ export {
   deepEqual,
   diffConfig,
   isPlainObject,
-} from './config/utils';
+} from '@qcqx/lattice-foundation';
 
 // 数据库
 export {
@@ -472,7 +473,7 @@ export {
 export type { GitOpResult, LatticeGitStatus, GitRemoteInfo } from './maintenance/git-ops';
 
 // 工具
-export { nowISO, todayDateForId } from './utils/time';
+export { nowISO, todayDateForId } from '@qcqx/lattice-foundation';
 
 // fast-start 日志
 export {

@@ -12,18 +12,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionIndexManager, type SessionIndexEntry } from '../src/session/session-index.js';
 
+let tmpDir: string;
 let baseDir: string;
 let indexPath: string;
 
 beforeEach(async () => {
-  baseDir = await mkdtemp(join(tmpdir(), 'lattice-idx-'));
+  tmpDir = await mkdtemp(join(tmpdir(), 'lattice-idx-'));
+  process.env.LATTICE_HOME = tmpDir;
+  baseDir = join(tmpDir, '.cache', 'sessions');
   indexPath = join(baseDir, 'index.json');
 });
 afterEach(async () => {
-  await rm(baseDir, { recursive: true, force: true });
+  delete process.env.LATTICE_HOME;
+  await rm(tmpDir, { recursive: true, force: true });
 });
 
-const mgrOf = () => new SessionIndexManager({ indexPath, baseDir });
+const mgrOf = () => new SessionIndexManager();
 
 const entry = (treeId: string, over: Partial<SessionIndexEntry> = {}): SessionIndexEntry => ({
   treeId,
@@ -119,6 +123,7 @@ describe('索引 CRUD', () => {
   });
 
   it('索引文件损坏 → 视为空索引，不阻断后续写入', async () => {
+    await mkdir(baseDir, { recursive: true });
     await writeFile(indexPath, '{ 坏的 json', 'utf-8');
     const m = mgrOf();
     expect((await m.load()).sessions).toEqual([]);
@@ -169,10 +174,9 @@ describe('rebuild（索引损坏兜底）', () => {
   });
 
   it('baseDir 不存在 → 空索引（首次启动路径）', async () => {
-    const m = new SessionIndexManager({
-      indexPath: join(baseDir, 'x', 'index.json'),
-      baseDir: join(baseDir, 'nope'),
-    });
+    const freshDir = join(tmpDir, 'nope');
+    process.env.LATTICE_HOME = freshDir;
+    const m = new SessionIndexManager();
     expect((await m.rebuild()).sessions).toEqual([]);
   });
 });

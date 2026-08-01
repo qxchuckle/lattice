@@ -25,6 +25,8 @@ import {
   fetchModelsCached,
   MIN_NODE_WIDTH,
   MIN_NODE_HEIGHT,
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
   type TurnNode,
   type NodeUiState,
 } from './agentStore';
@@ -38,7 +40,7 @@ interface NodeData {
 }
 
 /** 稳定空 ui 兑底（useSnapshot 不可条件调用） */
-const EMPTY_UI = proxy<NodeUiState>({ width: 340, height: 260 });
+const EMPTY_UI = proxy<NodeUiState>({ width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT });
 
 function ConversationNodeInner({ data }: NodeProps) {
   const { turnId } = data as NodeData;

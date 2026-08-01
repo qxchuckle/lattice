@@ -15,6 +15,9 @@ import { groupToolBlocks } from '../turnSummary';
 import { Collapsible } from './Collapsible';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolGroupBlock } from './ToolBlock';
+import { BLOCK_RENDERERS, registerBlockRenderer, sealBuiltinTypes } from './registry';
+import { useBatchedBlocks } from './useBatchedBlocks';
+import { BLOCK_STYLE } from '../../../constants/layout';
 
 export { FileChangeSummary } from './FileChangeSummary';
 
@@ -25,11 +28,9 @@ function TextBlock({ text, streaming }: { text: string; streaming?: boolean }) {
     <div
       className='agent-md-block'
       style={{
-        fontSize: 12,
-        lineHeight: 1.5,
+        ...BLOCK_STYLE.text,
         color: 'var(--text)',
         wordBreak: 'break-word',
-        margin: '4px 0',
       }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
@@ -68,11 +69,7 @@ function CodeBlockWithCopy({ children }: { children?: React.ReactNode }) {
         onClick={handleCopy}
         style={{
           position: 'absolute',
-          top: 4,
-          right: 4,
-          padding: '2px 6px',
-          fontSize: 9,
-          borderRadius: 3,
+          ...BLOCK_STYLE.copyButton,
           border: '1px solid var(--border)',
           background: 'var(--bg-secondary)',
           color: copied ? '#52c41a' : 'var(--text-secondary)',
@@ -83,12 +80,9 @@ function CodeBlockWithCopy({ children }: { children?: React.ReactNode }) {
       </button>
       <pre
         style={{
-          margin: 0,
-          padding: '8px 10px',
+          ...BLOCK_STYLE.codeBlockPre,
           background: 'var(--bg-tertiary)',
-          borderRadius: 6,
           overflow: 'auto',
-          fontSize: 11,
         }}>
         {children}
       </pre>
@@ -118,7 +112,7 @@ function FileEditBlock({
   return (
     <Collapsible label={label} icon='📝'>
       {diff ? (
-        <pre style={{ margin: 0, fontSize: 10, overflow: 'auto', maxHeight: 150, lineHeight: 1.4 }}>
+        <pre style={{ ...BLOCK_STYLE.diffPre, overflow: 'auto' }}>
           {diff.split('\n').map((line, i) => (
             <div
               key={i}
@@ -146,11 +140,9 @@ function TerminalBlock({ command, output }: { command: string; output?: string }
       {output && (
         <pre
           style={{
-            margin: 0,
-            fontSize: 10,
+            ...BLOCK_STYLE.terminalPre,
             color: 'var(--text-secondary)',
             overflow: 'auto',
-            maxHeight: 120,
             fontFamily: 'monospace',
           }}>
           {output}
@@ -164,12 +156,9 @@ function ErrorBlock({ message, suggestion }: { message: string; suggestion?: str
   return (
     <div
       style={{
-        margin: '4px 0',
-        padding: '6px 8px',
-        borderRadius: 6,
+        ...BLOCK_STYLE.errorBox,
         borderLeft: '3px solid #ff4d4f',
         background: 'rgba(255,77,79,0.06)',
-        fontSize: 11,
       }}>
       <div style={{ color: '#ff4d4f' }}>{message}</div>
       {suggestion && (
@@ -195,7 +184,7 @@ function CompactionBlock({
     preTokens ? ` · 压缩前 ${Math.round(preTokens / 1000)}k tokens` : ''
   }`;
   return (
-    <div style={{ margin: '6px 0', fontSize: 10 }}>
+    <div style={{ ...BLOCK_STYLE.compactionBox }}>
       <div
         style={{
           display: 'flex',
@@ -211,8 +200,7 @@ function CompactionBlock({
         <Collapsible label='压缩摘要' icon='📄' status='done'>
           <pre
             style={{
-              margin: 0,
-              fontSize: 10,
+              ...BLOCK_STYLE.diffPre,
               color: 'var(--text-secondary)',
               whiteSpace: 'pre-wrap',
               maxHeight: 160,
@@ -232,12 +220,9 @@ function NoticeBlock({ level, text }: { level: 'info' | 'warning'; text: string 
   return (
     <div
       style={{
-        margin: '4px 0',
-        padding: '4px 8px',
-        borderRadius: 6,
+        ...BLOCK_STYLE.noticeBox,
         borderLeft: `3px solid ${color}`,
         background: level === 'warning' ? 'rgba(250,173,20,0.06)' : 'var(--bg-tertiary)',
-        fontSize: 11,
         color,
       }}>
       {level === 'warning' ? '⚠ ' : ''}
@@ -246,65 +231,86 @@ function NoticeBlock({ level, text }: { level: 'info' | 'warning'; text: string 
   );
 }
 
-function ContentBlockRenderer({ block, streaming }: { block: NodeContent; streaming?: boolean }) {
-  switch (block.type) {
-    case 'text':
-      return <TextBlock text={block.text} streaming={streaming} />;
-    case 'code':
-      return (
-        <pre
-          style={{
-            fontSize: 10,
-            padding: 6,
-            background: 'var(--bg-tertiary)',
-            borderRadius: 4,
-            overflow: 'auto',
-          }}>
-          {block.text}
-        </pre>
-      );
-    case 'thinking':
-      return (
-        <ThinkingBlock
-          text={block.text}
-          startedAt={block.startedAt}
-          endedAt={block.endedAt}
-          active={streaming}
-        />
-      );
-    case 'diff':
-      return <FileEditBlock path={block.path} diff={block.text} kind={block.kind} />;
-    case 'image':
-      return (
-        <img
-          src={`data:${block.mimeType};base64,${block.data}`}
-          alt='image'
-          style={{ maxWidth: '100%', borderRadius: 4, margin: '4px 0' }}
-        />
-      );
-    case 'terminal':
-      return <TerminalBlock command={block.command} output={block.output} />;
-    case 'error':
-      return <ErrorBlock message={block.message} suggestion={block.suggestion} />;
-    case 'compaction':
-      return (
-        <CompactionBlock
-          trigger={block.trigger}
-          preTokens={block.preTokens}
-          summary={block.summary}
-        />
-      );
-    case 'notice':
-      return <NoticeBlock level={block.level} text={block.text} />;
-    case 'tool_call':
-    case 'tool_result':
-      // 已由 groupToolBlocks 配对为 tool-group 卡片（ContentRenderer 分支）；
-      // 此处仅处理孤儿块，无独立视觉（保持既有行为：不渲染）
-      return null;
-    default:
-      // exhaustiveness 兜底：NodeContent 新增块类型而本 switch 未补 → 编译报错
-      return assertNever(block);
+// ── 渲染器注册（替代旧 switch 分发） ──
+// 新增块类型只需 registerBlockRenderer 注册一项，无需改 ContentBlockRenderer。
+registerBlockRenderer('text', ({ block, streaming }) => (
+  <TextBlock text={(block as { text: string }).text} streaming={streaming} />
+));
+registerBlockRenderer('code', ({ block }) => {
+  const b = block as { text: string };
+  return (
+    <pre
+      style={{
+        ...BLOCK_STYLE.code,
+        background: 'var(--bg-tertiary)',
+        overflow: 'auto',
+      }}>
+      {b.text}
+    </pre>
+  );
+});
+registerBlockRenderer('thinking', ({ block, streaming }) => {
+  const b = block as { text: string; startedAt?: number; endedAt?: number };
+  return (
+    <ThinkingBlock text={b.text} startedAt={b.startedAt} endedAt={b.endedAt} active={streaming} />
+  );
+});
+registerBlockRenderer('diff', ({ block }) => {
+  const b = block as { path: string; text?: string; kind?: 'create' | 'edit' | 'delete' };
+  return <FileEditBlock path={b.path} diff={b.text} kind={b.kind} />;
+});
+registerBlockRenderer('image', ({ block }) => {
+  const b = block as { data: string; mimeType: string };
+  return (
+    <img
+      src={`data:${b.mimeType};base64,${b.data}`}
+      alt='image'
+      style={{ maxWidth: '100%', borderRadius: 4, margin: '4px 0' }}
+    />
+  );
+});
+registerBlockRenderer('terminal', ({ block }) => {
+  const b = block as { command: string; output?: string };
+  return <TerminalBlock command={b.command} output={b.output} />;
+});
+registerBlockRenderer('error', ({ block }) => {
+  const b = block as { message: string; suggestion?: string };
+  return <ErrorBlock message={b.message} suggestion={b.suggestion} />;
+});
+registerBlockRenderer('compaction', ({ block }) => {
+  const b = block as { trigger: 'auto' | 'manual'; preTokens?: number; summary?: string };
+  return <CompactionBlock trigger={b.trigger} preTokens={b.preTokens} summary={b.summary} />;
+});
+registerBlockRenderer('notice', ({ block }) => {
+  const b = block as { level: 'info' | 'warning'; text: string };
+  return <NoticeBlock level={b.level} text={b.text} />;
+});
+// tool_call / tool_result 已由 groupToolBlocks 配对为 tool-group 卡片（ContentRenderer 分支）；
+// 此处仅处理孤儿块，无独立视觉（保持既有行为：不渲染）
+registerBlockRenderer('tool_call', () => null);
+registerBlockRenderer('tool_result', () => null);
+
+// 封存内置类型：后续外部 registerBlockRenderer 不可覆盖以上内置渲染器
+sealBuiltinTypes();
+
+/**
+ * 内容块渲染器：查注册表渲染，未注册类型走 assertNever 兜底。
+ * 新增块类型只需在上方 registerBlockRenderer 注册一项。
+ */
+export function ContentBlockRenderer({
+  block,
+  streaming,
+}: {
+  block: NodeContent;
+  streaming?: boolean;
+}) {
+  const renderer = BLOCK_RENDERERS.get(block.type);
+  if (renderer) {
+    return renderer({ block, streaming });
   }
+  // exhaustiveness 兜底：注册表模式为动态扩展，失去 switch 的编译期穷举性检查；
+  // 此处仍用 assertNever 保持运行时兜底语义（未注册类型抛错，不静默丢弃）
+  return assertNever(block as never);
 }
 
 /**
@@ -320,10 +326,12 @@ export function ContentRenderer({
   streaming?: boolean;
 }) {
   const renderBlocks = groupToolBlocks(content);
+  // 批次四：100+ 块场景分批渲染，避免一次性挂载大量 DOM
+  const visibleBlocks = useBatchedBlocks(renderBlocks, streaming);
   return (
     <>
-      {renderBlocks.map((block, i) => {
-        const isLast = i === renderBlocks.length - 1;
+      {visibleBlocks.map((block, i) => {
+        const isLast = i === visibleBlocks.length - 1;
         if (block.type === 'tool-group') {
           // 稳定 key：配对后位置不随 result 到达而漂移，避免卡片重挂载丢状态
           return <ToolGroupBlock key={`tg-${block.call.toolId}`} group={block} />;
@@ -353,11 +361,9 @@ export function UsageFooter({ usage, model }: { usage?: TokenUsage; model?: stri
   return (
     <div
       style={{
-        fontSize: 9,
+        ...BLOCK_STYLE.usageFooter,
         color: 'var(--text-secondary)',
-        padding: '4px 0',
         borderTop: '1px solid var(--border)',
-        marginTop: 4,
       }}>
       {parts.join(' · ')}
     </div>

@@ -19,6 +19,9 @@ vi.mock('./connection', () => ({
   setStreamingTarget: vi.fn(),
   unsubscribeTree: vi.fn(),
   waitForSessionReady: vi.fn(() => new Promise<string>(() => {})),
+  // 批次四：useConnectionState re-export 所需的接缝
+  getConnectionState: vi.fn(() => ({ type: 'disconnected' as const })),
+  connectionState$: { subscribe: () => ({ unsubscribe: () => {} }) },
 }));
 
 import type {
@@ -288,6 +291,7 @@ describe('🔴 断连/切换清理（pendingPermissions + liveStreams）', () =>
     agentStore.activeSourceId = 'qoder';
     agentStore.activeModelId = 'auto';
     agentStore.pendingPermissions.clear();
+    agentStore.retryWarning = '';
     vi.clearAllMocks();
     // cleanupAgentStore 会停 GC，需在每轮测试前确保 GC 运行
     startLiveStreamGc();
@@ -333,5 +337,82 @@ describe('🔴 断连/切换清理（pendingPermissions + liveStreams）', () =>
     newConversation();
 
     expect(__hasLiveStreamForTest('rid-nc-1')).toBe(false);
+  });
+});
+
+// ── retryCounts 生命周期清理（批次四必修项 2）──
+
+describe('🔴 retryCounts 生命周期清理', () => {
+  beforeEach(() => {
+    agentStore.turns.clear();
+    agentStore.ui.clear();
+    agentStore.turnCaps.clear();
+    agentStore.sessionId = 'sess-1';
+    agentStore.treeId = 'tree-1';
+    agentStore.sources = [src('qoder', true)];
+    agentStore.activeSourceId = 'qoder';
+    agentStore.activeModelId = 'auto';
+    agentStore.retryWarning = '';
+    vi.clearAllMocks();
+  });
+
+  it('retryTurn 6 次触发 retryWarning（UI 警告）', () => {
+    putTurn(makeTurn('t-retry', 'done'));
+    // 前 5 次重试合法
+    for (let i = 0; i < 5; i++) {
+      retryTurn('t-retry');
+      // 每次重试后拉回 done 以允许下次重试（retry 会改为 streaming）
+      agentStore.turns.get('t-retry')!.status = 'done';
+    }
+    expect(agentStore.retryWarning).toBe('');
+    // 第 6 次超限
+    retryTurn('t-retry');
+    expect(agentStore.retryWarning).toMatch(/已达重试上限/);
+  });
+
+  it('switchConversation 后 retryCounts 清空（重试计数重置）', () => {
+    putTurn(makeTurn('t-retry2', 'done'));
+    // 5 次重试消耗预算
+    for (let i = 0; i < 5; i++) {
+      retryTurn('t-retry2');
+      agentStore.turns.get('t-retry2')!.status = 'done';
+    }
+    // 切换会话重置计数
+    switchConversation('tree-2');
+
+    // 新会话同 ID 重试应合法（retryCounts 已清空）
+    agentStore.sessionId = 'sess-1'; // 恢复 session 以允许 retryTurn 执行
+    putTurn(makeTurn('t-retry2', 'done'));
+    retryTurn('t-retry2');
+    // retryWarning 不应触发（因为计数已重置）
+    expect(agentStore.retryWarning).toBe('');
+  });
+
+  it('newConversation 后 retryCounts 清空', () => {
+    putTurn(makeTurn('t-retry3', 'done'));
+    for (let i = 0; i < 5; i++) {
+      retryTurn('t-retry3');
+      agentStore.turns.get('t-retry3')!.status = 'done';
+    }
+    newConversation();
+
+    agentStore.sessionId = 'sess-1'; // 恢复 session
+    putTurn(makeTurn('t-retry3', 'done'));
+    retryTurn('t-retry3');
+    expect(agentStore.retryWarning).toBe('');
+  });
+
+  it('cleanupAgentStore 后 retryCounts 清空', () => {
+    putTurn(makeTurn('t-retry4', 'done'));
+    for (let i = 0; i < 5; i++) {
+      retryTurn('t-retry4');
+      agentStore.turns.get('t-retry4')!.status = 'done';
+    }
+    cleanupAgentStore();
+
+    agentStore.sessionId = 'sess-1';
+    putTurn(makeTurn('t-retry4', 'done'));
+    retryTurn('t-retry4');
+    expect(agentStore.retryWarning).toBe('');
   });
 });

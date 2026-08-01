@@ -17,6 +17,8 @@ import {
   setModel,
   loadModels,
   computeSourceOptions,
+  useSources,
+  useModels,
 } from './agentStore';
 import { ModelTuningModal, fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip, MenuRow, chipStyle } from './ChatInputBar';
@@ -24,14 +26,19 @@ import { ChatInputBox, ModelMenuChip, MenuRow, chipStyle } from './ChatInputBar'
 function RootInputInner() {
   const snap = useSnapshot(agentStore);
   const [focused, setFocused] = useState(false);
-  // 菜单受控：点项内齿轮图标（stopPropagation 不触发选中）时也能主动收起菜单
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
 
+  // 服务器数据走 React Query（批次四重构：sources/models 归 Query 单一真相）
+  const sourcesQuery = useSources();
+  const modelsQuery = useModels(snap.activeSourceId || undefined);
+  const sources = sourcesQuery.data ?? [];
+  const models = modelsQuery.data ?? [];
+
   // 选项完全由 server 下发的源/模型数据驱动（无硬编码 fallback，未加载时禁用）
-  const activeSource = snap.sources.find((s) => s.id === snap.activeSourceId);
+  const activeSource = sources.find((s) => s.id === snap.activeSourceId);
 
   // 当前生效参数（选择值回退 tuning 默认值）：仅模型有 tuning 时展示参数 chip
-  const activeModel = snap.models.find((m) => m.id === snap.activeModelId);
+  const activeModel = models.find((m) => m.id === snap.activeModelId);
   const tuning = activeModel?.tuning;
   const effectiveCw = snap.activeContextWindow || tuning?.contextWindow?.default || 0;
   const effectiveThinking =
@@ -44,7 +51,7 @@ function RootInputInner() {
 
   // 菜单项完全消费 computeSourceOptions 投影（单一真相）：禁选/原因/配置入口均由投影驱动，
   // 不在组件内重推导。不可用源：禁选（antd disabled 拦截点击）+ 错误图标 + Tooltip 展示原因
-  const sourceMenuItems = computeSourceOptions(snap.sources).map((opt) => ({
+  const sourceMenuItems = computeSourceOptions(sources).map((opt) => ({
     key: opt.id,
     disabled: opt.disabled,
     label: (
@@ -121,7 +128,7 @@ function RootInputInner() {
                 trigger={['click']}
                 open={sourceMenuOpen}
                 onOpenChange={setSourceMenuOpen}
-                disabled={snap.sources.length === 0}>
+                disabled={sources.length === 0}>
                 <button
                   type='button'
                   style={chipStyle}
@@ -132,7 +139,7 @@ function RootInputInner() {
               </Dropdown>
 
               <ModelMenuChip
-                models={snap.models}
+                models={models}
                 value={snap.activeModelId}
                 onChange={setModel}
                 onEdit={(id) => {

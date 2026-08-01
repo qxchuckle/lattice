@@ -26,13 +26,17 @@ const LEAN: Partial<SourceCapabilities> = {
   },
 };
 
+let tmpDir: string;
 let baseDir: string;
 
 beforeEach(async () => {
-  baseDir = await mkdtemp(join(tmpdir(), 'lattice-factory-'));
+  tmpDir = await mkdtemp(join(tmpdir(), 'lattice-factory-'));
+  process.env.LATTICE_HOME = tmpDir;
+  baseDir = join(tmpDir, '.cache', 'sessions');
 });
 afterEach(async () => {
-  await rm(baseDir, { recursive: true, force: true });
+  delete process.env.LATTICE_HOME;
+  await rm(tmpDir, { recursive: true, force: true });
 });
 
 async function setupAgent(capabilities?: Partial<SourceCapabilities>) {
@@ -52,7 +56,6 @@ async function setupAgent(capabilities?: Partial<SourceCapabilities>) {
     dispose: async () => {},
   } as unknown as AgentSourceInstance;
   const agent = createLatticeAgent({
-    storage: { baseDir, indexPath: join(baseDir, 'index.json') },
     sources,
   });
   return agent;

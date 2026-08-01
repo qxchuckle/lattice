@@ -32,6 +32,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@qcqx/lattice-foundation": "workspace:*",
     "@huggingface/transformers": "^3.4.1",
     "better-sqlite3": "^11.9.1",
     "glob": "^13.0.6",

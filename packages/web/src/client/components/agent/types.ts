@@ -1,7 +1,16 @@
 /**
  * Agent 模块类型定义 + 常量
+ *
+ * 布局常量（DEFAULT_NODE_WIDTH 等）从 constants/layout.ts 集中管理，
+ * 此处 re-export 保持向后兼容（外部消费方从 './types' 或 './agentStore' 导入均可）。
  */
 import type { TokenUsage, NodeContent, ViewStatus } from '@qcqx/lattice-agent-protocol';
+import {
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
+  MIN_NODE_WIDTH,
+  MIN_NODE_HEIGHT,
+} from '../../constants/layout';
 
 // ── 画布节点模型（一轮对话 = 一个节点） ──
 // blocks 直接用协议 NodeContent（与 server 持久化/流式转换同一类型，无平行块模型）
@@ -41,8 +50,8 @@ export interface ConversationEntry {
 
 // ── 常量 ──
 
-export const DEFAULT_NODE_WIDTH = 340;
-export const DEFAULT_NODE_HEIGHT = 260;
-export const MIN_NODE_WIDTH = 240;
-export const MIN_NODE_HEIGHT = 140;
+/** Agent 节点默认宽度（值来自 constants/layout.ts） */
+export { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT, MIN_NODE_WIDTH, MIN_NODE_HEIGHT };
+
+/** 根输入节点 ID（纯 UI 标识，不属布局 token） */
 export const ROOT_INPUT_ID = '__root_input__';

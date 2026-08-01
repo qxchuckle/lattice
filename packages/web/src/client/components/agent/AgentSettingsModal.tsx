@@ -11,6 +11,7 @@ import type { ModelListItem } from '@qcqx/lattice-agent-protocol';
 import { getAdapter } from '../../adapters';
 import { agentStore, computeSourceOptions, pickActiveSourceId } from './store';
 import { fetchModels, loadAgentConfig, loadModels, clearModelListCache } from './api';
+import { useSources } from './hooks';
 
 const labelStyle: React.CSSProperties = {
   fontSize: 12,
@@ -27,6 +28,10 @@ const hintStyle: React.CSSProperties = {
 export function AgentSettingsModal() {
   const snap = useSnapshot(agentStore);
   const { message } = App.useApp();
+
+  // 服务器数据走 React Query（批次四重构：sources 归 Query 单一真相）
+  const sourcesQuery = useSources();
+  const sources = sourcesQuery.data ?? [];
 
   const [defaultSource, setDefaultSource] = useState<string | undefined>();
   const [defaultModel, setDefaultModel] = useState<string | undefined>();
@@ -123,7 +128,7 @@ export function AgentSettingsModal() {
     [persist, defaultSource],
   );
 
-  const viewSource = snap.sources.find((s) => s.id === viewSourceId);
+  const viewSource = sources.find((s) => s.id === viewSourceId);
   const supportsCustom = viewSource ? viewSource.modelPolicy !== 'catalog' : false;
 
   const refreshAfterCustomChange = useCallback(async (sourceId: string) => {
@@ -172,14 +177,14 @@ export function AgentSettingsModal() {
   // 选项完全消费 computeSourceOptions 投影（单一真相）：不可用源禁选，原因统一用
   // 图标 + 悬浮 Tooltip 展示（与 RootInputNode 源菜单一致，避免内联文字被下拉宽度截断）；
   // modelPolicy 后缀为展示信息，非可用性推导
-  const sourceOptions = computeSourceOptions(snap.sources).map((opt) => ({
+  const sourceOptions = computeSourceOptions(sources).map((opt) => ({
     value: opt.id,
     disabled: opt.disabled,
     label: (
       <Tooltip title={opt.disabledReason} placement='right'>
         {/* Tooltip 包整行（同 RootInputNode）：禁用项上 antd 仍渲染 label，hover 即可见完整原因 */}
         <span style={{ display: 'block' }}>
-          {opt.label} ({snap.sources.find((s) => s.id === opt.id)?.modelPolicy})
+          {opt.label} ({sources.find((s) => s.id === opt.id)?.modelPolicy})
           {opt.disabled && (
             <ExclamationCircleOutlined style={{ fontSize: 12, color: '#ff4d4f', marginLeft: 6 }} />
           )}

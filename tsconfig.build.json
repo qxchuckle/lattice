@@ -5,6 +5,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/foundation/tsconfig.build.json"
+    },
+    {
       "path": "packages/agent-protocol/tsconfig.build.json"
     },
     {

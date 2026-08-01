@@ -102,9 +102,9 @@ importers:
       '@qcqx/lattice-agent-source':
         specifier: workspace:*
         version: link:../agent-source
-      '@qcqx/lattice-agent-source-builtins':
+      '@qcqx/lattice-foundation':
         specifier: workspace:*
-        version: link:../agent-source-builtins
+        version: link:../foundation
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -264,6 +264,9 @@ importers:
       '@huggingface/transformers':
         specifier: ^3.4.1
         version: 3.8.1
+      '@qcqx/lattice-foundation':
+        specifier: workspace:*
+        version: link:../foundation
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
@@ -346,6 +349,21 @@ importers:
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
+
+  packages/foundation:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.2
+        version: 22.19.17
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@5.9.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.0)(@types/node@22.19.17)(@vitest/coverage-v8@4.1.10)(jsdom@25.0.1)(vite@8.1.0(@types/node@22.19.17)(esbuild@0.28.1)(jiti@2.7.0)(less@4.6.7)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/web:
     dependencies:

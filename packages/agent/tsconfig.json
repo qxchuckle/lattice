@@ -2,13 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "outDir": "dist",
     "paths": {
       "@qcqx/lattice-agent-pipeline": ["../agent-pipeline/src/index.ts"],
       "@qcqx/lattice-agent-protocol": ["../agent-protocol/src/index.ts"],
       "@qcqx/lattice-agent-protocol/*": ["../agent-protocol/src/*"],
       "@qcqx/lattice-agent-source": ["../agent-source/src/index.ts"],
-      "@qcqx/lattice-agent-source/*": ["../agent-source/src/*"]
+      "@qcqx/lattice-agent-source/*": ["../agent-source/src/*"],
+      "@qcqx/lattice-foundation": ["../foundation/src/index.ts"],
+      "@qcqx/lattice-foundation/*": ["../foundation/src/*"]
     }
   },
   "include": ["src", "../../types", "tests"]

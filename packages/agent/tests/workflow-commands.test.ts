@@ -1,28 +1,32 @@
 /**
  * 资源扫描 + WorkflowEngine 本地命令测试（临时目录 fixtures，不触碰真实用户目录）
  */
-import { describe, it, expect, beforeAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventBus } from '../src/events/event-bus.js';
 import { WorkflowEngine } from '../src/workflow/workflow-engine.js';
 import { scanLocalCommands, stripFrontmatter } from '../src/workflow/command-scan.js';
 
-let userDir: string;
+let latticeHome: string;
+let cmdsDir: string;
 let projectCwd: string;
+let prevLatticeHome: string | undefined;
 
 beforeAll(async () => {
-  userDir = await mkdtemp(join(tmpdir(), 'lattice-cmds-'));
+  latticeHome = await mkdtemp(join(tmpdir(), 'lattice-cmds-'));
+  cmdsDir = join(latticeHome, 'agent', 'commands');
+  await mkdir(cmdsDir, { recursive: true });
   // 用户级：嵌套目录命令（name = 相对路径）
-  await mkdir(join(userDir, 'lattice', 'task'), { recursive: true });
+  await mkdir(join(cmdsDir, 'lattice', 'task'), { recursive: true });
   await writeFile(
-    join(userDir, 'lattice', 'task', 'start.md'),
+    join(cmdsDir, 'lattice', 'task', 'start.md'),
     '# /lattice/task/start\n\n开始一个任务的模板正文',
   );
   // frontmatter 覆盖 name/description/argument-hint
   await writeFile(
-    join(userDir, 'custom.md'),
+    join(cmdsDir, 'custom.md'),
     '---\ndescription: 自定义命令\nargument-hint: <id>\n---\n\n命令正文',
   );
 
@@ -30,11 +34,22 @@ beforeAll(async () => {
   await mkdir(join(projectCwd, '.lattice', 'commands'), { recursive: true });
   // 项目级同名覆盖用户级
   await writeFile(join(projectCwd, '.lattice', 'commands', 'custom.md'), '项目级正文');
+
+  // 设置 LATTICE_HOME 指向测试目录
+  prevLatticeHome = process.env.LATTICE_HOME;
+  process.env.LATTICE_HOME = latticeHome;
+});
+
+afterAll(async () => {
+  if (prevLatticeHome === undefined) delete process.env.LATTICE_HOME;
+  else process.env.LATTICE_HOME = prevLatticeHome;
+  await rm(latticeHome, { recursive: true, force: true });
+  await rm(projectCwd, { recursive: true, force: true });
 });
 
 describe('scanLocalCommands', () => {
   it('递归扫描：name = 相对路径去 .md，描述取首行标题', () => {
-    const cmds = scanLocalCommands(userDir, 'user');
+    const cmds = scanLocalCommands(cmdsDir, 'user');
     const start = cmds.find((c) => c.name === 'lattice/task/start');
     expect(start).toBeDefined();
     expect(start!.description).toContain('/lattice/task/start');
@@ -42,7 +57,7 @@ describe('scanLocalCommands', () => {
   });
 
   it('frontmatter 属性优先：description / argument-hint', () => {
-    const cmds = scanLocalCommands(userDir, 'user');
+    const cmds = scanLocalCommands(cmdsDir, 'user');
     const custom = cmds.find((c) => c.name === 'custom');
     expect(custom!.description).toBe('自定义命令');
     expect(custom!.argumentHint).toBe('<id>');
@@ -67,7 +82,6 @@ describe('WorkflowEngine 本地命令', () => {
   it('loadLocalCommands：用户级 + 项目级，同名项目级覆盖', async () => {
     const engine = new WorkflowEngine(new EventBus(), {
       automation: 'manual',
-      commandDirs: [userDir],
     });
     const count = engine.loadLocalCommands(projectCwd);
     expect(count).toBeGreaterThanOrEqual(2);

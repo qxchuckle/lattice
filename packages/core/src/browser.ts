@@ -20,7 +20,7 @@ export {
   type FingerprintDerived,
 } from './project/identity';
 
-// 类型（编译时擦除，无运行时影响）
+// 类型（编译时擦除，无运行时影响 — re-export from @qcqx/lattice-foundation）
 export type {
   ProjectMeta,
   TaskMeta,
@@ -59,6 +59,6 @@ export type {
   RelationsFile,
   TaskProjectRow,
   AncestorProjectInfo,
-} from './types';
+} from '@qcqx/lattice-foundation';
 
 export type { GitStatus } from './project/git-status';

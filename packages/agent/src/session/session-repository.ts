@@ -16,17 +16,13 @@ import type {
   ConversationTree,
   StreamingState,
 } from '@qcqx/lattice-agent-protocol';
+import { getSessionsCacheDir, getSessionsIndexPath } from '@qcqx/lattice-foundation';
 
 /**
  * 会话持久化结构版本（单调整数，结构不兼容变更时递增）。
  * v1：tree.json + nodes.jsonl + streaming/（本次重构后的基线）。
  */
 export const SESSION_SCHEMA_VERSION = 1;
-
-export interface SessionStorage {
-  baseDir: string; // ~/.lattice/.cache/sessions/
-  indexPath?: string; // 索引文件路径（可选，不传则不启用索引）
-}
 
 /** streaming 中间态文件内容（持久化正在生成的 assistant 回复） */
 /** 在途流式快照（跨端流转，单一真相在 protocol） */
@@ -39,7 +35,13 @@ export class SessionRepository {
    */
   private writeLocks = new Map<string, Promise<void>>();
 
-  constructor(private readonly storage: SessionStorage) {}
+  private readonly _baseDir: string;
+  private readonly _indexPath: string;
+
+  constructor() {
+    this._baseDir = getSessionsCacheDir();
+    this._indexPath = getSessionsIndexPath();
+  }
 
   private withWriteLock<T>(treeId: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.writeLocks.get(treeId) ?? Promise.resolve();
@@ -55,16 +57,16 @@ export class SessionRepository {
   }
 
   get baseDir(): string {
-    return this.storage.baseDir;
+    return this._baseDir;
   }
 
-  get indexPath(): string | undefined {
-    return this.storage.indexPath;
+  get indexPath(): string {
+    return this._indexPath;
   }
 
   private treeDir(treeId: string): string {
     this.assertSafeSegment(treeId, 'treeId');
-    return join(this.storage.baseDir, treeId);
+    return join(this._baseDir, treeId);
   }
 
   /**
@@ -197,18 +199,6 @@ export class SessionRepository {
       }
     }
     return results;
-  }
-
-  // ── 目录遍历 ──
-
-  /** 列出所有树目录名（无索引时兜底列举会话） */
-  async listTreeDirs(): Promise<string[]> {
-    try {
-      const dirs = await readdir(this.storage.baseDir);
-      return dirs.filter((d) => !d.startsWith('.') && d !== 'index.json');
-    } catch {
-      return [];
-    }
   }
 
   // ── 内部：文件尾部读取 ──
