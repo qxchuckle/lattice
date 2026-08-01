@@ -3,16 +3,18 @@
  * Lattice 统一发布脚本
  *
  * 用法:
- *   pnpm release patch          # 三个包同时 patch 升级
- *   pnpm release minor          # 三个包同时 minor 升级
- *   pnpm release major          # 三个包同时 major 升级
- *   pnpm release 1.2.3          # 三个包同时设为指定版本
- *   pnpm release patch --core   # 只发布 core
- *   pnpm release patch --cli    # 只发布 cli
- *   pnpm release patch --web    # 只发布 web
+ *   pnpm release patch          # 所有包同时 patch 升级
+ *   pnpm release minor          # 所有包同时 minor 升级
+ *   pnpm release major          # 所有包同时 major 升级
+ *   pnpm release 1.2.3          # 所有包同时设为指定版本
+ *   pnpm release patch --core   # 发布 core（foundation 自动先行构建+发布）
+ *   pnpm release patch --cli    # 发布 cli（foundation + core 自动先行）
+ *   pnpm release patch --web    # 发布 web（foundation + core 自动先行）
  *   pnpm release patch --core --web  # 发布 core 和 web
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
  *   pnpm release continue        # 发布失败后继续（跳过版本bump和构建，重试发布+git）
+ *
+ * 注：foundation 作为零依赖基础层，始终随其他包一起发布，无需 --foundation 标志。
  */
 
 import { execSync } from 'node:child_process';
@@ -24,6 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 
 const PACKAGES = {
+  foundation: resolve(root, 'packages/foundation/package.json'),
   core: resolve(root, 'packages/core/package.json'),
   cli: resolve(root, 'packages/cli/package.json'),
   web: resolve(root, 'packages/web/package.json'),
@@ -84,11 +87,15 @@ function run(cmd, opts = {}) {
 const targets = [];
 const hasFlag = onlyCore || onlyCli || onlyWeb;
 if (!hasFlag) {
-  targets.push('core', 'cli', 'web');
+  targets.push('foundation', 'core', 'cli', 'web');
 } else {
   if (onlyCore) targets.push('core');
   if (onlyCli) targets.push('cli');
   if (onlyWeb) targets.push('web');
+  // foundation 是 core/cli/web 的传递依赖，任一发布时自动包含
+  if (targets.some((t) => ['core', 'cli', 'web'].includes(t)) && !targets.includes('foundation')) {
+    targets.unshift('foundation');
+  }
 }
 
 // --- 升版本（continue 模式跳过） ---
@@ -117,13 +124,18 @@ if (isContinue) {
     }
   }
 
-  // --- 构建 ---
+  // --- 构建（拓扑序：foundation → core → cli/web） ---
   console.log('\n🔨 构建...');
+  // foundation 是 core/cli/web 的传递依赖，有任一在 targets 中就需要先构建 foundation
+  if (targets.some((t) => ['core', 'cli', 'web'].includes(t)) && !targets.includes('foundation')) {
+    run('pnpm run build:foundation');
+  }
+  if (targets.includes('foundation')) {
+    run('pnpm run build:foundation');
+  }
   // core 是 cli 和 web 的共同依赖，有任一在 targets 中就需要先构建 core
-  if (targets.includes('cli') || targets.includes('web')) {
-    if (!targets.includes('core')) {
-      run('pnpm run build:core');
-    }
+  if (targets.some((t) => ['cli', 'web'].includes(t)) && !targets.includes('core')) {
+    run('pnpm run build:core');
   }
   if (targets.includes('core')) {
     run('pnpm run build:core');

@@ -8,6 +8,7 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/client/*"],
+      "@qcqx/lattice-foundation": ["../foundation/src/index.ts"],
       "@qcqx/lattice-core": ["../core/src/index.ts"],
       "@qcqx/lattice-core/*": ["../core/src/*"],
       "@qcqx/lattice-agent": ["../agent/src/index.ts"],

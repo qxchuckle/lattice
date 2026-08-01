@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src/client'),
+      // 零依赖基础层：dev 直接走源码，免去改动后手动 build dist
+      '@qcqx/lattice-foundation': resolve(__dirname, '../foundation/src/index.ts'),
       // 指向 core 浏览器安全入口（只导出纯函数 + 类型，零 Node.js 依赖）
       '@qcqx/lattice-core': resolve(__dirname, '../core/src/browser.ts'),
       // 先于根出口 alias（前缀匹配）：/schemas 子出口直指源码，供 server 侧测试解析；

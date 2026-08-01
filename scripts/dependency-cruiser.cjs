@@ -82,7 +82,9 @@ module.exports = {
     {
       name: 'foundation-zero-npm-deps',
       severity: 'error',
-      comment: 'spec：foundation 不得引入任何三方 npm 依赖（仅允许 node:* 内置模块）',
+      comment:
+        'spec：foundation 不得引入任何三方 npm 依赖（仅允许 node:* 内置模块）。' +
+        '如需添加三方依赖（如 zod），请同时更新此规则白名单和 foundation package.json',
       from: { path: '^packages/foundation/src' },
       to: { path: 'node_modules' },
     },
