@@ -7,6 +7,7 @@ import type {
   PresenceState,
   NodeCapabilities,
   SourceOption,
+  QueuedMessage,
 } from '@qcqx/lattice-agent-protocol';
 import type { TurnNode, NodeUiState, ConversationEntry } from './types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './types';
@@ -121,6 +122,10 @@ export const agentStore = proxy({
   settingsOpen: false,
   /** 同树其他在场端（多端同步 presence） */
   peers: [] as PresenceState[],
+  /** 当前树的排队消息（server queue.state 广播驱动，只读镜像；streaming 期间用户提交的待发消息） */
+  queue: [] as QueuedMessage[],
+  /** 正在 dispatch 的排队消息 ID（server queue.state 广播驱动） */
+  queueDispatching: null as string | null,
   /** 待应答的权限请求（requestId → 详情），UI 据此渲染/撤销权限对话框 */
   pendingPermissions: new Map<string, PendingPermission>(),
   /** 重试超限提示（非空时 UI 层弹出 message.warning 并复位为 ''） */

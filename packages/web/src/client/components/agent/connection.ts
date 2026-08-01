@@ -25,6 +25,7 @@ import {
   handleStreamEvent,
   handleStreamAborted,
   handlePresenceState,
+  handleQueueState,
   resetLastAppliedRev,
   clearLiveStream,
 } from './sync';
@@ -436,6 +437,9 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     case 'presence.state':
       handlePresenceState(msg);
+      break;
+    case 'queue.state':
+      handleQueueState(msg);
       break;
     case 'tree.event':
       break; // S6 精化：增量 op

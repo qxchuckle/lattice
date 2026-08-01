@@ -28,6 +28,10 @@ export const ClientMessageType = {
   TreeSwitchHead: 'tree.switchHead',
   TreeSetDefault: 'tree.setDefault',
   PermissionRespond: 'permission.respond',
+  // 消息排队（streaming 期间排队发送，多端同步）
+  QueueEnqueue: 'queue.enqueue',
+  QueueUpdate: 'queue.update',
+  QueueSteer: 'queue.steer',
   // 多端同步（per-tree 订阅模型）
   TreeSubscribe: 'tree.subscribe',
   TreeUnsubscribe: 'tree.unsubscribe',
@@ -52,6 +56,7 @@ export const ServerMessageType = {
   StreamEvent: 'stream.event',
   StreamAborted: 'stream.aborted',
   PresenceState: 'presence.state',
+  QueueState: 'queue.state',
   Pong: 'pong',
 } as const;
 

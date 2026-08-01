@@ -154,6 +154,75 @@ export interface PermissionRespondMessage {
   allowed: boolean;
 }
 
+// ── 消息排队（streaming 期间排队发送，多端同步） ──
+
+/** 排队中的用户消息（server 管理，per-tree 生命周期，多端共享） */
+export interface QueuedMessage {
+  /** server 生成的唯一 ID */
+  id: string;
+  /** 用户输入文本 */
+  content: string;
+  /** 结构化输入段（chip 编辑器） */
+  segments?: PromptSegment[];
+  /** 排序权重（单调递增，重排时调整） */
+  order: number;
+  /** 入队时间戳（Unix 毫秒） */
+  createdAt: number;
+  /** 入队连接 ID（标记谁排的，供 UI 显示/区分） */
+  createdBy: string;
+  /** 投递模式：queue=等当前轮结束后发送；steer=引导注入当前轮 */
+  mode: 'queue' | 'steer';
+  /** 锚定的目标 turn（user 节点 ID）：dispatch 时在该 turn 的链路末端追加 */
+  anchorTurnId: string;
+  /** 指定模型（dispatch 时使用） */
+  model?: string;
+  /** 思考深度 */
+  thinkingLevel?: string;
+  /** 上下文窗口 tokens */
+  contextWindow?: number;
+  /** 指定源 */
+  sourceId?: string;
+}
+
+/** 队列操作类型（queue.update 载荷） */
+export type QueueUpdateAction =
+  | { action: 'reorder'; newIndex: number }
+  | { action: 'remove' }
+  | { action: 'edit'; content: string; segments?: PromptSegment[] }
+  | { action: 'mode'; mode: 'queue' | 'steer' };
+
+/** 入队：streaming 期间用户提交的消息进入排队 */
+export interface QueueEnqueueMessage {
+  type: 'queue.enqueue';
+  sessionId: string;
+  message: string;
+  segments?: PromptSegment[];
+  /** 锚定 turn（在哪个节点后面排队） */
+  anchorTurnId: string;
+  mode?: 'queue' | 'steer';
+  model?: string;
+  thinkingLevel?: string;
+  contextWindow?: number;
+  sourceId?: string;
+}
+
+/** 队列操作：重排 / 删除 / 编辑 / 模式切换 */
+export interface QueueUpdateMessage {
+  type: 'queue.update';
+  sessionId: string;
+  /** 目标消息 ID */
+  messageId: string;
+  /** 操作载荷 */
+  update: QueueUpdateAction;
+}
+
+/** 引导注入：将排队消息立即注入当前流式 turn（不支持的源降级为 abort+restart） */
+export interface QueueSteerMessage {
+  type: 'queue.steer';
+  sessionId: string;
+  messageId: string;
+}
+
 // ── 多端同步（per-tree 订阅） ──
 
 /** 订阅一棵树；带 sinceRev 时 server 比对决定发快照或跳过 */
@@ -198,6 +267,9 @@ export type ClientMessage =
   | TreeSwitchHeadMessage
   | TreeSetDefaultMessage
   | PermissionRespondMessage
+  | QueueEnqueueMessage
+  | QueueUpdateMessage
+  | QueueSteerMessage
   | TreeSubscribeMessage
   | TreeUnsubscribeMessage
   | PresenceUpdateMessage
@@ -337,6 +409,16 @@ export interface PongMessage {
   type: 'pong';
 }
 
+/** 队列状态广播（per-tree 全量推送，与 presence.state 同模式） */
+export interface QueueStateMessage {
+  type: 'queue.state';
+  treeId: string;
+  /** 当前排队消息列表（按 order 排序） */
+  messages: QueuedMessage[];
+  /** 正在 dispatch 的消息 ID（防重入标记，供 UI 显示“发送中”） */
+  dispatching: string | null;
+}
+
 export type ServerMessage =
   | SessionCreatedMessage
   | AgentEventMessage
@@ -352,4 +434,5 @@ export type ServerMessage =
   | StreamEventMessage
   | StreamAbortedMessage
   | PresenceStateMessage
+  | QueueStateMessage
   | PongMessage;

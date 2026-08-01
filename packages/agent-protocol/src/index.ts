@@ -141,6 +141,12 @@ export type {
   StreamEventMessage,
   StreamAbortedMessage,
   PresenceStateMessage,
+  QueuedMessage,
+  QueueUpdateAction,
+  QueueEnqueueMessage,
+  QueueUpdateMessage,
+  QueueSteerMessage,
+  QueueStateMessage,
   TreeOp,
   PresenceState,
 } from './transport/ws.js';

@@ -17,6 +17,8 @@ import type {
   StreamEventMessage,
   StreamAbortedMessage,
   PresenceStateMessage,
+  QueueStateMessage,
+  QueuedMessage,
 } from '@qcqx/lattice-agent-protocol';
 import { applyEventToContent } from '@qcqx/lattice-agent-protocol';
 import { advanceViewStatus, isTerminalViewStatus } from '@qcqx/lattice-agent-protocol';
@@ -182,6 +184,17 @@ export function handleStreamAborted(msg: StreamAbortedMessage): void {
 export function handlePresenceState(msg: PresenceStateMessage): void {
   if (msg.treeId !== agentStore.treeId) return;
   agentStore.peers = msg.peers as PresenceState[];
+}
+
+/**
+ * 排队状态（streaming 期间排队发送的消息，多端镜像 server 权威队列）。
+ * 数据驱动：client 只镜像渲染，不做预测；排序/删除/dispatch 全由 server 广播更新。
+ */
+export function handleQueueState(msg: QueueStateMessage): void {
+  if (msg.treeId !== agentStore.treeId) return; // 非当前树（已切换）忽略
+  agentStore.queue = msg.messages as QueuedMessage[];
+  agentStore.queueDispatching = msg.dispatching;
+  agentStore.version++;
 }
 
 // ── 他端在途流缓冲 GC（定时回收超期条目，防内存泄漏） ──

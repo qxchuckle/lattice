@@ -9,12 +9,14 @@ import type {
   PromptSegment,
   PermissionRequestHandler,
   ConversationBranch,
+  QueuedMessage,
 } from '@qcqx/lattice-agent-protocol';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PromptComposerDeps } from '../prompt/prompt-composer.js';
 import type { SourceProfileProvider } from './source-profiles.js';
 import type { TreeRuntimeState } from './runtime-state.js';
 import type { SessionState } from './session-state.js';
+import type { EventBus } from '../events/event-bus.js';
 
 /** 每个 WS session 的运行时状态（轻量：连接身份 + 当前树）；锁域在 TreeRuntime */
 export interface SessionContext {
@@ -41,6 +43,12 @@ export interface TreeRuntime {
   state: TreeRuntimeState;
   /** 最近一次任务/流的错误（原先被无痕吞掉；配合 state.*.failed 观测） */
   lastError?: unknown;
+  /** 排队中的用户消息（per-tree，多端共享；streaming 期间用户提交的待发消息） */
+  pendingMessages: QueuedMessage[];
+  /** 正在 dispatch 的排队消息 ID（防重入标记） */
+  pendingDispatching: string | null;
+  /** 排队消息排序计数器（单调递增，不回收，避免删除后 order 碰撞） */
+  pendingOrderCounter: number;
 }
 
 /** 传输层注入的回调（controller 不感知 WS） */
@@ -84,6 +92,22 @@ export interface SendOpts {
   segments?: PromptSegment[];
 }
 
+/** 入队参数（传输层解析 queue.enqueue 后透传） */
+export interface EnqueueOpts {
+  content: string;
+  segments?: PromptSegment[];
+  /** 锚定的目标 turn（user 节点 ID）：在该 turn 的链路末端追加 */
+  anchorTurnId: string;
+  /** 投递模式（默认 queue：等当前 turn 结束后按序发送；steer：注入在途流） */
+  mode?: 'queue' | 'steer';
+  model?: string;
+  thinkingLevel?: string;
+  contextWindow?: number;
+  sourceId?: string;
+  /** 入队连接 ID（标记谁排的，供 UI 展示） */
+  createdBy?: string;
+}
+
 export interface ConversationControllerDeps {
   session: SessionManager;
   /** 仅依赖源注册表抽象（protocol），不绑定具体源包 */
@@ -95,4 +119,6 @@ export interface ConversationControllerDeps {
   profiles: SourceProfileProvider;
   /** 反向权限问答（源问→宿主答）；缺省时 driver 按源的 permissionModes.default 策略执行 */
   onPermissionRequest?: PermissionRequestHandler;
+  /** 事件总线（队列变更 emit `queue:changed`，传输层订阅后广播；缺省时不通知） */
+  events?: EventBus;
 }

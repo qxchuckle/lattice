@@ -39,6 +39,9 @@ function makeConn(overrides?: Partial<AgentConn>): AgentConn {
 function makeLatticeAgent() {
   const permissionRespond = vi.fn();
   const conversationSend = vi.fn();
+  const conversationEnqueue = vi.fn();
+  const conversationQueueUpdate = vi.fn();
+  const conversationGetQueueState = vi.fn(() => ({ messages: [], dispatching: null }));
   const latticeAgent = {
     conversation: {
       send: conversationSend,
@@ -54,6 +57,14 @@ function makeLatticeAgent() {
       abortTreeStreams: vi.fn(),
       abortByRequestId: vi.fn(),
       turnCapabilities: vi.fn(),
+      enqueue: conversationEnqueue,
+      queueUpdate: conversationQueueUpdate,
+      getQueueState: conversationGetQueueState,
+      setQueueHooks: vi.fn(),
+      dispatchTreeOf: vi.fn(),
+      cleanupQueue: vi.fn(),
+      steer: vi.fn(),
+      tryDispatch: vi.fn(),
     },
     session: {
       loadTree: vi.fn(),
@@ -77,6 +88,17 @@ function makeLatticeAgent() {
     },
   } as unknown as LatticeAgent;
   return { latticeAgent, permissionRespond, conversationSend };
+}
+
+/** 队列命令测试专用：返回可断言的队列 mock */
+function queueMocks(latticeAgent: LatticeAgent) {
+  const conv = latticeAgent.conversation as unknown as {
+    enqueue: ReturnType<typeof vi.fn>;
+    queueUpdate: ReturnType<typeof vi.fn>;
+    getQueueState: ReturnType<typeof vi.fn>;
+    getSession: ReturnType<typeof vi.fn>;
+  };
+  return conv;
 }
 
 function makeCtx(overrides?: Partial<WsCommandContext>) {
@@ -501,5 +523,106 @@ describe('session 归属追踪 (P1-#12 fix)', () => {
     } as ClientMessage);
 
     expect(ctx.conn.sessions.has('sess-send-1')).toBe(true);
+  });
+});
+
+describe('消息排队命令路由 (queue.*)', () => {
+  it('queue.enqueue：由 sessionId 反查 treeId 后透传入队（含 createdBy=连接 ID）', async () => {
+    const { ctx, latticeAgent } = makeCtx();
+    const conv = queueMocks(latticeAgent);
+    conv.getSession.mockReturnValue({ treeId: 'tree-1' });
+
+    await handleWsCommand(ctx, {
+      type: 'queue.enqueue',
+      sessionId: 'sess-1',
+      message: '排队消息',
+      anchorTurnId: 'turn-1',
+      mode: 'queue',
+      model: 'ultimate',
+    } as ClientMessage);
+
+    expect(conv.enqueue).toHaveBeenCalledTimes(1);
+    const [treeId, opts] = conv.enqueue.mock.calls[0] as [string, Record<string, unknown>];
+    expect(treeId, '由 session 反查到 treeId').toBe('tree-1');
+    expect(opts.content).toBe('排队消息');
+    expect(opts.anchorTurnId).toBe('turn-1');
+    expect(opts.mode).toBe('queue');
+    expect(opts.model).toBe('ultimate');
+    expect(opts.createdBy, '标记入队连接').toBe('conn-test');
+  });
+
+  it('queue.enqueue：session 无树 → session.error，不入队', async () => {
+    const { ctx, sent, latticeAgent } = makeCtx();
+    const conv = queueMocks(latticeAgent);
+    conv.getSession.mockReturnValue({ treeId: null });
+
+    await handleWsCommand(ctx, {
+      type: 'queue.enqueue',
+      sessionId: 'sess-1',
+      message: 'x',
+      anchorTurnId: 'turn-1',
+    } as ClientMessage);
+
+    expect(conv.enqueue).not.toHaveBeenCalled();
+    expect(
+      sent.some((m) => m.type === 'session.error'),
+      '无树报错',
+    ).toBe(true);
+  });
+
+  it('queue.update：透传 messageId + update 动作', async () => {
+    const { ctx, latticeAgent } = makeCtx();
+    const conv = queueMocks(latticeAgent);
+    conv.getSession.mockReturnValue({ treeId: 'tree-1' });
+
+    await handleWsCommand(ctx, {
+      type: 'queue.update',
+      sessionId: 'sess-1',
+      messageId: 'msg-1',
+      update: { action: 'reorder', newIndex: 0 },
+    } as ClientMessage);
+
+    expect(conv.queueUpdate).toHaveBeenCalledWith('tree-1', 'msg-1', {
+      action: 'reorder',
+      newIndex: 0,
+    });
+  });
+
+  it('queue.steer：由 sessionId 反查 treeId 后调 conversation.steer（P3a abort+restart）', async () => {
+    const { ctx, latticeAgent } = makeCtx();
+    const conv = queueMocks(latticeAgent);
+    conv.getSession.mockReturnValue({ treeId: 'tree-1' });
+    const steer = (conv as unknown as { steer: ReturnType<typeof vi.fn> }).steer;
+
+    await handleWsCommand(ctx, {
+      type: 'queue.steer',
+      sessionId: 'sess-1',
+      messageId: 'msg-1',
+    } as ClientMessage);
+
+    expect(steer).toHaveBeenCalledWith('tree-1', 'msg-1');
+  });
+
+  it('tree.subscribe：快照后补发 queue.state（新订阅者看到排队面板）', async () => {
+    const { ctx, sent, latticeAgent } = makeCtx();
+    const conv = queueMocks(latticeAgent);
+    conv.getQueueState.mockReturnValue({
+      messages: [{ id: 'm1', content: '排队', order: 0 }],
+      dispatching: null,
+    });
+
+    await handleWsCommand(ctx, { type: 'tree.subscribe', treeId: 'tree-1' } as ClientMessage);
+
+    const qs = sent.find((m) => m.type === 'queue.state') as
+      | { treeId: string; messages: unknown[]; dispatching: string | null }
+      | undefined;
+    expect(qs, '补发 queue.state').toBeTruthy();
+    expect(qs!.treeId).toBe('tree-1');
+    expect(qs!.messages).toHaveLength(1);
+    expect(qs!.dispatching).toBeNull();
+    // 重连恢复：订阅后触发一次 tryDispatch（恢复全部断连期间停滞的队列）
+    expect(
+      (conv as unknown as { tryDispatch: ReturnType<typeof vi.fn> }).tryDispatch,
+    ).toHaveBeenCalledWith('tree-1');
   });
 });

@@ -50,6 +50,10 @@ import {
   switchConversation,
   newConversation,
   cleanupAgentStore,
+  removeQueuedMessage,
+  reorderQueuedMessage,
+  editQueuedMessage,
+  computeReorderIndex,
   type TurnNode,
 } from './agentStore';
 
@@ -151,6 +155,93 @@ describe('submitFromNode fork 前源可用性校验', () => {
     expect(id).not.toBeNull();
     const send = sentMessages().find((m) => m.type === 'session.send');
     expect(send).toMatchObject({ sourceId: 'qoder', parentNodeId: null });
+  });
+});
+
+describe('submitFromNode 排队路径（streaming 期间入队）', () => {
+  it('父 turn streaming → 发 queue.enqueue（非 session.send），不建本地 turn', () => {
+    putTurn(makeTurn('p1', 'streaming', { sourceId: 'qoder' }));
+    const id = submitFromNode('p1', '排队消息');
+    expect(id, '不创建本地 turn').toBeNull();
+    expect(sentMessages().filter((m) => m.type === 'session.send')).toHaveLength(0);
+    const enq = sentMessages().find((m) => m.type === 'queue.enqueue') as
+      | { anchorTurnId: string; message: string; mode: string }
+      | undefined;
+    expect(enq, '发 queue.enqueue').toBeTruthy();
+    expect(enq!.anchorTurnId, '锚定 streaming 的父 turn').toBe('p1');
+    expect(enq!.message).toBe('排队消息');
+    expect(enq!.mode).toBe('queue');
+    expect(agentStore.turns.size, '未新增 turn').toBe(1);
+  });
+
+  it('父 turn done → 正常 session.send（不入队）', () => {
+    putTurn(makeTurn('p1', 'done', { sourceId: 'qoder' }));
+    const id = submitFromNode('p1', '追问');
+    expect(id).not.toBeNull();
+    expect(sentMessages().filter((m) => m.type === 'queue.enqueue')).toHaveLength(0);
+    expect(sentMessages().find((m) => m.type === 'session.send')).toBeTruthy();
+  });
+});
+
+describe('排队队列 actions（queue.update 命令 + 排序索引计算）', () => {
+  const qm = (id: string, order: number, anchor = 't1') => ({
+    id,
+    content: id,
+    order,
+    createdAt: order,
+    createdBy: 'c1',
+    mode: 'queue' as const,
+    anchorTurnId: anchor,
+  });
+
+  beforeEach(() => {
+    agentStore.queue = [];
+  });
+
+  it('removeQueuedMessage 发 queue.update remove', () => {
+    removeQueuedMessage('m1');
+    const upd = sentMessages().find((m) => m.type === 'queue.update') as {
+      messageId: string;
+      update: { action: string };
+    };
+    expect(upd.messageId).toBe('m1');
+    expect(upd.update.action).toBe('remove');
+  });
+
+  it('reorderQueuedMessage 发 queue.update reorder（携带 newIndex）', () => {
+    reorderQueuedMessage('m1', 2);
+    const upd = sentMessages().find((m) => m.type === 'queue.update') as {
+      update: { action: string; newIndex: number };
+    };
+    expect(upd.update).toMatchObject({ action: 'reorder', newIndex: 2 });
+  });
+
+  it('editQueuedMessage 发 queue.update edit；空内容不发送', () => {
+    editQueuedMessage('m1', '新内容');
+    const upd = sentMessages().find((m) => m.type === 'queue.update') as {
+      update: { action: string; content: string };
+    };
+    expect(upd.update).toMatchObject({ action: 'edit', content: '新内容' });
+    vi.clearAllMocks();
+    editQueuedMessage('m1', '   ');
+    expect(sentMessages().filter((m) => m.type === 'queue.update')).toHaveLength(0);
+  });
+
+  it('computeReorderIndex：移到组首位 / 组末位 / 组中间', () => {
+    agentStore.queue = [qm('a', 0), qm('b', 1), qm('c', 2)];
+    // c(组 idx2) 移到组 idx0 → 扁平 0
+    expect(computeReorderIndex('c', 0, 't1')).toBe(0);
+    // a(组 idx0) 移到组末（idx2）→ 移除后 [b,c]，插到 c 后 → 2
+    expect(computeReorderIndex('a', 2, 't1')).toBe(2);
+    // a(组 idx0) 移到组 idx1 → 移除后 [b,c]，插到 b 前… 目标组 idx1=c → 扁平 1
+    expect(computeReorderIndex('a', 1, 't1')).toBe(1);
+  });
+
+  it('computeReorderIndex：跨锚点不交又时组内映射正确', () => {
+    // 扁平：a(A) x(B) b(A)；A 组 = [a, b]
+    agentStore.queue = [qm('a', 0, 'A'), qm('x', 1, 'B'), qm('b', 2, 'A')];
+    // b 移到 A 组首位 → 移除后 [a, x]，目标组 idx0=a → 扁平 0
+    expect(computeReorderIndex('b', 0, 'A')).toBe(0);
   });
 });
 

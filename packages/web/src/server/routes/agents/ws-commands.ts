@@ -221,6 +221,52 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
       break;
     }
 
+    // ── 消息排队（streaming 期间排队发送，多端同步） ──
+
+    case 'queue.enqueue': {
+      if (!msg.sessionId || !msg.message || !msg.anchorTurnId) return;
+      conn.sessions.add(msg.sessionId);
+      const tid = conversation.getSession(msg.sessionId)?.treeId;
+      if (!tid) {
+        send({
+          type: 'session.error',
+          sessionId: msg.sessionId,
+          message: 'No tree to enqueue into',
+        });
+        return;
+      }
+      // 入队后 controller emit queue:changed → ws-handler 订阅统一广播 queue.state（多端镜像）
+      conversation.enqueue(tid, {
+        content: msg.message,
+        segments: msg.segments,
+        anchorTurnId: msg.anchorTurnId,
+        mode: msg.mode,
+        model: msg.model,
+        thinkingLevel: msg.thinkingLevel,
+        contextWindow: msg.contextWindow,
+        sourceId: msg.sourceId,
+        createdBy: conn.id,
+      });
+      break;
+    }
+
+    case 'queue.update': {
+      if (!msg.sessionId || !msg.messageId) return;
+      const tid = conversation.getSession(msg.sessionId)?.treeId;
+      if (!tid) return;
+      conversation.queueUpdate(tid, msg.messageId, msg.update);
+      break;
+    }
+
+    case 'queue.steer': {
+      if (!msg.sessionId || !msg.messageId) return;
+      const tid = conversation.getSession(msg.sessionId)?.treeId;
+      if (!tid) return;
+      // P3a Soft Steer：中止当前流 + 排队消息插队立即 dispatch（源拥有 loop，无法在途注入）
+      conversation.steer(tid, msg.messageId);
+      break;
+    }
+
     // ── 多端同步（per-tree 订阅） ──
 
     case 'tree.subscribe': {
@@ -237,6 +283,17 @@ export async function handleWsCommand(ctx: WsCommandContext, msg: ClientMessage)
       const snap = await ctx.buildSnapshot(msg.treeId);
       if (snap) send(snap);
       ctx.broadcastPresence(msg.treeId);
+      // 补发当前队列状态：新订阅者看到排队面板（镜像 server 权威队列）
+      const qState = conversation.getQueueState(msg.treeId);
+      send({
+        type: 'queue.state',
+        treeId: msg.treeId,
+        messages: qState.messages,
+        dispatching: qState.dispatching,
+      });
+      // 重连恢复：全部断连期间 turn 落定的队列会停滞（无会话不 dispatch），
+      // 重连订阅且会话已建立后触发一次续发（空队列/已 dispatching 时自然 no-op）
+      conversation.tryDispatch(msg.treeId);
       break;
     }
 

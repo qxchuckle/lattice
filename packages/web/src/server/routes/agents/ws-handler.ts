@@ -93,6 +93,44 @@ export function closeConnection(conn: AgentConn, deps: CloseConnectionDeps): voi
   for (const treeId of [...conn.subscribed]) deps.unsubscribeConn(conn, treeId);
 }
 
+/**
+ * 构建一棵树的全量快照（共享纯逻辑：per-connection buildSnapshot 与路由层队列广播复用）。
+ * snapshotTakenAt = 构建起始时间：异步构建期间若有新变更，客户端可据此判旧。
+ */
+async function buildTreeSnapshot(
+  session: LatticeAgent['session'],
+  conversation: LatticeAgent['conversation'],
+  treeId: string,
+): Promise<ServerMessage | null> {
+  const snapshotTakenAt = Date.now();
+  const tree = await session.loadTree(treeId);
+  if (!tree) return null;
+  const interrupted = await session.getInterruptedStreams(treeId);
+  const nodes = session.getNodes(treeId);
+  return {
+    type: 'tree.snapshot',
+    treeId,
+    rev: tree.rev ?? 0,
+    nodes,
+    branches: tree.branches,
+    headNodeId: tree.headNodeId,
+    turnCapabilities: conversation.turnCapabilities(treeId),
+    streaming: interrupted.map((s) => ({
+      requestId: s.requestId,
+      parentId: s.parentId,
+      content: s.content,
+    })),
+    conversation: {
+      treeId,
+      title: tree.title,
+      nodeCount: nodes.length,
+      updatedAt: tree.updatedAt,
+    },
+    snapshotTakenAt,
+    expectedNextRev: (tree.rev ?? 0) + 1,
+  };
+}
+
 export function setupAgentWs(
   app: FastifyInstance,
   getAgent: () => Promise<LatticeAgent>,
@@ -101,6 +139,8 @@ export function setupAgentWs(
   const treeSubscribers = new Map<string, Set<AgentConn>>();
   const treePresence = new Map<string, Map<string, PresenceState>>();
   const graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** 队列广播接线只执行一次（agent 为单例，events 同一实例；防多连接重复订阅致重复广播） */
+  let queueWired = false;
 
   /** 向一棵树的全部订阅者广播（可排除发起连接） */
   function broadcastTree(treeId: string, msg: ServerMessage, exceptConnId?: string): void {
@@ -110,6 +150,21 @@ export function setupAgentWs(
       if (exceptConnId && c.id === exceptConnId) continue;
       send(c.socket, msg);
     }
+  }
+
+  /**
+   * 路由层共享的快照广播（队列 dispatch hooks 专用）：懒取单例 agent 构建快照。
+   * 不捕获 per-connection 闭包（区别于连接内的 broadcastSnapshot），避免队列 hooks 钉死首个连接的作用域。
+   */
+  function broadcastSnapshotShared(treeId: string): void {
+    void getAgent()
+      .then((ag) => buildTreeSnapshot(ag.session, ag.conversation, treeId))
+      .then((snap) => {
+        if (snap) broadcastTree(treeId, snap);
+      })
+      .catch((err) => {
+        console.error(`[ws] queue broadcastSnapshot failed for ${treeId}:`, err);
+      });
   }
 
   /** 广播该树当前全量 presence 列表 */
@@ -181,6 +236,64 @@ export function setupAgentWs(
     const latticeAgent = await getAgent();
     const { conversation, session, events } = latticeAgent;
 
+    // ── 消息队列广播接线（整个路由层只执行一次；agent 单例，events 同一实例） ──
+    if (!queueWired) {
+      queueWired = true;
+      /** 广播某树当前队列状态（queue:changed 后统一推送，多端镜像同一权威状态） */
+      const broadcastQueueState = (treeId: string): void => {
+        const st = conversation.getQueueState(treeId);
+        broadcastTree(treeId, {
+          type: 'queue.state',
+          treeId,
+          messages: st.messages,
+          dispatching: st.dispatching,
+        });
+      };
+      events.on('queue:changed', (event) => {
+        const { treeId } = event.payload as { treeId: string };
+        broadcastQueueState(treeId);
+      });
+      // 订阅者检查：某树无订阅者（全断连）时不 dispatch，避免 grace 停流后被 dispatch 链逐条重新点火空烧 token；
+      // 重连订阅后由 tree.subscribe 触发的 tryDispatch 恢复
+      conversation.setSubscriberCheck((tid) => (treeSubscribers.get(tid)?.size ?? 0) > 0);
+      // dispatch 专用 hooks：按 turn 归属树广播（由 requestId 反查 treeId，不绑定具体连接）。
+      // dispatched turn 的流式/树更新经 broadcastTree 达全部订阅者，与发起端无关；
+      // 连接生命周期不影响它（区别于 per-connection 的 makeHooks）。
+      // 首事件先补一次快照：排队消息客户端无本地 turn，不先拿到 user 节点则 stream.event 无处挂载，
+      // 他端只能等落定才整体出现；快照后可逐字渲染流式。落定清理防无界增长。
+      const dispatchSnapshotSent = new Set<string>();
+      conversation.setQueueHooks({
+        onEvent: (event, rid) => {
+          const tid = conversation.dispatchTreeOf(rid);
+          if (!tid) return;
+          if (!dispatchSnapshotSent.has(rid)) {
+            dispatchSnapshotSent.add(rid);
+            broadcastSnapshotShared(tid);
+          }
+          broadcastTree(tid, { type: 'stream.event', treeId: tid, requestId: rid, event });
+        },
+        onError: (message, rid) => {
+          if (rid) dispatchSnapshotSent.delete(rid);
+          const tid = rid ? conversation.dispatchTreeOf(rid) : undefined;
+          if (tid && rid)
+            broadcastTree(tid, {
+              type: 'stream.aborted',
+              treeId: tid,
+              requestId: rid,
+              reason: message,
+            });
+        },
+        onTreeUpdated: (treeId, _headNodeId, rid) => {
+          if (rid) dispatchSnapshotSent.delete(rid);
+          broadcastSnapshotShared(treeId);
+        },
+        onStreamAborted: (tid, rid, reason) => {
+          if (rid) dispatchSnapshotSent.delete(rid);
+          broadcastTree(tid, { type: 'stream.aborted', treeId: tid, requestId: rid, reason });
+        },
+      });
+    }
+
     const conn: AgentConn = {
       id: randomUUID(),
       socket,
@@ -191,36 +304,9 @@ export function setupAgentWs(
       sessions: new Set(),
     };
 
-    // 构建一棵树的全量快照
-    const buildSnapshot = async (treeId: string): Promise<ServerMessage | null> => {
-      const snapshotTakenAt = Date.now(); // 构建起始时间：异步构建期间若有新变更，客户端可据此判旧
-      const tree = await session.loadTree(treeId);
-      if (!tree) return null;
-      const interrupted = await session.getInterruptedStreams(treeId);
-      const nodes = session.getNodes(treeId);
-      return {
-        type: 'tree.snapshot',
-        treeId,
-        rev: tree.rev ?? 0,
-        nodes,
-        branches: tree.branches,
-        headNodeId: tree.headNodeId,
-        turnCapabilities: conversation.turnCapabilities(treeId),
-        streaming: interrupted.map((s) => ({
-          requestId: s.requestId,
-          parentId: s.parentId,
-          content: s.content,
-        })),
-        conversation: {
-          treeId,
-          title: tree.title,
-          nodeCount: nodes.length,
-          updatedAt: tree.updatedAt,
-        },
-        snapshotTakenAt,
-        expectedNextRev: (tree.rev ?? 0) + 1,
-      };
-    };
+    // 构建一棵树的全量快照（委托模块级共享函数）
+    const buildSnapshot = (treeId: string): Promise<ServerMessage | null> =>
+      buildTreeSnapshot(session, conversation, treeId);
 
     const broadcastSnapshot = (treeId: string): void => {
       void buildSnapshot(treeId)

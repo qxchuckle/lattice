@@ -83,7 +83,7 @@ import {
   shouldSkipDescendantMark,
 } from '@qcqx/lattice-agent-protocol';
 import type { PromptSegment } from '@qcqx/lattice-agent-protocol';
-import { viewToNodeStatus } from './turnState';
+import { viewToNodeStatus, isStreamingStatus } from './turnState';
 
 // ── 提交消息 ──
 
@@ -177,6 +177,24 @@ export function submitFromNode(
     return null;
   }
 
+  // 排队路径：目标 turn 正在 streaming → 不建本地 turn，发 queue.enqueue 入队。
+  // server 广播 queue.state 更新排队面板（数据驱动 + 多端同步）；turn 落定后 dispatch 走现有 send 路径。
+  if (parentTurn && isStreamingStatus(parentTurn.status)) {
+    sendWs({
+      type: 'queue.enqueue',
+      sessionId: agentStore.sessionId,
+      message: message.trim(),
+      segments: opts?.segments,
+      anchorTurnId: parentTurn.id,
+      mode: 'queue',
+      model: modelId || undefined,
+      thinkingLevel: thinkingLevel || undefined,
+      contextWindow: contextWindow || undefined,
+      sourceId,
+    });
+    return null; // 不创建本地 turn（等 server 广播 queue.state 更新 UI）
+  }
+
   const turnId = crypto.randomUUID();
   const requestId = turnId; // 全栈统一 ID：turnId = requestId = persisted nodeId
   const turn: TurnNode = {
@@ -211,6 +229,66 @@ export function submitFromNode(
     sourceId,
   });
   return turnId;
+}
+
+// ── 消息排队（streaming 期间排队发送，server 单写权威，client 只发命令 + 镜像渲染） ──
+
+/** 删除排队消息（queue.update remove；server 处理后广播最新 queue.state） */
+export function removeQueuedMessage(messageId: string): void {
+  if (!agentStore.sessionId) return;
+  sendWs({
+    type: 'queue.update',
+    sessionId: agentStore.sessionId,
+    messageId,
+    update: { action: 'remove' },
+  });
+}
+
+/** 重排排队消息（queue.update reorder；newIndex 为移除后的扁平位置，与 server splice 语义一致） */
+export function reorderQueuedMessage(messageId: string, newIndex: number): void {
+  if (!agentStore.sessionId) return;
+  sendWs({
+    type: 'queue.update',
+    sessionId: agentStore.sessionId,
+    messageId,
+    update: { action: 'reorder', newIndex },
+  });
+}
+
+/** 编辑排队消息内容（queue.update edit；空内容不发送） */
+export function editQueuedMessage(messageId: string, content: string): void {
+  if (!agentStore.sessionId || !content.trim()) return;
+  sendWs({
+    type: 'queue.update',
+    sessionId: agentStore.sessionId,
+    messageId,
+    update: { action: 'edit', content: content.trim() },
+  });
+}
+
+/** 引导（steer）：将排队消息立即注入当前对话（P3a：中止当前回复 + 插队重开一轮） */
+export function steerQueuedMessage(messageId: string): void {
+  if (!agentStore.sessionId) return;
+  sendWs({ type: 'queue.steer', sessionId: agentStore.sessionId, messageId });
+}
+
+/**
+ * 计算组内移动后的扁平索引（server reorder 语义：先移除再插入 newIndex）。
+ * 面板按 anchorTurnId 分组渲染，组内位置需映射到扁平队列位置（跨锚点不交又时组内相对顺序不变）。
+ */
+export function computeReorderIndex(
+  messageId: string,
+  targetGroupIndex: number,
+  anchorTurnId: string,
+): number {
+  const sorted = [...agentStore.queue].sort((a, b) => a.order - b.order);
+  const without = sorted.filter((m) => m.id !== messageId);
+  const groupIds = without.filter((m) => m.anchorTurnId === anchorTurnId).map((m) => m.id);
+  if (targetGroupIndex >= groupIds.length) {
+    const lastId = groupIds[groupIds.length - 1];
+    return without.findIndex((m) => m.id === lastId) + 1;
+  }
+  return without.findIndex((m) => m.id === groupIds[targetGroupIndex]);
 }
 
 // ── 中止（支持精确中止单个流） ──
@@ -416,6 +494,8 @@ export async function switchConversation(treeId: string): Promise<void> {
   agentStore.turns.clear();
   agentStore.ui.clear();
   agentStore.peers = [];
+  agentStore.queue = []; // 切树即清队列镜像（与 peers 同列，避免旧树脏数据驻留）
+  agentStore.queueDispatching = null;
   agentStore.treeId = treeId;
   agentStore.version++;
 
@@ -439,6 +519,8 @@ export function newConversation(): void {
   agentStore.turns.clear();
   agentStore.ui.clear();
   agentStore.peers = [];
+  agentStore.queue = []; // 新对话清空队列镜像
+  agentStore.queueDispatching = null;
   agentStore.version++;
 }
 

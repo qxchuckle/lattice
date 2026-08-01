@@ -207,7 +207,9 @@ export function registerAgentRestRoutes(
   app.delete('/api/agent/conversations/:treeId', async (req) => {
     const { treeId } = req.params as { treeId: string };
     try {
-      await (await getAgent()).session.deleteTree(treeId);
+      const latticeAgent = await getAgent();
+      await latticeAgent.session.deleteTree(treeId);
+      latticeAgent.conversation.cleanupQueue(treeId); // 清理 agent 层排队队列（连同锁域）
       cleanupTree(treeId); // 清理 WS 同步状态（订阅/presence/宽限计时）
       return ok();
     } catch (err) {

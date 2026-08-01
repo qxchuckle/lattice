@@ -75,6 +75,8 @@ export function createLatticeAgent(deps: LatticeAgentDeps): LatticeAgent {
     profiles,
     // 反向权限通道：pipeline 闸门（机制）+ PermissionGuard 规则与 UI 问询（策略）
     onPermissionRequest: createSourcePermissionHandler(permission),
+    // 队列变更通知：emit `queue:changed`，传输层订阅后广播 queue.state
+    events,
     promptDeps: {
       resolveCommandTemplate: (name) => workflow.getCommandTemplate(name),
       ...deps.promptDeps,

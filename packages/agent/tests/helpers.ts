@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionManager, ConversationController } from '../src/index.js';
 import type { ConversationHooks } from '../src/index.js';
+import type { EventBus } from '../src/index.js';
 import type { AgentSourceInstance } from '@qcqx/lattice-agent-source';
 import { createSourceProfileProvider } from '../src/conversation/source-profiles.js';
 import type {
@@ -40,6 +41,10 @@ export interface MockState {
   hangBeforeYield: boolean;
   /** done 前追发 compaction+notice 事件（模拟源内部自动压缩/resume 降级警告） */
   emitCompaction?: boolean;
+  /** 文本后追发一个流内 error 事件（流不中断、继续走到 done/hang：验证流内错误不提前释放 dispatch 锁） */
+  emitMidError?: boolean;
+  /** 零内容正常完成：不发任何 text 事件直接 done（runTurn 不落 assistant 节点，验证让位不卡死） */
+  zeroContent?: boolean;
 }
 
 export interface MockCalls {
@@ -116,8 +121,20 @@ export function makeMockSource(state: MockState, calls: MockCalls): ISource {
         // 中止是正常结局（driver 铁律）：不抛错，返回已知会话
         return { sessionId: incoming ?? undefined };
       }
-      emit({ type: 'text', content: '回复[' });
-      emit({ type: 'text', content: `${text}]` });
+      if (!state.zeroContent) {
+        emit({ type: 'text', content: '回复[' });
+        emit({ type: 'text', content: `${text}]` });
+      }
+      if (state.emitMidError) {
+        // 流内错误事件（非终结）：turn-runner 补发 onError 但流继续，终将 onTreeUpdated 落定
+        emit({
+          type: 'error',
+          message: '流内在途错误',
+          code: 'unknown',
+          retryable: false,
+          source: { id: 'mock', name: 'mock' },
+        });
+      }
       if (state.hangUntilAbort) {
         await waitAbort();
         return { sessionId: incoming ?? undefined };
@@ -185,8 +202,8 @@ export async function setupTestEnv(): Promise<{ baseDir: string; cleanup: () => 
   };
 }
 
-/** mkdtemp 隔离环境 + mock source + controller（目录清理交由 OS 临时目录策略） */
-export async function setup(emitDone = true): Promise<TestContext> {
+/** mkdtemp 隔离环境 + mock source + controller（目录清理交由 OS 临时目录策略）；events 可选注入（测 EventBus 通知用） */
+export async function setup(emitDone = true, events?: EventBus): Promise<TestContext> {
   const { baseDir, cleanup } = await setupTestEnv();
   const sm = new SessionManager();
   const state: MockState = { emitDone, hangUntilAbort: false, hangBeforeYield: false };
@@ -205,7 +222,7 @@ export async function setup(emitDone = true): Promise<TestContext> {
     registry: sources.registry,
     listLocalSkills: () => [],
   });
-  const controller = new ConversationController({ session: sm, sources, profiles });
+  const controller = new ConversationController({ session: sm, sources, profiles, events });
   return { baseDir, sm, state, calls, controller, cleanup };
 }
 

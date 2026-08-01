@@ -18,6 +18,7 @@ import {
   handleStreamEvent,
   handleStreamAborted,
   handlePresenceState,
+  handleQueueState,
   resetLastAppliedRev,
   getLastAppliedRev,
   startLiveStreamGc,
@@ -363,6 +364,82 @@ describe('sync.handlePresenceState', () => {
       peers: [{ connectionId: 'c1', clientKind: 'web' }],
     } as PresenceStateMessage);
     expect(agentStore.peers.length).toBe(0);
+  });
+});
+
+describe('sync.handleQueueState（排队状态多端镜像）', () => {
+  beforeEach(() => {
+    agentStore.treeId = TREE;
+    agentStore.queue = [];
+    agentStore.queueDispatching = null;
+  });
+
+  it('镜像当前树的队列 + dispatching 标记', () => {
+    handleQueueState({
+      type: 'queue.state',
+      treeId: TREE,
+      messages: [
+        {
+          id: 'm1',
+          content: '排队1',
+          order: 0,
+          createdAt: 1,
+          createdBy: 'c1',
+          mode: 'queue',
+          anchorTurnId: 't1',
+        },
+        {
+          id: 'm2',
+          content: '排队2',
+          order: 1,
+          createdAt: 2,
+          createdBy: 'c1',
+          mode: 'queue',
+          anchorTurnId: 't1',
+        },
+      ],
+      dispatching: 'm1',
+    });
+    expect(agentStore.queue).toHaveLength(2);
+    expect(agentStore.queue[0].content).toBe('排队1');
+    expect(agentStore.queueDispatching).toBe('m1');
+  });
+
+  it('忽略非当前树的队列状态', () => {
+    handleQueueState({
+      type: 'queue.state',
+      treeId: 'other',
+      messages: [
+        {
+          id: 'm1',
+          content: 'x',
+          order: 0,
+          createdAt: 1,
+          createdBy: 'c1',
+          mode: 'queue',
+          anchorTurnId: 't1',
+        },
+      ],
+      dispatching: null,
+    });
+    expect(agentStore.queue).toHaveLength(0);
+  });
+
+  it('空队列广播清空镜像（dispatch 后队列排空）', () => {
+    agentStore.queue = [
+      {
+        id: 'm1',
+        content: 'x',
+        order: 0,
+        createdAt: 1,
+        createdBy: 'c1',
+        mode: 'queue',
+        anchorTurnId: 't1',
+      },
+    ];
+    handleQueueState({ type: 'queue.state', treeId: TREE, messages: [], dispatching: null });
+    expect(agentStore.queue).toHaveLength(0);
+    expect(agentStore.queueDispatching).toBeNull();
   });
 });
 

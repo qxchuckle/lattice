@@ -21,20 +21,59 @@ export class TreeRuntimeRegistry {
     return ctx.treeId ?? `session:${ctx.sessionId}`;
   }
 
+  /** 创建空锁域（of/ofTree 共用，字段初始化单一来源） */
+  private create(): TreeRuntime {
+    return {
+      abortControllers: new Map(),
+      queue: Promise.resolve(),
+      streamQueues: new Map(),
+      state: initialTreeRuntimeState(),
+      pendingMessages: [],
+      pendingDispatching: null,
+      pendingOrderCounter: 0,
+    };
+  }
+
   /** 取/建该 session 当前锁域（per-tree；懒建树前退化为 per-session bootstrap） */
   of(ctx: SessionContext): TreeRuntime {
     const key = this.keyOf(ctx);
     let rt = this.runtimes.get(key);
     if (!rt) {
-      rt = {
-        abortControllers: new Map(),
-        queue: Promise.resolve(),
-        streamQueues: new Map(),
-        state: initialTreeRuntimeState(),
-      };
+      rt = this.create();
       this.runtimes.set(key, rt);
     }
     return rt;
+  }
+
+  /**
+   * 直接按 treeId 取/建锁域（消息排队操作用：队列操作只有 treeId，无 SessionContext）。
+   * 与 of(ctx) 共享同一 Map——树创建后 keyOf(ctx) 就是 treeId，两者命中同一实例。
+   */
+  ofTree(treeId: string): TreeRuntime {
+    let rt = this.runtimes.get(treeId);
+    if (!rt) {
+      rt = this.create();
+      this.runtimes.set(treeId, rt);
+    }
+    return rt;
+  }
+
+  /** 移除锁域（树删除时调用，释放排队消息与在途请求表） */
+  cleanup(treeId: string): void {
+    this.runtimes.delete(treeId);
+  }
+
+  /** 非创建式查找：锁域不存在返回 undefined（settle/steer 用，避免复活已清理的锁域） */
+  peek(treeId: string): TreeRuntime | undefined {
+    return this.runtimes.get(treeId);
+  }
+
+  /** 某请求是否注册了在途流（abortController 存在）：跨锁域扫描，供区分流内错误与终结错误 */
+  isStreaming(requestId: string): boolean {
+    for (const rt of this.runtimes.values()) {
+      if (rt.abortControllers.has(requestId)) return true;
+    }
+    return false;
   }
 
   /**

@@ -11,6 +11,7 @@ import type { ModelListItem, PromptSegment } from '@qcqx/lattice-agent-protocol'
 import { projectNodeCapabilities } from '@qcqx/lattice-agent-protocol';
 import { fmtTokens } from './ModelTuningModal';
 import { ChatInputBox, ModelMenuChip } from './ChatInputBar';
+import { QueuedMessagesPanel } from './QueuedMessagesPanel';
 import { MISSING_TURN } from './store';
 import {
   agentStore,
@@ -444,6 +445,9 @@ function ConversationNodeInner({ data }: NodeProps) {
               )}
             </div>
 
+            {/* ── 排队面板（streaming 期间提交的消息，数据驱动镜像 server 队列） ── */}
+            <QueuedMessagesPanel anchorTurnId={turnId} />
+
             {/* ── 底部输入区（常驻，能力投影控制）：与虚拟初始节点同布局，仅无源选择 ── */}
             {caps.canFollowup && (
               <div
@@ -453,8 +457,8 @@ function ConversationNodeInner({ data }: NodeProps) {
                   padding: '6px 8px',
                 }}>
                 <ChatInputBox
-                  placeholder='继续追问...'
-                  canSubmit={!isStreaming}
+                  placeholder={isStreaming ? '输入消息排队发送...' : '继续追问...'}
+                  canSubmit
                   onSubmit={handleFollowupSubmit}
                   allowImages={
                     threadModels.find((m) => m.id === (followupModel ?? turn.modelId))?.capabilities
