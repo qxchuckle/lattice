@@ -569,11 +569,16 @@ export class ConversationController {
     const tree = this.deps.session.getTree(treeId);
 
     // 解析实际父节点（若 parentNodeId 是 user 节点，链接到它的 assistant 子节点）
+    // retry 后同一 user 下可能有多个 assistant 子节点（旧的被标 undone），须取活跃者（与 doContinue 同口径）；
+    // 否则 .find() 先命中 undone 旧节点，下方只读守卫把正常追问误判为“已撤销/删除”
     let actualParentId: string | null = null;
     if (opts.parentNodeId) {
       const assistantChild = this.deps.session
         .getNodes(treeId)
-        .find((n) => n.parentId === opts.parentNodeId && n.role === 'assistant');
+        .find(
+          (n) =>
+            n.parentId === opts.parentNodeId && n.role === 'assistant' && !isReadOnly(n.status),
+        );
       actualParentId = assistantChild?.id ?? opts.parentNodeId;
     }
 
@@ -808,7 +813,12 @@ export class ConversationController {
     if (!tree) return;
 
     const userNode = this.deps.session.getNode(treeId, nodeId);
-    if (!userNode || userNode.role !== 'user') return;
+    if (!userNode || userNode.role !== 'user') {
+      // 节点不存在（如 client 乐观创建但被 server 拒绝的幽灵节点）或非 user 节点：
+      // 必须 onReject 通知，client 凭 tree.reject 重载树清除乐观 streaming 态，否则永久卡“生成中”
+      hooks.onReject?.(requestId, '节点不存在或不是用户消息，无法重试');
+      return;
+    }
     // 统一守卫：只读终态与源 fork 能力两个约束合在一处判（与 UI 置灰同源）
     const verdict = this.guard.check(treeId, nodeId, 'retry');
     if (!verdict.ok) {

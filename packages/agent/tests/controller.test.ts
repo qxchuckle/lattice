@@ -85,6 +85,59 @@ describe('ConversationController 编排核心', () => {
     expect(user1Lines, 'retry 复用 user 节点（JSONL 中 turn1 仅 1 行）').toBe(1);
   });
 
+  it('retry 后追问：同一 user 下两个 assistant（旧 undone），追问挂活跃者下不被误判已撤销/删除', async () => {
+    const { sm, controller } = await setup();
+    controller.createSession('sess1', 'mock', null);
+    controller.send('sess1', '你好', { requestId: 'turn1' }, noopHooks);
+    await flush(controller, 'sess1');
+    const treeId = controller.getSession('sess1')!.treeId!;
+
+    // retry 后 turn1 下两个 assistant：旧 undone + 新 active
+    controller.retry('sess1', 'turn1', 'turn1-retry', noopHooks);
+    await flush(controller, 'sess1');
+    const assistants = sm
+      .getNodes(treeId)
+      .filter((n) => n.role === 'assistant' && n.parentId === 'turn1');
+    expect(assistants.length, 'retry 后两个 assistant').toBe(2);
+    expect(
+      assistants.some((n) => n.status === 'undone'),
+      '旧 assistant undone',
+    ).toBe(true);
+
+    // 追问：不得被只读守卫误判为“已撤销/删除”（旧实现 .find() 先命中 undone 旧节点）
+    const log: string[] = [];
+    controller.send(
+      'sess1',
+      '追问',
+      { requestId: 'turn2', parentNodeId: 'turn1' },
+      makeLogHooks(log),
+    );
+    await flush(controller, 'sess1');
+    expect(
+      log.some((l) => l.includes('目标节点已撤销')),
+      '不误判已撤销/删除',
+    ).toBe(false);
+    const activeAsst = assistants.find((n) => n.status !== 'undone')!;
+    expect(sm.getNode(treeId, 'turn2')?.parentId, '追问挂在活跃 assistant 下').toBe(activeAsst.id);
+  });
+
+  it('retry 不存在的节点 → onReject（不静默 return 致 client 卡 streaming）', async () => {
+    const { controller } = await setup();
+    controller.createSession('sess1', 'mock', null);
+    controller.send('sess1', '你好', { requestId: 'turn1' }, noopHooks);
+    await flush(controller, 'sess1');
+
+    let rejected: string | undefined;
+    controller.retry('sess1', 'ghost-node', 'req-ghost', {
+      ...noopHooks,
+      onReject: (_rid, reason) => {
+        rejected = reason;
+      },
+    });
+    await flush(controller, 'sess1');
+    expect(rejected, '节点不存在 → onReject 通知').toBeTruthy();
+  });
+
   it('undo：标记目标 + 后代为 undone；delete：标记 hidden', async () => {
     const { sm, controller } = await setup();
     controller.createSession('sess1', 'mock', null);

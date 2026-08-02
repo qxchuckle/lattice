@@ -60,6 +60,7 @@ import {
 import {
   sendWs,
   isWsReady,
+  isWsConnected,
   connectAgentWs,
   disconnectAgentWs,
   setStreamingTarget,
@@ -499,8 +500,10 @@ export async function switchConversation(treeId: string): Promise<void> {
   agentStore.treeId = treeId;
   agentStore.version++;
 
-  // WS 未就绪时发起连接：onopen 会按 treeId 兜底 session.create（避免消息丢失看不了历史）
-  if (!isWsReady()) {
+  // WS 未连通时发起连接：onopen 会按 treeId 兜底 session.create（避免消息丢失看不了历史）。
+  // 注意：此处 sessionId 刚被置 null（正等待新建），不能用 isWsReady（其要求 sessionId 非空，恒 false
+  // 会误走 connectAgentWs 分支并提前 return，导致已连通时 session.create 永不发送、树不加载）
+  if (!isWsConnected()) {
     connectAgentWs();
     return;
   }

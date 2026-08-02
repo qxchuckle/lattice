@@ -224,6 +224,15 @@ export function isWsReady(): boolean {
   return !!socket$ && connectionStateSubject.value.type === 'connected' && !!agentStore.sessionId;
 }
 
+/**
+ * WS 传输层是否已连通（不含 session 状态）。
+ * 供 switchConversation 使用：切换会话时 sessionId 刚被置 null（正等待新建），
+ * 此时判断“能否直接发 session.create”只看传输层，不能用 isWsReady（其要求 sessionId 非空，恒 false）。
+ */
+export function isWsConnected(): boolean {
+  return !!socket$ && connectionStateSubject.value.type === 'connected';
+}
+
 // ── 应用层心跳：定期 ping + 检测对端存活（半开连接/NAT 静默断开时快速发现并触发重连） ──
 // 生命周期由下方状态订阅统一管理：仅 connected 态运行，离开 connected 即停，不在各回调里手工启停。
 
