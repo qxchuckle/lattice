@@ -4,7 +4,7 @@
 import type { NodeContent, ModelListItem, GetTreeResponse } from '@qcqx/lattice-agent-protocol';
 import { get, del } from '../../api/request';
 import { ApiError } from '../../../shared/api';
-import { agentStore, ensureUi, putTurn, type ClientSourceInfo } from './store';
+import { agentStore, ensureUi, putTurn, removeTurn, type ClientSourceInfo } from './store';
 import type { ConversationEntry } from './types';
 import { buildTurnsFromNodes, restoreStreamingTurns, fillInterruptedStreams } from './turnGraph';
 import { isStreamingStatus } from './turnState';
@@ -38,13 +38,18 @@ export async function loadTree(treeId: string): Promise<void> {
     agentStore.turnCaps.clear();
     for (const [turnId, caps] of Object.entries(data.turnCapabilities ?? {})) {
       agentStore.turnCaps.set(turnId, caps);
+      // 同步写入 turn 对象：随 putTurn 落到 proxy，借 turn 级订阅触发节点重渲染（同 applySnapshot）
+      const t = turns.get(turnId);
+      if (t) t.caps = caps;
     }
 
-    // 写入 store（putTurn 包 proxy：流式 delta 靠 turn 级响应式驱动节点重渲染）
-    agentStore.turns.clear();
+    // 写入 store：putTurn 复用既有 proxy 原地更新（保持节点订阅有效）；快照中不再存在的 turn 单独移除
     for (const [id, turn] of turns) {
       putTurn(turn);
       ensureUi(id);
+    }
+    for (const id of [...agentStore.turns.keys()]) {
+      if (!turns.has(id)) removeTurn(id);
     }
     agentStore.version++;
   } catch (err) {

@@ -4,7 +4,12 @@
  * 布局常量（DEFAULT_NODE_WIDTH 等）从 constants/layout.ts 集中管理，
  * 此处 re-export 保持向后兼容（外部消费方从 './types' 或 './agentStore' 导入均可）。
  */
-import type { TokenUsage, NodeContent, ViewStatus } from '@qcqx/lattice-agent-protocol';
+import type {
+  TokenUsage,
+  NodeContent,
+  ViewStatus,
+  NodeCapabilities,
+} from '@qcqx/lattice-agent-protocol';
 import {
   DEFAULT_NODE_WIDTH,
   DEFAULT_NODE_HEIGHT,
@@ -29,6 +34,9 @@ export interface TurnNode {
   thinkingLevel?: string;
   contextWindow?: number;
   usage?: TokenUsage;
+  /** server 下发的能力投影（随快照写入 turn proxy，借 turn 级订阅触发重渲染——
+   * valtio Map 对 existing key 的 set 不响应，单独存 turnCaps Map 更新不触发节点重渲染） */
+  caps?: NodeCapabilities;
 }
 
 // ── UI 状态（纯前端） ──

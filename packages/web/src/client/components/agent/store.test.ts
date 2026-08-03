@@ -55,6 +55,16 @@ describe('store.putTurn / ensureUi 颗粒化', () => {
     a.width = 500;
     expect(agentStore.ui.get('u1')!.width).toBe(500);
   });
+
+  it('putTurn 同 id 复用既有 proxy 原地更新（快照重建不替换对象，节点订阅不失效）', () => {
+    const p1 = putTurn(turn('u1', null, 'streaming'));
+    // 快照重建 putTurn 同 id：应复用同一 proxy（而非新建），组件 useSnapshot 订阅持续有效
+    const p2 = putTurn({ ...turn('u1', null, 'error'), blocks: [{ type: 'error', message: 'e' }] });
+    expect(p2, '复用同一 proxy 对象').toBe(p1);
+    expect(agentStore.turns.get('u1'), 'Map 中仍是原 proxy').toBe(p1);
+    expect(p1.status, '字段原地更新').toBe('error');
+    expect((p1.blocks[0] as { message: string }).message).toBe('e');
+  });
 });
 
 describe('store 可见性查询（排除 hidden）', () => {

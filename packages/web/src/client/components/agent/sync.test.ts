@@ -175,6 +175,53 @@ describe('sync.applySnapshot', () => {
     expect((turn!.blocks[0] as { text: string }).text).toBe('live累积');
   });
 
+  it('防陈旧快照污染：本端已 error 的 turn 不被滞后的 msg.streaming 拉回 streaming', () => {
+    // 本端已处理 error 事件（终态）——模拟快速分支时先收到 error 事件
+    putTurn({
+      id: 'u1',
+      parentTurnId: null,
+      userMessage: 'q',
+      blocks: [{ type: 'error', message: '额度不足' }],
+      status: 'error',
+      timestamp: 1,
+      sourceId: 'qoder',
+      modelId: '',
+    } as TurnNode);
+    // 服务端快照构建于 error 落盘前：nodes 只有 user 节点，streaming 数组仍含该请求（滞后）
+    applySnapshot({
+      ...snapshot(
+        [userNode('u1')],
+        [{ requestId: 'u1', parentId: 'u1', content: [{ type: 'error', message: '额度不足' }] }],
+      ),
+      rev: 9,
+    });
+    const turn = agentStore.turns.get('u1');
+    expect(turn!.status, '已 error 的 turn 不被拉回 streaming（否则永卡生成中、无重试按钮）').toBe(
+      'error',
+    );
+  });
+
+  it('防陈旧快照污染：本端已 interrupted 的 turn 同样不被拉回 streaming', () => {
+    putTurn({
+      id: 'u1',
+      parentTurnId: null,
+      userMessage: 'q',
+      blocks: [{ type: 'text', text: '部分' }],
+      status: 'interrupted',
+      timestamp: 1,
+      sourceId: 'qoder',
+      modelId: '',
+    } as TurnNode);
+    applySnapshot({
+      ...snapshot(
+        [userNode('u1')],
+        [{ requestId: 'u1', parentId: 'u1', content: [{ type: 'text', text: '部分' }] }],
+      ),
+      rev: 9,
+    });
+    expect(agentStore.turns.get('u1')!.status, 'interrupted 保留').toBe('interrupted');
+  });
+
   it('会话列表元数据增量更新（免 REST 拉列表）', () => {
     agentStore.conversations = [];
     applySnapshot({

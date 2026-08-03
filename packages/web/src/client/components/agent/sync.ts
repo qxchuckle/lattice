@@ -22,7 +22,7 @@ import type {
 } from '@qcqx/lattice-agent-protocol';
 import { applyEventToContent } from '@qcqx/lattice-agent-protocol';
 import { advanceViewStatus, isTerminalViewStatus } from '@qcqx/lattice-agent-protocol';
-import { agentStore, putTurn, ensureUi } from './store';
+import { agentStore, putTurn, removeTurn, ensureUi } from './store';
 import { buildTurnsFromNodes } from './turnGraph';
 import { isStreamingStatus } from './turnState';
 import type { TurnNode, ConversationEntry } from './types';
@@ -67,12 +67,20 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
 
   const turns = buildTurnsFromNodes(msg.nodes as ConversationNode[]);
 
-  // 保护本端在途流式 turn：快照重建不得覆盖未落盘的 live 累积
+  // 保护本端已处理终态/在途流式的 turn：快照重建不得覆盖本端更鲜的认知。
+  // 竞态背景：服务端快照可能构建于 error 落盘之前（streaming 文件未清），把本端已处理完的
+  // 请求仍放进 msg.streaming；若只保护 streaming 态，下方恢复循环会把已 error 的 turn 拉回
+  // streaming 并永久固化（迟到 done 因 streamingMap 已清而被丢弃，再无机会纠正）。
+  // 故 error/interrupted（本端已处理终态事件）一并保护，不被陈旧快照覆盖。
   for (const [id, t] of turns) {
     const cur = agentStore.turns.get(id);
-    if (cur && isStreamingStatus(cur.status)) {
+    if (!cur) continue;
+    if (isStreamingStatus(cur.status)) {
       t.blocks = cur.blocks;
       t.status = 'streaming';
+    } else if (cur.status === 'error' || cur.status === 'interrupted') {
+      t.blocks = cur.blocks;
+      t.status = cur.status;
     }
   }
 
@@ -99,16 +107,24 @@ export function applySnapshot(msg: TreeSnapshotMessage, force = false): void {
     }
   }
 
-  agentStore.turns.clear();
+  // 不先 clear：putTurn 复用既有 proxy 原地更新（保持节点组件订阅有效，避免快照重建后
+  // 组件仍订阅被丢弃的旧 proxy 而陈旧渲染）；快照中不再存在的 turn 单独移除
   for (const [id, turn] of turns) {
     putTurn(turn);
     ensureUi(id);
+  }
+  for (const id of [...agentStore.turns.keys()]) {
+    if (!turns.has(id)) removeTurn(id);
   }
   // 能力数据驱动：server 已按同一守卫函数算好，client 直接存下备渲染（不重算）
   if (msg.turnCapabilities) {
     agentStore.turnCaps.clear();
     for (const [turnId, caps] of Object.entries(msg.turnCapabilities)) {
       agentStore.turnCaps.set(turnId, caps);
+      // 同步写入 turn proxy：valtio Map 对 existing key 的 set 不触发重渲染，
+      // 借 turn 级订阅（useSnapshot(turnProxy)）让节点重渲染读到最新能力（修复重试按钮陈旧不出现）
+      const turn = agentStore.turns.get(turnId);
+      if (turn) turn.caps = caps;
     }
   }
   // 会话列表元数据增量更新（免每次变更走 REST 拉列表）

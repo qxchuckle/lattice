@@ -43,6 +43,33 @@ interface NodeData {
 /** 稳定空 ui 兑底（useSnapshot 不可条件调用） */
 const EMPTY_UI = proxy<NodeUiState>({ width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT });
 
+/**
+ * 兄弟分支计数指示器（◀ n/m ▶）。独立成组件以隔离重渲染：
+ * valtio 不追踪 Map 变更，本组件订阅 turnStructureVersion（turn 增/删时 bump），
+ * 仅指示器自身随兄弟增删重渲染，不牵连整个节点重渲染（性能考量，见用户要求）。
+ */
+function SiblingIndicator({ turnId }: { turnId: string }) {
+  const { turnStructureVersion } = useSnapshot(agentStore);
+  void turnStructureVersion; // 建立订阅：结构变化时重渲染本指示器
+  const siblings = getSiblings(turnId);
+  if (siblings.length <= 1) return null;
+  const siblingIndex = siblings.indexOf(turnId);
+  return (
+    <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
+      ◀ {siblingIndex + 1}/{siblings.length} ▶
+    </span>
+  );
+}
+
+/** 子节点计数（⑂ k）。同 SiblingIndicator，独立订阅结构版本，不牵连节点重渲染。 */
+function ChildCount({ turnId }: { turnId: string }) {
+  const { turnStructureVersion } = useSnapshot(agentStore);
+  void turnStructureVersion;
+  const childIds = getChildIds(turnId);
+  if (childIds.length === 0) return null;
+  return <span style={{ fontSize: 9, color: 'var(--text-secondary)' }}>⑂ {childIds.length}</span>;
+}
+
 function ConversationNodeInner({ data }: NodeProps) {
   const { turnId } = data as NodeData;
   // turn 级订阅（turns Map 不被 valtio 代理，见 store.putTurn）：
@@ -68,16 +95,23 @@ function ConversationNodeInner({ data }: NodeProps) {
   // 样式标志单点投影（turnState.turnStyleFlags）：仅作边框/配色/占位映射，不参与交互入口判断
   const { isStreaming, isError, isInterrupted, isUndone, isHidden } = turnStyleFlags(turn?.status);
   // 能力数据驱动：优先用 server 下发的投影（与接口守卫同源，含源能力维度）。
+  // 读取顺序：turn.caps（随快照写入 turn proxy，turn 级订阅可触发重渲染）> turnCaps Map（兼容）。
   // 例外：streaming 是客户端瞬时态（未入快照），本地投影作过渡；快照未到时同理。
-  // 防陈旧：error 事件与新快照之间存在时间窗，turnCaps 仍为旧 streaming 投影（canAbort:true）；
-  // 非 streaming 态读到 canAbort:true 即判定陈旧，回退按当前状态本地推导（保证重试按钮即时出现）。
-  // （valtio Map 对 existing key 的 set 不触发重渲染，无法靠订阅 turnCaps 解决，故用状态一致性校验）
-  const serverCaps = agentStore.turnCaps.get(turnId);
+  // 防陈旧：终态事件与新快照之间存在时间窗，caps 可能仍为旧投影：
+  //   ① canAbort:true = 陈旧 streaming 投影；② status 已 error/interrupted 但 canRetry:false = 陈旧 done 投影。
+  // 命中任一则回退按当前状态本地推导（重试按钮即时出现）；对不支持 fork 的源（canRetry 合法为 false），
+  // 真实 caps 随快照到达后经 turn 级订阅重渲染自动纠正（短暂误显示可接受，优于按钮迟到/缺失）。
+  const serverCaps = turn?.caps ?? agentStore.turnCaps.get(turnId);
+  const status = turn?.status ?? 'done';
+  const capsStale =
+    !serverCaps ||
+    serverCaps.canAbort ||
+    ((status === 'error' || status === 'interrupted') && !serverCaps.canRetry);
   const caps = isStreaming
     ? projectNodeCapabilities('streaming')
-    : serverCaps && !serverCaps.canAbort
-      ? serverCaps
-      : projectNodeCapabilities(turn?.status ?? 'done');
+    : capsStale
+      ? projectNodeCapabilities(status)
+      : serverCaps;
 
   // 流式自动滚动
   useEffect(() => {
@@ -169,9 +203,6 @@ function ConversationNodeInner({ data }: NodeProps) {
     </div>
   );
 
-  const childIds = getChildIds(turnId);
-  const siblings = getSiblings(turnId);
-  const siblingIndex = siblings.indexOf(turnId);
   const isCollapsed = ui?.collapsed ?? false;
 
   return (
@@ -266,24 +297,18 @@ function ConversationNodeInner({ data }: NodeProps) {
                 <span style={{ fontSize: 10, color: 'var(--brand-color)', fontWeight: 600 }}>
                   User
                 </span>
-                {/* 兄弟分支切换 */}
-                {siblings.length > 1 && (
-                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 }}>
-                    ◀ {siblingIndex + 1}/{siblings.length} ▶
-                  </span>
-                )}
-                {childIds.length > 0 && (
-                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', marginLeft: 'auto' }}>
-                    ⑂ {childIds.length}
-                  </span>
-                )}
-                {/* Fork / 撤销 / 删除 按钮（常驻，可用性由能力投影决定） */}
+                {/* 兄弟分支计数（独立组件，随兄弟增删自重渲染，不牵连节点） */}
+                <SiblingIndicator turnId={turnId} />
+                {/* 右侧组：子计数 + 操作按钮，整体右推（主组件不再读 childIds/siblings） */}
                 <span
                   style={{
-                    marginLeft: childIds.length > 0 ? 4 : 'auto',
+                    marginLeft: 'auto',
                     display: 'flex',
+                    alignItems: 'center',
                     gap: 4,
                   }}>
+                  <ChildCount turnId={turnId} />
+                  {/* Fork / 撤销 / 删除 按钮（常驻，可用性由能力投影决定） */}
                   {caps.canBranch && (
                     <button
                       onClick={() => submitFromNode(turn.parentTurnId, turn.userMessage)}

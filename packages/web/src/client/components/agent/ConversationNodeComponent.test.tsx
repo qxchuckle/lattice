@@ -215,4 +215,44 @@ describe('ConversationNodeComponent turnCaps 防陈旧（重试按钮竞态回�
     renderNode(makeTurn('error', [{ type: 'error', message: '出错了' }]));
     expect(btn(/重试/)).toBeInTheDocument();
   });
+
+  it('turnCaps 陈旧 done 投影（canRetry:false）但 status 已 error → 回退本地推导，重试按钮即时出现', async () => {
+    // 模拟终态事件与新快照之间的时间窗：caps 还是旧 done 投影（canRetry:false, canAbort:false）
+    agentStore.turnCaps.set('t1', projectNodeCapabilities('done'));
+    renderNode(makeTurn('error', [{ type: 'error', message: '额度不足' }]));
+    // 不能因陈旧 done 投影的 canRetry:false 而隐藏重试按钮
+    expect(await screen.findByRole('button', { name: /重试/ })).toBeInTheDocument();
+  });
+});
+
+describe('ConversationNodeComponent 兄弟计数响应式', () => {
+  beforeEach(() => {
+    cleanup();
+    agentStore.turns.clear();
+    vi.clearAllMocks();
+  });
+
+  it('新增兄弟后计数指示器（◀ n/m ▶）实时更新', async () => {
+    // 两个顶层兄弟（parentTurnId=null）
+    putTurn({ ...makeTurn('done'), id: 's1' });
+    putTurn({ ...makeTurn('done'), id: 's2' });
+    const props = {
+      id: 's1',
+      data: { turnId: 's1' },
+      type: 'conversation',
+      position: { x: 0, y: 0 },
+      selected: false,
+      isConnectable: false,
+      zIndex: 0,
+    } as unknown as NodeProps;
+    render(
+      <ReactFlowProvider>
+        <ConversationNodeComponent {...props} />
+      </ReactFlowProvider>,
+    );
+    expect(screen.getByText(/1\/2/)).toBeInTheDocument();
+    // 新增第三个兄弟 → turns.size 变化触发重渲染 → 计数更新为 1/3
+    putTurn({ ...makeTurn('done'), id: 's3' });
+    expect(await screen.findByText(/1\/3/)).toBeInTheDocument();
+  });
 });

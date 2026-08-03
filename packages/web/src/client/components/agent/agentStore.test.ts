@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('./connection', () => ({
   sendWs: vi.fn(),
   isWsReady: vi.fn(() => true),
+  isWsConnected: vi.fn(() => true),
   connectAgentWs: vi.fn(),
   disconnectAgentWs: vi.fn(),
   setStreamingTarget: vi.fn(),

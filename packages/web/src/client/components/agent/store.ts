@@ -130,6 +130,9 @@ export const agentStore = proxy({
   pendingPermissions: new Map<string, PendingPermission>(),
   /** 重试超限提示（非空时 UI 层弹出 message.warning 并复位为 ''） */
   retryWarning: '' as string,
+  /** turns Map 结构版本：turn 增/删时 bump（valtio 不追踪 Map 变更，节点组件订阅此普通字段
+   * 以在兄弟/子节点增删时重渲染更新计数；区别于 version——后者含终态事件等非结构变更） */
+  turnStructureVersion: 0,
 });
 
 // ── 内部辅助 ──
@@ -142,9 +145,22 @@ export const agentStore = proxy({
  * 所有 turn 入 Map 必须走此函数，禁止直接 turns.set。
  */
 export function putTurn(turn: TurnNode): TurnNode {
+  // 复用既有 proxy 原地更新：快照重建（applySnapshot/loadTree）不替换对象，
+  // 节点组件对旧 proxy 的 useSnapshot 订阅持续有效（避免订阅被丢弃的旧 proxy 而陈旧渲染）
+  const existing = agentStore.turns.get(turn.id);
+  if (existing) {
+    Object.assign(existing, turn);
+    return existing;
+  }
   const p = proxy(turn);
   agentStore.turns.set(p.id, p);
+  agentStore.turnStructureVersion++; // 结构新增→依赖计数的节点重渲染
   return p;
+}
+
+/** 移除 turn 并 bump 结构版本（valtio 不追踪 Map.delete，须手动触发计数重渲染） */
+export function removeTurn(id: string): void {
+  if (agentStore.turns.delete(id)) agentStore.turnStructureVersion++;
 }
 
 /** 稳定空 turn 兜底（useSnapshot 不可条件调用，目标节点缺失时占位） */
