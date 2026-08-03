@@ -10,7 +10,7 @@ import { DatabaseOutlined } from '@ant-design/icons';
 import type { ModelListItem, PromptSegment } from '@qcqx/lattice-agent-protocol';
 import { projectNodeCapabilities } from '@qcqx/lattice-agent-protocol';
 import { fmtTokens } from './ModelTuningModal';
-import { ChatInputBox, ModelMenuChip } from './ChatInputBar';
+import { ChatInputBox, ModelMenuChip, chipStyle } from './ChatInputBar';
 import { QueuedMessagesPanel } from './QueuedMessagesPanel';
 import { MISSING_TURN } from './store';
 import {
@@ -179,6 +179,15 @@ function ConversationNodeInner({ data }: NodeProps) {
     turn.thinkingLevel === 'none'
       ? '已关闭'
       : turn.thinkingLevel || threadModel?.tuning?.thinking?.default || '源默认';
+  // 参数 chip（与虚拟根同款逻辑：仅显示显式值或 tuning 默认值，无 fallback 文案）
+  const paramLabel = [
+    ctxCapacity ? fmtTokens(ctxCapacity) : null,
+    turn.thinkingLevel === 'none'
+      ? '不思考'
+      : turn.thinkingLevel || threadModel?.tuning?.thinking?.default || '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const contextPopover = (
     <div style={{ fontSize: 12, minWidth: 200 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
@@ -496,17 +505,32 @@ function ConversationNodeInner({ data }: NodeProps) {
                       ?.vision === true
                   }
                   controls={
-                    <ModelMenuChip
-                      models={threadModels}
-                      value={followupModel ?? turn.modelId}
-                      onChange={setFollowupModel}
-                      onEdit={(id) => {
-                        // 与虚拟根同款：编辑即选中该模型，参数作用于本节点（节点作用域）
-                        if ((followupModel ?? turn.modelId) !== id) setFollowupModel(id);
-                        agentStore.tuningModelId = id;
-                        agentStore.tuningTargetTurnId = turnId;
-                      }}
-                    />
+                    <>
+                      <ModelMenuChip
+                        models={threadModels}
+                        value={followupModel ?? turn.modelId}
+                        onChange={setFollowupModel}
+                        onEdit={(id) => {
+                          // 与虚拟根同款：编辑即选中该模型，参数作用于本节点（节点作用域）
+                          if ((followupModel ?? turn.modelId) !== id) setFollowupModel(id);
+                          agentStore.tuningModelId = id;
+                          agentStore.tuningTargetTurnId = turnId;
+                        }}
+                      />
+                      {/* 当前参数 chip（与虚拟根一致：有 tuning 规格才展示，点击编辑本节点参数） */}
+                      {threadModel?.tuning && paramLabel && (
+                        <button
+                          type='button'
+                          style={{ ...chipStyle, color: 'var(--text-secondary)' }}
+                          title='当前参数（上下文窗口 · 思考深度），点击编辑'
+                          onClick={() => {
+                            agentStore.tuningModelId = followupModel ?? turn.modelId;
+                            agentStore.tuningTargetTurnId = turnId;
+                          }}>
+                          {paramLabel}
+                        </button>
+                      )}
+                    </>
                   }
                   trailing={
                     /* 上下文查看（仅展示：用量/容量 + 本线程配置） */
