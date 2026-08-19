@@ -29,3 +29,22 @@ export {
 export type { SpecLintIssue, SpecLintReport } from './lint';
 export { migrateSpecs } from './migrate';
 export type { MigrateResult, MigrateOptions } from './migrate';
+export {
+  exportSpecs,
+  verifySpecExport,
+  SPEC_EXPORT_TOOL,
+  SPEC_EXPORT_MANIFEST,
+  SPEC_EXPORT_DEFAULT_NAME,
+} from './export';
+export type {
+  SpecExportOptions,
+  SpecExportScope,
+  SpecExportSource,
+  SpecExportFileEntry,
+  SpecExportManifest,
+  SpecExportWarning,
+  SpecExportWarningType,
+  SpecExportResult,
+  SpecExportVerifyIssue,
+  SpecExportVerifyResult,
+} from './export';

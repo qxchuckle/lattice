@@ -309,6 +309,11 @@ export {
   DESCRIPTION_MIN_LENGTH,
   DESCRIPTION_MAX_LENGTH,
   migrateSpecs,
+  exportSpecs,
+  verifySpecExport,
+  SPEC_EXPORT_TOOL,
+  SPEC_EXPORT_MANIFEST,
+  SPEC_EXPORT_DEFAULT_NAME,
 } from './spec';
 export type {
   SpecMatch,
@@ -318,6 +323,16 @@ export type {
   SpecLintReport,
   MigrateResult,
   MigrateOptions,
+  SpecExportOptions,
+  SpecExportScope,
+  SpecExportSource,
+  SpecExportFileEntry,
+  SpecExportManifest,
+  SpecExportWarning,
+  SpecExportWarningType,
+  SpecExportResult,
+  SpecExportVerifyIssue,
+  SpecExportVerifyResult,
 } from './spec';
 
 // 任务

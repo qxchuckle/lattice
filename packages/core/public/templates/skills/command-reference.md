@@ -213,6 +213,18 @@
 
 批量迁移（补 id/刷新 updated/补 title）。`--scope`（默认 all）/ `--dry-run` / `--json` / `--json-format`
 
+### `ltc spec export`
+
+导出 spec 为标准 Agent Skills 目录结构（`SKILL.md` 入口 + `manifest.yaml` hash 清单 + `global/` + `user/` + `<项目名>/` 一层平铺）。文件名加 `<user>__` 前缀；SKILL.md 目录按层级分节，项目级逐项目小节并附包名/git 匹配信息，检测到环境依赖时生成「使用注意」段（引导使用方 AI 灵活处理 ltc/本机路径，不改写正文）；重复导出 hash 对比仅重写变更；警告四类（本机路径/ltc 引用/悬空引用/敏感信息）+ 缺 description 清单只报告不改写。
+
+- `--filter <kw>`（可多次）：tags/文件名/标题/description；项目级含所属项目元数据
+- `--tag <tag>`（可多次）/ `--project <id|name>`（可多次）/ `--scope <level>`（默认 all）
+- `--user <name>`（可多次；`all`=全部用户；默认当前用户）
+- `--name`（skill 名，默认 lattice-specs）/ `--description`（覆盖自动生成）
+- `-o, --output <dir>`（默认 `~/.lattice/.cache/export-spec/<skill名>/`，公共文件夹按名分子目录，同名覆盖）
+- `--clean`（仅限含本工具 manifest.yaml 的目录）/ `--strict`（警告升错误）/ `--json`
+- `--verify <dir>`：不导出，仅校验目录与 manifest 一致性
+
 ## `ltc spec template`
 
 `list` / `apply <name>` / `pull <repo>` / `sync [--repo]` / `sync-builtins [--template <names>] [--all]`
