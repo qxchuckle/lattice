@@ -11,6 +11,7 @@ import {
   writeGlobalConfig,
   writeLocalConfig,
   getProjectSpecs,
+  getAllProjectSpecs,
   getAllProjectSpecsGrouped,
   getUserSpecs,
   getGlobalSpecs,
@@ -675,8 +676,9 @@ export function registerSpecCommand(program: Command): void {
           if (!opts.scope || opts.scope === 'user') {
             collected.push(...(await getUserSpecs(username)));
           }
-          if (projectId && (!opts.scope || opts.scope === 'project')) {
-            collected.push(...(await getProjectSpecs(username, projectId)));
+          if (!opts.scope || opts.scope === 'project') {
+            // 全量视角：project 级覆盖全部已注册项目（与 export / suggest-description 一致）
+            collected.push(...(await getAllProjectSpecs(username)));
           }
           reports = lintSpecs(collected);
         } else if (file) {

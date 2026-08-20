@@ -217,6 +217,13 @@
 - `--scope <scope>`（`all` 默认 / `global` / `user` / `project`=全部项目）/ `--limit <n>` / `--json`（含 `level` + `projectName`）
 - 修复提示为 `spec set` 绝对路径命令，可直接跨项目落盘
 
+### `ltc spec lint [file]`
+
+校验 spec frontmatter 完整性（id/title 为 error，description/updated/tags 为 warning；有 error 时退出码非 0）。
+
+- `<file>` 支持模糊匹配与 glob；`--scope` 限定层级
+- `--all` 批量扫描（project 级覆盖全部已注册项目）/ `--json`
+
 ### `ltc spec migrate [name]`
 
 批量迁移（补 id/刷新 updated/补 title）。`--scope`（默认 all）/ `--dry-run` / `--json` / `--json-format`
