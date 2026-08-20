@@ -221,11 +221,33 @@ export interface LocalConfig {
   username: string;
   scanDirs?: string[];
   gitEnabled?: boolean;
+  /** lattice 数据仓库（~/.lattice 主仓）的 git remote URL。注意与 ProjectMeta.gitRemotes（已注册项目代码仓的 remote）同名不同义 */
   gitRemote?: string;
   registryTemplates?: string[];
   /** web 面板密码鉴权配置，未设置则无鉴权 */
   webAuth?: WebAuthConfig;
+  /** 域同步（经验包）配置。注意与 gitRemote 的单仓多机同步双轨并存 */
+  sync?: SyncDomainsConfig;
   [key: string]: unknown;
+}
+
+/** 单个同步域（经验包仓库）的本机配置条目 */
+export interface SyncDomainConfig {
+  /** 域仓库 URL */
+  remote: string;
+  /** 域仓库分支（经验包分支，建议只 fast-forward），默认 main */
+  branch?: string;
+  /** 消费策略：trusted=读取+约束生效（默认）；reference=只读不注入；off=只同步镜像不读取 */
+  use?: 'trusted' | 'reference' | 'off';
+  /** 推送白名单规则："*"=全匹配；"project:<glob>"；"user-spec:<glob>"；"global-spec:<glob>"。缺省/空=只读消费（不推） */
+  routes?: string[];
+  /** 纯本机备注名，不参与任何契约与匹配 */
+  label?: string;
+}
+
+export interface SyncDomainsConfig {
+  /** 域列表；数组顺序即读时遵蔽优先级（越靠前越高） */
+  domains: SyncDomainConfig[];
 }
 
 export type ResolvedConfig = GlobalConfig & Partial<LocalConfig>;
@@ -419,6 +441,8 @@ export interface SemanticSearchResult {
   type: SearchDocumentType;
   title: string;
   username?: string;
+  /** 数据来源：'local' 或域 hash（D20） */
+  source?: string;
   projectId?: string;
   projectIds?: string[];
   distance: number;

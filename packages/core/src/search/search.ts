@@ -4,7 +4,7 @@ import type {
   SearchResult,
   SemanticMatchedSection,
 } from '../types';
-import { getSpecSearchMeta, searchFts, searchSpecsFallback } from '../db';
+import { getSpecSearchMeta, searchFts, searchSpecsFallback, getDocumentSourceByPath } from '../db';
 import { semanticSearch, getEmbeddingConfig } from '../rag';
 import { normalizeProjectId } from '../project';
 
@@ -75,6 +75,8 @@ type SearchAccumulator = {
   filePath: string;
   username: string;
   projectIds: string[];
+  /** 数据来源域：'local' 或域 hash（D20；输出为 meta.domain，语义侧携带，FTS 侧后补齐） */
+  domain?: string;
   ftsRank?: number;
   fallbackRank?: number;
   semanticRank?: number;
@@ -653,6 +655,7 @@ export async function hybridSearch(
         if (!existing.username && r.username) {
           existing.username = r.username;
         }
+        if (!existing.domain && r.source) existing.domain = r.source;
         if (!existing.snippet && semanticSnippet) existing.snippet = semanticSnippet;
         existing.fusionScore += semanticScore;
         existing.sources.add('semantic');
@@ -664,6 +667,7 @@ export async function hybridSearch(
           filePath: r.filePath,
           username: r.username ?? '',
           projectIds: r.projectIds ?? (r.projectId ? [r.projectId] : []),
+          domain: r.source,
           semanticRank: rank + 1,
           semanticDistance: r.distance,
           matchedSections: r.matchedSections,
@@ -731,6 +735,7 @@ export async function hybridSearch(
           filePath: candidate.filePath,
           source: resolveSource(candidate.sources),
           sources: Array.from(candidate.sources.values()),
+          domain: candidate.domain ?? getDocumentSourceByPath(candidate.filePath),
           ftsRank: candidate.ftsRank ?? null,
           fallbackRank: candidate.fallbackRank ?? null,
           semanticRank: candidate.semanticRank ?? null,

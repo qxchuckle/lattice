@@ -221,6 +221,8 @@ export function indexFtsAndMeta(
     sourceType: SearchDocumentType;
     projectId?: string;
     projectIds?: string[];
+    /** 数据来源：'local' 或域 hash（默认 local，D20） */
+    source?: string;
   },
 ): { hash: string; encodedProjectIds: string } {
   const hash = contentHash(content);
@@ -265,6 +267,8 @@ export function storeEmbedding(
     username: string;
     sourceType: SearchDocumentType;
     encodedProjectIds: string;
+    /** 数据来源：'local' 或域 hash（默认 local） */
+    source?: string;
     chunkIndex?: number;
     headingPath?: string;
     headingLevel?: number;
@@ -278,6 +282,7 @@ export function storeEmbedding(
     file_path: filePath,
     content_hash: hash,
     source_type: meta.sourceType,
+    source: meta.source ?? 'local',
     title: meta.title,
     username: meta.username,
     project_id: meta.encodedProjectIds,
@@ -328,6 +333,8 @@ export async function indexSearchDocument(
     sourceType: SearchDocumentType;
     projectId?: string;
     projectIds?: string[];
+    /** 数据来源：'local' 或域 hash（默认 local） */
+    source?: string;
   },
 ): Promise<void> {
   const { hash, encodedProjectIds } = indexFtsAndMeta(filePath, content, meta);
@@ -335,7 +342,13 @@ export async function indexSearchDocument(
 
   if (!needsReembedding) {
     // 内容未变，但仍刷新 chunk 元数据（title/username/project_id 可能变了）
-    updateEmbeddingMetadataByFilePath(filePath, meta.title, meta.username, encodedProjectIds);
+    updateEmbeddingMetadataByFilePath(
+      filePath,
+      meta.title,
+      meta.username,
+      encodedProjectIds,
+      meta.source,
+    );
     return;
   }
 
@@ -374,6 +387,7 @@ export async function indexSearchDocument(
       username: meta.username,
       sourceType: meta.sourceType,
       encodedProjectIds,
+      source: meta.source ?? 'local',
       chunkIndex: chunk.chunkIndex,
       headingPath: chunk.headingPath,
       headingLevel: chunk.headingLevel,
@@ -449,6 +463,7 @@ export async function semanticSearch(
       type: SearchDocumentType;
       title: string;
       username: string;
+      source: string;
       projectIds: string[];
       bestDistance: number;
       matchedSections: SemanticMatchedSection[];
@@ -502,6 +517,7 @@ export async function semanticSearch(
         type: row.source_type,
         title: row.title,
         username: row.username,
+        source: row.source,
         projectIds,
         bestDistance: result.distance,
         matchedSections: [section],
@@ -520,6 +536,7 @@ export async function semanticSearch(
     type: doc.type,
     title: doc.title,
     username: doc.username || undefined,
+    source: doc.source || 'local',
     projectId: doc.projectIds[0],
     projectIds: doc.projectIds,
     distance: doc.bestDistance,
@@ -552,6 +569,8 @@ type SearchDoc = {
   sourceType?: SearchDocumentType;
   projectId?: string;
   projectIds?: string[];
+  /** 数据来源：'local' 或域 hash（默认 local，D20） */
+  source?: string;
 };
 
 /** 跨文档批量索引（rebuild / incremental 复用） */
@@ -604,6 +623,7 @@ async function batchIndexDocuments(
         sourceType: SearchDocumentType;
         projectId?: string;
         projectIds?: string[];
+        source?: string;
       };
       chunks: MarkdownChunk[];
       chunkIds: string[];
@@ -621,6 +641,7 @@ async function batchIndexDocuments(
         sourceType: doc.sourceType ?? ('spec' as SearchDocumentType),
         projectId: doc.projectId,
         projectIds: doc.projectIds,
+        source: doc.source,
       };
       const existing = getEmbeddingByPath(doc.filePath);
       const chunks = chunkMarkdown(doc.content, doc.title, config.minChunkSize);

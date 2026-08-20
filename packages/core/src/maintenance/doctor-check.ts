@@ -29,6 +29,7 @@ import {
   fileExists,
   getGlobalConfigPath,
   getGlobalSpecDir,
+  getLatticeRoot,
   getLocalConfigPath,
   getProjectMetaPath,
   getTaskMetaPath,
@@ -39,6 +40,7 @@ import {
   listDir,
   listUserDirs,
   readJSON,
+  readText,
   writeJSON,
 } from '../paths';
 import { getUsername, isInitialized } from '../config';
@@ -46,6 +48,14 @@ import { closeDb, deleteProject, initDb } from '../db';
 import { FTS_INDEX_VERSION, getFtsIndexVersion } from '../db';
 import { getRAGStatus } from '../rag';
 import { readInitMeta } from '../cache/init-meta';
+import simpleGit from 'simple-git';
+import { isGitInitialized } from './git-ops';
+import {
+  GITIGNORE_SECTIONS,
+  computeMissingGitignoreSections,
+  ensureGitignore,
+  renderGitignoreSections,
+} from './gitignore';
 
 /** 解析 JSON 数组字符串 */
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -249,6 +259,22 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
   // 5.8 孤立任务目录
   const orphanTaskEntries = await checkOrphanedTaskDirs(username);
   entries.push(...orphanTaskEntries);
+
+  // 5.9 主仓 .gitignore 标准段检查
+  const gitignoreSectionEntries = await checkGitignoreSections(opts.fix);
+  entries.push(...gitignoreSectionEntries);
+
+  // 5.10 已跟踪但应忽略的文件（.trash/、models/、.sync-domains/ 等被 git 跟踪）
+  const trackedIgnoredEntries = await checkTrackedIgnoredFiles();
+  entries.push(...trackedIgnoredEntries);
+
+  // 5.11 域同步健康（镜像存在性/指纹/降级源）
+  const domainHealthEntries = await checkDomainHealth();
+  entries.push(...domainHealthEntries);
+
+  // 5.12 孤儿域镜像（镜像目录存在但配置无对应条目，手改配置绕过 CLI 产生）
+  const orphanMirrorEntries = await checkOrphanDomainMirrors();
+  entries.push(...orphanMirrorEntries);
 
   // 6. RAG
   const ragStatus = await getRAGStatus();
@@ -930,4 +956,159 @@ async function checkOrphanedTaskDirs(username: string): Promise<DoctorEntry[]> {
   }
 
   return entries;
+}
+
+// ─── 5.11 域同步健康 ───
+
+/**
+ * 域配置健康检查：镜像目录存在性（G4 反向）、指纹文件可读性。
+ * 只读检查，不修复；镜像缺失建议 re-join 或 ltc sync。
+ */
+async function checkDomainHealth(): Promise<DoctorEntry[]> {
+  const { readSyncDomains, domainHashOf, mirrorDirOf } = await import('../sync/domain-config');
+  const { isRebaseInProgress } = await import('../sync/mirror');
+  const domains = await readSyncDomains();
+  if (domains.length === 0) {
+    return [{ item: '域同步健康', status: 'healthy', message: '未关联域，跳过' }];
+  }
+
+  const entries: DoctorEntry[] = [];
+  const problems: string[] = [];
+  for (const raw of domains) {
+    const hash = domainHashOf(raw);
+    const mirrorDir = mirrorDirOf(raw);
+    if (!(await dirExists(mirrorDir))) {
+      problems.push(`域 ${hash} 镜像目录缺失`);
+      continue;
+    }
+    if (await isRebaseInProgress(mirrorDir)) {
+      problems.push(`域 ${hash} 镜像处于 rebase 中间态（运行 ltc sync 自动逃生）`);
+    }
+  }
+  if (problems.length === 0) {
+    entries.push({
+      item: '域同步健康',
+      status: 'healthy',
+      message: `${domains.length} 个域镜像全部就绪`,
+    });
+  } else {
+    entries.push({
+      item: '域同步健康',
+      status: 'stale',
+      message: problems.join('；'),
+      fix: '运行 ltc sync 拉取重建镜像；镜像缺失且配置在意的域可 sync domain unlink 后重新 join',
+    });
+  }
+  return entries;
+}
+
+// ─── 5.12 孤儿域镜像 ───
+
+/**
+ * 孤儿镜像：.sync-domains/ 下有目录但配置无对应条目（手改 config 绕过 CLI 产生）。
+ * 仅报告不自动删（镜像可再生，但删除属用户决策）。G4。
+ */
+async function checkOrphanDomainMirrors(): Promise<DoctorEntry[]> {
+  const { readSyncDomains, domainHashOf } = await import('../sync/domain-config');
+  const { getSyncDomainsDir } = await import('../paths');
+  const configured = new Set((await readSyncDomains()).map((d) => domainHashOf(d)));
+
+  const mirrorEntries = await listDir(getSyncDomainsDir());
+  const orphans = mirrorEntries.filter((name) => !name.startsWith('.') && !configured.has(name));
+  if (orphans.length === 0) {
+    return [{ item: '孤儿域镜像', status: 'healthy', message: '无孤儿镜像' }];
+  }
+  return [
+    {
+      item: '孤儿域镜像',
+      status: 'stale',
+      message: `${orphans.length} 个镜像目录无对应域配置：${orphans.slice(0, 3).join('；')}${orphans.length > 3 ? '…' : ''}`,
+      fix: `确属废弃可删除：rm -rf ${getSyncDomainsDir()}/<hash>（镜像可再生，删除无数据损失）`,
+    },
+  ];
+}
+
+// ─── 5.9 主仓 .gitignore 标准段检查 ───
+
+async function checkGitignoreSections(fix?: boolean): Promise<DoctorEntry[]> {
+  if (!(await isGitInitialized())) {
+    return [{ item: 'gitignore 标准段', status: 'healthy', message: '未启用 git 管理，跳过' }];
+  }
+
+  const gitignorePath = join(getLatticeRoot(), '.gitignore');
+  const existing = (await fileExists(gitignorePath)) ? ((await readText(gitignorePath)) ?? '') : '';
+  const missing = computeMissingGitignoreSections(existing);
+
+  if (missing.length === 0) {
+    return [{ item: 'gitignore 标准段', status: 'healthy', message: '标准段全部就绪' }];
+  }
+
+  const titles = missing.map((s) => s.title).join('；');
+  if (fix) {
+    await ensureGitignore(gitignorePath);
+    return [
+      {
+        item: 'gitignore 标准段',
+        status: 'repaired',
+        message: `已补 ${missing.length} 个缺失段：${titles}`,
+      },
+    ];
+  }
+
+  return [
+    {
+      item: 'gitignore 标准段',
+      status: 'stale',
+      message: `缺失 ${missing.length} 个标准段：${titles}`,
+      fix: '运行 lattice doctor --fix 自动补段',
+    },
+  ];
+}
+
+// ─── 5.10 已跟踪但应忽略的文件 ───
+
+/**
+ * 检查主仓中已被 git 跟踪、但命中标准忽略规则的文件（如历史入库的 .trash/、models/）。
+ * 仅报告不自动清理：取消跟踪会改变仓内容且涉及用户决策，fix 字段给双向建议。
+ */
+async function checkTrackedIgnoredFiles(): Promise<DoctorEntry[]> {
+  if (!(await isGitInitialized())) {
+    return [{ item: '已跟踪忽略文件', status: 'healthy', message: '未启用 git 管理，跳过' }];
+  }
+
+  try {
+    const git = simpleGit(getLatticeRoot());
+    const tracked = (await git.raw(['ls-files']))
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const { default: ignore } = await import('ignore');
+    const matcher = ignore();
+    matcher.add(renderGitignoreSections(GITIGNORE_SECTIONS));
+
+    const offenders = tracked.filter((p) => matcher.ignores(p));
+    if (offenders.length === 0) {
+      return [
+        {
+          item: '已跟踪忽略文件',
+          status: 'healthy',
+          message: `已跟踪 ${tracked.length} 个文件，无应忽略项`,
+        },
+      ];
+    }
+
+    return [
+      {
+        item: '已跟踪忽略文件',
+        status: 'stale',
+        message: `${offenders.length} 个已跟踪文件命中忽略规则：${offenders.slice(0, 3).join('；')}${offenders.length > 3 ? '…' : ''}`,
+        fix: `取消跟踪：git rm -r --cached ${offenders.slice(0, 2).join(' ')}${offenders.length > 2 ? ' …' : ''}；确需跟踪则调整 .gitignore`,
+      },
+    ];
+  } catch (err) {
+    return [
+      { item: '已跟踪忽略文件', status: 'error', message: `检查失败：${(err as Error).message}` },
+    ];
+  }
 }

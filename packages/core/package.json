@@ -23,7 +23,8 @@
     "dev": "tsup --watch",
     "check-types": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "tsup",
+    "test": "node --test tests/"
   },
   "files": [
     "dist"
@@ -36,6 +37,7 @@
     "better-sqlite3": "^11.9.1",
     "glob": "^13.0.6",
     "gray-matter": "^4.0.3",
+    "ignore": "^7.0.5",
     "minimatch": "^10.2.5",
     "simple-git": "^3.27.0",
     "sqlite-vec": "^0.1.9",

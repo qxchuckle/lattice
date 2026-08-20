@@ -25,6 +25,7 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../../lib';
+import { DomainSection } from './DomainSection';
 
 interface GitStatus {
   initialized: boolean;
@@ -338,6 +339,9 @@ export const GitSyncTab = memo(function GitSyncTab() {
           )}
         </Card>
       )}
+
+      {/* 域（经验包）管理：join / unlink / route / 同步 */}
+      <DomainSection />
 
       {/* 提交 */}
       <div>

@@ -41,6 +41,8 @@ export type {
   AncestorProjectInfo,
   FastStartLogEntry,
   FastStartLogFile,
+  SyncDomainConfig,
+  SyncDomainsConfig,
 } from './types';
 
 // 路径与文件工具
@@ -71,6 +73,10 @@ export {
   getFastStartLogDir,
   getFastStartLogFileName,
   getFastStartLogFilePath,
+  getSyncDomainsDir,
+  getSyncDomainDir,
+  getSyncBaselineDir,
+  getSyncBaselinePath,
   toKebabCase,
   ensureDir,
   fileExists,
@@ -158,6 +164,7 @@ export {
   getEmbeddingsByFilePath,
   deleteEmbeddingsByFilePath,
   updateEmbeddingMetadataByFilePath,
+  getDocumentSourceByPath,
   // FTS 索引版本与通用 KV
   FTS_INDEX_VERSION,
   DB_SCHEMA_VERSION,
@@ -459,6 +466,15 @@ export {
 export { runStartupSelfCheck } from './maintenance/startup-self-check';
 export type { StartupSelfCheckResult } from './maintenance/startup-self-check';
 export { runDoctorCheck } from './maintenance/doctor-check';
+export {
+  GITIGNORE_SECTIONS,
+  ensureGitignore,
+  computeMissingGitignoreSections,
+  renderGitignoreSections,
+} from './maintenance/gitignore';
+export type { GitignoreEntry, GitignoreSection } from './maintenance/gitignore';
+export * from './sync';
+export * from './provider';
 export { getGlobalStatus } from './maintenance/status';
 export type { GlobalStatus } from './maintenance/status';
 export { openDirectory, openWithEditor, openLatticeRoot } from './maintenance/open';

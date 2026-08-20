@@ -31,7 +31,7 @@ let _db: Database.Database | null = null;
  * v4: 新增 project_dirs 表 — 记录每个 primaryId 下的物理目录实例，
  *     解决多个物理目录 primaryId 相同导致 DB 只有一行、虚拟合并无法发现关联目录的问题
  */
-export const DB_SCHEMA_VERSION = 4;
+export const DB_SCHEMA_VERSION = 5;
 const DB_SCHEMA_VERSION_KEY = 'db_schema_version';
 
 const SCHEMA_SQL = `
@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS project_dirs (
 CREATE TABLE IF NOT EXISTS embeddings (
   id TEXT PRIMARY KEY,
   file_path TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'local',
   chunk_index INTEGER NOT NULL DEFAULT 0,
   heading_path TEXT NOT NULL DEFAULT '',
   heading_level INTEGER NOT NULL DEFAULT 0,
@@ -1060,6 +1061,8 @@ export function upsertEmbedding(entry: {
   username: string;
   project_id: string;
   vector_indexed: number;
+  /** 数据来源：'local'（主数据）或域 hash（默认 local，D20） */
+  source?: string;
   chunk_index?: number;
   heading_path?: string;
   heading_level?: number;
@@ -1069,17 +1072,18 @@ export function upsertEmbedding(entry: {
   getDb()
     .prepare(
       `INSERT INTO embeddings (
-         id, file_path, content_hash, source_type, title, username, project_id, vector_indexed,
+         id, file_path, source, content_hash, source_type, title, username, project_id, vector_indexed,
          chunk_index, heading_path, heading_level, parent_id, content,
          created, updated
        )
        VALUES (
-         @id, @file_path, @content_hash, @source_type, @title, @username, @project_id, @vector_indexed,
+         @id, @file_path, @source, @content_hash, @source_type, @title, @username, @project_id, @vector_indexed,
          @chunk_index, @heading_path, @heading_level, @parent_id, @content,
          datetime('now'), datetime('now')
        )
        ON CONFLICT(id) DO UPDATE SET
          file_path = @file_path,
+         source = @source,
          content_hash = @content_hash,
          source_type = @source_type,
          title = @title,
@@ -1100,6 +1104,8 @@ export function upsertEmbedding(entry: {
       parent_id: null,
       content: '',
       ...entry,
+      // better-sqlite3 把 undefined 绑定为 NULL：显式归一，防 NOT NULL 违约
+      source: entry.source ?? 'local',
     });
 }
 
@@ -1109,6 +1115,18 @@ export function getEmbeddingByPath(
   return getDb()
     .prepare('SELECT id, content_hash, vector_indexed FROM embeddings WHERE file_path = ? LIMIT 1')
     .get(filePath) as { id: string; content_hash: string; vector_indexed: number } | undefined;
+}
+
+/** 按文件路径查文档数据来源（'local' 或域 hash；D20，FTS 候选补齐用） */
+export function getDocumentSourceByPath(filePath: string): string {
+  try {
+    const row = getDb()
+      .prepare('SELECT source FROM embeddings WHERE file_path = ? LIMIT 1')
+      .get(filePath) as { source: string } | undefined;
+    return row?.source ?? 'local';
+  } catch {
+    return 'local';
+  }
 }
 
 /** 获取文件的所有 chunk embedding 记录 */
@@ -1154,18 +1172,21 @@ export function updateEmbeddingMetadataByFilePath(
   title: string,
   username: string,
   projectId: string,
+  source?: string,
 ): void {
   getDb()
     .prepare(
-      `UPDATE embeddings SET title = ?, username = ?, project_id = ?, updated = datetime('now') WHERE file_path = ?`,
+      `UPDATE embeddings SET title = ?, username = ?, project_id = ?, source = ?, updated = datetime('now') WHERE file_path = ?`,
     )
-    .run(title, username, projectId, filePath);
+    // undefined 会被 better-sqlite3 绑定为 NULL，显式归一
+    .run(title, username, projectId, source ?? 'local', filePath);
 }
 
 export function getEmbeddingRowsByIds(ids: string[]): {
   id: string;
   file_path: string;
   source_type: SearchDocumentType;
+  source: string;
   title: string;
   username: string;
   project_id: string;
@@ -1178,7 +1199,7 @@ export function getEmbeddingRowsByIds(ids: string[]): {
   const placeholders = ids.map(() => '?').join(', ');
   return getDb()
     .prepare(
-      `SELECT id, file_path, source_type, title, username, project_id,
+      `SELECT id, file_path, source_type, source, title, username, project_id,
               chunk_index, heading_path, heading_level, content
        FROM embeddings
        WHERE id IN (${placeholders})`,
@@ -1187,6 +1208,7 @@ export function getEmbeddingRowsByIds(ids: string[]): {
     id: string;
     file_path: string;
     source_type: SearchDocumentType;
+    source: string;
     title: string;
     username: string;
     project_id: string;

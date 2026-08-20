@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { checkbox, confirm, input } from '@inquirer/prompts';
-import ignore from 'ignore';
 import { cp, readdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -56,38 +55,7 @@ import {
   syncBundledSpecTemplatesWithPrompt,
 } from '../utils/spec-templates';
 import { shouldSkipConfirm } from '../utils';
-
-interface GitignoreEntry {
-  pattern: string;
-  probePath: string;
-}
-
-interface GitignoreSection {
-  title: string;
-  entries: GitignoreEntry[];
-}
-
-const GITIGNORE_SECTIONS: GitignoreSection[] = [
-  {
-    title: 'Lattice 本机配置',
-    entries: [{ pattern: 'config/config-local.json', probePath: 'config/config-local.json' }],
-  },
-  {
-    title: '个人敏感信息',
-    entries: [{ pattern: '**/private/', probePath: 'workspace/private/secret.txt' }],
-  },
-  {
-    title: '本地缓存（SQLite 数据库等）',
-    entries: [{ pattern: '.cache/', probePath: '.cache/lattice.db' }],
-  },
-  {
-    title: '其他',
-    entries: [
-      { pattern: '.DS_Store', probePath: '.DS_Store' },
-      { pattern: 'node_modules/', probePath: 'node_modules/package.json' },
-    ],
-  },
-];
+import { ensureGitignore } from '@qcqx/lattice-core';
 
 export function registerInitCommand(program: Command): void {
   const initCmd: Command = program.command('init');
@@ -350,40 +318,6 @@ function parseCommaSeparatedOption(value: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-async function ensureGitignore(gitignorePath: string): Promise<void> {
-  const existingContent = (await fileExists(gitignorePath))
-    ? ((await readText(gitignorePath)) ?? '')
-    : '';
-  if (!existingContent.trim()) {
-    await writeText(gitignorePath, `${renderGitignoreSections(GITIGNORE_SECTIONS)}\n`);
-    return;
-  }
-
-  const matcher = ignore();
-  matcher.add(existingContent);
-
-  const missingSections = GITIGNORE_SECTIONS.map((section) => ({
-    ...section,
-    entries: section.entries.filter((entry) => !matcher.ignores(entry.probePath)),
-  })).filter((section) => section.entries.length > 0);
-
-  if (missingSections.length === 0) {
-    return;
-  }
-
-  const nextBlock = renderGitignoreSections(missingSections);
-  const normalizedExisting = existingContent.trimEnd();
-  await writeText(gitignorePath, `${normalizedExisting}\n\n${nextBlock}\n`);
-}
-
-function renderGitignoreSections(sections: GitignoreSection[]): string {
-  return sections
-    .map((section) =>
-      [`# ${section.title}`, ...section.entries.map((entry) => entry.pattern)].join('\n'),
-    )
-    .join('\n\n');
 }
 
 interface ExtraRulesInjection {

@@ -38,6 +38,8 @@ import {
   migrateSpecs,
   exportSpecs,
   verifySpecExport,
+  createComposite,
+  sourceLabel,
   type SpecExportScope,
   type ProjectSpecGroup,
   type SpecFrontmatter,
@@ -93,7 +95,11 @@ export function registerSpecCommand(program: Command): void {
         const projectId = await resolveCurrentProjectId();
         const scopeFilter = opts.scope as string | undefined;
 
-        const allSpecs: { scope: string; specs: Awaited<ReturnType<typeof getGlobalSpecs>> }[] = [];
+        const allSpecs: {
+          scope: string;
+          specs: Awaited<ReturnType<typeof getGlobalSpecs>>;
+          from?: string;
+        }[] = [];
 
         if (!scopeFilter || scopeFilter === 'global') {
           allSpecs.push({ scope: 'global', specs: await getGlobalSpecs() });
@@ -103,6 +109,28 @@ export function registerSpecCommand(program: Command): void {
         }
         if (projectId && (!scopeFilter || scopeFilter === 'project')) {
           allSpecs.push({ scope: 'project', specs: await getProjectSpecs(username, projectId) });
+        }
+
+        // 域 spec（knowledgeView：use!=off 全部域；来源标注；本地已遮蔽的域副本不重复列出）
+        const composite = await createComposite(username);
+        const knowledge = await composite.knowledgeView();
+        const shadowedNs = new Set(knowledge.shadowed.map((s) => s.namespace));
+        const domainSpecs = knowledge.specs.filter(
+          (v) => v.source !== 'local' && !shadowedNs.has(v.namespace),
+        );
+        const scopeMapped = domainSpecs.filter((v) => {
+          if (!scopeFilter) return true;
+          if (scopeFilter === 'global') return v.scope === 'global';
+          if (scopeFilter === 'user') return v.scope === 'user';
+          if (scopeFilter === 'project') return v.scope === 'project';
+          return true;
+        });
+        if (scopeMapped.length > 0) {
+          allSpecs.push({
+            scope: 'domain',
+            from: sourceLabel(scopeMapped[0].source, knowledge.labels),
+            specs: scopeMapped.map((v) => v.spec),
+          });
         }
 
         closeDb();
@@ -127,7 +155,8 @@ export function registerSpecCommand(program: Command): void {
 
         for (const group of allSpecs) {
           if (group.specs.length === 0) continue;
-          logger.raw(chalk.blue(`\n[${group.scope}] ${group.specs.length} 个 spec：`));
+          const fromTag = group.from ? chalk.magenta(` · 来自 ${group.from}`) : '';
+          logger.raw(chalk.blue(`\n[${group.scope}] ${group.specs.length} 个 spec${fromTag}：`));
           for (const spec of group.specs) {
             const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
             const tags = spec.frontmatter.tags?.join(', ') ?? '';
@@ -162,9 +191,12 @@ export function registerSpecCommand(program: Command): void {
   // show
   cmd
     .command('show <file>')
-    .description('查看 spec 信息（支持文件名、标题模糊匹配和 glob 语法）')
+    .description(
+      '查看 spec 信息（支持文件名、标题模糊匹配和 glob 语法；--source 直读被遮蔽的域版本）',
+    )
     .option('--scope <scope>', '限定层级（project / user / global）')
     .option('--user <username>', '查看指定用户的 spec（默认当前用户）')
+    .option('--source <hash8>', '指定来源域（hash 前 8 位）直读域版本（D24）')
     .option('--detail', '输出文件内容')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
@@ -173,6 +205,53 @@ export function registerSpecCommand(program: Command): void {
         const currentUsername = await getUsername();
         const targetUsername = (opts.user as string) ?? currentUsername;
         await initDb();
+
+        // --source：直读指定域版本（不经遮蔽，含被本地遮蔽的副本；匹配域内文件名/路径/标题）
+        if (opts.source) {
+          const composite = await createComposite(currentUsername);
+          const knowledge = await composite.knowledgeView();
+          const hash8 = String(opts.source);
+          const domainViews = [
+            ...knowledge.specs.filter((v) => v.source.startsWith(hash8)),
+            ...knowledge.shadowed.filter((s) => s.lostSource.startsWith(hash8)).map((s) => s.entry),
+          ];
+          if (domainViews.length === 0) {
+            logger.raw(chalk.yellow(`未找到来源域 ${hash8}（可用的域中无匹配，或域不存在）`));
+            closeDb();
+            return;
+          }
+          const matched = domainViews.filter(
+            (v) =>
+              v.spec.fileName === file ||
+              v.spec.relativePath === file ||
+              v.spec.relativePath.endsWith(`/${file}`) ||
+              v.spec.frontmatter.title === file,
+          );
+          if (matched.length === 0) {
+            logger.raw(
+              chalk.yellow(
+                `域 ${hash8} 中未找到 spec：${file}（域内共 ${domainViews.length} 个 spec）`,
+              ),
+            );
+            closeDb();
+            return;
+          }
+          closeDb();
+          const label = sourceLabel(matched[0].source, knowledge.labels);
+          for (const v of matched) {
+            const s = v.spec;
+            logger.raw(
+              chalk.bold(`\n${s.frontmatter.title ?? s.fileName}`) + chalk.magenta(` [${label}]`),
+            );
+            logger.raw(chalk.dim(`  ${v.scope} · ${s.filePath}`));
+            if (opts.detail) {
+              logger.raw(chalk.dim('\n' + '─'.repeat(40)));
+              logger.raw(s.content);
+            }
+            logger.raw('');
+          }
+          return;
+        }
 
         // 校验指定用户是否存在
         if (opts.user) {

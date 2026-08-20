@@ -29,6 +29,8 @@ Lattice 的所有数据都存储在 `~/.lattice/` 目录下。
 │   ├── web-server.json                  # Web 服务器运行状态
 │   └── sensitive/                       # 敏感信息缓存（token/cookie/密钥等，文档正文不记录）
 ├── .trash/                              # 软删除回收站（删除的任务/项目暂存于此）
+├── .sync-domains/                       # 域同步镜像（已 gitignore；每域一个独立 git 仓，目录名 = 域 hash）
+│   └── <domain-hash>/                   # 单个域（经验包）的本机只读物化视图，各机独立 clone
 ├── .git/                                # Git 仓库（可选，用于版本管理 ~/.lattice）
 ├── .gitignore                           # Git 忽略规则
 └── users/                               # 用户数据
@@ -59,6 +61,8 @@ Lattice 的所有数据都存储在 `~/.lattice/` 目录下。
 | `models/` | RAG embedding 模型文件 | 否（体积大） |
 | `.cache/` | SQLite 数据库、模型缓存、运行状态、敏感信息缓存 | 否（gitignore） |
 | `.trash/` | 软删除回收站 | 否 |
+| `.sync-domains/` | 域同步镜像（经验包的本机只读副本，各机独立 clone） | 否（gitignore） |
+| `.cache/sync-baseline/` | 域同步基线指纹（本机上次 push 的贡献路径集） | 否（随 .cache） |
 | `users/<user>/spec/` | 用户级 spec，跨项目复用 | 是 |
 | `users/<user>/projects/` | 项目注册数据 | 是 |
 | `users/<user>/tasks/` | 任务数据 | 是 |
@@ -72,6 +76,26 @@ Lattice 的数据按以下层级组织：
 - **用户级**（`users/<username>/`）：按用户名隔离，包含该用户的 spec、项目、任务和关系数据
 - **项目级**（`projects/<project-id>/`）：单个项目的元数据和项目级 spec
 - **任务级**（`tasks/<task-id>/`）：单个任务的元数据、PRD、进度日志和方案讨论
+
+### 域同步（双轨模型）
+
+Lattice 的同步是双轨的，两轨长期并存、场景正交：
+
+| | origin 单仓（`ltc sync`） | 域（经验包，`ltc sync domain join`） |
+|---|---|---|
+| 场景 | **一个用户多机器间**全量同步 | **多用户协作**，互相选择性提供经验 |
+| 范围 | 整个 `~/.lattice` 主数据 | routes 白名单（项目/任务/spec） |
+| 可见性 | 仅自己的机器 | 他人可见 |
+| 数据落地 | pull 回写主目录 | **pull 止步镜像**（`~/.lattice/.sync-domains/<hash>/`），读时经统一数据源 Provider 合并，永不落盘主数据 |
+
+关键语义：
+
+- **域身份** = `sha256(remote#branch)` 前 16 位；一切身份运算恒用 hash，label 仅本机备注；
+- **消费策略**（域配置 `use`，默认 `trusted`）：`trusted` 读取+约束生效；`reference` 只读不注入约束；`off` 只同步镜像不读取；
+- **推送策略**（域配置 `routes`）：`"*"` 全量；`project:<glob>` / `user-spec:<glob>` / `global-spec:<glob>` 选择性；缺省 = 只读消费（join 陌生域的安全默认）；push 为白名单增量式（只覆盖自己的贡献集 + 基线指纹退出传播，别人的内容永不因我 push 被删）；
+- **遮蔽规则**（读时合并）：本地主数据 > 域（域间按配置数组顺序）；遮蔽键 spec = 同命名空间相对路径、任务 = 任务 id、项目 = 契约 ID；域数据一律只读；
+- **冲突裁决**（AI 工作流同样适用）：spec 生效优先级层级主序不变（project > user > global），同层级同路径冲突以**本地数据源、当前用户**为准；被遮蔽的域版本可用 `ltc spec show <name> --source <hash8>` 直读；
+- 配置位置：`config-local.json` 的 `sync.domains`（数组顺序即遮蔽优先级）。
 
 > **敏感信息存储约定**：spec、PRD、checkpoint 等文档中不记录 token、cookie、密钥等敏感信息。需要沉淀敏感信息时，写入 `~/.lattice/.cache/sensitive/` 下的独立 txt/md 文件（文件名标注来源任务或 spec），文档正文只引用文件路径。
 

@@ -51,6 +51,27 @@ export function getLocalConfigPath(): string {
   return pathJoin(getConfigDir(), 'config-local.json');
 }
 
+// ─── 域同步 ───
+
+/** 域镜像根目录（每域一个独立 git 仓库，目录名 = 域 hash；整体 gitignore，不轻本仓同步） */
+export function getSyncDomainsDir(): string {
+  return pathJoin(getLatticeRoot(), '.sync-domains');
+}
+
+/** 单个域镜像目录 */
+export function getSyncDomainDir(domainHash: string): string {
+  return pathJoin(getSyncDomainsDir(), domainHash);
+}
+
+/** 域同步基线指纹目录（记录本机上次成功 push 的贡献路径集，支撑退出传播；位于 .cache 不轻仓） */
+export function getSyncBaselineDir(): string {
+  return pathJoin(getCacheDir(), 'sync-baseline');
+}
+
+export function getSyncBaselinePath(domainHash: string): string {
+  return pathJoin(getSyncBaselineDir(), `${domainHash}.json`);
+}
+
 // ─── 全局 spec ───
 
 export function getGlobalSpecDir(): string {

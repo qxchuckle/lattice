@@ -1,11 +1,12 @@
 import type { SearchDocumentType } from '../types';
-import { listUserDirs } from '../paths';
+import { listUserDirs, readText, join } from '../paths';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from '../spec';
 import { listTasks, getTaskPrd, getTaskDesign } from '../task';
 import { readProgress } from '../task/checkpoint';
 import { listProjects, getAllUniqueRelations } from '../project';
 import { readProfileSummary, readProfileTags } from '../project/profile';
 import { getProjectProfileSummaryPath } from '../paths';
+import { createComposite } from '../provider/composite';
 
 export interface SearchDocumentInput {
   filePath: string;
@@ -16,6 +17,8 @@ export interface SearchDocumentInput {
   sourceType?: SearchDocumentType;
   projectId?: string;
   projectIds?: string[];
+  /** 数据来源：'local'（主数据，默认）或域 hash（D20；域文档用镜像绝对路径，孤儿清理按路径生效） */
+  source?: string;
 }
 
 /** spec 文件的最小结构契约（getGlobalSpecs/getUserSpecs/getProjectSpecs 返回元素） */
@@ -27,7 +30,12 @@ interface SpecFileLike {
 }
 
 /** 构建 spec 类型的搜索文档（消除全局/用户/项目级 spec 构建重复） */
-function buildSpecDoc(s: SpecFileLike, username: string, projectId?: string): SearchDocumentInput {
+function buildSpecDoc(
+  s: SpecFileLike,
+  username: string,
+  projectId?: string,
+  source?: string,
+): SearchDocumentInput {
   return {
     filePath: s.filePath,
     content: s.content,
@@ -37,7 +45,108 @@ function buildSpecDoc(s: SpecFileLike, username: string, projectId?: string): Se
     sourceType: 'spec',
     projectId,
     projectIds: projectId ? [projectId] : undefined,
+    source,
   };
+}
+
+/**
+ * 域文档收集（v3）：从 knowledgeView 拿遥蔽去重后的胜者条目。
+ *
+ * - 域 spec：胜者才索引，被遥蔽副本永不索引（collector 不理解遥蔽）；
+ * - 域任务：PRD + design（v1；checkpoint 逐条索引 v2）；
+ * - 域项目：元数据文档（name/tags/ids）；
+ * - 域 source/off 档不进 knowledgeView，自然不索引；
+ * - G1 降级域自动跳过（镜像缺失/同步中）。
+ */
+async function collectDomainDocs(currentUsername: string): Promise<SearchDocumentInput[]> {
+  const composite = await createComposite(currentUsername);
+  const view = await composite.knowledgeView();
+  const docs: SearchDocumentInput[] = [];
+
+  // 域 spec（含本地胜出的路径——本地已索引，只补 source!==local 的胜者）
+  for (const v of view.specs) {
+    if (v.source === 'local') continue;
+    docs.push(buildSpecDoc(v.spec, v.username ?? '', v.contractId, v.source));
+  }
+
+  // 域任务（PRD + design）与域项目元数据：直接读镜像文件
+  for (const src of composite.sources) {
+    if (src.kind !== 'domain' || !src.mirrorDir || src.use === 'off') continue;
+
+    for (const v of view.tasks) {
+      if (v.source !== src.id) continue;
+      const taskDir = join(src.mirrorDir, 'users', v.username, 'tasks', v.task.id);
+      const [prd, design] = await Promise.all([
+        readText(join(taskDir, 'prd.md')),
+        readText(join(taskDir, 'design.md')),
+      ]);
+      if (prd !== null) {
+        docs.push({
+          filePath: join(taskDir, 'prd.md'),
+          content: [
+            `任务标题：${v.task.title}`,
+            `任务状态：${v.task.status}`,
+            v.task.projects?.length ? `关联项目：${v.task.projects.join(', ')}` : '',
+            prd,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          title: v.task.title,
+          tags: ['task', v.task.status],
+          username: v.username,
+          sourceType: 'task',
+          projectIds: v.task.projects,
+          source: v.source,
+        });
+      }
+      if (design) {
+        docs.push({
+          filePath: join(taskDir, 'design.md'),
+          content: [`任务：${v.task.title}`, design].filter(Boolean).join('\n\n'),
+          title: `[design] ${v.task.title}`,
+          tags: ['design', v.task.status],
+          username: v.username,
+          sourceType: 'design',
+          projectIds: v.task.projects,
+          source: v.source,
+        });
+      }
+    }
+
+    for (const v of view.projects) {
+      if (v.source !== src.id || !v.contractId || !src.mirrorDir || !v.project.id) continue;
+      // 镜像内项目目录名 = 编码契约 ID（D19），不是 primaryId
+      const { encodeContractDirName } = await import('../sync/contribution');
+      const mirrorDirName = encodeContractDirName(v.contractId);
+      const metaPath = join(
+        src.mirrorDir,
+        'users',
+        v.username,
+        'projects',
+        mirrorDirName,
+        'project.json',
+      );
+      const metaContent = await readText(metaPath);
+      if (metaContent === null) continue;
+      docs.push({
+        filePath: metaPath,
+        content: [
+          `项目：${v.project.name}`,
+          `IDs：${(v.project.ids ?? []).join(', ')}`,
+          v.project.description ? `描述：${v.project.description}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        title: v.project.name ?? v.contractId,
+        tags: ['project'],
+        username: v.username,
+        sourceType: 'project',
+        projectIds: [v.contractId],
+        source: v.source,
+      });
+    }
+  }
+  return docs;
 }
 
 /** 收集所有待索引的搜索文档（spec + task + project + relation） */
@@ -55,6 +164,17 @@ export async function collectAllSearchDocuments(): Promise<SearchDocumentInput[]
   const userDocsArrays = await Promise.all(usernames.map((u) => collectUserDocs(u)));
   for (const docs of userDocsArrays) {
     allDocs.push(...docs);
+  }
+
+  // 域文档（v3：knowledgeView 胜者 + 域任务 PRD/design + 域项目元数据）
+  const { getUsername } = await import('../config');
+  const currentUsername = await getUsername().catch(() => usernames[0] ?? '');
+  if (currentUsername) {
+    try {
+      allDocs.push(...(await collectDomainDocs(currentUsername)));
+    } catch {
+      // 域收集失败（配置异常等）不阻断本地索引
+    }
   }
 
   return allDocs;

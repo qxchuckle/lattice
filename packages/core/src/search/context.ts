@@ -26,6 +26,50 @@ import { selectPrimaryId } from '../project/identity';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
 import { readProfileSummary, readProfileTags } from '../project/profile';
+import { createComposite } from '../provider/composite';
+import type { SpecView } from '../provider/types';
+import { deriveContractId } from '../sync/contribution';
+
+/**
+ * 域 spec 约束注入（F3 连线）：注入通道取 constraintView（仅 use=trusted 域）。
+ *
+ * 并入规则：
+ * - 用户级：仅同名用户（用户级 spec 只对本人生效的既有语义保留）；
+ * - 全局级：全部 trusted 域（join 即接受其全局规范）；
+ * - 项目级：契约 ID 对齐当前项目的域同事贡献（协作价值）。
+ * reference 域不进本通道（检索可见但不约束），off 域完全不可见。
+ */
+async function collectDomainConstraintSpecs(
+  username: string,
+  projectId: string,
+): Promise<{ userSpecs: ParsedSpec[]; globalSpecs: ParsedSpec[]; projectSpecs: ParsedSpec[] }> {
+  const composite = await createComposite(username);
+  const constraint = await composite.constraintView();
+  const domainEntries = constraint.specs.filter((v) => v.source !== 'local');
+  if (domainEntries.length === 0) return { userSpecs: [], globalSpecs: [], projectSpecs: [] };
+
+  const result = {
+    userSpecs: domainEntries
+      .filter((v) => v.scope === 'user' && v.username === username)
+      .map((v: SpecView) => v.spec),
+    globalSpecs: domainEntries.filter((v) => v.scope === 'global').map((v: SpecView) => v.spec),
+    projectSpecs: [] as ParsedSpec[],
+  };
+
+  // 项目级：当前项目的契约 ID 对齐（ids 含 git:/remote: 衍生 ID）
+  try {
+    const meta = await getVirtualProjectMeta(username, projectId);
+    const contractId = meta ? deriveContractId(meta.ids ?? []) : null;
+    if (contractId) {
+      result.projectSpecs = domainEntries
+        .filter((v) => v.scope === 'project' && v.contractId === contractId)
+        .map((v: SpecView) => v.spec);
+    }
+  } catch {
+    // DB 未初始化等：项目级注入跳过
+  }
+  return result;
+}
 
 /**
  * 获取虚拟合并组的所有任务 ID（去重）
@@ -157,6 +201,21 @@ export async function getContextForProject(
       getGlobalSpecs(),
       getCascadedSpecs(username, normalizedProjectId),
     ]);
+  }
+
+  // 域 spec 约束注入（F3）：trusted 域按层级并入注入通道（遮蔽已在 constraintView 完成，胜者为准）
+  const domainConstraint = await collectDomainConstraintSpecs(username, normalizedProjectId);
+  if (domainConstraint.userSpecs.length > 0) {
+    userSpecs = [...userSpecs, ...domainConstraint.userSpecs];
+    cascadedSpecs = [...cascadedSpecs, ...domainConstraint.userSpecs];
+  }
+  if (domainConstraint.globalSpecs.length > 0) {
+    globalSpecs = [...globalSpecs, ...domainConstraint.globalSpecs];
+    cascadedSpecs = [...cascadedSpecs, ...domainConstraint.globalSpecs];
+  }
+  if (domainConstraint.projectSpecs.length > 0) {
+    projectSpecs = [...projectSpecs, ...domainConstraint.projectSpecs];
+    cascadedSpecs = [...cascadedSpecs, ...domainConstraint.projectSpecs];
   }
 
   // 查找关联的活跃任务

@@ -77,7 +77,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   app.get<{ Params: { type: string; id: string } }>('/api/paths/:type/:id', async (req) => {
     const username = await getUsername();
     const { type, id } = req.params;
-    let path: string | null = null;
+    // switch 各分支必赋值（default 提前 return），无需初值
+    let path: string;
     try {
       switch (type) {
         case 'project-dir':
