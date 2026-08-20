@@ -208,6 +208,14 @@
 ### `ltc spec set <file>`
 
 - `--scope` / `--title` / `--description` / `--add-tag` / `--rm-tag` / `--id`
+- `<file>` 支持完整路径：跨项目/任意位置的 spec 直接写回原文件，不受 cwd 所在项目限制
+
+### `ltc spec suggest-description`
+
+列出缺少 `description` 的 spec 并展示上下文帮助补写。project 级覆盖**全部已注册项目**（与 `spec export` 视角一致，不限于 cwd 所在项目）。
+
+- `--scope <scope>`（`all` 默认 / `global` / `user` / `project`=全部项目）/ `--limit <n>` / `--json`（含 `level` + `projectName`）
+- 修复提示为 `spec set` 绝对路径命令，可直接跨项目落盘
 
 ### `ltc spec migrate [name]`
 

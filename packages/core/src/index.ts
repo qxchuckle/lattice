@@ -294,6 +294,7 @@ export {
   getUserSpecs,
   getProjectSpecs,
   getAllProjectSpecs,
+  getAllProjectSpecsGrouped,
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
   detectSpecConflicts,
@@ -318,6 +319,7 @@ export {
 export type {
   SpecMatch,
   FindSpecOptions,
+  ProjectSpecGroup,
   SpecValidationWarning,
   SpecLintIssue,
   SpecLintReport,

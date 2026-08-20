@@ -11,9 +11,11 @@ export {
   getUserSpecs,
   getProjectSpecs,
   getAllProjectSpecs,
+  getAllProjectSpecsGrouped,
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
 } from './cascade';
+export type { ProjectSpecGroup } from './cascade';
 export { detectSpecConflicts } from './conflicts';
 export { findSpecByName } from './query';
 export type { SpecMatch, FindSpecOptions } from './query';

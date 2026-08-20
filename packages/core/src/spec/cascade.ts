@@ -111,6 +111,31 @@ export async function getAllProjectSpecs(username: string): Promise<ParsedSpec[]
   return [...specMap.values()];
 }
 
+/** 全部项目 spec 的归组结果：spec 与所属项目的对应 */
+export interface ProjectSpecGroup {
+  projectId: string;
+  projectName: string;
+  specs: ParsedSpec[];
+}
+
+/**
+ * 获取所有已注册项目的 spec（按项目归组，含项目名归属）
+ *
+ * 供跨项目全量视角的命令使用（与 spec export 的 collectSpecs 视角对齐）：
+ * 返回值携带归属信息，调用方无需从 filePath 反推项目。
+ * 跳过无 spec 的项目。
+ */
+export async function getAllProjectSpecsGrouped(username: string): Promise<ProjectSpecGroup[]> {
+  const projects = listProjects(username);
+  const groups: ProjectSpecGroup[] = [];
+  for (const p of projects) {
+    const specs = await getProjectSpecs(username, p.id);
+    if (specs.length === 0) continue;
+    groups.push({ projectId: p.id, projectName: p.name, specs });
+  }
+  return groups;
+}
+
 /**
  * 三层级联聚合：项目 > 用户 > 全局
  * 同相对路径文件按优先级覆盖，不同路径文件合并

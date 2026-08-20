@@ -11,6 +11,7 @@ import {
   writeGlobalConfig,
   writeLocalConfig,
   getProjectSpecs,
+  getAllProjectSpecsGrouped,
   getUserSpecs,
   getGlobalSpecs,
   detectSpecConflicts,
@@ -37,6 +38,7 @@ import {
   exportSpecs,
   verifySpecExport,
   type SpecExportScope,
+  type ProjectSpecGroup,
   type SpecFrontmatter,
   type ParsedSpec,
   type SpecLintReport,
@@ -803,8 +805,13 @@ export function registerSpecCommand(program: Command): void {
   cmd
     .command('suggest-description')
     .alias('suggest-desc')
-    .description('列出缺少 description 的 spec，并展示上下文帮助补写')
-    .option('--scope <scope>', '限定层级（all / global / user / project），默认 all')
+    .description(
+      '列出缺少 description 的 spec（project 级覆盖全部已注册项目），并展示上下文帮助补写',
+    )
+    .option(
+      '--scope <scope>',
+      '限定层级（all / global / user / project），默认 all；project = 全部项目',
+    )
     .option('--limit <n>', '最多展示几条（默认 20）', '20')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
@@ -812,27 +819,41 @@ export function registerSpecCommand(program: Command): void {
       try {
         await initDb();
         const username = await getUsername();
-        const projectId = (await resolveCurrentProject())?.id ?? null;
         const scope = (opts.scope ?? 'all') as string;
 
-        const allSpecs: ParsedSpec[] = [];
-        if (scope === 'all' || scope === 'global') {
-          allSpecs.push(...(await getGlobalSpecs()));
-        }
-        if (scope === 'all' || scope === 'user') {
-          allSpecs.push(...(await getUserSpecs(username)));
-        }
-        if (projectId && (scope === 'all' || scope === 'project')) {
-          allSpecs.push(...(await getProjectSpecs(username, projectId)));
-        }
+        // 三层数据源：project 级覆盖全部已注册项目，与 spec export 视角对齐
+        const [globalSpecs, userSpecs, projectGroups] = await Promise.all([
+          scope === 'all' || scope === 'global' ? getGlobalSpecs() : Promise.resolve([]),
+          scope === 'all' || scope === 'user' ? getUserSpecs(username) : Promise.resolve([]),
+          scope === 'all' || scope === 'project'
+            ? getAllProjectSpecsGrouped(username)
+            : Promise.resolve([]),
+        ]);
         closeDb();
 
-        const missing = allSpecs.filter(
-          (s) =>
-            !s.frontmatter.description ||
-            (typeof s.frontmatter.description === 'string' &&
-              s.frontmatter.description.trim() === ''),
-        );
+        const isEmptyDescription = (s: ParsedSpec) =>
+          !s.frontmatter.description ||
+          (typeof s.frontmatter.description === 'string' &&
+            s.frontmatter.description.trim() === '');
+
+        // global → user → 逐项目（按项目分组），跨项目同名 spec 天然消歧
+        const missing: Array<{
+          level: 'global' | 'user' | 'project';
+          projectName: string | null;
+          spec: ParsedSpec;
+        }> = [
+          ...globalSpecs
+            .filter(isEmptyDescription)
+            .map((spec) => ({ level: 'global' as const, projectName: null, spec })),
+          ...userSpecs
+            .filter(isEmptyDescription)
+            .map((spec) => ({ level: 'user' as const, projectName: null, spec })),
+          ...projectGroups.flatMap((g: ProjectSpecGroup) =>
+            g.specs
+              .filter(isEmptyDescription)
+              .map((spec) => ({ level: 'project' as const, projectName: g.projectName, spec })),
+          ),
+        ];
 
         if (missing.length === 0) {
           logger.raw(chalk.green('✓ 所有 spec 都已有 description'));
@@ -843,11 +864,13 @@ export function registerSpecCommand(program: Command): void {
         const shown = missing.slice(0, limit);
 
         if (opts.json) {
-          const data = shown.map((s) => ({
-            filePath: s.filePath,
-            relativePath: s.relativePath,
-            title: s.frontmatter.title ?? s.fileName.replace(/\.md$/i, ''),
-            contentSnippet: extractSnippet(s.content, 3),
+          const data = shown.map((m) => ({
+            filePath: m.spec.filePath,
+            relativePath: m.spec.relativePath,
+            level: m.level,
+            projectName: m.projectName,
+            title: m.spec.frontmatter.title ?? m.spec.fileName.replace(/\.md$/i, ''),
+            contentSnippet: extractSnippet(m.spec.content, 3),
           }));
           outputJson({ total: missing.length, shown: data.length, specs: data }, opts.jsonFormat);
           return;
@@ -862,11 +885,12 @@ export function registerSpecCommand(program: Command): void {
           chalk.dim('  description 格式建议：三段式 — "适用于…；约束/规则…；目的/效果…"\n'),
         );
 
-        for (const s of shown) {
-          const title = s.frontmatter.title ?? s.fileName.replace(/\.md$/i, '');
-          logger.raw(`  ${chalk.bold(title)}`);
-          logger.raw(chalk.dim(`    路径：${s.filePath}`));
-          const snippet = extractSnippet(s.content, 3);
+        for (const m of shown) {
+          const title = m.spec.frontmatter.title ?? m.spec.fileName.replace(/\.md$/i, '');
+          const levelLabel = m.level === 'project' ? `project · ${m.projectName}` : m.level;
+          logger.raw(`  ${chalk.bold(title)} ${chalk.dim(`[${levelLabel}]`)}`);
+          logger.raw(chalk.dim(`    路径：${m.spec.filePath}`));
+          const snippet = extractSnippet(m.spec.content, 3);
           if (snippet) {
             logger.raw(chalk.dim(`    内容预览：`));
             for (const line of snippet.split('\n')) {
@@ -874,7 +898,10 @@ export function registerSpecCommand(program: Command): void {
             }
           }
           logger.raw(
-            chalk.cyan(`    → lattice spec set "${s.relativePath}" --description "<你的摘要>"\n`),
+            chalk.cyan(
+              // 绝对路径走 findSpecByName direct 分支写回原文件，跨项目可用
+              `    → lattice spec set "${m.spec.filePath}" --description "<你的摘要>"\n`,
+            ),
           );
         }
 
