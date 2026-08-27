@@ -43,6 +43,7 @@ export const canvasStore = proxy({
     scope: true,
     semantic: true,
     cross_user: true,
+    same_project: true,
   } as Record<string, boolean>,
   /** 聚焦深度（选中节点后高亮的跳数，0 = 全部，默认 1 跳） */
   focusDepth: 1 as number,
@@ -56,6 +57,12 @@ export const canvasStore = proxy({
   canvasKeyword: '' as string,
   /** 画布用户筛选：空数组 = 仅当前用户（默认行为），非空 = 选中用户列表 */
   userFilter: [] as string[],
+  /** 来源域筛选：勾选的域 hash（Web 视图默认只显示本地数据，勾选放行域数据） */
+  domainFilter: [] as string[],
+  /** 本机数据显示开关（来源筛选；false = 只看勾选的域数据，不显示本机） */
+  localDataFilter: true,
+  /** 域内用户精筛：`${domainHash}:${username}`（与 domainFilter 取并集生效） */
+  domainUserFilter: [] as string[],
   /** 布局优化中（触发重新排布时置 true，完成后自动复位） */
   layoutRunning: false,
   /** 画布首次渲染完成（首次数据加载 + 布局完成），用于控制 loading 遮罩 */

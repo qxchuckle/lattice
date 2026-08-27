@@ -75,6 +75,14 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
         'background-color': '#13C2C2',
       } as unknown as cytoscape.Css.Node,
     },
+    {
+      // 域（经验包）来源节点：双线边框（区别于本地数据的实线；scope 虚线语义让位）
+      selector: 'node[isDomain = "true"]',
+      style: {
+        'border-style': 'double',
+        'border-width': 4,
+      } as unknown as cytoscape.Css.Node,
+    },
     { selector: '.dimmed', style: { 'opacity': 0.15 } as unknown as cytoscape.Css.Node },
     {
       selector: '.search-match',
@@ -147,6 +155,26 @@ export function buildStylesheet(isDark: boolean): cytoscape.Stylesheet[] {
       } as unknown as cytoscape.Css.Edge,
     },
     { selector: 'edge.dimmed', style: { 'opacity': 0.08 } as unknown as cytoscape.Css.Edge },
+    // 同源项目（本地 ↔ 域同 contractId）：青色虚线
+    {
+      selector: "edge[label = 'same-project']",
+      style: {
+        'line-color': '#13C2C2',
+        'target-arrow-color': '#13C2C2',
+        'line-style': 'dashed',
+        'width': 2,
+      } as unknown as cytoscape.Css.Edge,
+    },
+    // 跨用户虚拟合并（本地多用户同项目）：紫色虚线
+    {
+      selector: "edge[label = 'cross-user']",
+      style: {
+        'line-color': '#722ED1',
+        'target-arrow-color': '#722ED1',
+        'line-style': 'dashed',
+        'width': 2,
+      } as unknown as cytoscape.Css.Edge,
+    },
     {
       selector: 'edge.highlighted',
       style: {

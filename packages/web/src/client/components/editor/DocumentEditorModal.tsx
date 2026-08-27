@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Modal, Button, Segmented, App, Spin, Switch } from 'antd';
-import { EditOutlined, SaveOutlined } from '@ant-design/icons';
+import { EditOutlined, SaveOutlined, EyeOutlined } from '@ant-design/icons';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
@@ -22,6 +22,8 @@ interface DocumentEditorModalProps {
   title: string;
   /** 是否 YAML 文件（progress.yaml） */
   isYaml?: boolean;
+  /** 只读（域数据：唯一修改来源是同步，仅支持查看） */
+  readOnly?: boolean;
 }
 
 export const DocumentEditorModal = memo(function DocumentEditorModal({
@@ -31,13 +33,14 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
   entityId,
   title,
   isYaml,
+  readOnly = false,
 }: DocumentEditorModalProps) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { mode: themeMode } = useTheme();
   const isMobile = useIsMobile();
   const [content, setContent] = useState('');
-  const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split');
+  const [mode, setMode] = useState<'edit' | 'preview' | 'split'>(readOnly ? 'preview' : 'split');
   const [saving, setSaving] = useState(false);
   const [syncScroll, setSyncScroll] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
@@ -134,7 +137,7 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
 
   return (
     <Modal
-      title={`编辑 - ${title}`}
+      title={`${readOnly ? '查看' : '编辑'} - ${title}`}
       open={open}
       onCancel={onClose}
       width='90%'
@@ -146,12 +149,24 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
               size='small'
               value={mode}
               onChange={(v) => setMode(v as 'edit' | 'preview' | 'split')}
-              options={[
-                { label: '编辑', value: 'edit' },
-                { label: '预览', value: 'preview' },
-                { label: '分屏', value: 'split' },
-              ]}
+              options={
+                readOnly
+                  ? [
+                      { label: '预览', value: 'preview' },
+                      { label: '原始', value: 'split' },
+                    ]
+                  : [
+                      { label: '编辑', value: 'edit' },
+                      { label: '预览', value: 'preview' },
+                      { label: '分屏', value: 'split' },
+                    ]
+              }
             />
+            {readOnly && (
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                域数据只读 · 修改来源是同步
+              </span>
+            )}
             {mode === 'split' && (
               <Switch
                 size='small'
@@ -170,10 +185,20 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
             />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button onClick={onClose}>取消</Button>
-            <Button type='primary' icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
-              保存
-            </Button>
+            {readOnly ? (
+              <Button onClick={onClose}>关闭</Button>
+            ) : (
+              <>
+                <Button onClick={onClose}>取消</Button>
+                <Button
+                  type='primary'
+                  icon={<SaveOutlined />}
+                  loading={saving}
+                  onClick={handleSave}>
+                  保存
+                </Button>
+              </>
+            )}
           </div>
         </div>
       }>
@@ -205,6 +230,7 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
                 extensions={extensions}
                 theme={themeMode === 'dark' ? 'dark' : 'light'}
                 height='100%'
+                editable={!readOnly}
                 style={{ height: '100%', fontSize: 13 }}
                 onCreateEditor={(view) => {
                   editorViewRef.current = view;
@@ -271,18 +297,25 @@ export function EditButton({
   title,
   isYaml,
   size = 'small',
+  readOnly = false,
 }: {
   contentType: string;
   entityId: string;
   title: string;
   isYaml?: boolean;
   size?: 'small' | 'middle';
+  /** 域数据：按钮变「查看」，弹窗只读无保存 */
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size={size} type='text' icon={<EditOutlined />} onClick={() => setOpen(true)}>
-        编辑
+      <Button
+        size={size}
+        type='text'
+        icon={readOnly ? <EyeOutlined /> : <EditOutlined />}
+        onClick={() => setOpen(true)}>
+        {readOnly ? '查看详情' : '编辑'}
       </Button>
       <DocumentEditorModal
         open={open}
@@ -291,6 +324,7 @@ export function EditButton({
         entityId={entityId}
         title={title}
         isYaml={isYaml}
+        readOnly={readOnly}
       />
     </>
   );

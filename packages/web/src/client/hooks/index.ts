@@ -5,6 +5,8 @@ export {
   useStats,
   useUsers,
   useProjectTaskSearch,
+  useDomainsData,
+  type DomainDataPack,
 } from './data';
 export {
   useTheme,

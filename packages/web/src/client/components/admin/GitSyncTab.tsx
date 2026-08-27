@@ -26,6 +26,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../../lib';
 import { DomainSection } from './DomainSection';
+import { SyncLogSection } from './SyncLogSection';
 
 interface GitStatus {
   initialized: boolean;
@@ -56,6 +57,8 @@ export const GitSyncTab = memo(function GitSyncTab() {
   const [log, setLog] = useState('');
   const [running, setRunning] = useState(false);
   const [commitMsg, setCommitMsg] = useState('');
+  const [enableRemote, setEnableRemote] = useState('');
+  const [enabling, setEnabling] = useState(false);
 
   // Remote 管理
   const [addOpen, setAddOpen] = useState(false);
@@ -79,10 +82,46 @@ export const GitSyncTab = memo(function GitSyncTab() {
     staleTime: 10_000,
   });
 
+  const { data: gitDomains } = useQuery({
+    queryKey: ['git-domains'],
+    queryFn: async (): Promise<Array<{ hash: string; label?: string; remote: string }>> => {
+      return await apiGet<Array<{ hash: string; label?: string; remote: string }>>(
+        '/api/git/domains',
+      );
+    },
+    staleTime: 10_000,
+  });
+  const logDomainOptions = [
+    { value: 'origin', label: 'origin（主数据）' },
+    ...(gitDomains ?? []).map((d) => ({
+      value: d.hash,
+      label: `${d.label ?? d.remote}（${d.hash.slice(0, 8)}）`,
+    })),
+  ];
+
   const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['git-status'] });
     queryClient.invalidateQueries({ queryKey: ['git-remotes'] });
   }, [queryClient]);
+
+  const handleEnableGit = useCallback(async () => {
+    setEnabling(true);
+    try {
+      const r = await apiPost<{ success: boolean; message: string }>('/api/git/enable', {
+        remote: enableRemote.trim() || undefined,
+      });
+      if (r.success) {
+        message.success('已启用主数据 Git 管理');
+        refresh();
+      } else {
+        message.warning(r.message);
+      }
+    } catch (err) {
+      message.error(`启用失败：${(err as Error).message}`);
+    } finally {
+      setEnabling(false);
+    }
+  }, [enableRemote, message, refresh]);
 
   const handleOp = useCallback(
     async (op: 'commit' | 'pull' | 'push' | 'sync') => {
@@ -209,10 +248,47 @@ export const GitSyncTab = memo(function GitSyncTab() {
     );
   }
 
+  // 双轨分区：主数据（origin 单仓）与域（经验包）各自独立小标题；域不依赖 origin Git
   if (!gitStatus?.initialized) {
     return (
-      <div style={{ padding: '12px' }}>
-        <Empty description='~/.lattice 未启用 Git 管理' />
+      <div
+        style={{
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          height: 'calc(100vh - 16px)',
+          overflowY: 'auto',
+        }}>
+        <Card size='small' title='主数据 · origin 单仓'>
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description='未启用 Git 管理——启用后将初始化为 main 分支，可在多台机器间全量同步 ~/.lattice 主数据'
+          />
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+            <Button
+              type='primary'
+              size='small'
+              loading={enabling}
+              onClick={handleEnableGit}
+              disabled={!enableRemote.trim()}>
+              启用 Git 管理
+            </Button>
+            <Input
+              size='small'
+              placeholder='可选：远程仓库 URL（git remote）'
+              value={enableRemote}
+              onChange={(e) => setEnableRemote(e.target.value)}
+              style={{ width: 260, marginLeft: 8 }}
+            />
+          </div>
+        </Card>
+        <Card size='small' title='域 · 经验包'>
+          <DomainSection />
+        </Card>
+        <Card size='small' title='同步日志'>
+          <SyncLogSection domainOptions={logDomainOptions} />
+        </Card>
       </div>
     );
   }
@@ -221,197 +297,214 @@ export const GitSyncTab = memo(function GitSyncTab() {
   const remoteList = remotes ?? [];
 
   return (
-    <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {/* Git 状态 */}
-      <Card size='small' title='Git 状态'>
-        <Descriptions column={1} size='small'>
-          <Descriptions.Item label='分支'>
-            {gitStatus.branch && <Tag color='blue'>{gitStatus.branch}</Tag>}
-          </Descriptions.Item>
-          <Descriptions.Item label='远程仓库'>
-            {hasRemote ? (
-              <span style={{ fontSize: 11, wordBreak: 'break-all' }}>{gitStatus.remote}</span>
-            ) : (
-              <Tag color='orange'>未配置</Tag>
-            )}
-          </Descriptions.Item>
-          <Descriptions.Item label='变更'>
-            {gitStatus.hasChanges ? (
-              <Tag color='orange'>{gitStatus.changedFiles.length} 个文件</Tag>
-            ) : (
-              <Tag color='green'>无变更</Tag>
-            )}
-          </Descriptions.Item>
-          {gitStatus.aheadCount > 0 && (
-            <Descriptions.Item label='领先'>
-              <Tag color='blue'>{gitStatus.aheadCount} 个 commit 未推送</Tag>
+    <div
+      style={{
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        height: 'calc(100vh - 16px)',
+        overflowY: 'auto',
+      }}>
+      {/* ── 轨道一：主数据（origin 单仓多机同步）── */}
+      <Card size='small' title='主数据 · origin 单仓'>
+        <Card size='small' style={{ marginBottom: 8 }}>
+          <Descriptions column={1} size='small'>
+            <Descriptions.Item label='分支'>
+              {gitStatus.branch && <Tag color='blue'>{gitStatus.branch}</Tag>}
             </Descriptions.Item>
-          )}
-          {gitStatus.behindCount > 0 && (
-            <Descriptions.Item label='落后'>
-              <Tag color='orange'>{gitStatus.behindCount} 个 commit 未拉取</Tag>
+            <Descriptions.Item label='远程仓库'>
+              {hasRemote ? (
+                <span style={{ fontSize: 11, wordBreak: 'break-all' }}>{gitStatus.remote}</span>
+              ) : (
+                <Tag color='orange'>未配置</Tag>
+              )}
             </Descriptions.Item>
-          )}
-        </Descriptions>
-      </Card>
-
-      {/* Remote 管理 */}
-      <Card
-        size='small'
-        title={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <LinkOutlined /> Remote 仓库
-          </span>
-        }
-        extra={
-          <Button
-            size='small'
-            type='text'
-            icon={<PlusOutlined />}
-            onClick={() => setAddOpen(true)}
-          />
-        }>
-        {remoteList.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-            未关联任何远程仓库。点击 + 添加。
-          </div>
-        ) : (
-          <List
-            size='small'
-            dataSource={remoteList}
-            renderItem={(remote) => (
-              <List.Item
-                actions={[
-                  <Button
-                    key='edit'
-                    size='small'
-                    type='text'
-                    icon={<EditOutlined />}
-                    onClick={() => {
-                      setEditRemote(remote);
-                      editForm.setFieldsValue({ url: remote.url });
-                    }}
-                  />,
-                  <Button
-                    key='remove'
-                    size='small'
-                    type='text'
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleRemoveRemote(remote.name)}
-                  />,
-                ]}>
-                <List.Item.Meta
-                  title={
-                    <span style={{ fontSize: 13 }}>
-                      {remote.name}
-                      {remote.name === 'origin' && (
-                        <Tag color='blue' style={{ marginLeft: 4 }}>
-                          默认
-                        </Tag>
-                      )}
-                    </span>
-                  }
-                  description={
-                    <span style={{ fontSize: 11, wordBreak: 'break-all' }}>{remote.url}</span>
-                  }
-                />
-              </List.Item>
+            <Descriptions.Item label='变更'>
+              {gitStatus.hasChanges ? (
+                <Tag color='orange'>{gitStatus.changedFiles.length} 个文件</Tag>
+              ) : (
+                <Tag color='green'>无变更</Tag>
+              )}
+            </Descriptions.Item>
+            {gitStatus.aheadCount > 0 && (
+              <Descriptions.Item label='领先'>
+                <Tag color='blue'>{gitStatus.aheadCount} 个 commit 未推送</Tag>
+              </Descriptions.Item>
             )}
-          />
-        )}
-      </Card>
-
-      {/* 变更文件 */}
-      {gitStatus.changedFiles.length > 0 && (
-        <Card size='small' title={`变更文件 (${gitStatus.changedFiles.length})`}>
-          <List
-            size='small'
-            dataSource={gitStatus.changedFiles.slice(0, 20)}
-            renderItem={(file) => (
-              <List.Item style={{ fontSize: 11, padding: '4px 0' }}>{file}</List.Item>
+            {gitStatus.behindCount > 0 && (
+              <Descriptions.Item label='落后'>
+                <Tag color='orange'>{gitStatus.behindCount} 个 commit 未拉取</Tag>
+              </Descriptions.Item>
             )}
-          />
-          {gitStatus.changedFiles.length > 20 && (
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-              ...还有 {gitStatus.changedFiles.length - 20} 个文件
+          </Descriptions>
+        </Card>
+
+        {/* Remote 管理 */}
+        <Card
+          size='small'
+          title={
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <LinkOutlined /> Remote 仓库
+            </span>
+          }
+          extra={
+            <Button
+              size='small'
+              type='text'
+              icon={<PlusOutlined />}
+              onClick={() => setAddOpen(true)}
+            />
+          }>
+          {remoteList.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              未关联任何远程仓库。点击 + 添加。
             </div>
+          ) : (
+            <List
+              size='small'
+              dataSource={remoteList}
+              renderItem={(remote) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      key='edit'
+                      size='small'
+                      type='text'
+                      icon={<EditOutlined />}
+                      onClick={() => {
+                        setEditRemote(remote);
+                        editForm.setFieldsValue({ url: remote.url });
+                      }}
+                    />,
+                    <Button
+                      key='remove'
+                      size='small'
+                      type='text'
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleRemoveRemote(remote.name)}
+                    />,
+                  ]}>
+                  <List.Item.Meta
+                    title={
+                      <span style={{ fontSize: 13 }}>
+                        {remote.name}
+                        {remote.name === 'origin' && (
+                          <Tag color='blue' style={{ marginLeft: 4 }}>
+                            默认
+                          </Tag>
+                        )}
+                      </span>
+                    }
+                    description={
+                      <span style={{ fontSize: 11, wordBreak: 'break-all' }}>{remote.url}</span>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
           )}
         </Card>
-      )}
 
-      {/* 域（经验包）管理：join / unlink / route / 同步 */}
-      <DomainSection />
+        {/* 变更文件 */}
+        {gitStatus.changedFiles.length > 0 && (
+          <Card size='small' title={`变更文件 (${gitStatus.changedFiles.length})`}>
+            <List
+              size='small'
+              dataSource={gitStatus.changedFiles.slice(0, 20)}
+              renderItem={(file) => (
+                <List.Item style={{ fontSize: 11, padding: '4px 0' }}>{file}</List.Item>
+              )}
+            />
+            {gitStatus.changedFiles.length > 20 && (
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                ...还有 {gitStatus.changedFiles.length - 20} 个文件
+              </div>
+            )}
+          </Card>
+        )}
 
-      {/* 提交 */}
-      <div>
-        <Space.Compact style={{ width: '100%' }}>
-          <Input
-            placeholder='提交信息（可选）'
-            value={commitMsg}
-            onChange={(e) => setCommitMsg(e.target.value)}
-            onPressEnter={() => handleOp('commit')}
-            size='small'
-          />
+        {/* 提交 */}
+        <div>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder='提交信息（可选）'
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              onPressEnter={() => handleOp('commit')}
+              size='small'
+            />
+            <Button
+              icon={<CheckOutlined />}
+              loading={running}
+              onClick={() => handleOp('commit')}
+              size='small'
+              type='primary'>
+              提交
+            </Button>
+          </Space.Compact>
+          {!hasRemote && (
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+              未配置远程仓库，可先本地提交。配置 Remote 后即可 Pull / Push。
+            </div>
+          )}
+        </div>
+
+        {/* 同步操作 */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <Button
-            icon={<CheckOutlined />}
+            icon={<CloudDownloadOutlined />}
             loading={running}
-            onClick={() => handleOp('commit')}
-            size='small'
-            type='primary'>
-            提交
+            onClick={() => handleOp('pull')}
+            disabled={!hasRemote}
+            block>
+            Pull
           </Button>
-        </Space.Compact>
-        {!hasRemote && (
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-            未配置远程仓库，可先本地提交。配置 Remote 后即可 Pull / Push。
+          <Button
+            icon={<CloudUploadOutlined />}
+            loading={running}
+            onClick={() => handleOp('push')}
+            disabled={!hasRemote}
+            block>
+            Push
+          </Button>
+          <Button
+            type='primary'
+            icon={<SyncOutlined />}
+            loading={running}
+            onClick={() => handleOp('sync')}
+            disabled={!hasRemote}
+            block>
+            全部同步
+          </Button>
+        </div>
+
+        {/* 日志 */}
+        {log && (
+          <div
+            style={{
+              fontSize: 11,
+              padding: 8,
+              background: 'var(--bg-secondary)',
+              borderRadius: 4,
+              whiteSpace: 'pre-wrap',
+              color: 'var(--text-secondary)',
+            }}>
+            {log}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* 同步操作 */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Button
-          icon={<CloudDownloadOutlined />}
-          loading={running}
-          onClick={() => handleOp('pull')}
-          disabled={!hasRemote}
-          block>
-          Pull
-        </Button>
-        <Button
-          icon={<CloudUploadOutlined />}
-          loading={running}
-          onClick={() => handleOp('push')}
-          disabled={!hasRemote}
-          block>
-          Push
-        </Button>
-        <Button
-          type='primary'
-          icon={<SyncOutlined />}
-          loading={running}
-          onClick={() => handleOp('sync')}
-          disabled={!hasRemote}
-          block>
-          全部同步
-        </Button>
-      </div>
+      {/* ── 轨道二：域（经验包多用户协作）── */}
+      <Card size='small' title='域 · 经验包'>
+        <DomainSection />
+      </Card>
 
-      {/* 日志 */}
-      {log && (
-        <div
-          style={{
-            fontSize: 11,
-            padding: 8,
-            background: 'var(--bg-secondary)',
-            borderRadius: 4,
-            whiteSpace: 'pre-wrap',
-            color: 'var(--text-secondary)',
-          }}>
-          {log}
-        </div>
-      )}
+      {/* ── 同步日志（JSONL 聚合）── */}
+      <Card size='small' title='同步日志'>
+        <SyncLogSection domainOptions={logDomainOptions} />
+      </Card>
 
       {/* 添加 Remote Modal */}
       <Modal

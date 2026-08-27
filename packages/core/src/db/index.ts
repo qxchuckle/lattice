@@ -278,14 +278,17 @@ function ensureSpecSearchMetaSchema(db: Database.Database): void {
   }
 }
 
+type SchemaCheckResult = false | 'fresh' | 'upgraded';
+
 /**
  * 检测数据库 schema 版本，如果是旧版本则删除数据库文件以触发重建。
- * 返回 true 表示需要回填数据（全新 DB 或 schema 升级）。
+ * 返回值：false=无需迁移；'fresh'=全新 DB（需回填，无历史索引）；
+ * 'upgraded'=旧版本库被删除重建（历史索引丢失，需提示 rag rebuild）。
  */
-function checkAndMigrateDbSchema(): boolean {
+function checkAndMigrateDbSchema(): SchemaCheckResult {
   const dbPath = getDbPath();
   // 全新 DB：需要回填数据
-  if (!existsSync(dbPath)) return true;
+  if (!existsSync(dbPath)) return 'fresh';
 
   let tempDb: Database.Database | null = null;
   try {
@@ -323,7 +326,8 @@ function checkAndMigrateDbSchema(): boolean {
     } catch {
       /* ignore */
     }
-    return true;
+    // 已存在的旧版本库被删除重建：历史索引丢失
+    return 'upgraded';
   } catch {
     // 数据库损坏或其他错误，直接删除重建
     if (tempDb) {
@@ -348,7 +352,8 @@ function checkAndMigrateDbSchema(): boolean {
     } catch {
       /* ignore */
     }
-    return true;
+    // 已有库被删除重建（损坏场景同样丢历史索引）
+    return 'upgraded';
   }
 }
 
@@ -431,7 +436,8 @@ export async function initDb(): Promise<Database.Database> {
   await ensureDir(getCacheDir());
 
   // 检测旧 schema，如需重建则删除旧文件
-  const rebuilt = checkAndMigrateDbSchema();
+  // schemaCheck: false=无需迁移；'fresh'=全新库；'upgraded'=旧库版本低被删除重建
+  const schemaCheck = checkAndMigrateDbSchema();
 
   _db = new Database(getDbPath());
   _db.pragma('journal_mode = WAL');
@@ -495,10 +501,12 @@ export async function initDb(): Promise<Database.Database> {
   }
 
   // 如果发生了 schema 重建，触发项目数据重建
-  if (rebuilt) {
+  if (schemaCheck) {
     await rebuildProjectsCache();
-    // 标记需要 rag rebuild（上层启动时检查并执行）
-    setLatticeMeta('rag_rebuild_needed', 'true');
+    // 仅升级场景标记需要 rag rebuild（全新库无历史索引可重建，不提示）
+    if (schemaCheck === 'upgraded') {
+      setLatticeMeta('rag_rebuild_needed', 'true');
+    }
   }
 
   return _db;

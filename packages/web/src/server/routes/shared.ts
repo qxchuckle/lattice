@@ -80,3 +80,29 @@ export type GetUsernameFn = typeof GetUsername;
 
 /** 路由模块注册函数类型 */
 export type RouteRegistrar = (app: FastifyInstance) => void | Promise<void>;
+
+/** 域镜像文件读取：仅允许 .sync-domains 内的绝对路径（防任意文件读取） */
+export async function readDomainMirrorFile(absolutePath: string): Promise<string | null> {
+  const { getSyncDomainsDir } = await import('@qcqx/lattice-core');
+  const root = getSyncDomainsDir();
+  if (!absolutePath.startsWith(root + sep)) return null;
+  const { readFile } = await import('node:fs/promises');
+  return readFile(absolutePath, 'utf-8').catch(() => null);
+}
+
+/** 域任务文档：taskId 本地 miss 时从镜像读取（prd.md / design.md / progress.yaml） */
+export async function readDomainTaskDoc(
+  username: string,
+  taskId: string,
+  file: string,
+): Promise<string | null> {
+  const { createComposite, getSyncDomainsDir } = await import('@qcqx/lattice-core');
+  const composite = await createComposite(username);
+  const view = await composite.knowledgeView();
+  const dt = view.tasks.find((v) => v.task.id === taskId && v.source !== 'local');
+  if (!dt || !dt.username) return null;
+  const { join } = await import('node:path');
+  return readDomainMirrorFile(
+    join(getSyncDomainsDir(), dt.source, 'users', dt.username, 'tasks', taskId, file),
+  );
+}

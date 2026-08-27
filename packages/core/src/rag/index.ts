@@ -693,6 +693,7 @@ async function batchIndexDocuments(
           title: item.doc.title,
           username: item.doc.username,
           sourceType: item.doc.sourceType ?? 'spec',
+          source: item.meta.source,
           encodedProjectIds,
           chunkIndex: chunk.chunkIndex,
           headingPath: chunk.headingPath,

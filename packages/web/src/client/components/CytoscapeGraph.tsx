@@ -43,6 +43,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
     projectFilter,
     canvasKeyword,
     userFilter,
+    localDataFilter,
   } = useSnapshot(canvasStore);
   const graphData = useGlobalGraph();
   const visibleTypesRef = useRef(visibleTypes);
@@ -57,6 +58,8 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
   projectFilterRef.current = projectFilter;
   const canvasKeywordRef = useRef(canvasKeyword);
   canvasKeywordRef.current = canvasKeyword;
+  const localDataFilterRef = useRef(localDataFilter);
+  localDataFilterRef.current = localDataFilter;
   const userFilterRef = useRef(userFilter);
   userFilterRef.current = userFilter;
   const skipAnchorRef = useRef(false);
@@ -460,6 +463,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
       specScopeFilterRef.current,
       projectFilterRef.current,
       canvasKeywordRef.current,
+      localDataFilterRef.current,
     );
 
     // 同步 lastVisibleKey：图数据更新已全量重建，防止筛选变化 useEffect 重复触发布局
@@ -627,6 +631,7 @@ export const CytoscapeGraph = memo(function CytoscapeGraph() {
         [...specScopeFilter],
         [...projectFilter],
         canvasKeyword,
+        localDataFilter,
       );
 
       // 增量增减：diff 当前画布与期望集合

@@ -233,7 +233,8 @@ export async function syncAll(): Promise<{
 /** 初始化 Git 仓库（init + 首次 commit + 添加 remote） */
 export async function initLatticeGit(root: string, remoteUrl?: string): Promise<GitOpResult> {
   const git = simpleGit(root);
-  await git.init();
+  // 显式 -b main：不依赖 git 全局 init.defaultBranch（可能默认 master）
+  await git.raw(['init', '-b', 'main']);
   await git.add('.');
   await git.commit('chore: 初始化 lattice');
   if (remoteUrl) {

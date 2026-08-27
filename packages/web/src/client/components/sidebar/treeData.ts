@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSnapshot } from 'valtio';
 import { getAdapter } from '../../adapters';
 import {
   queryKeys,
@@ -9,7 +10,9 @@ import {
   deduplicateProjects,
   getProjectId,
 } from '../../lib';
+import { canvasStore } from '../../store';
 import type { ViewMode } from '../../store';
+import { useDomainsData, type DomainDataPack } from '../../hooks/data';
 import type { TreeNode } from './treeUtils';
 import type { TaskMeta, ProjectMeta, ParsedSpec } from '@qcqx/lattice-core';
 
@@ -35,8 +38,12 @@ export function useTreeData(): {
   loading: boolean;
   tasks: TaskMeta[];
   specs: ParsedSpec[];
+  domainsData?: DomainDataPack;
 } {
   const adapter = getAdapter();
+  const { domainFilter, domainUserFilter, localDataFilter } = useSnapshot(canvasStore);
+  const hasDomainSelection = domainFilter.length > 0 || domainUserFilter.length > 0;
+  const domainsQuery = useDomainsData(hasDomainSelection);
   const projectsQuery = useQuery({
     queryKey: queryKeys.projects,
     queryFn: () => adapter.getProjects(),
@@ -266,27 +273,147 @@ export function useTreeData(): {
       };
     });
 
-    return [
-      {
-        key: 'root-spec',
-        title: `Spec (${totalSpecCount})`,
+    // ── 域（经验包）树：勾选的域/域用户分组展示（默认不显示本地以外数据） ──
+    const domainChildren: TreeNode[] = [];
+    const pack = domainsQuery.data;
+    if (pack && hasDomainSelection) {
+      for (const d of pack.domains) {
+        const wholeDomain = domainFilter.includes(d.hash);
+        const selectedUsers = new Set(
+          domainUserFilter.filter((k) => k.startsWith(`${d.hash}:`)).map((k) => k.split(':')[1]),
+        );
+        if (!wholeDomain && selectedUsers.size === 0) continue;
+        const label8 = d.hash.slice(0, 8);
+        const domainName = d.label || `域${label8}`;
+        const domainSpecs = pack.specs.filter(
+          (sp) =>
+            sp.source === d.hash &&
+            (wholeDomain || selectedUsers.has(sp.username)) &&
+            (sp.scope === 'user' || sp.scope === 'global' ? true : true),
+        );
+        const domainTasks = pack.tasks.filter(
+          (t) => t.source === d.hash && (wholeDomain || selectedUsers.has(t.username)),
+        );
+        const domainProjects = pack.projects.filter(
+          (pj) => pj.source === d.hash && (wholeDomain || selectedUsers.has(pj.username)),
+        );
+        if (domainSpecs.length + domainTasks.length + domainProjects.length === 0) continue;
+        domainChildren.push({
+          key: `domain-${d.hash}`,
+          title: domainName,
+          type: 'spec-root',
+          meta: { domain: domainName },
+          children: [
+            ...(domainProjects.length > 0
+              ? [
+                  {
+                    key: `domain-${d.hash}-projects`,
+                    title: `项目 (${domainProjects.length})`,
+                    type: 'spec-scope' as const,
+                    children: domainProjects.map((pj) => ({
+                      key: `domain-${d.hash}-proj-${pj.contractId ?? pj.id}`,
+                      title: pj.name ?? pj.contractId ?? pj.id ?? '',
+                      type: 'project-item' as const,
+                      // 与画布域节点 ID 同构：详情 entityData 定位 + 路由选中画布节点
+                      entityId: `domain:${d.hash.slice(0, 8)}:project:${pj.contractId ?? pj.id ?? ''}`,
+                      viewMode: 'project' as ViewMode,
+                      meta: { domain: domainName, desc: `@${pj.username}` },
+                    })),
+                  },
+                ]
+              : []),
+            ...(domainSpecs.length > 0
+              ? [
+                  {
+                    key: `domain-${d.hash}-specs`,
+                    title: `Spec (${domainSpecs.length})`,
+                    type: 'spec-scope' as const,
+                    children: domainSpecs.map((sp) => ({
+                      key: `domain-${d.hash}-spec-${sp.filePath}`,
+                      title: sp.title,
+                      type: 'spec-item' as const,
+                      // 与画布域节点 ID 同构（domain:<hash8>:spec:<filePath>）：详情面板依赖该 ID 定位 entityData
+                      entityId: `domain:${d.hash.slice(0, 8)}:spec:${sp.filePath}`,
+                      viewMode: 'spec' as ViewMode,
+                      meta: {
+                        domain: domainName,
+                        desc: 'spec',
+                        scope:
+                          sp.scope === 'global'
+                            ? '全局级'
+                            : sp.scope === 'user'
+                              ? '用户级'
+                              : '项目级',
+                      },
+                    })),
+                  },
+                ]
+              : []),
+            ...(domainTasks.length > 0
+              ? [
+                  {
+                    key: `domain-${d.hash}-tasks`,
+                    title: `任务 (${domainTasks.length})`,
+                    type: 'spec-scope' as const,
+                    children: domainTasks.map((t) => ({
+                      key: `domain-${d.hash}-task-${t.id}`,
+                      title: truncate(t.title, 30),
+                      type: 'task-item' as const,
+                      // 与画布域节点 ID 同构：详情 entityData 定位 + 路由选中画布节点
+                      entityId: `domain:${d.hash.slice(0, 8)}:task:${t.id}`,
+                      viewMode: 'task' as ViewMode,
+                      meta: { domain: domainName, status: t.status, desc: `@${t.username}` },
+                    })),
+                  },
+                ]
+              : []),
+          ],
+        });
+      }
+    }
+
+    const roots: TreeNode[] = [];
+    // 来源筛选：本机关闭时只显示域数据（本地三根不进树）
+    if (localDataFilter) {
+      roots.push(
+        {
+          key: 'root-spec',
+          title: `Spec (${totalSpecCount})`,
+          type: 'spec-root',
+          children: specChildren,
+        },
+        {
+          key: 'root-project',
+          title: `项目 (${projects.length})`,
+          type: 'project-root',
+          children: projectChildren,
+        },
+        {
+          key: 'root-task',
+          title: `任务 (${tasks.length})`,
+          type: 'task-root',
+          children: taskChildren,
+        },
+      );
+    }
+    if (domainChildren.length > 0) {
+      roots.push({
+        key: 'root-domain',
+        title: `域 (${domainChildren.length})`,
         type: 'spec-root',
-        children: specChildren,
-      },
-      {
-        key: 'root-project',
-        title: `项目 (${projects.length})`,
-        type: 'project-root',
-        children: projectChildren,
-      },
-      {
-        key: 'root-task',
-        title: `任务 (${tasks.length})`,
-        type: 'task-root',
-        children: taskChildren,
-      },
-    ];
-  }, [loading, projectsQuery.data, tasksQuery.data, specsQuery.data]);
+        children: domainChildren,
+      });
+    }
+    return roots;
+  }, [
+    loading,
+    projectsQuery.data,
+    tasksQuery.data,
+    specsQuery.data,
+    domainsQuery.data,
+    hasDomainSelection,
+    localDataFilter,
+  ]);
 
   const specs = useMemo<ParsedSpec[]>(() => {
     const s = specsQuery.data;
@@ -294,5 +421,11 @@ export function useTreeData(): {
     return [...(s.global || []), ...(s.user || []), ...(s.project || [])];
   }, [specsQuery.data]);
 
-  return { tree, loading, tasks: (tasksQuery.data as TaskMeta[] | undefined) ?? [], specs };
+  return {
+    tree,
+    loading,
+    tasks: (tasksQuery.data as TaskMeta[] | undefined) ?? [],
+    specs,
+    domainsData: domainsQuery.data,
+  };
 }

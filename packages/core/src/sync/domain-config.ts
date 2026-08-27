@@ -52,13 +52,15 @@ export const ROUTE_PREFIXES = ['project:', 'user-spec:', 'global-spec:'] as cons
 /** 校验单条 route 语法："*" 或 "<前缀><glob>"。非法抛错（消息含原因） */
 export function validateRoute(rule: string): void {
   if (rule === '*') return;
-  const hit = ROUTE_PREFIXES.find((p) => rule.startsWith(p));
+  // 否定模式：! 前缀 + 合法 route（如 !user-spec:secret-*.md）
+  const inner = rule.startsWith('!') ? rule.slice(1) : rule;
+  const hit = ROUTE_PREFIXES.find((p) => inner.startsWith(p));
   if (!hit) {
     throw new Error(
-      `非法 route 规则 "${rule}"：须为 "*" 或以 ${ROUTE_PREFIXES.map((p) => `"${p}"`).join(' / ')} 之一开头`,
+      `非法 route 规则 "${rule}"：须为 "*" 或以 ${ROUTE_PREFIXES.map((p) => `"${p}"`).join(' / ')} 之一开头（支持 ! 否定前缀）`,
     );
   }
-  const glob = rule.slice(hit.length);
+  const glob = inner.slice(hit.length);
   if (!glob.trim()) {
     throw new Error(`非法 route 规则 "${rule}"：${hit} 后的 glob 不能为空`);
   }
@@ -76,12 +78,18 @@ export function parseRoutes(routes: string[] | undefined): ParsedRoutes {
     validateRoute(rule);
     if (rule === '*') {
       parsed.matchAll = true;
-    } else if (rule.startsWith('project:')) {
-      parsed.projectGlobs.push(rule.slice('project:'.length));
-    } else if (rule.startsWith('user-spec:')) {
-      parsed.userSpecGlobs.push(rule.slice('user-spec:'.length));
-    } else if (rule.startsWith('global-spec:')) {
-      parsed.globalSpecGlobs.push(rule.slice('global-spec:'.length));
+      continue;
+    }
+    // 否定前缀：剥 ! 后按类型归类，glob 保留 ! 前缀供 globMatchAny 排除
+    const neg = rule.startsWith('!');
+    const inner = neg ? rule.slice(1) : rule;
+    const prefix = neg ? '!' : '';
+    if (inner.startsWith('project:')) {
+      parsed.projectGlobs.push(prefix + inner.slice('project:'.length));
+    } else if (inner.startsWith('user-spec:')) {
+      parsed.userSpecGlobs.push(prefix + inner.slice('user-spec:'.length));
+    } else if (inner.startsWith('global-spec:')) {
+      parsed.globalSpecGlobs.push(prefix + inner.slice('global-spec:'.length));
     }
   }
   return parsed;
@@ -101,6 +109,46 @@ export function validateDomainConfig(domain: SyncDomainConfig): void {
   for (const rule of domain.routes ?? []) {
     validateRoute(rule);
   }
+}
+
+// ─── hash 引用解析（CLI/Web 统一体验：完整 16 位或 ≥4 位前缀） ───
+
+export interface DomainRefResolution {
+  /** 唯一命中 */
+  domain?: SyncDomainConfig;
+  index: number;
+  /** 未命中/歧义时的错误信息（含可用域清单，附人类可读指引） */
+  error?: string;
+}
+
+/**
+ * 按完整 hash 或唯一前缀（≥4 位）解析域引用。
+ * 未命中/歧义时返回带可用域清单的 error，把「未找到」升级为可操作的指引。
+ */
+export async function resolveDomainRef(ref: string): Promise<DomainRefResolution> {
+  const domains = await readSyncDomains();
+  const candidates = domains
+    .map((domain, index) => ({ domain, index }))
+    .filter((c) => domainHashOf(c.domain).startsWith(ref));
+
+  if (candidates.length === 1) {
+    return { domain: candidates[0].domain, index: candidates[0].index };
+  }
+  if (candidates.length > 1) {
+    const list = candidates.map((c) => domainHashOf(c.domain)).join('、');
+    return {
+      index: -1,
+      error: `前缀 "${ref}" 匹配到 ${candidates.length} 个域（${list}），请用更长的前缀或完整 hash`,
+    };
+  }
+  if (domains.length === 0) {
+    return {
+      index: -1,
+      error: `未找到域：${ref}（尚未关联任何域，先 ltc sync domain join <remote>）`,
+    };
+  }
+  const list = domains.map((d) => `${domainHashOf(d)}${d.label ? `(${d.label})` : ''}`).join('、');
+  return { index: -1, error: `未找到域：${ref}。已关联的域：${list}` };
 }
 
 // ─── 配置读写（config-local.json 合并写） ───

@@ -11,6 +11,10 @@ import { mirrorDirOf, normalizeDomainConfig } from './domain-config';
  */
 
 export interface MirrorResult {
+  /** 拉取变更文件清单（审计展示） */
+  changedFiles?: string[];
+  /** 目标 remote#branch（审计展示） */
+  target?: string;
   ok: boolean;
   message: string;
   /** pull 冲突时的冲突文件清单 */
@@ -84,15 +88,25 @@ export async function isUnbornHead(mirrorDir: string): Promise<boolean> {
   }
 }
 
-/** unborn 状态下尝试从远端建基：远端有分支 → fetch + checkout -B；远端空 → 保持空仓待首次 push */
+/**
+ * unborn 状态下尝试从远端建基：
+ * - ls-remote 失败 = 远端不可达（报错，不谈判「拉取成功」）
+ * - ls-remote 成功且远端有分支 → fetch + checkout -B
+ * - ls-remote 成功但远端无分支 → 真空仓，保持 unborn 待首次 push
+ */
 async function bootstrapUnbornIfNeeded(
   git: SimpleGit,
   mirrorDir: string,
   branch: string,
 ): Promise<void> {
-  await git.fetch('origin', branch).catch(() => undefined);
-  const refs = await git.raw(['ls-remote', 'origin', `refs/heads/${branch}`]).catch(() => '');
+  let refs: string;
+  try {
+    refs = await git.raw(['ls-remote', 'origin', `refs/heads/${branch}`]);
+  } catch (err) {
+    throw new Error(`远端不可达：${(err as Error).message.split('\n')[0]}`, { cause: err });
+  }
   if (refs.trim()) {
+    await git.fetch('origin', branch);
     await git.raw(['checkout', '-B', branch, `origin/${branch}`]);
   }
 }
@@ -105,13 +119,30 @@ export async function mirrorPull(domain: SyncDomainConfig): Promise<MirrorResult
 
   const aborted = await abortRebaseIfNeeded(mirrorDir);
   if (await isUnbornHead(mirrorDir)) {
+    // 不可达远端在此报错（不再误判为空仓）；真空仓返回跳过
     await bootstrapUnbornIfNeeded(git, mirrorDir, d.branch);
     if (await isUnbornHead(mirrorDir)) {
       return { ok: true, message: '远端为空，跳过拉取' };
     }
   }
   try {
+    // 拉取前后 HEAD 对比（审计明细：变更 commit 数与文件清单）
+    const headBefore = await git.revparse('HEAD').catch(() => '');
     await git.raw(['pull', '--rebase', 'origin', d.branch]);
+    let changeNote = '';
+    const origHead = await git.revparse('ORIG_HEAD').catch(() => '');
+    if (headBefore && origHead && origHead !== headBefore) {
+      const count = await git.raw(['rev-list', '--count', `${headBefore}..HEAD`]).catch(() => '');
+      const files = await git.raw(['diff', '--name-only', headBefore, 'HEAD']).catch(() => '');
+      const fileList = files.split('\n').filter(Boolean).slice(0, 50);
+      changeNote = `（拉取 ${count.trim() || '?'} 个提交，变更 ${fileList.length} 个文件）`;
+      return {
+        ok: true,
+        message: `${aborted ? '拉取成功（已清理上次中断的 rebase）' : '拉取成功'}${changeNote}`,
+        changedFiles: fileList,
+        target: `${d.remote}#${d.branch}`,
+      };
+    }
     return { ok: true, message: aborted ? '拉取成功（已清理上次中断的 rebase）' : '拉取成功' };
   } catch (err) {
     // 逃生：回到 pull 前状态，输出冲突报告（手动解决指引）

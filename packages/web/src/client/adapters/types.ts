@@ -43,6 +43,8 @@ export interface LatticeDataAdapter {
 
   // 搜索
   search(query: string, opts?: SearchOpts): Promise<SearchResult[]>;
+  /** 域（经验包）数据包：Web 视图来源筛选的数据源 */
+  getDomainsData(): Promise<import('../hooks/data').DomainDataPack>;
 
   // 打开文件/目录（通过 type + entityId 解析路径）
   openPath(type: string, entityId: string, app: string): Promise<boolean>;

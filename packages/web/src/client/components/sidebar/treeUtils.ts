@@ -20,7 +20,7 @@ export interface TreeNode {
   children?: TreeNode[];
   entityId?: string;
   viewMode?: ViewMode;
-  meta?: { desc?: string; status?: string; scope?: string };
+  meta?: { desc?: string; status?: string; scope?: string; domain?: string };
 }
 
 // ── Spec scope 辅助 ──
@@ -287,6 +287,12 @@ export function flattenSearch(
         meta.scope = scopeValueToLabel(inferSpecScope(filePath));
       }
 
+      // 来源域标注（D20：本地无感，域结果显示 hash8）
+      const domain = (item.meta as { domain?: string } | undefined)?.domain;
+      if (domain && domain !== 'local') {
+        meta.domain = domain.slice(0, 8);
+      }
+
       return {
         key: `search-${i}-${id}`,
         title: item.title,
@@ -421,6 +427,13 @@ export const edgeLegendItems: EdgeLegendItem[] = [
     label: '跨用户',
     desc: '虚拟合并 (cross-user)',
     color: '#722ED1',
+    group: 'project',
+  },
+  {
+    key: 'same_project',
+    label: '同源项目',
+    desc: 'Local ↔ Domain',
+    color: '#13C2C2',
     group: 'project',
   },
 ];

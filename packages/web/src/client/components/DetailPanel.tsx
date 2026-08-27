@@ -632,6 +632,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                       entityId={task.id}
                       title={tab.label}
                       isYaml={tab.key === 'progress'}
+                      readOnly={!!(task as TaskMeta & { domain?: string }).domain}
                     />
                   </div>
                   {tab.loading ? (
@@ -1326,7 +1327,9 @@ function SpecDetail({ data }: { data: SpecNodeData }) {
     ...(specsQuery.data?.user || []),
     ...(specsQuery.data?.global || []),
   ];
-  const spec = allSpecs.find((s) => s.fileName === specId || s.frontmatter.id === specId);
+  const spec = allSpecs.find(
+    (s) => s.fileName === specId || s.filePath === specId || s.frontmatter.id === specId,
+  );
   const finalFilePath = filePath || spec?.filePath || null;
   const tasks = (tasksQuery.data as TaskMeta[] | undefined) ?? [];
 
@@ -1376,7 +1379,15 @@ function SpecDetail({ data }: { data: SpecNodeData }) {
               children: (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-                    <EditButton contentType='spec' entityId={specId} title={title} />
+                    <EditButton
+                      contentType='spec'
+                      entityId={specId}
+                      title={title}
+                      readOnly={
+                        !!(data as SpecNodeData & { domain?: string }).domain ||
+                        specId.startsWith('domain:')
+                      }
+                    />
                   </div>
                   {spec?.content && <MarkdownWithToc content={spec.content} />}
                 </>

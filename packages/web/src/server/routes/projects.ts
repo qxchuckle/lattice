@@ -17,8 +17,10 @@ import {
   readText,
   openWithEditor,
   type EditorApp,
+  type ProjectMeta,
+  createComposite,
 } from '@qcqx/lattice-core';
-import { isPathSafe, resolveFilePath } from './shared';
+import { isPathSafe, resolveFilePath, readDomainTaskDoc, readDomainMirrorFile } from './shared';
 
 export function registerProjectRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { username?: string } }>('/api/projects', async (req) => {
@@ -29,8 +31,50 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => {
     const username = await getUsername();
     const meta = await getVirtualProjectMeta(username, req.params.id);
-    if (!meta) return { error: 'not_found', message: '项目不存在' };
-    return meta;
+    if (meta) return meta;
+    // 跨用户回退：ID 带 username: 前缀或属其他用户时，按全用户索引定位属主再查
+    const bareId = req.params.id.replace(/^[\w.-]+:(?=legacy:|git:|remote:)/, '');
+    if (bareId !== req.params.id) {
+      const owner = await getVirtualProjectMeta(
+        req.params.id.slice(0, req.params.id.length - bareId.length - 1),
+        bareId,
+      );
+      if (owner) return owner;
+    }
+    try {
+      const all = (await listVirtualProjectMetas(username)) as Array<
+        ProjectMeta & { username?: string }
+      >;
+      const hit = all.find(
+        (m) => m.id === bareId || (m.ids ?? []).includes(bareId) || m.id === req.params.id,
+      );
+      if (hit?.username) {
+        const ownerMeta = await getVirtualProjectMeta(hit.username, hit.id ?? hit.ids?.[0] ?? '');
+        if (ownerMeta) return ownerMeta;
+      }
+    } catch {
+      // 全用户索引不可用时走下方域回退
+    }
+    // 域项目回退（只读展示：本地 miss 时从统一数据源查域项目）
+    try {
+      const composite = await createComposite(username);
+      const view = await composite.knowledgeView();
+      const dp = view.projects.find(
+        (v) =>
+          v.source !== 'local' &&
+          (v.contractId === req.params.id || v.project.ids?.includes(req.params.id)),
+      );
+      if (dp) {
+        return {
+          ...dp.project,
+          domain: dp.source,
+          domainLabel: view.labels.get(dp.source) ?? '',
+        };
+      }
+    } catch {
+      // 域数据不可用（G1 降级）
+    }
+    return { error: 'not_found', message: '项目不存在' };
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/git-status', async (req) => {
@@ -114,13 +158,22 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       if (type === 'prd') {
         const content = await getTaskPrd(username, id);
         if (content !== null) return { content };
+        // 域任务回退：从镜像读（只读展示）
+        const domainContent = await readDomainTaskDoc(username, id, 'prd.md');
+        if (domainContent !== null) return { content: domainContent };
         return { error: 'not_found', message: 'PRD 文件不存在或为空' };
       }
       const filePath = await resolveFilePath(type, id, username);
       if (filePath) {
         const content = await readText(filePath);
         if (content !== null) return { content };
-        return { error: 'not_found', message: '文件不存在' };
+      }
+      // 域任务回退：design.md / progress.yaml
+      const domainFile =
+        type === 'design' ? 'design.md' : type === 'progress' ? 'progress.yaml' : null;
+      if (domainFile) {
+        const domainContent = await readDomainTaskDoc(username, id, domainFile);
+        if (domainContent !== null) return { content: domainContent };
       }
       return { error: 'not_found', message: '文件不存在' };
     } catch {
@@ -135,7 +188,12 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     const specId = req.body?.specId;
     if (!specId) return { error: 'bad_request', message: 'specId is required' };
     const filePath = await resolveFilePath('spec', specId, username);
-    if (!filePath) return { error: 'not_found', message: 'Spec 不存在' };
+    if (!filePath) {
+      // 域 spec 回退：specId 为镜像内绝对路径时直接读（限定 .sync-domains 前缀，防任意读取）
+      const domainContent = await readDomainMirrorFile(specId);
+      if (domainContent !== null) return { content: domainContent };
+      return { error: 'not_found', message: 'Spec 不存在' };
+    }
     try {
       const content = await readText(filePath);
       if (content !== null) return { content };

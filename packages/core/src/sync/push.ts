@@ -40,6 +40,12 @@ export interface DomainPushResult {
   copied: number;
   removed: number;
   conflicts?: string[];
+  /** 上行文件清单（destRel，审计展示用；截前 50） */
+  copiedFiles?: string[];
+  /** 退出传播清单（destRel，审计展示用；截前 50） */
+  removedFiles?: string[];
+  /** 目标域 remote#branch（审计展示用） */
+  target?: string;
 }
 
 export async function readBaseline(domainHash: string): Promise<DomainBaseline | null> {
@@ -114,6 +120,9 @@ export async function pushDomain(
         message: cp.message,
         copied: plan.files.length,
         removed,
+        copiedFiles: plan.files.map((f) => f.destRel).slice(0, 50),
+        removedFiles: baseline ? baseline.paths.filter((p) => !planPaths.has(p)).slice(0, 50) : [],
+        target: `${d.remote}#${d.branch}`,
       };
     }
     if (!cp.pushed) {
@@ -133,9 +142,18 @@ export async function pushDomain(
     return {
       ...base,
       status: cp.committed ? 'pushed' : 'no-changes',
-      message: cp.committed ? `推送 ${plan.files.length} 个文件，退出 ${removed} 个` : '无变更',
+      message: cp.committed
+        ? `推送 ${plan.files.length} 个文件，退出 ${removed} 个 → ${d.remote}#${d.branch}`
+        : '无变更（镜像与远端一致）',
       copied: plan.files.length,
       removed,
+      copiedFiles: cp.committed ? plan.files.map((f) => f.destRel).slice(0, 50) : [],
+      removedFiles: cp.committed
+        ? baseline
+          ? baseline.paths.filter((p) => !planPaths.has(p)).slice(0, 50)
+          : []
+        : [],
+      target: `${d.remote}#${d.branch}`,
     };
   } catch (err) {
     return { ...base, status: 'error', message: (err as Error).message };

@@ -32,6 +32,8 @@ import {
   addSpecRefs,
   removeSpecRefs,
   nowISO,
+  findDomainTaskHint,
+  domainReadOnlyMessage,
 } from '@qcqx/lattice-core';
 import type {
   TaskMeta,
@@ -90,6 +92,16 @@ function formatLineage(lineage: TaskMeta[]): string[] {
   return lineage.map(
     (task, index) => `${index === 0 ? '- ' : '  -> '}${task.title} [${task.status}] (${task.id})`,
   );
+}
+
+/** F4：写操作未找到任务时，反查是否域只读对象（仅错误路径开销） */
+async function reportTaskNotFound(username: string, id: string): Promise<void> {
+  const hint = await findDomainTaskHint(username, id);
+  if (hint) {
+    logger.raw(chalk.yellow(domainReadOnlyMessage(hint)));
+  } else {
+    logger.raw(chalk.yellow(`未找到任务：${id}`));
+  }
 }
 
 export function registerTaskCommand(program: Command): void {
@@ -312,7 +324,7 @@ export function registerTaskCommand(program: Command): void {
         const username = await getUsername();
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           return;
         }
 
@@ -400,7 +412,7 @@ export function registerTaskCommand(program: Command): void {
 
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           closeDb();
           return;
         }
@@ -523,7 +535,7 @@ export function registerTaskCommand(program: Command): void {
         if (updated) {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已开始`));
         } else {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -544,7 +556,7 @@ export function registerTaskCommand(program: Command): void {
         if (updated) {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已完成`));
         } else {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -565,7 +577,7 @@ export function registerTaskCommand(program: Command): void {
         if (updated) {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已归档`));
         } else {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -586,7 +598,7 @@ export function registerTaskCommand(program: Command): void {
         if (updated) {
           logger.raw(chalk.green(`✓ 任务 ${updated.title} 已重新打开`));
         } else {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
         }
       } catch (err) {
         console.error(chalk.red('错误：'), (err as Error).message);
@@ -606,7 +618,7 @@ export function registerTaskCommand(program: Command): void {
         const username = await getUsername();
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           return;
         }
 
@@ -644,7 +656,7 @@ export function registerTaskCommand(program: Command): void {
         const username = await getUsername();
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           return;
         }
 
@@ -680,7 +692,7 @@ export function registerTaskCommand(program: Command): void {
 
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           closeDb();
           return;
         }
@@ -713,7 +725,7 @@ export function registerTaskCommand(program: Command): void {
         const match = await resolveTaskById(username, id);
         if (!match) {
           closeDb();
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           return;
         }
 
@@ -777,7 +789,7 @@ export function registerTaskCommand(program: Command): void {
         const username = await getUsername();
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           return;
         }
 
@@ -883,7 +895,7 @@ export function registerTaskCommand(program: Command): void {
 
         const match = await resolveTaskById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到任务：${id}`));
+          await reportTaskNotFound(username, id);
           closeDb();
           return;
         }

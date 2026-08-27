@@ -21,7 +21,7 @@ import {
   setSidebarView,
   type SidebarView,
 } from '../../store';
-import { useSearch, useUsers, useIsMobile } from '../../hooks';
+import { useSearch, useUsers, useIsMobile, useDomainsData } from '../../hooks';
 import { getEntityColor, truncate } from '../../lib';
 import { useTreeData } from './treeData';
 import {
@@ -271,6 +271,20 @@ function TreeItemBase({
             {node.meta.desc}
           </Tag>
         )}
+        {node.meta?.domain && (
+          <Tag
+            color='magenta'
+            title={`来自同步域 ${node.meta.domain}`}
+            style={{
+              fontSize: 9,
+              margin: 0,
+              lineHeight: '14px',
+              padding: '0 3px',
+              flexShrink: 0,
+            }}>
+            {`域 ${node.meta.domain}`}
+          </Tag>
+        )}
         {node.meta?.scope && node.type === 'spec-item' && (
           <Tag
             color={
@@ -417,6 +431,11 @@ const SearchTreeTab = memo(function SearchTreeTab() {
     if (!isComposingRef.current) setInputValue(searchKeyword);
   }, [searchKeyword]);
   const searchResult = useSearch();
+  const domainsDataQuery = useDomainsData();
+  const domainFilter = useSnapshot(canvasStore).domainFilter;
+  const domainUserFilter = useSnapshot(canvasStore).domainUserFilter;
+  const [domainCollapsed, setDomainCollapsed] = useState(false);
+  const [expandedDomainHash, setExpandedDomainHash] = useState<string | null>(null);
   const { tree, loading, tasks, specs } = useTreeData();
 
   const handleNavigate = useCallback((node: TreeNode) => {
@@ -552,13 +571,37 @@ const FilterTreeTab = memo(function FilterTreeTab() {
     projectFilter,
     canvasKeyword,
     userFilter,
+    domainFilter,
+    domainUserFilter,
+    localDataFilter,
   } = useSnapshot(canvasStore);
   const { tree } = useTreeData();
   const usersQuery = useUsers();
+  // 来源域（经验包）筛选：默认只显示本地数据，勾选放行域/域内用户
+  const domainsDataQuery = useDomainsData();
+  const [domainCollapsed, setDomainCollapsed] = useState(false);
+  const [expandedDomainHash, setExpandedDomainHash] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['spec', 'project']));
   const [projectCollapsed, setProjectCollapsed] = useState(false);
   const [projectSearchKeyword, setProjectSearchKeyword] = useState('');
-  const [userCollapsed, setUserCollapsed] = useState(false);
+  const [expandedLocalUsers, setExpandedLocalUsers] = useState(false);
+
+  // 本机父级勾选态派生：全部本机用户勾选时视为全选
+  const allLocalUsersChecked =
+    !!usersQuery.data &&
+    usersQuery.data.users.length > 0 &&
+    usersQuery.data.users.every((u) => userFilter.includes(u));
+
+  // 来源筛选默认态：本机默认勾选当前用户（勾选集合 = 显示的本机用户集合）
+  const userFilterInitialized = useRef(false);
+  useEffect(() => {
+    if (!usersQuery.data || userFilterInitialized.current) return;
+    userFilterInitialized.current = true;
+    const cu = usersQuery.data.currentUser;
+    if (cu && userFilter.length === 0) {
+      canvasStore.userFilter = [cu];
+    }
+  }, [usersQuery.data, userFilter]);
 
   const projects = useMemo(() => {
     const projectRoot = tree.find((n) => n.type === 'project-root');
@@ -612,121 +655,225 @@ const FilterTreeTab = memo(function FilterTreeTab() {
         style={{ marginBottom: 8 }}
       />
 
-      {/* 用户筛选 */}
-      {usersQuery.data && usersQuery.data.users.length > 1 && (
-        <>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              marginBottom: 4,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}>
-            <span
-              style={{
-                cursor: 'pointer',
-                fontSize: 10,
-                width: 16,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+      {/* 来源：本机（可展开本机用户）+ 域（可展开域内用户）——统一树形结构 */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          marginTop: 4,
+        }}>
+        <span
+          style={{
+            cursor: 'pointer',
+            fontSize: 10,
+            width: 16,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setDomainCollapsed(!domainCollapsed)}>
+          {domainCollapsed ? '▸' : '▾'}
+        </span>
+        来源
+        {(!localDataFilter ||
+          domainFilter.length > 0 ||
+          domainUserFilter.length > 0 ||
+          userFilter.length > 0) && (
+          <span style={{ fontSize: 9, color: 'var(--brand-color)' }}>
+            (
+            {(localDataFilter ? 0 : 1) +
+              domainFilter.length +
+              domainUserFilter.length +
+              userFilter.length}{' '}
+            选)
+          </span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+          {(!localDataFilter ||
+            domainFilter.length > 0 ||
+            domainUserFilter.length > 0 ||
+            userFilter.length > 0) && (
+            <Button
+              size='small'
+              type='text'
+              onClick={() => {
+                canvasStore.domainFilter = [];
+                canvasStore.domainUserFilter = [];
+                canvasStore.localDataFilter = true;
+                canvasStore.userFilter = [];
+                canvasStore.projectFilter = [];
               }}
-              onClick={() => setUserCollapsed(!userCollapsed)}>
-              {userCollapsed ? '▸' : '▾'}
-            </span>
-            用户
-            {userFilter.length > 0 && (
-              <span style={{ fontSize: 9, color: 'var(--brand-color)' }}>
-                ({userFilter.length} 选)
-              </span>
-            )}
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
-              <Button
-                size='small'
-                type='text'
-                onClick={() => {
-                  canvasStore.userFilter = [];
-                  canvasStore.projectFilter = [];
-                  canvasStore.canvasKeyword = '';
-                }}
-                style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
-                仅当前
-              </Button>
-              {userFilter.length < usersQuery.data.users.length && (
-                <Button
-                  size='small'
-                  type='text'
-                  onClick={() => {
-                    canvasStore.userFilter = [...usersQuery.data!.users];
-                    canvasStore.projectFilter = [];
-                  }}
-                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
-                  全选
-                </Button>
-              )}
-              {userFilter.length > 0 && (
-                <Button
-                  size='small'
-                  type='text'
-                  onClick={() => {
-                    canvasStore.userFilter = [];
-                    canvasStore.projectFilter = [];
-                  }}
-                  style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
-                  清空
-                </Button>
-              )}
-            </div>
-          </div>
-          {!userCollapsed && (
-            <div style={{ maxHeight: 100, overflow: 'auto', marginBottom: 8 }}>
-              {usersQuery.data.users.map((u) => {
-                const isCurrent = u === usersQuery.data!.currentUser;
-                const isChecked = userFilter.includes(u);
-                return (
-                  <Checkbox
-                    key={u}
-                    checked={isChecked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        canvasStore.userFilter = [...userFilter, u];
-                      } else {
-                        canvasStore.userFilter = userFilter.filter((x) => x !== u);
-                      }
-                      // 切换用户时清空项目筛选（跨用户 projectId 可能不匹配）
-                      canvasStore.projectFilter = [];
-                    }}
-                    style={{
-                      fontSize: 10,
-                      display: 'flex',
-                      alignItems: 'center',
-                      margin: '1px 0',
-                    }}>
-                    <span style={{ fontWeight: isCurrent ? 600 : 400 }}>
-                      {u}
-                      {isCurrent && (
-                        <Tag
-                          color='blue'
-                          style={{
-                            fontSize: 9,
-                            margin: '0 0 0 4px',
-                            lineHeight: '14px',
-                            padding: '0 3px',
-                            flexShrink: 0,
-                          }}>
-                          当前
-                        </Tag>
-                      )}
-                    </span>
-                  </Checkbox>
-                );
-              })}
-            </div>
+              style={{ fontSize: 10, padding: '0 4px', height: 18 }}>
+              清空
+            </Button>
           )}
-        </>
+        </div>
+      </div>
+      {!domainCollapsed && (
+        <div style={{ maxHeight: 160, overflow: 'auto', marginBottom: 8 }}>
+          {/* 本机（可展开本机用户，与域一致的展开交互） */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Checkbox
+                checked={localDataFilter && allLocalUsersChecked}
+                indeterminate={localDataFilter && !allLocalUsersChecked && userFilter.length > 0}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    // 勾选本机 = 显示本机数据 + 全部本机用户勾选
+                    canvasStore.localDataFilter = true;
+                    if (usersQuery.data) {
+                      canvasStore.userFilter = [...usersQuery.data.users];
+                    }
+                  } else {
+                    // 取消本机 = 不显示本机数据（用户勾选保留，恢复勾选时还原）
+                    canvasStore.localDataFilter = false;
+                  }
+                }}
+                style={{ fontSize: 10, flex: 1, fontWeight: 600 }}>
+                本机
+                <span style={{ fontSize: 9, color: 'var(--text-secondary)', fontWeight: 400 }}>
+                  （主数据，可写）
+                </span>
+              </Checkbox>
+              {usersQuery.data && usersQuery.data.users.length > 0 && (
+                <span
+                  style={{
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    color: 'var(--text-tertiary)',
+                    padding: '0 4px',
+                  }}
+                  onClick={() => setExpandedLocalUsers(!expandedLocalUsers)}>
+                  {expandedLocalUsers ? '▾' : '▸'}
+                  {usersQuery.data.users.length} 用户
+                </span>
+              )}
+            </div>
+            {expandedLocalUsers && usersQuery.data && (
+              <div style={{ paddingLeft: 20 }}>
+                {usersQuery.data.users.map((u) => {
+                  const isCurrent = u === usersQuery.data!.currentUser;
+                  const isChecked = userFilter.includes(u);
+                  return (
+                    <Checkbox
+                      key={u}
+                      checked={isChecked}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          canvasStore.userFilter = [...userFilter, u];
+                        } else {
+                          canvasStore.userFilter = userFilter.filter((x) => x !== u);
+                        }
+                        // 切换用户时清空项目筛选（跨用户 projectId 可能不匹配）
+                        canvasStore.projectFilter = [];
+                      }}
+                      style={{ fontSize: 10, display: 'flex', margin: '1px 0' }}>
+                      <span style={{ fontWeight: isCurrent ? 600 : 400 }}>
+                        @{u}
+                        {isCurrent && (
+                          <Tag
+                            color='blue'
+                            style={{
+                              fontSize: 9,
+                              margin: '0 0 0 4px',
+                              lineHeight: '14px',
+                              padding: '0 3px',
+                              flexShrink: 0,
+                            }}>
+                            当前
+                          </Tag>
+                        )}
+                      </span>
+                    </Checkbox>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {!domainsDataQuery.data || domainsDataQuery.data.domains.length === 0 ? (
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary)', paddingLeft: 4 }}>
+              未关联域（ltc sync domain join &lt;remote&gt;）
+            </div>
+          ) : (
+            domainsDataQuery.data.domains.map((d) => {
+              const isDomainChecked = domainFilter.includes(d.hash);
+              return (
+                <div key={d.hash}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <Checkbox
+                      checked={isDomainChecked}
+                      indeterminate={
+                        !isDomainChecked && domainUserFilter.some((x) => x.startsWith(`${d.hash}:`))
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // 勾选域 = 自动勾选该域全部用户（树形父子联动）
+                          canvasStore.domainFilter = [...domainFilter, d.hash];
+                          const allUsers = d.users.map((u) => `${d.hash}:${u}`);
+                          const merged = new Set([...domainUserFilter, ...allUsers]);
+                          canvasStore.domainUserFilter = [...merged];
+                          setExpandedDomainHash(d.hash);
+                        } else {
+                          canvasStore.domainFilter = domainFilter.filter((x) => x !== d.hash);
+                          canvasStore.domainUserFilter = domainUserFilter.filter(
+                            (x) => !x.startsWith(`${d.hash}:`),
+                          );
+                        }
+                      }}
+                      style={{ fontSize: 10, flex: 1 }}>
+                      <span>
+                        {d.label || '域'}
+                        <span style={{ color: 'var(--text-tertiary)' }}> {d.hash.slice(0, 8)}</span>
+                        <span style={{ color: 'var(--text-tertiary)' }}> · {d.use}</span>
+                      </span>
+                    </Checkbox>
+                    {d.users.length > 0 && (
+                      <span
+                        style={{
+                          cursor: 'pointer',
+                          fontSize: 10,
+                          color: 'var(--text-tertiary)',
+                          padding: '0 4px',
+                        }}
+                        onClick={() =>
+                          setExpandedDomainHash(expandedDomainHash === d.hash ? null : d.hash)
+                        }>
+                        {expandedDomainHash === d.hash ? '▾' : '▸'}
+                        {d.users.length} 用户
+                      </span>
+                    )}
+                  </div>
+                  {expandedDomainHash === d.hash && (
+                    <div style={{ paddingLeft: 20 }}>
+                      {d.users.map((u) => {
+                        const key = `${d.hash}:${u}`;
+                        const isUserChecked = domainUserFilter.includes(key);
+                        return (
+                          <Checkbox
+                            key={key}
+                            checked={isUserChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                canvasStore.domainUserFilter = [...domainUserFilter, key];
+                              } else {
+                                canvasStore.domainUserFilter = domainUserFilter.filter(
+                                  (x) => x !== key,
+                                );
+                              }
+                            }}
+                            style={{ fontSize: 10, display: 'flex', margin: '1px 0' }}>
+                            @{u}
+                          </Checkbox>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       )}
 
       {/* 节点类型 - 横向 */}

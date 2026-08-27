@@ -1,3 +1,4 @@
+import type { DomainDataPack } from '../hooks/data';
 import type {
   LatticeDataAdapter,
   TaskQueryOpts,
@@ -140,6 +141,10 @@ export class HttpAdapter implements LatticeDataAdapter {
     if (opts?.projectId) params.set('projectId', opts.projectId);
     if (opts?.limit) params.set('limit', String(opts.limit));
     return fetchJson<SearchResult[]>(`${API_BASE}/search?${params.toString()}`, opts?.signal);
+  }
+
+  getDomainsData(): Promise<DomainDataPack> {
+    return fetchJson<DomainDataPack>(`${API_BASE}/domains/data`);
   }
 
   // ── 打开文件/目录 ──

@@ -8,6 +8,10 @@
   --text: #2a2a32;
   --text-secondary: #6a6a72;
   --border: #d8d8d6;
+  // ── 实体类型色（与 theme.ts tokens.entity 同基准；DOM 侧引用，画布侧走 tokens）──
+  --entity-task: #1677ff;
+  --entity-project: #fa8c16;
+  --entity-spec: #13c2c2;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
   --transition-fast: 0.2s ease;
@@ -35,6 +39,9 @@
   --text: #eaeaf0;
   --text-secondary: #9a9aa6;
   --border: #44444f;
+  --entity-task: #1677ff;
+  --entity-project: #fa8c16;
+  --entity-spec: #13c2c2;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.28);
 }
@@ -428,7 +435,9 @@ body {
   }
 
   .ant-tabs-content {
-    height: 100%;
+    // auto 随内容撑开：内容超高时触发 content-holder 滚动（height:100% 会把溢出钉在容器内不滚）
+    height: auto;
+    min-height: 100%;
   }
 }
 

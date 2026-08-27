@@ -66,9 +66,16 @@ export function getNodeLabel(data: LatticeNodeData): string {
     }
   })();
 
-  // 多用户模式：追加用户名后缀
+  // 多用户模式：追加用户名后缀；域来源节点同时标注域 hash8（@用户·域）
   const username = data.username;
-  const userTag = username ? `\n@${username}` : '';
+  const domainTag = data.domain
+    ? `·${(data.domainLabel as string) || `域${String(data.domain).slice(0, 8)}`}`
+    : '';
+  const userTag = username
+    ? `\n@${username}${domainTag}`
+    : domainTag
+      ? `\n@${domainTag.slice(1)}`
+      : '';
 
   return attrTag ? `${typeTag}${attrTag}\n${title}${userTag}` : `${typeTag}\n${title}${userTag}`;
 }
@@ -89,6 +96,7 @@ export function toElements(
   specScopeFilter?: readonly string[],
   projectFilter?: readonly string[],
   canvasKeyword?: string,
+  localDataFilter?: boolean,
 ): cytoscape.ElementDefinition[] {
   const visibleSet = new Set(
     Object.entries(visibleTypes)
@@ -112,6 +120,9 @@ export function toElements(
     const data = n.data;
     const entityType = data.entityType;
     if (!visibleSet.has(entityType)) return;
+
+    // 来源筛选：本机关闭时跳过本地节点（域节点 data.domain 存在）
+    if (localDataFilter === false && !data.domain) return;
 
     // 任务状态筛选
     if (entityType === 'task' && taskStatusFilter && taskStatusFilter.length > 0) {
@@ -163,7 +174,10 @@ export function toElements(
       entityType === 'task'
         ? getTaskStatusColor(data.status || 'planning')
         : getEntityColor(entityType);
-    cyNodes.push({ data: { ...data, id: n.id, label, color } });
+    // cytoscape data 选择器按字符串匹配可靠（boolean 的 = 匹配退化为存在性）
+    cyNodes.push({
+      data: { ...data, id: n.id, label, color, isDomain: data.domain ? 'true' : 'false' },
+    });
   });
 
   const edgeVisibleSet = visibleEdgeTypes

@@ -31,12 +31,149 @@ import type {
   ParsedSpec,
   ReferencedSpec,
 } from '@qcqx/lattice-core';
+import { useDomainsData, type DomainDataPack } from './data';
+
+/**
+ * 域（经验包）节点入图：勾选的域/域用户转 LatticeNode/Edge。
+ * 节点 id 用 `domain:<hash8>:` 前缀与本地命名空间隔离；data.domain 标注来源。
+ * 边：域项目↔域 spec（spec 归属）、域项目↔域任务（task 关联，按 contractId 对齐）。
+ */
+function appendDomainNodes(
+  nodes: LatticeNode[],
+  edges: LatticeEdge[],
+  pack: DomainDataPack | undefined,
+  domainFilter: readonly string[],
+  domainUserFilter: readonly string[],
+): void {
+  if (!pack || (domainFilter.length === 0 && domainUserFilter.length === 0)) return;
+
+  const domainLabels = new Map(pack.domains.map((d) => [d.hash, d.label]));
+  for (const d of pack.domains) {
+    const wholeDomain = domainFilter.includes(d.hash);
+    const selectedUsers = new Set(
+      domainUserFilter.filter((k) => k.startsWith(`${d.hash}:`)).map((k) => k.split(':')[1]),
+    );
+    if (!wholeDomain && selectedUsers.size === 0) continue;
+    const ns = `domain:${d.hash.slice(0, 8)}`;
+    const pass = (source: string, username: string) =>
+      source === d.hash && (wholeDomain || selectedUsers.has(username));
+
+    const projectNodeId = new Map<string, string>();
+    for (const pj of pack.projects) {
+      if (!pass(pj.source, pj.username) || !pj.contractId) continue;
+      const nodeId = `${ns}:project:${pj.contractId}`;
+      projectNodeId.set(pj.contractId, nodeId);
+      nodes.push({
+        id: nodeId,
+        type: 'projectNode',
+        position: { x: 0, y: 0 },
+        data: {
+          entityType: 'project',
+          projectId: pj.contractId,
+          name: pj.name ?? pj.contractId,
+          username: pj.username,
+          domain: d.hash,
+          domainLabel: domainLabels.get(d.hash) || undefined,
+        },
+      });
+      // 同源项目连线：与本地（含多用户）项目节点 ids 交集时连边（分开展示 + 连线，来源可见）
+      for (const local of nodes) {
+        if (local.id === nodeId) continue;
+        const ld = local.data as { entityType?: string; domain?: string; ids?: string[] };
+        if (ld.entityType !== 'project' || ld.domain) continue;
+        if (hasIdIntersection(ld.ids ?? [], pj.ids ?? [])) {
+          edges.push({
+            id: `edge-same-project-${local.id}-${nodeId}`,
+            source: local.id,
+            target: nodeId,
+            type: 'smoothstep',
+            label: 'same-project',
+            style: {
+              stroke: '#13C2C2',
+              opacity: 0.55,
+              strokeDasharray: '6 4',
+            } as CSSProperties,
+            data: { label: 'same-project' },
+          });
+          break; // 一个域项目节点对每个本地节点至多一条边
+        }
+      }
+    }
+
+    for (const sp of pack.specs) {
+      if (!pass(sp.source, sp.username)) continue;
+      const nodeId = `${ns}:spec:${sp.filePath}`;
+      nodes.push({
+        id: nodeId,
+        type: 'specNode',
+        position: { x: 0, y: 0 },
+        data: {
+          entityType: 'spec',
+          specId: sp.filePath,
+          title: sp.title,
+          scope: sp.scope,
+          filePath: sp.filePath,
+          username: sp.username,
+          domain: d.hash,
+          domainLabel: domainLabels.get(d.hash) || undefined,
+        },
+      });
+      if (sp.scope === 'project' && sp.contractId && projectNodeId.has(sp.contractId)) {
+        edges.push({
+          id: `${ns}:edge-spec-${sp.filePath}`,
+          source: projectNodeId.get(sp.contractId)!,
+          target: nodeId,
+          type: 'smoothstep',
+          label: 'spec',
+          style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+          data: { label: 'spec' },
+        });
+      }
+    }
+
+    for (const t of pack.tasks) {
+      if (!pass(t.source, t.username)) continue;
+      const nodeId = `${ns}:task:${t.id}`;
+      nodes.push({
+        id: nodeId,
+        type: 'taskNode',
+        position: { x: 0, y: 0 },
+        data: {
+          entityType: 'task',
+          taskId: t.id,
+          title: t.title,
+          status: t.status,
+          projectIds: (t.projects || []).filter((pid) => projectNodeId.has(pid)),
+          username: t.username,
+          domain: d.hash,
+          domainLabel: domainLabels.get(d.hash) || undefined,
+        },
+      });
+      for (const pid of t.projects || []) {
+        const pn = projectNodeId.get(pid);
+        if (pn) {
+          edges.push({
+            id: `${ns}:edge-task-${t.id}-${pid}`,
+            source: pn,
+            target: nodeId,
+            type: 'smoothstep',
+            label: 'task',
+            style: { stroke: 'var(--text-secondary)', opacity: 0.4 } as CSSProperties,
+            data: { label: 'task' },
+          });
+        }
+      }
+    }
+  }
+}
 
 // ── 全局视角：项目 + 关系图 ──
 
 export function useGlobalGraph() {
   const adapter = getAdapter();
-  const { userFilter } = useSnapshot(canvasStore);
+  const { userFilter, domainFilter, domainUserFilter } = useSnapshot(canvasStore);
+  const hasDomainSelection = domainFilter.length > 0 || domainUserFilter.length > 0;
+  const domainsQuery = useDomainsData(hasDomainSelection);
 
   const singleUsername = userFilter.length === 1 ? userFilter[0] : undefined;
   const isMultiUser = userFilter.length >= 2;
@@ -180,6 +317,7 @@ export function useGlobalGraph() {
               name: p.name,
               username,
               hasGit: !!p.gitRemotes?.length,
+              ids: p.ids,
             },
           });
         });
@@ -393,6 +531,9 @@ export function useGlobalGraph() {
         }
       }
 
+      // 域（经验包）节点：勾选的域/域用户入图
+      appendDomainNodes(nodes, edges, domainsQuery.data, domainFilter, domainUserFilter);
+
       return { nodes, edges };
     }
 
@@ -413,6 +554,7 @@ export function useGlobalGraph() {
           projectId: pid,
           name: p.name,
           hasGit: !!p.gitRemotes?.length,
+          ids: p.ids,
         },
       });
     });
@@ -573,6 +715,9 @@ export function useGlobalGraph() {
       });
     });
 
+    // ── 域（经验包）节点：勾选的域/域用户入图（默认不显示本地以外数据） ──
+    appendDomainNodes(nodes, edges, domainsQuery.data, domainFilter, domainUserFilter);
+
     return { nodes, edges };
   }, [
     isMultiUser,
@@ -582,6 +727,9 @@ export function useGlobalGraph() {
     relationsQuery.data,
     specsQuery.data,
     multiQueries,
+    domainsQuery.data,
+    domainFilter,
+    domainUserFilter,
   ]);
 
   return {

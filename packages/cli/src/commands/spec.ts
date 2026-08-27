@@ -220,11 +220,14 @@ export function registerSpecCommand(program: Command): void {
             closeDb();
             return;
           }
+          const fileNoExt = file.replace(/\.md$/, '');
           const matched = domainViews.filter(
             (v) =>
               v.spec.fileName === file ||
+              v.spec.fileName === `${fileNoExt}.md` ||
               v.spec.relativePath === file ||
               v.spec.relativePath.endsWith(`/${file}`) ||
+              v.spec.relativePath.endsWith(`/${fileNoExt}.md`) ||
               v.spec.frontmatter.title === file,
           );
           if (matched.length === 0) {

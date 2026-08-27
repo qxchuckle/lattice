@@ -7,6 +7,7 @@ import { listProjects, getAllUniqueRelations } from '../project';
 import { readProfileSummary, readProfileTags } from '../project/profile';
 import { getProjectProfileSummaryPath } from '../paths';
 import { createComposite } from '../provider/composite';
+import { parse as parseYaml } from 'yaml';
 
 export interface SearchDocumentInput {
   filePath: string;
@@ -50,6 +51,23 @@ function buildSpecDoc(
 }
 
 /**
+ * 域镜像 progress.yaml 安全解析（容错：坏文件返回空）。
+ * 复用主数据 ProgressFile 结构，但不绑定主数据路径。
+ */
+function safeParseProgress(
+  raw: string,
+): Array<{ id: string; type: string; title: string; message: string }> {
+  try {
+    const data = parseYaml(raw) as {
+      entries?: Array<{ id: string; type: string; title: string; message: string }>;
+    } | null;
+    return data?.entries ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 域文档收集（v3）：从 knowledgeView 拿遥蔽去重后的胜者条目。
  *
  * - 域 spec：胜者才索引，被遥蔽副本永不索引（collector 不理解遥蔽）；
@@ -76,9 +94,10 @@ async function collectDomainDocs(currentUsername: string): Promise<SearchDocumen
     for (const v of view.tasks) {
       if (v.source !== src.id) continue;
       const taskDir = join(src.mirrorDir, 'users', v.username, 'tasks', v.task.id);
-      const [prd, design] = await Promise.all([
+      const [prd, design, progressRaw] = await Promise.all([
         readText(join(taskDir, 'prd.md')),
         readText(join(taskDir, 'design.md')),
+        readText(join(taskDir, 'progress.yaml')),
       ]);
       if (prd !== null) {
         docs.push({
@@ -110,6 +129,24 @@ async function collectDomainDocs(currentUsername: string): Promise<SearchDocumen
           projectIds: v.task.projects,
           source: v.source,
         });
+      }
+      // checkpoint 逐条索引（与主数据 checkpoint 文档结构一致）
+      if (progressRaw && progressRaw.trim()) {
+        const parsed = safeParseProgress(progressRaw);
+        for (const entry of parsed) {
+          docs.push({
+            filePath: `${join(taskDir, 'progress.yaml')}/checkpoint/${entry.id}`,
+            content: [`任务：${v.task.title}`, `类型：${entry.type}`, entry.title, entry.message]
+              .filter(Boolean)
+              .join('\n\n'),
+            title: `[${entry.type}] ${entry.title}`,
+            tags: ['checkpoint', entry.type, v.task.status],
+            username: v.username,
+            sourceType: 'checkpoint',
+            projectIds: v.task.projects,
+            source: v.source,
+          });
+        }
       }
     }
 

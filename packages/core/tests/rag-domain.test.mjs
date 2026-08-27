@@ -79,6 +79,10 @@ beforeEach(async () => {
     '# 域任务 design\n设计讨论\n',
   );
   await putFile(
+    join(stage, 'users', U, 'tasks', DOMAIN_TASK, 'progress.yaml'),
+    'entries:\n  - id: cp_test01\n    type: decision\n    title: 域内决策\n    message: 域任务的 checkpoint 内容\n    createdAt: "2026-08-19T12:00:00.000Z"\n',
+  );
+  await putFile(
     join(stage, 'users', U, 'projects', DIR_A, 'project.json'),
     JSON.stringify({ ids: [CONTRACT_A], name: 'pack-app' }),
   );
@@ -122,6 +126,9 @@ test('collector 域文档：胜者索引、被遮蔽副本不索引、域任务 
   // 域任务 PRD + design 文档
   const prd = docs.find((d) => d.filePath.endsWith(`${DOMAIN_TASK}/prd.md`));
   assert.ok(prd && prd.source === hash && prd.sourceType === 'task', '域任务 PRD 文档');
+  // 域任务 checkpoint 逐条索引
+  const cp = docs.find((d) => d.sourceType === 'checkpoint' && d.source === hash);
+  assert.ok(cp && cp.title.includes('域内决策'), '域任务 checkpoint 文档');
   const design = docs.find((d) => d.filePath.endsWith(`${DOMAIN_TASK}/design.md`));
   assert.ok(
     design && design.source === hash && design.sourceType === 'design',

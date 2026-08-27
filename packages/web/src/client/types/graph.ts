@@ -10,6 +10,10 @@ export interface TaskNodeData {
   projectId?: string;
   projectIds?: string[];
   username?: string;
+  /** 来源域 hash（本地数据无此字段） */
+  domain?: string;
+  /** 来源域备注名（label，显示优先于 hash8） */
+  domainLabel?: string;
   [key: string]: unknown;
 }
 
@@ -19,6 +23,10 @@ export interface ProjectNodeData {
   name: string;
   hasGit?: boolean;
   username?: string;
+  /** 来源域 hash（本地数据无此字段） */
+  domain?: string;
+  /** 来源域备注名（label，显示优先于 hash8） */
+  domainLabel?: string;
   [key: string]: unknown;
 }
 
@@ -30,6 +38,10 @@ export interface SpecNodeData {
   projectId?: string;
   filePath?: string;
   username?: string;
+  /** 来源域 hash（本地数据无此字段） */
+  domain?: string;
+  /** 来源域备注名（label，显示优先于 hash8） */
+  domainLabel?: string;
   [key: string]: unknown;
 }
 

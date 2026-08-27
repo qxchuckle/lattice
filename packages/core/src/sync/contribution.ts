@@ -70,10 +70,38 @@ export async function walkFiles(dir: string): Promise<string[]> {
 }
 
 function globMatchAny(value: string, globs: string[]): boolean {
-  return globs.some((g) => minimatch(value, g, { nocase: true }));
+  // 否定模式：! 前缀 glob 排除（minimatch 的 ! 在 some 逻辑下不生效，需独立处理）
+  const positive = globs.filter((g) => !g.startsWith('!'));
+  const negative = globs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
+  return (
+    positive.some((g) => minimatch(value, g, { nocase: true })) &&
+    !negative.some((g) => minimatch(value, g, { nocase: true }))
+  );
 }
 
 /** 计算某用户的域贡献集（文件级复制清单） */
+/** dry-run 预览：给定 routes 会推送什么（不实际推送，保存前提示用） */
+export async function previewContribution(
+  username: string,
+  routes: string[] | undefined,
+  baselinePaths: string[] = [],
+): Promise<{
+  copied: number;
+  removed: number;
+  copiedFiles: string[];
+  removedFiles: string[];
+}> {
+  const plan = await computeContribution(username, routes);
+  const planPaths = new Set(plan.files.map((f) => f.destRel));
+  const removedFiles = baselinePaths.filter((p) => !planPaths.has(p));
+  return {
+    copied: plan.files.length,
+    removed: removedFiles.length,
+    copiedFiles: plan.files.map((f) => f.destRel).slice(0, 50),
+    removedFiles: removedFiles.slice(0, 50),
+  };
+}
+
 export async function computeContribution(
   username: string,
   routes: string[] | undefined,

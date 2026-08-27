@@ -188,6 +188,8 @@ export function resolvePrimaryId(idMap: Map<string, string>, id: string): string
  * 用于替代 `p.id`（现在可能是 undefined）。
  */
 export function getProjectId(p: ProjectMeta): string {
+  // 防御：错误对象/缺 ids 时不再抛 undefined.length
+  if (!p || !Array.isArray(p.ids)) return (p as { id?: string })?.id ?? '';
   return selectPrimaryId(p.ids) ?? p.id ?? p.ids[0] ?? '';
 }
 

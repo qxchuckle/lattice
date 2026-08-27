@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, App as AntdApp } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import { useSnapshot } from 'valtio';
 import App from './App';
 import { themeStore } from './store';
@@ -34,7 +35,7 @@ function Root() {
   }, [mode]);
 
   return (
-    <ConfigProvider theme={getAntdThemeConfig(mode)}>
+    <ConfigProvider theme={getAntdThemeConfig(mode)} locale={zhCN}>
       <AntdApp>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>

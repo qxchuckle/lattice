@@ -6,6 +6,7 @@ import {
   getProjectSpecs,
   getAllProjectSpecs,
   unifiedSearch,
+  createComposite,
 } from '@qcqx/lattice-core';
 
 export function registerSpecRoutes(app: FastifyInstance): void {
@@ -22,11 +23,38 @@ export function registerSpecRoutes(app: FastifyInstance): void {
       const projectSpecs = req.query.projectId
         ? await getProjectSpecs(username, req.query.projectId)
         : await getAllProjectSpecs(username);
-      return {
+      const result: Record<string, unknown> = {
         global: await getGlobalSpecs(),
         user: await getUserSpecs(username),
         project: projectSpecs,
       };
+      // 域 spec 并入（详情面板按 specId 查找 + 标题映射；domain 字段标注来源，scope 归位）
+      try {
+        const composite = await createComposite(username);
+        const view = await composite.knowledgeView();
+        const domainSpecs = view.specs.filter((v) => v.source !== 'local');
+        if (domainSpecs.length > 0) {
+          const mapped = domainSpecs.map((v) => ({
+            frontmatter: v.spec.frontmatter,
+            content: v.spec.content,
+            filePath: v.spec.filePath,
+            fileName: v.spec.fileName,
+            relativePath: v.spec.relativePath,
+            domain: v.source,
+          }));
+          for (const m of mapped) {
+            const view2 = domainSpecs.find(
+              (v) => v.spec.filePath === m.filePath && v.source === m.domain,
+            );
+            const scope = view2?.scope ?? 'user';
+            const bucket = scope === 'global' ? 'global' : scope === 'project' ? 'project' : 'user';
+            (result[bucket] as unknown[]).push(m);
+          }
+        }
+      } catch {
+        // 域数据不可用时仅返回本地（G1 降级）
+      }
+      return result;
     },
   );
 

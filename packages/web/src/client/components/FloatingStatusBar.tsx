@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Button, Badge, Segmented, Tooltip } from 'antd';
+import { Button, Badge, Segmented, Tooltip, Popover } from 'antd';
 import {
   ReloadOutlined,
   BulbOutlined,
@@ -14,6 +14,7 @@ import {
   SettingOutlined,
   CodeOutlined,
   WarningOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useSnapshot } from 'valtio';
@@ -38,6 +39,7 @@ import {
 import { fitToElements } from './graph/layout';
 import { useIsMobile } from '../hooks';
 import { CanvasSearchBar } from './CanvasSearchBar';
+import { GraphLegend } from './GraphLegend';
 
 const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] = [
   { label: '力导向', value: 'force', icon: <AimOutlined /> },
@@ -245,6 +247,21 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
             style={{ borderRadius: '50%' }}
           />
         </Tooltip>
+        <Popover
+          title='图例 · 节点与连线说明'
+          content={<GraphLegend />}
+          trigger='click'
+          placement='bottomRight'
+          overlayStyle={{ maxWidth: 460 }}>
+          <Tooltip title='图例说明'>
+            <Button
+              size='small'
+              type='text'
+              icon={<QuestionCircleOutlined />}
+              style={{ borderRadius: '50%' }}
+            />
+          </Tooltip>
+        </Popover>
       </div>
       <CanvasSearchBar />
     </>

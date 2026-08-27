@@ -7,6 +7,7 @@ import {
   readLocalConfig,
   readSyncDomains,
   writeSyncDomains,
+  resolveDomainRef,
   domainHashOf,
   peekDomain,
   joinDomain,
@@ -34,7 +35,6 @@ export function registerSyncCommand(program: Command): void {
     .option('--pull', '仅拉取（origin 单仓）')
     .option('--push', '仅推送（origin 单仓）')
     .option('--only <target>', '只执行指定轨道：origin | domains')
-    .option('--json', 'JSON 格式输出（域同步结果）')
     .action(async (opts) => {
       try {
         if (opts.pull || opts.push) {
@@ -87,22 +87,41 @@ export function registerSyncCommand(program: Command): void {
         logger.raw(
           chalk.green(`✓ 已关联域 ${result.domainHash}${opts.label ? `（${opts.label}）` : ''}`),
         );
+        if (!routes || routes.length === 0) {
+          logger.raw(
+            chalk.dim(
+              `  当前为只读消费。要推送自己的内容：ltc sync domain route add ${result.domainHash} '<规则>'`,
+            ),
+          );
+        }
         logger.raw(chalk.dim(`  镜像：${result.mirrorDir}`));
         printSummary(remote, result.summary, result.warnings);
       } catch (err) {
-        console.error(chalk.red('关联失败：'), (err as Error).message);
+        const msg = (err as Error).message;
+        console.error(chalk.red('关联失败：'), msg);
+        if (msg.includes('域已存在')) {
+          console.error(
+            chalk.dim('  已关联过该域：改用 route add 加推送规则，或 unlink 后重新 join'),
+          );
+        }
         process.exitCode = 1;
       }
     });
 
   domain
     .command('unlink <hash>')
-    .description('解除域关联：移除配置与本地镜像（主数据毫发无伤）')
+    .description(
+      '解除域关联：移除配置与本地镜像（主数据毫发无伤）；hash 支持完整 16 位或 ≥4 位前缀',
+    )
     .action(async (hash) => {
       try {
-        const r = await unlinkDomain(hash);
+        const resolved = await resolveDomainRef(hash);
+        if (resolved.error || !resolved.domain) throw new Error(resolved.error);
+        const r = await unlinkDomain(domainHashOf(resolved.domain));
         logger.raw(
-          chalk.green(`✓ 已解除域 ${hash}（${r.label ?? r.remote}）：配置、镜像、指纹已清理`),
+          chalk.green(
+            `✓ 已解除域 ${r.label ?? r.remote}：配置、镜像、指纹已清理（主数据毫发无伤）`,
+          ),
         );
       } catch (err) {
         console.error(chalk.red('解除失败：'), (err as Error).message);
@@ -126,9 +145,8 @@ export function registerSyncCommand(program: Command): void {
           return;
         }
         for (const d of domains) {
-          logger.raw(
-            `  ${chalk.bold(d.hash)} ${d.label ? chalk.cyan(`(${d.label})`) : ''} ${chalk.dim(`优先级 ${d.priority}`)}`,
-          );
+          const labelPart = d.label ? ` ${chalk.cyan(`(${d.label})`)}` : '';
+          logger.raw(`  ${chalk.bold(d.hash)}${labelPart} ${chalk.dim(`优先级 ${d.priority}`)}`);
           logger.raw(
             chalk.dim(
               `    ${d.remote}#${d.branch} · ${d.use} · ${d.pushState} · 镜像${d.mirrorExists ? '就绪' : '缺失'}` +
@@ -150,13 +168,16 @@ export function registerSyncCommand(program: Command): void {
     .action(async (hash: string, rule: string) => {
       try {
         validateRoute(rule);
+        const resolved = await resolveDomainRef(hash);
+        if (resolved.error || resolved.domain === undefined) throw new Error(resolved.error);
         const domains = await readSyncDomains();
-        const idx = domains.findIndex((d) => domainHashOf(d) === hash);
-        if (idx === -1) throw new Error(`未找到域：${hash}`);
+        const idx = domains.findIndex((d) => domainHashOf(d) === domainHashOf(resolved.domain!));
         const routes = [...(domains[idx].routes ?? []), rule];
         domains[idx] = { ...domains[idx], routes };
         await writeSyncDomains(domains);
-        logger.raw(chalk.green(`✓ 已添加规则 ${rule}（现 ${routes.length} 条）`));
+        logger.raw(
+          chalk.green(`✓ 已添加规则 ${rule}（现 ${routes.length} 条，ltc sync 推送生效）`),
+        );
       } catch (err) {
         console.error(chalk.red('添加失败：'), (err as Error).message);
         process.exitCode = 1;
@@ -168,9 +189,10 @@ export function registerSyncCommand(program: Command): void {
     .description('移除推送规则')
     .action(async (hash: string, rule: string) => {
       try {
+        const resolved = await resolveDomainRef(hash);
+        if (resolved.error || resolved.domain === undefined) throw new Error(resolved.error);
         const domains = await readSyncDomains();
-        const idx = domains.findIndex((d) => domainHashOf(d) === hash);
-        if (idx === -1) throw new Error(`未找到域：${hash}`);
+        const idx = domains.findIndex((d) => domainHashOf(d) === domainHashOf(resolved.domain!));
         const routes = (domains[idx].routes ?? []).filter((r) => r !== rule);
         domains[idx] = { ...domains[idx], routes };
         await writeSyncDomains(domains);
@@ -258,10 +280,6 @@ async function runFullSync(opts: { only?: string; json?: boolean }): Promise<voi
     logger.raw(chalk.blue(`正在同步 ${domains.length} 个域...`));
     const username = await currentUsername();
     const outcomes = await syncDomains(username);
-    if (opts.json) {
-      outputJson(outcomes);
-      return;
-    }
     let allOk = true;
     for (const o of outcomes) {
       const label = o.label ? `（${o.label}）` : '';

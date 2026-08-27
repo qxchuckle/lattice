@@ -11,6 +11,7 @@ import {
   getSmartContext,
   listAllUsernames,
   type TaskStatus,
+  createComposite,
 } from '@qcqx/lattice-core';
 
 export function registerTaskRoutes(app: FastifyInstance): void {
@@ -41,8 +42,19 @@ export function registerTaskRoutes(app: FastifyInstance): void {
   app.get<{ Params: { id: string } }>('/api/tasks/:id', async (req) => {
     const username = await getUsername();
     const task = await getTaskMeta(username, req.params.id);
-    if (!task) return { error: 'not_found', message: '任务不存在' };
-    return task;
+    if (task) return task;
+    // 域任务回退（只读展示：本地 miss 时从统一数据源查域任务元数据）
+    try {
+      const composite = await createComposite(username);
+      const view = await composite.knowledgeView();
+      const dt = view.tasks.find((v) => v.task.id === req.params.id && v.source !== 'local');
+      if (dt) {
+        return { ...dt.task, domain: dt.source, domainLabel: view.labels.get(dt.source) ?? '' };
+      }
+    } catch {
+      // 域数据不可用（G1 降级）
+    }
+    return { error: 'not_found', message: '任务不存在' };
   });
 
   app.get<{ Params: { id: string } }>('/api/tasks/:id/progress', async (req) => {
