@@ -36,7 +36,6 @@
     "@huggingface/transformers": "^3.4.1",
     "better-sqlite3": "^11.9.1",
     "glob": "^13.0.6",
-    "gray-matter": "^4.0.3",
     "ignore": "^7.0.5",
     "minimatch": "^10.2.5",
     "simple-git": "^3.27.0",

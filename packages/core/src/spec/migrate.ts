@@ -1,5 +1,5 @@
 import type { ParsedSpec } from '../types';
-import { writeSpec, normalizeSpecFrontmatter } from './io';
+import { writeSpec, normalizeSpecFrontmatter, formatSpecParseError } from './io';
 import { isValidSpecId } from './id';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from './cascade';
 import { getUsername } from '../config';
@@ -77,6 +77,15 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
 
   for (const spec of filteredSpecs) {
     try {
+      // YAML 语法错误：跳过迁移（writeSpec 会重建 frontmatter，原内容将丢失）
+      if (spec.parseError) {
+        result.errors.push({
+          filePath: spec.filePath,
+          message: `frontmatter YAML 解析失败，已跳过（避免重写丢失原字段）：${formatSpecParseError(spec.parseError)}`,
+        });
+        continue;
+      }
+
       const fm = spec.frontmatter;
       const addedFields: string[] = [];
 

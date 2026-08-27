@@ -1,5 +1,6 @@
 import type { ParsedSpec, SpecFrontmatter } from '../types';
 import { isValidSpecId } from './id';
+import { formatSpecParseError } from './io';
 
 /** Description 长度建议（中文字符宽度，按字符数判断） */
 export const DESCRIPTION_MIN_LENGTH = 30;
@@ -24,6 +25,7 @@ export interface SpecLintReport {
  * 校验 spec frontmatter 的完整性与规范性。
  *
  * 严格校验项（error）：
+ * - frontmatter YAML 语法错误（此时字段级校验全部跳过，frontmatter 为空对象）
  * - `id` 缺失或不符合 `spec-{8 位 base36}` 格式
  * - `title` 缺失或为空字符串
  *
@@ -36,6 +38,22 @@ export interface SpecLintReport {
 export function lintSpecFrontmatter(spec: ParsedSpec): SpecLintReport {
   const fm = spec.frontmatter ?? ({} as SpecFrontmatter);
   const issues: SpecLintIssue[] = [];
+
+  // YAML 语法错误：frontmatter 不可信，字段级校验无意义，直接返回单条 error
+  if (spec.parseError) {
+    return {
+      filePath: spec.filePath,
+      relativePath: spec.relativePath,
+      issues: [
+        {
+          severity: 'error',
+          field: 'frontmatter',
+          message: `frontmatter YAML 解析失败：${formatSpecParseError(spec.parseError)}。字段级校验已跳过，请先修复语法错误。`,
+        },
+      ],
+      ok: false,
+    };
+  }
 
   // id
   if (fm.id === undefined || fm.id === null || fm.id === '') {

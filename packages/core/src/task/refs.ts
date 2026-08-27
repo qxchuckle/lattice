@@ -2,7 +2,7 @@ import type { TaskMeta, ReferencedSpec } from '../types';
 import { getTaskMeta } from './index';
 import { writeJSON } from '../paths';
 import { getTaskMetaPath } from '../paths';
-import { writeSpec, normalizeSpecFrontmatter } from '../spec/io';
+import { writeSpec, normalizeSpecFrontmatter, formatSpecParseError } from '../spec/io';
 import { isValidSpecId } from '../spec/id';
 import { findSpecByName } from '../spec/query';
 import { nowISO } from '../utils/time';
@@ -143,6 +143,14 @@ async function resolveSpecInput(
 
   const match = matches[0]; // 同 spec 跨层级时取最高优先级
   const spec = match.spec;
+
+  // YAML 语法错误：拒绝自愈 backfill（writeSpec 会重建 frontmatter，原内容将丢失）
+  if (spec.parseError) {
+    throw new Error(
+      `spec ${spec.relativePath} frontmatter YAML 解析失败（${formatSpecParseError(spec.parseError)}），请先修复语法错误后再引用`,
+    );
+  }
+
   let specId = spec.frontmatter.id;
 
   // 自愈式 backfill：如果 spec 缺少合法 id，自动补上

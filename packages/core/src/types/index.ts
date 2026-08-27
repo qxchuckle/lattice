@@ -152,6 +152,16 @@ export interface SpecFrontmatter {
   [key: string]: unknown;
 }
 
+/** Spec frontmatter YAML 解析错误（坏文件不阻塞加载，由消费方按需处理） */
+export interface SpecParseError {
+  /** 错误原因（js-yaml reason，不含位置信息） */
+  message: string;
+  /** 文件内行号（1-based；js-yaml mark.line + 1） */
+  line?: number;
+  /** 行内列号（1-based；js-yaml mark.column + 1） */
+  column?: number;
+}
+
 /** 解析后的 Spec 文件 */
 export interface ParsedSpec {
   frontmatter: SpecFrontmatter;
@@ -161,6 +171,11 @@ export interface ParsedSpec {
   relativePath: string;
   /** 项目级 spec 的所属项目 ID（从 filePath 解析）；全局级/用户级为 undefined */
   projectId?: string;
+  /**
+   * frontmatter YAML 解析失败时携带；此时 frontmatter 为空对象、content 为去围栏后的正文。
+   * 写回类操作（set / migrate / ref-spec 自愈）必须先检查此字段，避免重建 frontmatter 丢失原内容。
+   */
+  parseError?: SpecParseError;
 }
 
 /** 全局配置 config.json */

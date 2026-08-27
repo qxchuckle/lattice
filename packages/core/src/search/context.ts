@@ -16,7 +16,7 @@ import {
   getCascadedSpecs,
   getCascadedSpecsWithAncestors,
 } from '../spec';
-import { parseSpec } from '../spec/io';
+import { parseSpec, formatSpecParseError } from '../spec/io';
 import { getTaskMeta } from '../task';
 import { listProjects, normalizeProjectId, getVirtualProjectMeta } from '../project';
 import { getRelationsByProject } from '../project/relation';
@@ -441,7 +441,8 @@ export async function getSmartContext(
       dedupedResults.slice(0, 5).map((r) => parseSpec(r.filePath)),
     );
     for (const spec of parsedResults) {
-      if (spec) semanticSpecs.push(spec);
+      // 坏 YAML 的 spec 无可用元数据，不进语义关联列表
+      if (spec && !spec.parseError) semanticSpecs.push(spec);
     }
   } catch {
     // RAG 不可用时静默回退
@@ -524,8 +525,10 @@ export function formatContextAsMarkdown(
       const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
       const scope = resolveSpecScope(spec, ctx);
       const scopeTag = SCOPE_LABEL[scope] ?? scope;
-      const description =
-        typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+      // 坏 YAML 的 spec：显式标记解析失败（区别于[缺失摘要]，提示修复而非补摘要）
+      const description = spec.parseError
+        ? `[frontmatter 解析失败：${formatSpecParseError(spec.parseError)}，运行 lattice spec lint 定位]`
+        : typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
           ? spec.frontmatter.description.trim()
           : '[缺失摘要]';
       const matched = queryMatchedPaths?.has(spec.filePath) ? '★ ' : '';
@@ -569,8 +572,10 @@ export function formatContextAsMarkdown(
         lines.push(`#### 项目级 Spec（${userData.projectSpecs.length}）\n`);
         for (const spec of userData.projectSpecs) {
           const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
-          const description =
-            typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+          const description = spec.parseError
+            ? `[frontmatter 解析失败：${formatSpecParseError(spec.parseError)}]`
+            : typeof spec.frontmatter.description === 'string' &&
+                spec.frontmatter.description.trim()
               ? spec.frontmatter.description.trim()
               : '[缺失摘要]';
           lines.push(`- **${title}** — ${description}`);
@@ -583,8 +588,10 @@ export function formatContextAsMarkdown(
         lines.push(`#### 用户级 Spec（${userData.userSpecs.length}）\n`);
         for (const spec of userData.userSpecs) {
           const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
-          const description =
-            typeof spec.frontmatter.description === 'string' && spec.frontmatter.description.trim()
+          const description = spec.parseError
+            ? `[frontmatter 解析失败：${formatSpecParseError(spec.parseError)}]`
+            : typeof spec.frontmatter.description === 'string' &&
+                spec.frontmatter.description.trim()
               ? spec.frontmatter.description.trim()
               : '[缺失摘要]';
           lines.push(`- **${title}** — ${description}`);

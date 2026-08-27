@@ -1,4 +1,3 @@
-import matter from 'gray-matter';
 import simpleGit from 'simple-git';
 import { existsSync, readFileSync } from 'node:fs';
 import { cp, mkdir, rm, stat } from 'node:fs/promises';
@@ -15,7 +14,7 @@ import {
   writeJSON,
   toKebabCase,
 } from './paths';
-import { writeSpec } from './spec/io';
+import { writeSpec, parseFrontmatter, formatSpecParseError } from './spec/io';
 import { findProjectDirName } from './project';
 
 // ─── 模板读取 ───
@@ -246,8 +245,14 @@ export async function applySpecTemplate(
 
   for (const file of template.files) {
     const filePath = join(targetDir, file.relativePath);
-    const parsed = matter(file.content);
-    await writeSpec(filePath, parsed.data, parsed.content.trim());
+    const { frontmatter, content, parseError } = parseFrontmatter(file.content);
+    // 模板 YAML 坏：带定位 fail-fast（gray-matter 时代会抛裸 YAMLException，且污染后续解析）
+    if (parseError) {
+      throw new Error(
+        `模板 ${templateName} 的 ${file.relativePath} frontmatter YAML 解析失败（${formatSpecParseError(parseError)}），请修复模板`,
+      );
+    }
+    await writeSpec(filePath, frontmatter, content.trim());
     firstFilePath ??= filePath;
   }
 

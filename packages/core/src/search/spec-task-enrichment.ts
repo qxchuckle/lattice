@@ -145,7 +145,8 @@ export async function enrichSpecResultsWithTaskRefs(
 
     // 读取 spec 文件获取 title
     const spec = await parseSpec(specPath, entry.ref.relativePath);
-    if (!spec) continue;
+    // 坏 YAML 的 spec 无可用元数据，跳过
+    if (!spec || spec.parseError) continue;
 
     const taskNames = tasks.map((t) => `「${t.taskTitle}」`).join('、');
     addedPaths.add(specPath);

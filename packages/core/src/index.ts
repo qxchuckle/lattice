@@ -13,6 +13,7 @@ export type {
   SearchDocumentMeta,
   SpecFrontmatter,
   ParsedSpec,
+  SpecParseError,
   GlobalConfig,
   LocalConfig,
   ResolvedConfig,
@@ -292,11 +293,13 @@ export { getInitMetaPath, readInitMeta, writeInitMeta, type InitMeta } from './c
 // Spec
 export {
   parseSpec,
+  parseFrontmatter,
   writeSpec,
   writeSpecRaw,
   deleteSpec,
   specExists,
   normalizeSpecFrontmatter,
+  formatSpecParseError,
   getGlobalSpecs,
   getUserSpecs,
   getProjectSpecs,

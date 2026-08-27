@@ -20,6 +20,7 @@ import {
   applySpecTemplate,
   parseSpec,
   writeSpec,
+  formatSpecParseError,
   specExists,
   findSpecByName,
   syncSpecTemplateRegistry,
@@ -291,6 +292,7 @@ export function registerSpecCommand(program: Command): void {
             title: m.spec.frontmatter.title ?? m.spec.fileName,
             tags: m.spec.frontmatter.tags ?? [],
             description: m.spec.frontmatter.description ?? null,
+            ...(m.spec.parseError ? { parseError: m.spec.parseError } : {}),
             ...(targetUsername !== currentUsername ? { sourceUser: targetUsername } : {}),
             ...(opts.detail ? { content: m.spec.content } : {}),
           }));
@@ -306,6 +308,11 @@ export function registerSpecCommand(program: Command): void {
           const title = s.frontmatter.title ?? s.fileName;
           logger.raw(chalk.bold(`\n${title}`) + userTag);
           logger.raw(chalk.dim(`  ${m.scope} · ${s.filePath}`));
+          if (s.parseError) {
+            logger.raw(
+              chalk.red(`  ⚠ frontmatter YAML 解析失败：${formatSpecParseError(s.parseError)}`),
+            );
+          }
           if (s.frontmatter.tags?.length) {
             logger.raw(chalk.dim(`  [${s.frontmatter.tags.join(', ')}]`));
           }
@@ -695,6 +702,18 @@ export function registerSpecCommand(program: Command): void {
         }
 
         const spec = matches[0].spec;
+
+        // YAML 语法错误：拒绝写入（writeSpec 会重建 frontmatter，原字段将丢失）
+        if (spec.parseError) {
+          logger.raw(
+            chalk.red(
+              `该 spec frontmatter YAML 解析失败（${formatSpecParseError(spec.parseError)}），已拒绝写入以避免丢失原字段。请先修复语法错误（可用 lattice spec lint 定位）。`,
+            ),
+          );
+          process.exitCode = 1;
+          return;
+        }
+
         const fm: SpecFrontmatter = { ...spec.frontmatter };
 
         if (opts.id !== undefined) {
@@ -921,20 +940,21 @@ export function registerSpecCommand(program: Command): void {
             s.frontmatter.description.trim() === '');
 
         // global → user → 逐项目（按项目分组），跨项目同名 spec 天然消歧
+        // 坏 YAML 的 spec 不计入（其字段不可信，应由 spec lint / migrate 报错引导修复）
         const missing: Array<{
           level: 'global' | 'user' | 'project';
           projectName: string | null;
           spec: ParsedSpec;
         }> = [
           ...globalSpecs
-            .filter(isEmptyDescription)
+            .filter((s) => !s.parseError && isEmptyDescription(s))
             .map((spec) => ({ level: 'global' as const, projectName: null, spec })),
           ...userSpecs
-            .filter(isEmptyDescription)
+            .filter((s) => !s.parseError && isEmptyDescription(s))
             .map((spec) => ({ level: 'user' as const, projectName: null, spec })),
           ...projectGroups.flatMap((g: ProjectSpecGroup) =>
             g.specs
-              .filter(isEmptyDescription)
+              .filter((s) => !s.parseError && isEmptyDescription(s))
               .map((spec) => ({ level: 'project' as const, projectName: g.projectName, spec })),
           ),
         ];

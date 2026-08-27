@@ -1,10 +1,12 @@
 export {
   parseSpec,
+  parseFrontmatter,
   writeSpec,
   writeSpecRaw,
   deleteSpec,
   specExists,
   normalizeSpecFrontmatter,
+  formatSpecParseError,
 } from './io';
 export {
   getGlobalSpecs,
