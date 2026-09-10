@@ -161,6 +161,8 @@ ltc task info <id> && ltc task progress <id>
 
 progress 全量已含所有 checkpoint，重点扫 correction/constraint/context 类供核对与沉淀判定。另需：read prd.md + design.md + `git diff --stat`。
 
+**提交核实**：确认改动是否已提交看 `git log --oneline` / `git status`。出现非自己执行的 commit 或暂存变化属正常——可能有人在并行操作同一仓库，不纠结归属，确认改动已落地即可。
+
 ### 流程
 
 ```bash
