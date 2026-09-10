@@ -9,6 +9,7 @@ export {
   deployCommandsAsSkills,
   injectToToolRoot,
   listBundledAgentFiles,
+  listBundledCommandSkillNames,
   type AIToolConfig,
   type ExtraRulesInjection,
   type InjectedPath,

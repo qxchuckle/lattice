@@ -12,19 +12,12 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import {
-  dirExists,
-  fileExists,
-  listDir,
-  readText,
-  removeDir,
-  removeFile,
-  writeText,
-} from '../paths';
+import { dirExists, fileExists, readText, removeDir, removeFile, writeText } from '../paths';
 import {
   LATTICE_BEGIN_MARKER,
   getAIToolConfigs,
   listBundledAgentFiles,
+  listBundledCommandSkillNames,
   resolveToolPath,
   splitFrontmatter,
   stripLatticeBlock,
@@ -77,6 +70,7 @@ export async function scanInjections(opts: ScanInjectionsOptions = {}): Promise<
     ? allTools.filter((t) => opts.toolIds?.includes(t.id))
     : allTools;
   const bundledAgentFiles = await listBundledAgentFiles();
+  const bundledCommandSkillNames = await listBundledCommandSkillNames();
 
   const findings: InjectionFinding[] = [];
   const scannedRoots: string[] = [];
@@ -164,22 +158,20 @@ export async function scanInjections(opts: ScanInjectionsOptions = {}): Promise<
         }
       }
 
-      // 5. Codex 特例：deployCommandsAsSkills 生成的 <root>/skills/lattice-*/
+      // 5. Codex 特例：deployCommandsAsSkills 生成的 <root>/skills/<lattice-*>/
+      //    按 bundled commands 派生的精确名单删（不用前缀 glob），避免误删用户自建的 lattice-* skill
       if (tool.id === 'codex') {
         const skillsRoot = join(targetRoot, 'skills');
-        if (await dirExists(skillsRoot)) {
-          for (const entry of await listDir(skillsRoot)) {
-            if (!entry.startsWith('lattice-')) continue;
-            const p = join(skillsRoot, entry);
-            if (await dirExists(p)) {
-              findings.push({
-                ...base,
-                kind: 'codex-skill-dir',
-                path: p,
-                action: 'delete-dir',
-                detail: '删除 commands 转化出的 skill 目录',
-              });
-            }
+        for (const skillName of bundledCommandSkillNames) {
+          const p = join(skillsRoot, skillName);
+          if (await dirExists(p)) {
+            findings.push({
+              ...base,
+              kind: 'codex-skill-dir',
+              path: p,
+              action: 'delete-dir',
+              detail: '删除 commands 转化出的 skill 目录',
+            });
           }
         }
       }

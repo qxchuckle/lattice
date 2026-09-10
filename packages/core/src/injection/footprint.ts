@@ -271,6 +271,34 @@ export function stripLatticeBlock(content: string): { content: string; found: bo
 }
 
 /**
+ * 遍历 bundled commands 目录，按 deployCommandsAsSkills 的命名规则返回每个 .md
+ * 对应的 codex skill 名 + 源路径。命名规则的唯一真源，供注入与清除共用，
+ * 保证 uninject 精确删除 init 生成物、不误删用户自建的 lattice-* skill。
+ */
+async function walkCommandSkillEntries(
+  commandsDir: string,
+): Promise<Array<{ skillName: string; sourcePath: string }>> {
+  const entries: Array<{ skillName: string; sourcePath: string }> = [];
+
+  async function walkDir(dir: string, prefix: string): Promise<void> {
+    const dirents = await readdir(dir, { withFileTypes: true });
+    for (const dirent of dirents) {
+      const fullPath = join(dir, dirent.name);
+      if (dirent.isDirectory()) {
+        await walkDir(fullPath, prefix ? `${prefix}-${dirent.name}` : dirent.name);
+      } else if (dirent.name.endsWith('.md')) {
+        const baseName = dirent.name.replace(/\.md$/, '');
+        const skillName = prefix ? `lattice-${prefix}-${baseName}` : `lattice-${baseName}`;
+        entries.push({ skillName, sourcePath: fullPath });
+      }
+    }
+  }
+
+  await walkDir(commandsDir, '');
+  return entries;
+}
+
+/**
  * Codex 特有：将 bundled commands 目录下每个 .md 文件转化为独立 Codex skill。
  * 映射规则：`task/start.md` → `~/.codex/skills/lattice-task-start/SKILL.md`
  *
@@ -283,39 +311,36 @@ export async function deployCommandsAsSkills(
 ): Promise<string[]> {
   const deployed: string[] = [];
 
-  async function walkDir(dir: string, prefix: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        await walkDir(fullPath, prefix ? `${prefix}-${entry.name}` : entry.name);
-      } else if (entry.name.endsWith('.md')) {
-        const baseName = entry.name.replace(/\.md$/, '');
-        const skillName = prefix ? `lattice-${prefix}-${baseName}` : `lattice-${baseName}`;
-        const content = (await readText(fullPath)) ?? '';
+  for (const { skillName, sourcePath } of await walkCommandSkillEntries(commandsDir)) {
+    const content = (await readText(sourcePath)) ?? '';
 
-        // 从文件内容中提取 description：取第一行 "目标：" 开头的内容
-        const goalMatch = content.match(/^目标[：:](.+)$/m);
-        const description = goalMatch ? goalMatch[1].trim() : `Lattice ${skillName} 命令`;
+    // 从文件内容中提取 description：取第一行 "目标：" 开头的内容
+    const goalMatch = content.match(/^目标[：:](.+)$/m);
+    const description = goalMatch ? goalMatch[1].trim() : `Lattice ${skillName} 命令`;
 
-        const frontmatter = [
-          '---',
-          `name: ${skillName}`,
-          `description: ${description}`,
-          '---',
-          '',
-        ].join('\n');
+    const frontmatter = [
+      '---',
+      `name: ${skillName}`,
+      `description: ${description}`,
+      '---',
+      '',
+    ].join('\n');
 
-        const skillDir = join(targetSkillsRoot, skillName);
-        await ensureDir(skillDir);
-        await writeText(join(skillDir, 'SKILL.md'), `${frontmatter}${content}`);
-        deployed.push(skillName);
-      }
-    }
+    const skillDir = join(targetSkillsRoot, skillName);
+    await ensureDir(skillDir);
+    await writeText(join(skillDir, 'SKILL.md'), `${frontmatter}${content}`);
+    deployed.push(skillName);
   }
 
-  await walkDir(commandsDir, '');
   return deployed;
+}
+
+/**
+ * 返回 bundled commands 会转化出的 codex skill 目录名（`lattice-*`）。
+ * uninject 据此精确清除，不用前缀 glob，避免误删用户自建的 lattice-* skill。
+ */
+export async function listBundledCommandSkillNames(): Promise<string[]> {
+  return (await walkCommandSkillEntries(getBundledTemplateDir('commands'))).map((e) => e.skillName);
 }
 
 /** 一次注入落盘的路径 + 类别，供 CLI 展示。 */
