@@ -382,7 +382,8 @@ export function registerSpecCommand(program: Command): void {
         for (const c of conflicts) {
           logger.raw(chalk.bold(`  ${c.fileName}`));
           for (const level of c.levels) {
-            logger.raw(`    [${level.scope}] ${chalk.dim(level.filePath)}`);
+            const idTag = level.specId ? chalk.dim(` id：${level.specId}`) : '';
+            logger.raw(`    [${level.scope}]${idTag} ${chalk.dim(level.filePath)}`);
             logger.raw(`    ${chalk.dim(level.snippet)}`);
           }
           logger.raw('');
@@ -983,6 +984,7 @@ export function registerSpecCommand(program: Command): void {
           const data = shown.map((m) => ({
             filePath: m.spec.filePath,
             relativePath: m.spec.relativePath,
+            id: m.spec.frontmatter.id ?? null,
             level: m.level,
             projectName: m.projectName,
             title: m.spec.frontmatter.title ?? m.spec.fileName.replace(/\.md$/i, ''),
@@ -1005,6 +1007,7 @@ export function registerSpecCommand(program: Command): void {
           const title = m.spec.frontmatter.title ?? m.spec.fileName.replace(/\.md$/i, '');
           const levelLabel = m.level === 'project' ? `project · ${m.projectName}` : m.level;
           logger.raw(`  ${chalk.bold(title)} ${chalk.dim(`[${levelLabel}]`)}`);
+          if (m.spec.frontmatter.id) logger.raw(chalk.dim(`    id：${m.spec.frontmatter.id}`));
           logger.raw(chalk.dim(`    路径：${m.spec.filePath}`));
           const snippet = extractSnippet(m.spec.content, 3);
           if (snippet) {
@@ -1124,8 +1127,9 @@ export function registerSpecCommand(program: Command): void {
               `\n⚠ ${result.missingDescriptions.length} 个 spec 缺 description（目录选读依据缺失，建议 ltc spec suggest-description 补齐后重导）：`,
             ),
           );
-          for (const f of result.missingDescriptions) {
-            logger.raw(chalk.dim(`  • ${f}`));
+          for (const m of result.missingDescriptions) {
+            const idTag = m.specId ? chalk.dim(` id：${m.specId}`) : '';
+            logger.raw(chalk.dim(`  • ${m.path}${idTag}`));
           }
         }
       } catch (err) {
@@ -1226,7 +1230,10 @@ function printLintReport(report: SpecLintReport, opts: { compact: boolean }): vo
 
   // 完整模式：每个 spec 一段
   const status = report.ok ? chalk.green('OK') : chalk.red('ERROR');
-  logger.raw(`\n${status} ${chalk.bold(report.relativePath)} ${chalk.dim(report.filePath)}`);
+  const idTag = report.specId ? chalk.dim(` id：${report.specId}`) : '';
+  logger.raw(
+    `\n${status} ${chalk.bold(report.relativePath)}${idTag} ${chalk.dim(report.filePath)}`,
+  );
   if (report.issues.length === 0) {
     logger.raw(chalk.green('  ✓ frontmatter 完整'));
     return;

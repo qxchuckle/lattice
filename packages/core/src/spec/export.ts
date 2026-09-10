@@ -92,8 +92,8 @@ export interface SpecExportResult {
   /** hash 未变而跳过写入的文件 */
   skipped: string[];
   warnings: SpecExportWarning[];
-  /** 缺 description 的导出文件（目录选读依据缺失，建议补齐后重导） */
-  missingDescriptions: string[];
+  /** 缺 description 的导出文件（目录选读依据缺失，建议补齐后重导）；specId 供直接 ref-spec/set */
+  missingDescriptions: { path: string; specId?: string }[];
 }
 
 export interface SpecExportVerifyIssue {
@@ -729,7 +729,7 @@ export async function exportSpecs(
   // 缺 description 清单（目录选读依据缺失）
   const missingDescriptions = items
     .filter((i) => !i.spec.frontmatter.description?.trim())
-    .map((i) => i.exportPath);
+    .map((i) => ({ path: i.exportPath, specId: i.spec.frontmatter.id }));
 
   return { outputDir, manifest, written, skipped, warnings, missingDescriptions };
 }

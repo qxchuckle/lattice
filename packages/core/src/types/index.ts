@@ -306,6 +306,7 @@ export interface SpecConflict {
   levels: {
     scope: 'project' | 'user' | 'global';
     filePath: string;
+    specId?: string;
     snippet: string;
   }[];
 }

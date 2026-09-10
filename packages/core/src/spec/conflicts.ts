@@ -40,6 +40,7 @@ export async function detectSpecConflicts(
         levels: entries.map((e) => ({
           scope: e.scope,
           filePath: e.spec.filePath,
+          specId: e.spec.frontmatter.id,
           snippet: e.spec.content.slice(0, 100) + (e.spec.content.length > 100 ? '...' : ''),
         })),
       });

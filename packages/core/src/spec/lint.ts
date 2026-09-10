@@ -17,6 +17,8 @@ export interface SpecLintIssue {
 export interface SpecLintReport {
   filePath: string;
   relativePath: string;
+  /** spec 全局唯一 id（frontmatter.id）；坏 YAML 或缺失时为 undefined */
+  specId?: string;
   issues: SpecLintIssue[];
   ok: boolean;
 }
@@ -44,6 +46,7 @@ export function lintSpecFrontmatter(spec: ParsedSpec): SpecLintReport {
     return {
       filePath: spec.filePath,
       relativePath: spec.relativePath,
+      specId: spec.frontmatter.id,
       issues: [
         {
           severity: 'error',
@@ -133,6 +136,7 @@ export function lintSpecFrontmatter(spec: ParsedSpec): SpecLintReport {
   return {
     filePath: spec.filePath,
     relativePath: spec.relativePath,
+    specId: spec.frontmatter.id,
     issues,
     ok: !hasError,
   };

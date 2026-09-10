@@ -223,6 +223,8 @@
 
 ### `ltc spec conflicts`
 
+检测三层（global/user/project）同 relativePath 的 spec 冲突；每个冲突层级输出含 `id`（区分不同层的同名 spec）。
+
 ### `ltc spec init <relative-path>`
 
 - `--scope` / `--title`（必填）/ `--description` / `--tags` / `--force`
@@ -236,7 +238,8 @@
 
 列出缺少 `description` 的 spec 并展示上下文帮助补写。project 级覆盖**全部已注册项目**（与 `spec export` 视角一致，不限于 cwd 所在项目）。
 
-- `--scope <scope>`（`all` 默认 / `global` / `user` / `project`=全部项目）/ `--limit <n>` / `--json`（含 `level` + `projectName`）
+- `--scope <scope>`（`all` 默认 / `global` / `user` / `project`=全部项目）/ `--limit <n>` / `--json`（含 `id` + `level` + `projectName`）
+- 普通输出与 `--json` 均含 spec `id`，可直接用于 `task ref-spec` / `spec set`
 - 修复提示为 `spec set` 绝对路径命令，可直接跨项目落盘
 
 ### `ltc spec lint [file]`
@@ -244,7 +247,8 @@
 校验 spec frontmatter 完整性（id/title 为 error，description/updated/tags 为 warning；有 error 时退出码非 0）。
 
 - `<file>` 支持模糊匹配与 glob；`--scope` 限定层级
-- `--all` 批量扫描（project 级覆盖全部已注册项目）/ `--json`
+- `--all` 批量扫描（project 级覆盖全部已注册项目）/ `--json`（`reports[].specId`）
+- 普通输出完整模式每个 spec 段含 `id` 行
 
 ### `ltc spec migrate [name]`
 
@@ -261,6 +265,7 @@
 - `-o, --output <dir>`（默认 `~/.lattice/.cache/export-spec/<skill名>/`，公共文件夹按名分子目录，同名覆盖）
 - `--clean`（仅限含本工具 manifest.yaml 的目录）/ `--strict`（警告升错误）/ `--json`
 - `--verify <dir>`：不导出，仅校验目录与 manifest 一致性
+- 输出含 spec `id`：`--json` 的 `manifest.files[].source.specId` 与 `missingDescriptions[].specId`；普通输出的缺 description 清单每项附 `id`（可直接 `task ref-spec` / `spec set`）
 
 ## `ltc spec template`
 
