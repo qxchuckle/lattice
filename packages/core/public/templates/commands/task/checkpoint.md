@@ -3,7 +3,7 @@
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
 **[依赖文档]**：
-- task-workflows.md：PRD 硬触发（T1~T8）/ 4. checkpoint 前 PRD 自检 / checkpoint 类型
+- task-workflows.md：1. PRD 硬触发（T1~T8） / 4. checkpoint 前 PRD 自检 / checkpoint 类型
 - lattice-rules.md：回答闭合自检（#十、回答闭合自检）
 
 **目标**：记录当前任务的关键进展，确保过程信息结构化落盘，支持跨会话追踪。
@@ -26,7 +26,7 @@ ltc task list --current     # 无 ID 时，选 in_progress 的
 
 执行 `ltc task checkpoint` **之前必须先过以下自检**——任意一条命中而 PRD 未同步，**必须先 `read_file prd.md` → `search_replace prd.md` 同步后再打点**（[task-workflows.md#4. checkpoint 前 PRD 自检]）：
 
-- [ ] 本轮是否触发了 [task-workflows.md#1. PRD 硬触发] 中任一项（T1~T8）？
+- [ ] 本轮是否触发了 [task-workflows.md#1. PRD 硬触发（T1~T8）] 中任一项？
 - [ ] 本轮改动的文件是否全部出现在 PRD 的"修改文件索引"中？
 - [ ] 本轮的方案 / 决策 / 否决理由是否已写入 PRD 对应段落？
 - [ ] 本轮发现的新约束 / 边界 / 风险是否已写入 PRD"关键约束"或"风险"段？

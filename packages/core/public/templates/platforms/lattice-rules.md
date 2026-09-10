@@ -31,7 +31,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检。（[task-workflows.md#实施期循环]）
 
-1. PRD 硬触发命中 → 先改 PRD（[task-workflows.md#1. PRD 硬触发]）
+1. PRD 硬触发命中 → 先改 PRD（[task-workflows.md#1. PRD 硬触发（T1~T8）]）
 2. 写代码前/checkpoint 前/complete 前/推翻方案后各有必做动作
 3. spec 每轮检查，非一次性
 4. 代码改完 → checkpoint；推翻方案 → pivot
