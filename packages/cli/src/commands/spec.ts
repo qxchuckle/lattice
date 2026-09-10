@@ -274,8 +274,11 @@ export function registerSpecCommand(program: Command): void {
         const projectId = await resolveCurrentProjectId();
 
         // ID 优先：合法 spec-id → findSpecById 跨 global/user/全部项目精确查找（与 ref-spec 口径一致，
-        // 唯一命中不受 --scope 收窄）；非 ID 或未命中 → 回退 findSpecByName（文件名/标题/glob + --scope）
-        const byId = isValidSpecId(file) ? await findSpecById(targetUsername, file) : null;
+        // 唯一命中不受 --scope 收窄；多命中时 preferProjectId=cwd 优先当前项目版本，与 ref-spec 消歧一致）；
+        // 非 ID 或未命中 → 回退 findSpecByName（文件名/标题/glob + --scope）
+        const byId = isValidSpecId(file)
+          ? await findSpecById(targetUsername, file, { preferProjectId: projectId })
+          : null;
         const matches: SpecMatch[] = byId
           ? [{ scope: byId.scope, spec: byId.spec }]
           : await findSpecByName(targetUsername, projectId, file, { scope: opts.scope });
