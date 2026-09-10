@@ -47,7 +47,7 @@ ltc task update <id> --parent <id> / --clear-parent
 ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 ```
 
-1. 按主题全文读取 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）：context 列表选读 + `ltc search` 补漏。读完全文后 → `ltc task ref-spec <task-id> <spec-name>` 关联（subagent 只读不关联，主线负责）
+1. 按主题全文读取 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）：context 列表选读 + `ltc search` 补漏。读完全文后 → `ltc task ref-spec <task-id> <spec-id>` 关联（subagent 只读不关联，主线负责）
 2. 参考近似历史任务 PRD（按复杂性选读相关的）
 3. 完善 PRD（目标、约束、方案、文件索引、风险）；有 design.md → 先 read。不要停留在默认空白标题，只记录当前最佳认知
 4. 输出 PRD 规模摘要（覆盖了哪几个关键段落）
@@ -130,7 +130,7 @@ ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ### spec 引用 + 元数据一致性
 
 ```bash
-ltc task ref-spec <task-id> <spec-name>
+ltc task ref-spec <task-id> <spec-id>
 ltc task unref-spec <task-id> <spec-id>
 ```
 

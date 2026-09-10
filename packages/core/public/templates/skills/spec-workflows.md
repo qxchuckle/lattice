@@ -32,7 +32,7 @@ spec 非永远正确——与代码矛盾时交叉验证，必要时问用户。
 
 **读**：`read_file` 全文（禁止部分读取）→ 验证时效 → 提炼约束
 
-**关联**：`ltc task ref-spec <task-id> <spec-name>`
+**关联**：`ltc task ref-spec <task-id> <spec-id>`
 
 ## 沉淀判定
 
