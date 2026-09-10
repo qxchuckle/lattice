@@ -23,6 +23,7 @@ import {
   formatSpecParseError,
   specExists,
   findSpecByName,
+  findSpecById,
   syncSpecTemplateRegistry,
   listSpecTemplateRegistries,
   removeSpecTemplateRegistry,
@@ -45,6 +46,7 @@ import {
   type ProjectSpecGroup,
   type SpecFrontmatter,
   type ParsedSpec,
+  type SpecMatch,
   type SpecLintReport,
 } from '@qcqx/lattice-core';
 import { logger, outputJson, resolveCurrentProject } from '../utils';
@@ -193,7 +195,7 @@ export function registerSpecCommand(program: Command): void {
   cmd
     .command('show <file>')
     .description(
-      '查看 spec 信息（支持文件名、标题模糊匹配和 glob 语法；--source 直读被遮蔽的域版本）',
+      '查看 spec 信息（推荐用 spec ID，全局唯一且可跨项目；也支持文件名、标题模糊匹配和 glob 语法；--source 直读被遮蔽的域版本）',
     )
     .option('--scope <scope>', '限定层级（project / user / global）')
     .option('--user <username>', '查看指定用户的 spec（默认当前用户）')
@@ -271,9 +273,12 @@ export function registerSpecCommand(program: Command): void {
 
         const projectId = await resolveCurrentProjectId();
 
-        const matches = await findSpecByName(targetUsername, projectId, file, {
-          scope: opts.scope,
-        });
+        // ID 优先：合法 spec-id → findSpecById 跨 global/user/全部项目精确查找（与 ref-spec 口径一致，
+        // 唯一命中不受 --scope 收窄）；非 ID 或未命中 → 回退 findSpecByName（文件名/标题/glob + --scope）
+        const byId = isValidSpecId(file) ? await findSpecById(targetUsername, file) : null;
+        const matches: SpecMatch[] = byId
+          ? [{ scope: byId.scope, spec: byId.spec }]
+          : await findSpecByName(targetUsername, projectId, file, { scope: opts.scope });
 
         closeDb();
 

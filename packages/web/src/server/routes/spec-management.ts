@@ -62,6 +62,9 @@ export async function registerSpecManagementRoutes(app: FastifyInstance): Promis
     await writeSpec(
       spec.filePath,
       {
+        // 保留原 frontmatter（含 id 及其他自定义字段），只覆盖被编辑的 title/description/tags；
+        // 否则 normalizeSpecFrontmatter 因传入无 id 会 generateSpecId 覆盖原 id，破坏所有按 id 的引用
+        ...spec.frontmatter,
         title: req.body.title ?? spec.frontmatter.title,
         description: req.body.description ?? spec.frontmatter.description,
         tags: tagList.length > 0 ? tagList : spec.frontmatter.tags,

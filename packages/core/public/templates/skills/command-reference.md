@@ -212,6 +212,8 @@
 
 ### `ltc spec show <file>`
 
+- `<file>` **推荐传 spec ID**（全局唯一）：跨 global + user + **全部已注册项目**精确查看，**不受 cwd 限制**（含未在工作区打开、但已注册的其他项目的 spec）。
+- 传名称 / 标题 / glob：项目级范围限 **cwd 项目**（+ user + global 层级）——名称跨项目会同名歧义，故收窄；要跨项目查看请改用 spec ID。
 - `--user <username>` / `--detail`（显示完整内容）
 
 ### `ltc spec conflicts`
