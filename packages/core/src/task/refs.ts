@@ -1,10 +1,10 @@
-import type { TaskMeta, ReferencedSpec } from '../types';
+import type { TaskMeta, ReferencedSpec, ParsedSpec } from '../types';
 import { getTaskMeta } from './index';
 import { writeJSON } from '../paths';
 import { getTaskMetaPath } from '../paths';
 import { writeSpec, normalizeSpecFrontmatter, formatSpecParseError } from '../spec/io';
 import { isValidSpecId } from '../spec/id';
-import { findSpecByName } from '../spec/query';
+import { findSpecByName, findSpecById } from '../spec/query';
 import { nowISO } from '../utils/time';
 
 export interface RefSpecResult {
@@ -51,6 +51,7 @@ export async function addSpecRefs(
         id: resolved.id,
         relativePath: resolved.relativePath,
         scope: resolved.scope,
+        ...(resolved.projectId ? { projectId: resolved.projectId } : {}),
         firstReadAt: nowISO(),
       });
       existingIds.add(resolved.id);
@@ -114,12 +115,14 @@ interface ResolvedSpecInput {
   id: string;
   relativePath: string;
   scope: 'global' | 'user' | 'project';
+  /** project 级 spec 的归属项目 ID（跨项目引用可精确定位；其他 scope 或旧数据为 undefined） */
+  projectId?: string;
 }
 
 /**
  * 解析 spec 输入：
- * - 如果是合法 spec-id 格式，直接作为已知 id 查找
- * - 否则当作文件名/路径用 findSpecByName 解析
+ * - 合法 spec-id 格式（推荐）→ 走 findSpecById，跨 global/user/全部项目按 frontmatter.id 精确查找
+ * - ID 未命中或非 ID → 回退 findSpecByName（文件名/路径片段/标题/glob，限 cwd 项目 + user + global）
  *
  * 如果 spec 文件缺 id，触发自愈式 backfill（自动写入 id 并保存）。
  */
@@ -128,7 +131,14 @@ async function resolveSpecInput(
   input: string,
   projectId: string | null,
 ): Promise<ResolvedSpecInput | null> {
-  // 尝试用 findSpecByName（既支持文件名也支持路径片段）
+  // ID 优先分支：合法 spec-id → 跨全部层级与全部项目精确查找（支持跨项目的项目级 spec）
+  if (isValidSpecId(input)) {
+    const byId = await findSpecById(username, input, { preferProjectId: projectId });
+    if (byId) return await finalizeResolvedSpec(byId.spec, byId.scope, byId.projectId);
+    // ID 未命中 → 落到下方名称解析（容错）
+  }
+
+  // 名称/路径解析：findSpecByName（既支持文件名也支持路径片段）
   const matches = await findSpecByName(username, projectId, input);
   if (matches.length === 0) return null;
 
@@ -137,14 +147,25 @@ async function resolveSpecInput(
   if (uniquePaths.size > 1) {
     const candidates = matches.map((m) => `[${m.scope}] ${m.spec.relativePath}`).join(', ');
     throw new Error(
-      `"${input}" 匹配到 ${matches.length} 个不同 spec（${candidates}），请使用更精确的名称`,
+      `"${input}" 匹配到 ${matches.length} 个不同 spec（${candidates}），请使用更精确的名称或改用 spec ID`,
     );
   }
 
   const match = matches[0]; // 同 spec 跨层级时取最高优先级
-  const spec = match.spec;
+  return await finalizeResolvedSpec(match.spec, match.scope as ResolvedSpecInput['scope']);
+}
 
-  // YAML 语法错误：拒绝自愈 backfill（writeSpec 会重建 frontmatter，原内容将丢失）
+/**
+ * 校验并归一命中的 spec，产出 ReferencedSpec 所需字段。
+ *
+ * - 坏 frontmatter（parseError）：拒绝自愈 backfill（writeSpec 会重建 frontmatter，原内容将丢失），抛带定位错误
+ * - 缺合法 id：自愈式 backfill（写入新 id 并保存）
+ */
+async function finalizeResolvedSpec(
+  spec: ParsedSpec,
+  scope: ResolvedSpecInput['scope'],
+  projectId?: string,
+): Promise<ResolvedSpecInput> {
   if (spec.parseError) {
     throw new Error(
       `spec ${spec.relativePath} frontmatter YAML 解析失败（${formatSpecParseError(spec.parseError)}），请先修复语法错误后再引用`,
@@ -163,6 +184,7 @@ async function resolveSpecInput(
   return {
     id: specId!,
     relativePath: spec.relativePath,
-    scope: match.scope as 'global' | 'user' | 'project',
+    scope,
+    projectId,
   };
 }

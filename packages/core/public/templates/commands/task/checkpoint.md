@@ -51,7 +51,7 @@ ltc task checkpoint <task-id> --type <type> --title "<标题>" -m "<内容>"
 ## 注意事项
 
 - 不要在每次对话轮都记录，只在有实质性进展时记录
-- 标题简洁（≤ 30 字），message 可详细
+- 标题简洁，message 可详细
 - 一次对话有多个值得记录的进展可以分多次调用
 - checkpoint 记录过程信息（决策事件 / 问题事件 / 调整事件），**不能替代 PRD 的当前最佳认知**——任何会使 PRD 变动的决策都必须同步补 PRD，不能只写进 checkpoint
 - checkpoint 完成后仍需过 [lattice-rules.md#十、回答闭合自检] 其余项（ref-spec / 项目关系 / associate 等）

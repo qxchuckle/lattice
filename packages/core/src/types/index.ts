@@ -69,6 +69,11 @@ export interface ReferencedSpec {
   relativePath: string;
   /** 作用域（global / user / project） */
   scope: 'global' | 'user' | 'project';
+  /**
+   * project 级 spec 的归属项目 ID（跨项目引用时用于精确定位物理路径）。
+   * 仅 scope='project' 且经 spec ID 解析命中时有值；旧记录可能缺失，消费方需回退按任务关联项目查找。
+   */
+  projectId?: string;
   /** 首次引用时间（ISO 8601） */
   firstReadAt: string;
 }

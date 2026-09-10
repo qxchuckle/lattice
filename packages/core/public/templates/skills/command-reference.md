@@ -1,6 +1,6 @@
 # CLI 命令参数参考
 
-查阅式字典。不知该调哪个命令 → 读流程文档（[task-workflows.md](task-workflows.md) / [spec-workflows.md](spec-workflows.md) / [project-context.md](project-context.md) / [project-discovery.md](project-discovery.md)）。
+查阅式字典。不知该调哪个命令 → 读流程文档（[task-workflows.md] / [spec-workflows.md] / [project-context.md] / [project-discovery.md]）。
 
 ## 通用约定
 
@@ -9,6 +9,7 @@
 | 命令 | 确认内容 |
 |---|---|
 | `ltc init` | 是否下载 embedding 模型 |
+| `ltc uninject` | 清除注入（删目录/文件、移除标记块） |
 | `ltc unlink` | 取消项目注册 |
 | `ltc project remove <id>` | 删除项目数据 |
 | `ltc project relation remove <a> <b>` | 删除项目关系 |
@@ -33,6 +34,16 @@
 
 - `--dirs <dirs>`：扫描目录（逗号分隔）；不传用配置 `scanDirs`
 - `--auto`：使用配置中 `scanDirs`，跳过交互
+
+## `ltc uninject`
+
+清除 `ltc init` 注入到外部 AI 客户端的文档副作用（**不动 `~/.lattice` 数据**）。默认先全量排查、打印将删清单，确认后执行。
+
+- `-f, --force`：跳过确认直接清除（AI 调用必须带）
+- `--tool <ids>`：仅清指定平台（逗号分隔，如 `qoder,cursor`）
+- `--dry-run`：只报告将清除的内容，不执行
+
+清除规则：`skills/lattice`、`commands/lattice`、Codex `skills/lattice-*` 整目录删；`agents/lattice-*.md` 按 bundled 名单删（保留用户自定义 agent）；rules 文件（`lattice.mdc` / `CLAUDE.md` / `AGENT.md` / `AGENTS.md`）移除 `<!-- LATTICE:BEGIN/END -->` 标记块——删块后为空则删文件、否则保留用户内容。以全量排查为唯一真源，`init-meta.json` 仅作提示，清除正确性不依赖它。
 
 ## `ltc status`
 
@@ -188,6 +199,10 @@
 
 ### `ltc task ref-spec <task-id> <spec...>` / `unref-spec <task-id> <spec-id...>`
 
+- `ref-spec` 的 `<spec...>` **推荐传 spec ID**（`spec-xxxxxxxx`，全局唯一）：按 ID 解析覆盖 global + user + **全部已注册项目**的项目级 spec，可跨项目关联任意项目的项目级 spec；也支持文件名 / 标题模糊 / glob（这三者限 cwd 项目 + user + global）。
+- 命中 project 级 spec 时，`referencedSpecs` 会记录其归属 `projectId`，供跨项目反查物理路径（search enrichment）。
+- `unref-spec` 参数为 spec ID。
+
 ## `ltc spec`
 
 ### `ltc spec list`
@@ -230,7 +245,7 @@
 
 ### `ltc spec export`
 
-导出 spec 为标准 Agent Skills 目录结构（`SKILL.md` 入口 + `manifest.yaml` hash 清单 + `global/` + `user/` + `<项目名>/` 一层平铺）。文件名加 `<user>__` 前缀；SKILL.md 目录按层级分节，项目级逐项目小节并附包名/git 匹配信息，检测到环境依赖时生成「使用注意」段（引导使用方 AI 灵活处理 ltc/本机路径，不改写正文）；重复导出 hash 对比仅重写变更；警告四类（本机路径/ltc 引用/悬空引用/敏感信息）+ 缺 description 清单只报告不改写。
+导出 spec 为标准 Agent Skills 目录结构（`SKILL.md` 入口 + `manifest.yaml` hash 清单 + `global/` + `user/` + `<项目名>/` 一层平铺）。文件名加 `<user>__` 前缀；SKILL.md 目录按层级分节，项目级逐项目小节并附包名/git 匹配信息，检测到环境依赖时生成"使用注意"段（引导使用方 AI 灵活处理 ltc/本机路径，不改写正文）；重复导出 hash 对比仅重写变更；警告四类（本机路径/ltc 引用/悬空引用/敏感信息）+ 缺 description 清单只报告不改写。
 
 - `--filter <kw>`（可多次）：tags/文件名/标题/description；项目级含所属项目元数据
 - `--tag <tag>`（可多次）/ `--project <id|name>`（可多次）/ `--scope <level>`（默认 all）
@@ -276,7 +291,7 @@
 **核心语义（v3 读时合并）**：
 
 - pull 止步镜像，**永不落盘主目录**；读时经统一数据源 Provider 合并（spec list/show、search、rag、context）
-- 遮蔽：本地主数据 > 域（域间按配置数组序）；键 = spec 同命名空间相对路径 / 任务 id / 项目契约 ID；域数据一律只读（写操作命中域对象报「域只读」）
+- 遮蔽：本地主数据 > 域（域间按配置数组序）；键 = spec 同命名空间相对路径 / 任务 id / 项目契约 ID；域数据一律只读（写操作命中域对象报"域只读"）
 - `use` 三档消费策略：`trusted` = 读取+约束生效（默认）；`reference` = 只读不注入约束；`off` = 只同步镜像不读取
 - push 白名单增量式：只覆盖自己的贡献集 + 基线指纹退出传播（`~/.lattice/.cache/sync-baseline/<hash>.json`；丢失则保守不删）；**别人的内容永不因我 push 被删**
 - 冲突（镜像有未推送 commit 且远端分叉）：pull --rebase 失败自动 abort 逃生 + 冲突清单，主数据零污染

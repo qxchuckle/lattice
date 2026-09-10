@@ -2,10 +2,10 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
-**[依赖 skill 子文档]**（本命令期间会反复 read 的 skill 子文档）：
-- `fast-start-workflows.md`：转正常模式完整流程
-- `task-workflows.md`：标题归纳与查重 / task start 后的起手动作 / 实施期循环（每轮用户输入到来时）
-- `spec-workflows.md`：按任务主题全文读取相关 spec
+**[依赖文档]**（均位于 lattice skill 目录）：
+- fast-start-workflows.md：转正常模式（to-normal）
+- task-workflows.md：命令参数非任务 ID 时：标题归纳与查重 / task start 后的起手动作 / 实施期循环（每轮用户输入到来时）
+- spec-workflows.md：按任务主题全文读取相关 spec
 
 **目标**：将当前 fast-start 会话转入正常任务模式——创建任务、回填 PRD、后续按正常实施期循环执行。
 
@@ -18,10 +18,7 @@
 
 ### 1. 归纳任务标题
 
-从对话上下文归纳简洁标题。按 `task-workflows.md` 的#命令参数不是任务 ID 时：标题归纳与查重流程：
-
-- `ltc task list --current` + `ltc search "<标题>" --type task --json` 查重
-- 有相似 in_progress 任务 → 先停下列候选给用户确认
+从对话上下文归纳简洁标题，按 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 查重（有相似 in_progress → 列候选给用户确认）。
 
 ### 2. 创建并启动任务
 
@@ -48,17 +45,12 @@ ltc task associate <task-id> --current
 
 ### 5. 后续按正常模式执行
 
-从此刻起，完全按 `task-workflows.md` 的#实施期循环（每轮用户输入到来时）执行：
-
-- PRD 同步硬触发检查
-- spec 选读
-- 写代码（≥3 文件时校对 PRD 文件索引）
-- 打 checkpoint
+从此刻起，完全按 [task-workflows.md#实施期循环（每轮用户输入到来时）] 执行。
 
 ## 输出要求
 
-- 创建任务后：任务 ID + 标题 + 关联项目（2~3 行）
-- 回填 PRD 后：PRD 覆盖的关键段落摘要（1~2 行）
+- 创建任务后：任务 ID + 标题 + 关联项目
+- 回填 PRD 后：PRD 覆盖的关键段落摘要
 - 整体确认：任务 ID + 状态 + 标题 + 关联项目 + 已回填的工作概述
 
 ## 约束

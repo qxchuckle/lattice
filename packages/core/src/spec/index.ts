@@ -19,8 +19,8 @@ export {
 } from './cascade';
 export type { ProjectSpecGroup } from './cascade';
 export { detectSpecConflicts } from './conflicts';
-export { findSpecByName } from './query';
-export type { SpecMatch, FindSpecOptions } from './query';
+export { findSpecByName, findSpecById } from './query';
+export type { SpecMatch, SpecByIdMatch, FindSpecOptions } from './query';
 export { validateSpecScope, validateSpecsScope } from './validate';
 export type { SpecValidationWarning } from './validate';
 export { generateSpecId, isValidSpecId, SPEC_ID_PREFIX, SPEC_ID_PATTERN } from './id';

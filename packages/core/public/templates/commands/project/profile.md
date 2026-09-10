@@ -2,6 +2,9 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
+**[依赖文档]**（均位于 lattice skill 目录）：
+- command-reference.md：`ltc project profile` 参数字典（check / brief / tags / done / show / path）
+
 **目标**：为项目生成/更新智能画像（summary.md + tags），支持增量更新。
 
 ## 命令参数

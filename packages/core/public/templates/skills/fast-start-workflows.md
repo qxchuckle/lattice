@@ -1,6 +1,6 @@
 # Fast-start 工作流
 
-fast-start 是 `task/start` 的轻量变体：获取上下文和全文读取 spec，但不创建任务/PRD/checkpoint。正常任务流见 [task-workflows.md](task-workflows.md)。
+fast-start 是 `task/start` 的轻量变体：获取上下文和全文读取 spec，但不创建任务/PRD/checkpoint。正常任务流见 [task-workflows.md]。
 
 ## 适用场景
 
@@ -11,8 +11,8 @@ fast-start 是 `task/start` 的轻量变体：获取上下文和全文读取 spe
 ## 启动流程
 
 1. `ltc context`
-2. 全文读取相关 spec（→ [spec-workflows.md#按任务主题全文读取相关-spec](spec-workflows.md#按任务主题全文读取相关-spec)）
-3. 输出简短确认（2~3 行）
+2. 全文读取相关 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）
+3. 输出简短确认
 4. 直接开始工作
 
 ## 与正常模式的差异
@@ -21,18 +21,18 @@ fast-start 是 `task/start` 的轻量变体：获取上下文和全文读取 spe
 |---|---|---|
 | 上下文 + spec 全文读取 | ✓ | ✓ |
 | 任务/PRD/checkpoint | ✗ | ✓ |
-| 实施期 4 步循环 | ✗ | ✓ |
+| 实施期循环 | ✗ | ✓ |
 | 轻量日志 | ✓ | — |
 | spec 沉淀 | ✓ | ✓ |
 | 复杂度检测+转正常 | ✓ | — |
 
-不走 [lattice-rules.md](lattice-rules.md) §三和§六。
+不走 [lattice-rules.md#三、实施期循环] 与 [lattice-rules.md#六、任务完成闭环]。
 
 ## 工作中约束
 
 - spec 全文读取仍必做（fast-start 只省任务记录，不省项目认知）
 - 不创建任务/PRD/checkpoint
-- spec 沉淀仍适用（→ [spec-workflows.md#沉淀判定](spec-workflows.md#沉淀判定)）
+- spec 沉淀仍适用（[spec-workflows.md#沉淀判定]）
 - 当前目录非已注册项目 → 提示用户
 
 ## 轻量日志
@@ -62,7 +62,7 @@ ltc fast-start log clear [--force]
 
 前置：当前处于 fast-start + 对话已有实质工作。
 
-1. 归纳标题+查重（→ [task-workflows.md#命令参数不是任务 ID 时标题归纳与查重](task-workflows.md#命令参数不是任务-id-时标题归纳与查重)）
+1. 归纳标题+查重（[task-workflows.md#命令参数非任务 ID 时：标题归纳与查重]）
 2. `ltc task create "<标题>" --current` + `ltc task start <id>` + `ltc context --task <id>`
 3. 回填 PRD（完整目标 + 已完成工作 + 剩余方案 + 文件索引 + 约束）
 4. `ltc task associate <id> --current`
@@ -77,4 +77,4 @@ fast-start 下执行 `/lattice/task/archive`：
 1. 归纳标题 → `ltc task create` + `ltc task start`
 2. 回填 PRD（目标/最终方案/文件索引/完成总结）
 3. `ltc task associate <id> --current`
-4. 按正常归档流程（→ [task-workflows.md#归档流程](task-workflows.md#归档流程)）
+4. 按正常归档流程（[task-workflows.md#归档]）

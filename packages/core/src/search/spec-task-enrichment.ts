@@ -173,7 +173,7 @@ export async function enrichSpecResultsWithTaskRefs(
  *
  * - global → getGlobalSpecDir() + relativePath
  * - user → getUserSpecDir(username) + relativePath
- * - project → 遍历任务关联项目，找到存在的文件
+ * - project → 优先用 ref.projectId 精确定位（跨项目引用），回退遍历任务关联项目（兼容旧记录）
  */
 async function resolveRefSpecPath(entry: TaskRefSpecEntry): Promise<string | null> {
   const { ref, username, taskProjectIds } = entry;
@@ -188,8 +188,11 @@ async function resolveRefSpecPath(entry: TaskRefSpecEntry): Promise<string | nul
     return (await fileExists(p)) ? p : null;
   }
 
-  // project scope：遍历任务关联的项目，找到包含该 spec 的项目目录
-  for (const projectId of taskProjectIds) {
+  // project scope：ref.projectId 优先（精确、支持跨项目引用），再回退任务关联项目（旧记录无 projectId）
+  const candidateProjectIds = ref.projectId
+    ? [ref.projectId, ...taskProjectIds.filter((id) => id !== ref.projectId)]
+    : taskProjectIds;
+  for (const projectId of candidateProjectIds) {
     const found = await findUsernameAndDirName(projectId);
     if (!found) continue;
     const p = join(getProjectSpecDir(found.username, found.dirName), ref.relativePath);

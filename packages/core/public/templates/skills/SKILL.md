@@ -32,19 +32,19 @@ description: >-
 
 | 文档 | 职责 |
 |---|---|
-| [lattice-rules.md](lattice-rules.md) | 起手/实施期/失忆恢复/归档硬约束/回答闭合自检 |
-| [project-context.md](project-context.md) | 进入项目动作、搜索、嵌套继承 |
-| [spec-workflows.md](spec-workflows.md) | spec 读写、沉淀判定 |
-| [task-workflows.md](task-workflows.md) | 任务全周期 |
-| [subagent-delegation.md](subagent-delegation.md) | 委派判定、dispatch prompt 契约、返回格式 |
+| [lattice-rules.md] | 起手/实施期/失忆恢复/归档硬约束/回答闭合自检 |
+| [project-context.md] | 进入项目动作、搜索、嵌套继承 |
+| [spec-workflows.md] | spec 读写、沉淀判定 |
+| [task-workflows.md] | 任务全周期 |
+| [subagent-delegation.md] | 委派判定、dispatch prompt 契约、返回格式 |
 
 **按需**（执行对应动作前读取）：
 
-- 注册/识别项目 · 多路径判定 · AI 推断项目关系 · 非 cwd 路径首次出现 → [project-discovery.md](project-discovery.md)
-- 执行或索引 agent command · 不确定有哪些 slash command 可用 → [agent-commands.md](agent-commands.md)
-- 使用 fast-start 流程 · `ltc fast-start` 相关操作 → [fast-start-workflows.md](fast-start-workflows.md)
-- 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 → [command-reference.md](command-reference.md)
-- `ltc` 命令程序性异常报错 · RAG 搜索结果异常 · 索引/数据不一致 → [troubleshooting.md](troubleshooting.md)
+- 注册/识别项目 · 多路径判定 · AI 推断项目关系 · 非 cwd 路径首次出现 → [project-discovery.md]
+- 执行或索引 agent command · 不确定有哪些 slash command 可用 → [agent-commands.md]
+- 使用 fast-start 流程 · `ltc fast-start` 相关操作 → [fast-start-workflows.md]
+- 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 → [command-reference.md]
+- `ltc` 命令程序性异常报错 · RAG 搜索结果异常 · 索引/数据不一致 → [troubleshooting.md]
 
 ## 自主信息获取
 
@@ -90,4 +90,4 @@ spec/PRD/项目变更后 → `ltc rag update`；报错 → `ltc rag rebuild`。
 
 ## --force
 
-AI 调用必须带 `-f`：`init` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 [command-reference.md#通用约定]。
+AI 调用必须带 `-f`：`init` / `uninject` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 [command-reference.md#通用约定]。

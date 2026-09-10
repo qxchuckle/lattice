@@ -65,6 +65,23 @@ ltc init --download-model
 - **Qoder**（`.qoder/`）
 - **Trae**（`.trae/`）
 
+### 移除注入（不再使用 Lattice 时）
+
+不想再让 AI 客户端加载 Lattice 工作流时，用 `ltc uninject` 清除 `ltc init` 注入到外部客户端的文档（**不会动 `~/.lattice` 里的数据**）：
+
+```bash
+# 先看看会清除哪些内容（不实际删除）
+ltc uninject --dry-run
+
+# 全量排查 → 打印将删清单 → 确认后清除
+ltc uninject
+
+# 只清指定客户端
+ltc uninject --tool qoder,cursor
+```
+
+清除以全量排查为准：`skills/lattice`、`commands/lattice` 等 Lattice 独占目录整体删除；共享文件（如 `CLAUDE.md`）只移除 `<!-- LATTICE:BEGIN/END -->` 标记块，保留你自己的内容；`agents/` 下只删 Lattice 注入的 `lattice-*.md`，不动你自定义的 agent。如需恢复，重新运行 `ltc init` 即可。
+
 ## 3. 注册项目
 
 Lattice 通过 git 指纹自动识别项目。根据项目类型选择注册方式：

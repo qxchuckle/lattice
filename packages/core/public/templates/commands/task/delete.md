@@ -2,9 +2,9 @@
 
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
-**[依赖 skill 子文档]**（本命令期间会按需 read 的 skill 子文档）：
-- `task-workflows.md`：任务目录结构 / checkpoint 类型
-- `command-reference.md`：`ltc task delete` / `ltc task list` / `ltc search` 参数字典
+**[依赖文档]**（均位于 lattice skill 目录）：
+- task-workflows.md：任务目录结构 / checkpoint 类型
+- command-reference.md：`ltc task delete` / `ltc task list` / `ltc search` 参数字典
 
 **目标**：删除任务，支持自然语言匹配候选任务交用户确认，无参数时删除当前 in_progress 任务，有风险因素时强制用户二次确认。
 
@@ -36,7 +36,7 @@ ltc task list --current
 ```
 
 匹配规则：
-- 搜索结果按 score 排序，取 top 5
+- 搜索结果按 score 排序取高相关候选
 - 排除 `archived` 任务（除非用户明确要删已归档任务）
 - 搜索无结果 → 回退到 `ltc task list --current` 按标题关键词模糊匹配
 - 仍无匹配 → 告知用户未找到任务，建议用 `/lattice/task/query` 查看

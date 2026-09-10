@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
 import { resolveCurrentProject } from './utils';
 import { registerInitCommand } from './commands/init';
+import { registerUninjectCommand } from './commands/uninject';
 import { registerLinkCommand } from './commands/link';
 import { registerUnlinkCommand } from './commands/unlink';
 import { registerScanCommand } from './commands/scan';
@@ -33,6 +34,7 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-
 program.name(cliName).description('Lattice — 跨项目 AI 上下文管理工具').version(pkg.version);
 
 registerInitCommand(program);
+registerUninjectCommand(program);
 registerLinkCommand(program);
 registerUnlinkCommand(program);
 registerScanCommand(program);

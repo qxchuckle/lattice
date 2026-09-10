@@ -290,6 +290,9 @@ export {
 export { readScanCache, writeScanCache, shouldScan, type ScanCache } from './cache/scan-cache';
 export { getInitMetaPath, readInitMeta, writeInitMeta, type InitMeta } from './cache/init-meta';
 
+// AI 客户端注入足迹（init 注入与 uninject 清除共享真源）
+export * from './injection';
+
 // Spec
 export {
   parseSpec,
@@ -309,6 +312,7 @@ export {
   getCascadedSpecsWithAncestors,
   detectSpecConflicts,
   findSpecByName,
+  findSpecById,
   validateSpecScope,
   validateSpecsScope,
   generateSpecId,
@@ -328,6 +332,7 @@ export {
 } from './spec';
 export type {
   SpecMatch,
+  SpecByIdMatch,
   FindSpecOptions,
   ProjectSpecGroup,
   SpecValidationWarning,

@@ -48,9 +48,9 @@ ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
 ```
 
 1. 按主题全文读取 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）：context 列表选读 + `ltc search` 补漏。读完全文后 → `ltc task ref-spec <task-id> <spec-name>` 关联（subagent 只读不关联，主线负责）
-2. 参考近似历史任务 PRD（按复杂性 1~5 个）
+2. 参考近似历史任务 PRD（按复杂性选读相关的）
 3. 完善 PRD（目标、约束、方案、文件索引、风险）；有 design.md → 先 read。不要停留在默认空白标题，只记录当前最佳认知
-4. 输出 PRD 规模摘要（1~3 行：覆盖了哪几个关键段落）
+4. 输出 PRD 规模摘要（覆盖了哪几个关键段落）
 5. 同步项目关联（[task-workflows.md#项目关联同步]）：新路径 `--paths`，新已注册项目 `--project <id>`
 6. 输出整体确认（ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
 
@@ -156,24 +156,23 @@ ltc project relation add <a> <b> --type <type> --description "证据" --ai-infer
 ### 前置采集（必做，未读就写总结 = 遗漏）
 
 ```bash
-ltc task info <id> && ltc task progress <id> && ltc task progress <id> --type correction && ltc task progress <id> --type constraint && ltc task progress <id> --type context
+ltc task info <id> && ltc task progress <id>
 ```
 
-另需：read design.md + `git diff --stat`
+progress 全量已含所有 checkpoint，重点扫 correction/constraint/context 类供核对与沉淀判定。另需：read prd.md + design.md + `git diff --stat`。
 
 ### 流程
 
 ```bash
-# 1. 前置采集 → 2. 补 PRD（最终方案+总结+遗留）→ 3. summary checkpoint
+# 1. 前置采集 → 2. 核对+补 PRD（最终方案+总结+遗留）→ 3. summary checkpoint
 ltc task checkpoint <id> --type summary --title "..." -m "..."
-# 4. complete + archive
-ltc task complete <id> && ltc task archive <id>
-# 5. ltc rag update → 6. 二次审阅 + spec 沉淀判定
+# 4. complete + archive + rag update
+ltc task complete <id> && ltc task archive <id> && ltc rag update
 ```
 
-### 二次审阅
+### 核对
 
-对照 progress：决策全在 PRD/checkpoint · 无遗漏改动 · 经验沉淀（[spec-workflows.md#沉淀判定]） · 项目关系补记。遗漏 → 立即补 + `ltc rag update`。
+写 PRD 总结前对照 progress 核对：决策全在 PRD/checkpoint · 无遗漏改动 · 经验沉淀（[spec-workflows.md#沉淀判定]） · 项目关系补记。遗漏 → 先补再继续。
 
 ### 空参数归档推断
 

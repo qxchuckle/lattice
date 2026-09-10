@@ -6,7 +6,7 @@
 
 **[依赖文档]**（本命令期间按需 read，不要全量加载）：
 - SKILL.md：导航 + 起手契约（默认必读）
-- lattice-rules.md：实施期循环 / checkpoint 时机 / spec 更新硬规则 / 回答闭合自检（#十、回答闭合自检）
+- lattice-rules.md：实施期循环 / checkpoint 时机 / spec 更新硬规则 / 十、回答闭合自检
 - task-workflows.md：任务身份不明 / 实施期循环模糊 / checkpoint 触发条件不明
 - spec-workflows.md：spec 清单不记得 / spec 层级与冲突不明
 
@@ -21,7 +21,7 @@
 
 1. **任务身份**：活跃任务 ID + 标题是否在当前上下文中明确可述？
    - 否 → `ltc task list --current --status in_progress`；多条无法判断 → 列候选请用户确认，不硬猜；如任务创建 / 进展 / 归档流程也模糊 → 读 task-workflows.md
-2. **工作流约束**：lattice-rules.md 实施期循环（PRD → spec → code → progress）/ checkpoint 时机 / spec 更新规则是否在当前上下文中明确可述？
+2. **工作流约束**：lattice-rules.md 实施期循环 / checkpoint 时机 / spec 更新规则是否在当前上下文中明确可述？
    - 否 → 读 SKILL.md + lattice-rules.md；实施期循环 / checkpoint 时机 模糊 → 加读 task-workflows.md；spec 更新规则模糊 → 加读 spec-workflows.md
 3. **Spec 清单**：当前项目可用 spec 列表（项目级 / 用户级 / 全局级各有哪些主题）是否在当前上下文中明确可列？
    - 否 → `ltc context` 重新拉取上下文与 spec 列表（仅清单层，不展开全文读取）；如对 spec 层级 / 冲突 / 模板机制也模糊 → 加读 spec-workflows.md

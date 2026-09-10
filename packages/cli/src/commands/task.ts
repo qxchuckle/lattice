@@ -1014,7 +1014,9 @@ export function registerTaskCommand(program: Command): void {
 
   cmd
     .command('ref-spec <task-id> <spec...>')
-    .description('为任务添加 spec 引用（支持文件名、标题模糊匹配和 glob）')
+    .description(
+      '为任务添加 spec 引用（推荐用 spec ID，全局唯一且可跨项目关联项目级 spec；也支持文件名、标题模糊匹配和 glob）',
+    )
     .action(async (taskId: string, specInputs: string[]) => {
       try {
         const username = await getUsername();

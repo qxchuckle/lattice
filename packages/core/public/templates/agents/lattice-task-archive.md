@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-Lattice 任务归档专员。执行#任务完成闭环（lattice-rules.md §六 + task-workflows.md 归档流程）。
+Lattice 任务归档专员。执行 [task-workflows.md#归档] 闭环。
 
 ## 输入
 
@@ -17,18 +17,14 @@ Lattice 任务归档专员。执行#任务完成闭环（lattice-rules.md §六 
 ### 1. 前置信息采集（禁止跳过）
 
 ```bash
-ltc task info <task-id>
-ltc task progress <task-id>
-ltc task progress <task-id> --type correction
-ltc task progress <task-id> --type constraint
-ltc task progress <task-id> --type context
+ltc task info <task-id> && ltc task progress <task-id>
 ```
 
-全量读取 prd.md + design.md（如存在）+ `git diff --stat`
+全量读取 prd.md + design.md（如存在）+ `git diff --stat`。progress 全量已含所有 checkpoint——重点扫 correction/constraint/context 类供 step 2 核对与 spec 沉淀判定。
 
-### 2. PRD 补全
+### 2. 核对 + PRD 补全
 
-补充/修订：最终方案 · 任务完成总结 · 遗留事项
+写 PRD 前先对照 progress 核对：关键决策是否全在 PRD/checkpoint · 有无遗漏改动 · spec 沉淀建议 · 项目关系。核对通过后补充/修订 PRD：最终方案 · 任务完成总结 · 遗留事项。
 
 ### 3. summary checkpoint
 
@@ -36,21 +32,11 @@ ltc task progress <task-id> --type context
 ltc task checkpoint <task-id> --type summary --title "任务完成总结" -m "<总结>"
 ```
 
-### 4. 归档
+### 4. 归档 + 索引更新
 
 ```bash
-ltc task complete <task-id> && ltc task archive <task-id>
+ltc task complete <task-id> && ltc task archive <task-id> && ltc rag update
 ```
-
-### 5. 索引更新
-
-```bash
-ltc rag update
-```
-
-### 6. 二次审阅
-
-检查：关键决策是否全在 PRD/checkpoint · 遗漏改动 · spec 沉淀建议 · 项目关系审查
 
 ## 返回格式
 
@@ -74,4 +60,4 @@ ltc rag update
 - 不执行 spec 沉淀（只给建议）
 - 有未完成子任务 → 停止归档并报告
 - 需确认命令带 `--force`
-- spec/PRD/design.md 全量读取
+- prd.md / design.md 全量读取

@@ -3,8 +3,9 @@
 **[执行前必读]** 执行本命令前必须先用 Skill 工具调用 `lattice` skill，再继续后续步骤。
 
 **[依赖文档]**：
-- task-workflows.md：归档 > 前置采集 / 归档 > 流程 / 归档 > 二次审阅 / 空参数归档推断
+- task-workflows.md：归档 > 前置采集 / 归档 > 流程 / 归档 > 核对 / 空参数归档推断
 - spec-workflows.md：沉淀判定 / 写入流程 / 层级
+- fast-start-workflows.md：归档（情况三 fast-start 模式）
 - subagent-delegation.md：委派判定 / dispatch prompt 契约（归档委派 `lattice-task-archive`）
 
 **目标**：结束并归档一个任务，同时判断是否需要沉淀规范。
@@ -21,12 +22,11 @@
 完整归档闭环 [task-workflows.md#归档]：
 
 1. **前置信息采集（必须先读后写）**：[task-workflows.md#前置采集]。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
-   - 含代码变更审查：如项目使用 git，通过 diff 审查本次任务修改的代码（`git diff --stat`），必要时阅读完整源文件，以确保归档信息完整覆盖所有实际变更
-2. **更新 PRD**：补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落；确保 progress 中的关键决策已在 PRD 中体现
+   - 含代码变更审查：如项目使用 git，通过 `git diff --stat` 审查本次任务修改的代码，必要时阅读完整源文件
+2. **核对 + 更新 PRD**：写 PRD 前先对照 progress 核对（[task-workflows.md#核对]）——决策全在 PRD/checkpoint · 无遗漏改动 · 项目关系；核对通过后补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落
    - 任务有父 / 子任务时先用 `ltc task lineage` / `ltc task tree --descendants` 检查链路是否仍合理
 3. **summary checkpoint** + **complete** + **archive** + **`ltc rag update`**
-4. **归档后二次审阅**（必做）：[task-workflows.md#二次审阅]
-5. **spec 沉淀判定**：见下文"归档前检查"段
+4. **spec 沉淀判定**：见下文"归档前检查"段
 
 ### 情况二：参数为空 / 不是任务 ID
 
@@ -38,15 +38,9 @@
 
 ### 情况三：fast-start 模式归档
 
-当前会话处于 fast-start 模式（通过 `/lattice/task/fast-start` 开始，未创建 lattice 任务）时执行归档：
+当前会话处于 fast-start 模式（`/lattice/task/fast-start` 开始，未创建 lattice 任务）→ 按 [fast-start-workflows.md#归档]：补建任务 + 回填 PRD（fast-start 阶段完成的工作）后按正常归档流程收尾。
 
-1. **从对话上下文归纳任务标题**
-2. `ltc task create "<标题>" --current` + `ltc task start <task-id>`
-3. **回填 PRD**：将 fast-start 阶段完成的工作写入 PRD（目标 / 最终方案 / 修改文件索引 / 任务完成总结）
-4. `ltc task associate <task-id> --current`
-5. **按情况一正常归档**：summary checkpoint → complete → archive → rag update → spec 沉淀判定
-
-fast-start 模式下虽然没有任务记录，但对话中的实质工作和 spec 沉淀判定仍然适用。归档时创建任务是为了让工作成果可追溯。
+fast-start 模式下虽无任务记录，但对话中的实质工作和 spec 沉淀判定仍适用；归档时创建任务是为了让工作成果可追溯。
 
 ## 归档前检查（spec 沉淀判定）
 

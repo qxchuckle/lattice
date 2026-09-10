@@ -69,12 +69,11 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 `task complete` 前：
 
 1. 前置采集（[task-workflows.md#归档]）
-2. PRD 补全（最终方案+总结）
+2. 核对 + PRD 补全（对照 progress 核对决策/遗漏后补最终方案+总结）
 3. summary checkpoint
 4. `ltc rag update`
 5. spec 沉淀判定
 6. 项目关系审查
-7. 二次审阅
 
 fast-start 归档：创建任务 → start → 回填 PRD → 按上述闭环。
 
