@@ -534,6 +534,7 @@ export function formatContextAsMarkdown(
       const matched = queryMatchedPaths?.has(spec.filePath) ? '★ ' : '';
       lines.push(`### ${matched}${title}\n`);
       lines.push(`- ${scopeTag}`);
+      if (spec.frontmatter.id) lines.push(`- id：${spec.frontmatter.id}`);
       lines.push(`- ${spec.filePath}`);
       lines.push(`- ${description}`);
       lines.push('');
@@ -579,6 +580,7 @@ export function formatContextAsMarkdown(
               ? spec.frontmatter.description.trim()
               : '[缺失摘要]';
           lines.push(`- **${title}** — ${description}`);
+          if (spec.frontmatter.id) lines.push(`  id：${spec.frontmatter.id}`);
           lines.push(`  路径：${spec.filePath}`);
         }
         lines.push('');
@@ -595,6 +597,7 @@ export function formatContextAsMarkdown(
               ? spec.frontmatter.description.trim()
               : '[缺失摘要]';
           lines.push(`- **${title}** — ${description}`);
+          if (spec.frontmatter.id) lines.push(`  id：${spec.frontmatter.id}`);
           lines.push(`  路径：${spec.filePath}`);
         }
         lines.push('');

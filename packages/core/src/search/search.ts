@@ -269,6 +269,7 @@ function normalizeTitleForGrouping(title: string): string {
 
 interface DuplicateRecord {
   filePath: string;
+  specId: string | null;
   score: number;
   username: string | null;
   projectIds: string[];
@@ -299,6 +300,7 @@ function collapseDuplicateTitles(results: SearchResult[]): SearchResult[] {
     const meta = r.meta;
     existing.push({
       filePath: meta.filePath ?? '',
+      specId: (meta.specId as string) || null,
       score: r.score,
       username: meta.username || null,
       projectIds: (meta.projectIds ?? []).slice(),
@@ -752,6 +754,7 @@ export async function hybridSearch(
           username: candidate.username,
           projectIds: candidate.projectIds,
           docKind: searchMeta?.docKind ?? null,
+          specId: searchMeta?.specId,
           scopeKey: searchMeta?.scopeKey ?? '',
           scopeTerms: searchMeta?.scopeTerms ?? [],
           domainTerms: searchMeta?.domainTerms ?? [],

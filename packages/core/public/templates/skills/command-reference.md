@@ -60,6 +60,8 @@
 
 嵌套项目自动继承祖先 spec。级联：`当前 > 父级 > 祖先 > 用户级 > 全局`。
 
+规范段每条 spec 输出含 **id**（markdown `- id：spec-xxxxxxxx` 行 / `--json` 的 `id` 字段），可直接用于 `task ref-spec`。
+
 ## `ltc search <query>`
 
 - `--type <type>`：`spec`/`task`/`project`/`checkpoint`/`relation`
@@ -69,6 +71,8 @@
 - `--limit <n>`：默认 10
 - `--no-rerank`
 - `--json`：AI 优先带上
+
+`spec` 类结果输出含 **id**（普通输出 `id：spec-xxxxxxxx` 行 / `--json` 的 `meta.specId`），可直接用于 `task ref-spec`（依赖索引已含 id：加列后需跑过一次 `rag rebuild` 回填存量）。
 
 ## `ltc link`
 
@@ -214,6 +218,7 @@
 
 - `<file>` **推荐传 spec ID**（全局唯一）：跨 global + user + **全部已注册项目**精确查看，**不受 cwd 限制**（含未在工作区打开、但已注册的其他项目的 spec）。
 - 传名称 / 标题 / glob：项目级范围限 **cwd 项目**（+ user + global 层级）——名称跨项目会同名歧义，故收窄；要跨项目查看请改用 spec ID。
+- 输出含该 spec 的 **id**（普通输出 `id：spec-xxxxxxxx` 行 / `--json` 的 `id` 字段）——按名查到后可直接用 id 去 `task ref-spec`。
 - `--user <username>` / `--detail`（显示完整内容）
 
 ### `ltc spec conflicts`

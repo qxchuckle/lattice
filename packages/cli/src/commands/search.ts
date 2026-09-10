@@ -16,6 +16,7 @@ import type { SearchResult } from '@qcqx/lattice-core';
 /** 精简 JSON 输出：只保留对调用方有用的字段 */
 const META_FIELDS_KEEP = new Set([
   'filePath',
+  'specId',
   'username',
   'projectIds',
   'semanticRank',
@@ -250,6 +251,7 @@ function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
   const filePath = (meta.filePath as string) ?? '';
   const username = (meta.username as string) || '';
   const taskId = (meta.taskId as string) || '';
+  const specId = (meta.specId as string) || '';
   const scope = inferScopeLabel(filePath, r.type);
   const isWeak = meta.weakMatch === true;
   const scoreLabel = formatScorePercent(r.score, meta.normalizedScore as number | undefined);
@@ -287,6 +289,9 @@ function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
   if (matchedVia && meta.source !== 'task-ref') {
     logger.raw(`    ${chalk.green(`↳ 经由任务「${matchedVia.docTitle}」关联发现`)}`);
   }
+  if (specId) {
+    logger.raw(`    ${chalk.dim(`id：${specId}`)}`);
+  }
   if (filePath) {
     logger.raw(`    ${chalk.dim(shortenPath(filePath))}`);
   }
@@ -295,9 +300,10 @@ function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
     const dups = (meta.duplicates as Array<Record<string, unknown>>) ?? [];
     for (const d of dups) {
       const dPath = (d.filePath as string) || '';
+      const dSpecId = (d.specId as string) || '';
       const dScore = formatScorePercent(d.score as number | undefined, undefined);
       logger.raw(
-        `      ${chalk.dim('↳')} ${chalk.dim(shortenPath(dPath))}` +
+        `      ${chalk.dim('↳')} ${dSpecId ? chalk.dim(`id：${dSpecId} `) : ''}${chalk.dim(shortenPath(dPath))}` +
           (dScore ? chalk.dim(` (${dScore})`) : ''),
       );
     }

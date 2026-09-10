@@ -164,6 +164,7 @@ export function registerSpecCommand(program: Command): void {
             const title = spec.frontmatter.title ?? spec.fileName.replace('.md', '');
             const tags = spec.frontmatter.tags?.join(', ') ?? '';
             logger.raw(`  ${chalk.bold(title)} ${chalk.dim(`(${spec.relativePath})`)}`);
+            if (spec.frontmatter.id) logger.raw(`    ${chalk.dim(`id：${spec.frontmatter.id}`)}`);
             if (tags) logger.raw(`    ${chalk.dim(`标签：${tags}`)}`);
           }
         }
@@ -250,6 +251,7 @@ export function registerSpecCommand(program: Command): void {
               chalk.bold(`\n${s.frontmatter.title ?? s.fileName}`) + chalk.magenta(` [${label}]`),
             );
             logger.raw(chalk.dim(`  ${v.scope} · ${s.filePath}`));
+            if (s.frontmatter.id) logger.raw(chalk.dim(`  id：${s.frontmatter.id}`));
             if (opts.detail) {
               logger.raw(chalk.dim('\n' + '─'.repeat(40)));
               logger.raw(s.content);
@@ -294,6 +296,7 @@ export function registerSpecCommand(program: Command): void {
         if (opts.json) {
           const result = matches.map((m) => ({
             scope: m.scope,
+            id: m.spec.frontmatter.id ?? null,
             filePath: m.spec.filePath,
             relativePath: m.spec.relativePath,
             fileName: m.spec.fileName,
@@ -316,6 +319,7 @@ export function registerSpecCommand(program: Command): void {
           const title = s.frontmatter.title ?? s.fileName;
           logger.raw(chalk.bold(`\n${title}`) + userTag);
           logger.raw(chalk.dim(`  ${m.scope} · ${s.filePath}`));
+          if (s.frontmatter.id) logger.raw(chalk.dim(`  id：${s.frontmatter.id}`));
           if (s.parseError) {
             logger.raw(
               chalk.red(`  ⚠ frontmatter YAML 解析失败：${formatSpecParseError(s.parseError)}`),

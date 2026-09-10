@@ -158,6 +158,7 @@ export async function enrichSpecResultsWithTaskRefs(
       meta: {
         filePath: specPath,
         source: 'task-ref',
+        specId: entry.ref.id,
         username: entry.username,
         projectIds: entry.taskProjectIds,
         matchedVia,

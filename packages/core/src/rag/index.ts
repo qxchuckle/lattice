@@ -166,6 +166,7 @@ function buildSearchMeta(
   content: string,
   sourceType: SearchDocumentType,
   tags?: string[],
+  specId?: string,
 ): SearchDocumentMeta {
   const { relativePath, directories, fileStem } = splitPathParts(filePath, sourceType);
   const headings = extractHeadings(content, 10);
@@ -199,6 +200,7 @@ function buildSearchMeta(
   return {
     filePath,
     docKind: inferDocKind(filePath, sourceType),
+    specId,
     tags: tags ?? [],
     headings,
     keywords,
@@ -223,12 +225,20 @@ export function indexFtsAndMeta(
     projectIds?: string[];
     /** 数据来源：'local' 或域 hash（默认 local，D20） */
     source?: string;
+    specId?: string;
   },
 ): { hash: string; encodedProjectIds: string } {
   const hash = contentHash(content);
   const projectIds = meta.projectIds ?? (meta.projectId ? [meta.projectId] : []);
   const encodedProjectIds = encodeProjectIds(projectIds);
-  const searchMeta = buildSearchMeta(filePath, meta.title, content, meta.sourceType, meta.tags);
+  const searchMeta = buildSearchMeta(
+    filePath,
+    meta.title,
+    content,
+    meta.sourceType,
+    meta.tags,
+    meta.specId,
+  );
 
   upsertFtsEntry({
     file_path: filePath,
@@ -335,6 +345,7 @@ export async function indexSearchDocument(
     projectIds?: string[];
     /** 数据来源：'local' 或域 hash（默认 local） */
     source?: string;
+    specId?: string;
   },
 ): Promise<void> {
   const { hash, encodedProjectIds } = indexFtsAndMeta(filePath, content, meta);
@@ -407,6 +418,7 @@ export async function indexSpec(
     username: string;
     projectId?: string;
     sourceType?: string;
+    specId?: string;
   },
 ): Promise<void> {
   await indexSearchDocument(filePath, content, {
@@ -415,6 +427,7 @@ export async function indexSpec(
     username: meta.username,
     sourceType: (meta.sourceType as SearchDocumentType | undefined) ?? 'spec',
     projectId: meta.projectId,
+    specId: meta.specId,
   });
 }
 
@@ -571,6 +584,8 @@ type SearchDoc = {
   projectIds?: string[];
   /** 数据来源：'local' 或域 hash（默认 local，D20） */
   source?: string;
+  /** spec 全局唯一 id（frontmatter.id），仅 spec 类型 */
+  specId?: string;
 };
 
 /** 跨文档批量索引（rebuild / incremental 复用） */
@@ -624,6 +639,7 @@ async function batchIndexDocuments(
         projectId?: string;
         projectIds?: string[];
         source?: string;
+        specId?: string;
       };
       chunks: MarkdownChunk[];
       chunkIds: string[];
@@ -642,6 +658,7 @@ async function batchIndexDocuments(
         projectId: doc.projectId,
         projectIds: doc.projectIds,
         source: doc.source,
+        specId: doc.specId,
       };
       const existing = getEmbeddingByPath(doc.filePath);
       const chunks = chunkMarkdown(doc.content, doc.title, config.minChunkSize);

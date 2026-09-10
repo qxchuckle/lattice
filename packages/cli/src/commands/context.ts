@@ -31,6 +31,7 @@ function stripSpecContent(spec: ParsedSpec, scope?: string): Record<string, unkn
   return {
     title: title ?? spec.fileName,
     filePath: spec.filePath,
+    ...(id ? { id } : {}),
     ...(description ? { description } : {}),
     ...(tags?.length ? { tags } : {}),
     ...(scope ? { scope } : {}),
@@ -177,6 +178,7 @@ export function registerContextCommand(program: Command): void {
                   ? s.frontmatter.description.trim()
                   : chalk.yellow('[缺失摘要]');
               logger.raw(`  ${chalk.bold(title)}`);
+              if (s.frontmatter.id) logger.raw(chalk.dim(`    ID：${s.frontmatter.id}`));
               logger.raw(chalk.dim(`    路径：${s.filePath}`));
               logger.raw(`    摘要：${description}`);
               logger.raw('');
@@ -192,6 +194,7 @@ export function registerContextCommand(program: Command): void {
                   ? s.frontmatter.description.trim()
                   : chalk.yellow('[缺失摘要]');
               logger.raw(`  ${chalk.bold(title)} — ${description}`);
+              if (s.frontmatter.id) logger.raw(chalk.dim(`    ID：${s.frontmatter.id}`));
               logger.raw(chalk.dim(`    路径：${s.filePath}`));
             }
             logger.raw('');
@@ -206,6 +209,7 @@ export function registerContextCommand(program: Command): void {
                   ? s.frontmatter.description.trim()
                   : chalk.yellow('[缺失摘要]');
               logger.raw(`  ${chalk.bold(title)} — ${description}`);
+              if (s.frontmatter.id) logger.raw(chalk.dim(`    ID：${s.frontmatter.id}`));
               logger.raw(chalk.dim(`    路径：${s.filePath}`));
             }
             logger.raw('');
@@ -221,6 +225,7 @@ export function registerContextCommand(program: Command): void {
                 logger.raw(chalk.blue(`  项目级 Spec（${userData.directSpecs.length}）：`));
                 for (const s of userData.directSpecs) {
                   logger.raw(`    ${s.frontmatter.title ?? s.fileName}`);
+                  if (s.frontmatter.id) logger.raw(chalk.dim(`      ID：${s.frontmatter.id}`));
                 }
               }
 

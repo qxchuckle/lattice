@@ -435,6 +435,8 @@ export type SearchDocKind = 'overview' | 'structure' | 'guideline' | 'reference'
 export interface SearchDocumentMeta {
   filePath: string;
   docKind: SearchDocKind;
+  /** spec 全局唯一 id（frontmatter.id）；仅 spec 类型文档有值，供 search 出口透出 */
+  specId?: string;
   tags: string[];
   headings: string[];
   keywords: string[];

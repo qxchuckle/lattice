@@ -20,6 +20,8 @@ export interface SearchDocumentInput {
   projectIds?: string[];
   /** 数据来源：'local'（主数据，默认）或域 hash（D20；域文档用镜像绝对路径，孤儿清理按路径生效） */
   source?: string;
+  /** spec 全局唯一 id（frontmatter.id），仅 spec 类型；索引后供 search 出口透出 */
+  specId?: string;
 }
 
 /** spec 文件的最小结构契约（getGlobalSpecs/getUserSpecs/getProjectSpecs 返回元素） */
@@ -27,7 +29,7 @@ interface SpecFileLike {
   filePath: string;
   content: string;
   fileName: string;
-  frontmatter: { title?: string; tags?: string[] };
+  frontmatter: { id?: string; title?: string; tags?: string[] };
 }
 
 /** 构建 spec 类型的搜索文档（消除全局/用户/项目级 spec 构建重复） */
@@ -47,6 +49,7 @@ function buildSpecDoc(
     projectId,
     projectIds: projectId ? [projectId] : undefined,
     source,
+    specId: s.frontmatter.id,
   };
 }
 

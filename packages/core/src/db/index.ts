@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS embeddings (
 CREATE TABLE IF NOT EXISTS spec_search_meta (
   file_path TEXT PRIMARY KEY,
   doc_kind TEXT NOT NULL,
+  spec_id TEXT NOT NULL DEFAULT '',
   tags TEXT NOT NULL,
   headings TEXT NOT NULL,
   keywords TEXT NOT NULL,
@@ -275,6 +276,9 @@ function ensureSpecSearchMetaSchema(db: Database.Database): void {
   }
   if (!columnNames.has('domain_terms')) {
     db.exec("ALTER TABLE spec_search_meta ADD COLUMN domain_terms TEXT NOT NULL DEFAULT '[]'");
+  }
+  if (!columnNames.has('spec_id')) {
+    db.exec("ALTER TABLE spec_search_meta ADD COLUMN spec_id TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -894,13 +898,14 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
   getDb()
     .prepare(
       `INSERT INTO spec_search_meta (
-         file_path, doc_kind, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms, updated
+         file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms, updated
        )
        VALUES (
-         @file_path, @doc_kind, @tags, @headings, @keywords, @title_terms, @path_terms, @scope_key, @scope_terms, @domain_terms, datetime('now')
+         @file_path, @doc_kind, @spec_id, @tags, @headings, @keywords, @title_terms, @path_terms, @scope_key, @scope_terms, @domain_terms, datetime('now')
        )
        ON CONFLICT(file_path) DO UPDATE SET
          doc_kind = @doc_kind,
+         spec_id = @spec_id,
          tags = @tags,
          headings = @headings,
          keywords = @keywords,
@@ -914,6 +919,7 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
     .run({
       file_path: meta.filePath,
       doc_kind: meta.docKind,
+      spec_id: meta.specId ?? '',
       tags: JSON.stringify(meta.tags),
       headings: JSON.stringify(meta.headings),
       keywords: JSON.stringify(meta.keywords),
@@ -928,7 +934,7 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
 export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
   const row = getDb()
     .prepare(
-      `SELECT file_path, doc_kind, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms
+      `SELECT file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms
        FROM spec_search_meta
        WHERE file_path = ?`,
     )
@@ -936,6 +942,7 @@ export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
     | {
         file_path: string;
         doc_kind: SearchDocumentMeta['docKind'];
+        spec_id: string;
         tags: string;
         headings: string;
         keywords: string;
@@ -952,6 +959,7 @@ export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
   return {
     filePath: row.file_path,
     docKind: row.doc_kind,
+    specId: row.spec_id || undefined,
     tags: JSON.parse(row.tags) as string[],
     headings: JSON.parse(row.headings) as string[],
     keywords: JSON.parse(row.keywords) as string[],
