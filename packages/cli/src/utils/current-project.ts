@@ -80,6 +80,7 @@ async function generateIdsForDir(
  */
 export async function resolveAndRegisterUpwards(
   startDir = process.cwd(),
+  opts?: { silentNotice?: boolean },
 ): Promise<CurrentProjectWithAncestors | null> {
   try {
     await initDb();
@@ -111,8 +112,9 @@ export async function resolveAndRegisterUpwards(
     // 统一用 autoRegisterProject 处理（内部判断：已注册/fork/多用户/新建）
     try {
       const { meta, isNew } = await autoRegisterProject(username, ids, dir);
-      if (meta && isNew) {
-        console.log(`✓ 自动注册项目：${meta.name} (${selectPrimaryId(ids) ?? ids[0]})`);
+      if (meta && isNew && !opts?.silentNotice) {
+        // 走 stderr：提示性输出不得进 stdout（会污染 `-q`/`--json` 的机器解析，如 `ID=$(ltc task create -q)`）；machine 模式（silentNotice）下整条静音，从根源排除污染
+        console.error(`✓ 自动注册项目：${meta.name} (${selectPrimaryId(ids) ?? ids[0]})`);
       }
       if (meta) {
         const allIds = resolveProjectIds(meta);
@@ -144,11 +146,12 @@ export async function resolveAndRegisterUpwards(
  */
 export async function resolveCurrentProject(
   startDir = process.cwd(),
+  opts?: { silentNotice?: boolean },
 ): Promise<CurrentProject | null> {
   // 缓存检查
   if (_cachedCurrent !== undefined) return _cachedCurrent;
 
-  const result = await resolveAndRegisterUpwards(startDir);
+  const result = await resolveAndRegisterUpwards(startDir, opts);
   if (!result) {
     _cachedCurrent = null;
     return null;
@@ -166,12 +169,13 @@ export async function resolveCurrentProject(
  */
 export async function resolveCurrentProjectWithAncestors(
   startDir = process.cwd(),
+  opts?: { silentNotice?: boolean },
 ): Promise<CurrentProjectWithAncestors | null> {
   if (_cachedCurrent !== undefined) {
     return _cachedCurrent ? { current: _cachedCurrent, ancestors: _cachedAncestors ?? [] } : null;
   }
 
-  const result = await resolveAndRegisterUpwards(startDir);
+  const result = await resolveAndRegisterUpwards(startDir, opts);
   if (!result) {
     _cachedCurrent = null;
     return null;

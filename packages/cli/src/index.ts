@@ -114,10 +114,14 @@ async function main(): Promise<void> {
     const parentName = actionCommand.parent?.name();
     const isRagIndexCmd = parentName === 'rag' && (name === 'rebuild' || name === 'update');
 
+    // machine 输出模式（--json / -q）：stdout 只留数据，preAction 的提示性输出一律静音，从根源排除对 $(...)/管道解析的污染
+    const cmdOpts = actionCommand.opts();
+    const machineOutput = Boolean(cmdOpts.json || cmdOpts.quiet);
+
     if (!isRagIndexCmd) {
       try {
         const checkResult = await runStartupSelfCheck();
-        if (checkResult.ragRebuildNeeded) {
+        if (checkResult.ragRebuildNeeded && !machineOutput) {
           console.warn('⚠ DB schema 已升级，建议运行 `lattice rag rebuild` 重建搜索索引');
         }
       } catch {
@@ -130,7 +134,7 @@ async function main(): Promise<void> {
       try {
         if (await isInitialized()) {
           const meta = await readInitMeta();
-          if (!meta || meta.version !== pkg.version) {
+          if ((!meta || meta.version !== pkg.version) && !machineOutput) {
             console.warn('\x1b[33m⚠ lattice 注入已过期，运行 ltc init 更新\x1b[0m');
           }
         }
@@ -141,7 +145,7 @@ async function main(): Promise<void> {
 
     // 自动注册守卫：向上查找 ID 源（.git / lattice.json）并注册未注册项目
     try {
-      await resolveCurrentProject();
+      await resolveCurrentProject(process.cwd(), { silentNotice: machineOutput });
     } catch {
       // 自动注册失败不阻断主命令执行
     }
