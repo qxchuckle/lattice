@@ -151,6 +151,7 @@ export {
   deleteFtsEntry,
   upsertSpecSearchMeta,
   getSpecSearchMeta,
+  getStoredMetaHash,
   deleteSpecSearchMeta,
   searchFts,
   deleteSearchDocumentsByPrefixes,
@@ -163,6 +164,7 @@ export {
   countEmbeddings,
   ensureVecStoreDimension,
   getEmbeddingsByFilePath,
+  getEmbeddingRowsByIds,
   deleteEmbeddingsByFilePath,
   updateEmbeddingMetadataByFilePath,
   getDocumentSourceByPath,
@@ -429,6 +431,7 @@ export {
 export {
   indexSpec,
   indexFtsAndMeta,
+  computeMetaHash,
   checkEmbeddingFreshness,
   storeEmbedding,
   removeSpecIndex,

@@ -86,6 +86,23 @@ function ensureDebugOption(cmd: Command): void {
 }
 ensureDebugOption(program);
 
+// 确保所有可执行命令都接受 --json 选项，避免 AI 带 --json 调用时因 unknown option 报错
+function ensureJsonOption(cmd: Command): void {
+  // 叶子命令：直接添加（已自定义 --json 的命令保留原语义，如 config set 为解析输入 value）
+  if (cmd.commands.length === 0) {
+    const hasJson = cmd.options.some((opt) => opt.long === '--json');
+    if (!hasJson) {
+      cmd.option('--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
+    }
+  } else {
+    // 父命令：不给父级加 --json（避免拦截子命令的 --json），仅递归子命令
+    for (const sub of cmd.commands) {
+      ensureJsonOption(sub);
+    }
+  }
+}
+ensureJsonOption(program);
+
 async function main(): Promise<void> {
   // 进程退出时确保 DB 正确关闭（WAL checkpoint）
   process.on('exit', () => closeDb());

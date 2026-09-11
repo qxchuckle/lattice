@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS spec_search_meta (
   scope_key TEXT NOT NULL DEFAULT '',
   scope_terms TEXT NOT NULL DEFAULT '[]',
   domain_terms TEXT NOT NULL DEFAULT '[]',
+  meta_hash TEXT NOT NULL DEFAULT '',
   updated TEXT NOT NULL
 );
 
@@ -279,6 +280,9 @@ function ensureSpecSearchMetaSchema(db: Database.Database): void {
   }
   if (!columnNames.has('spec_id')) {
     db.exec("ALTER TABLE spec_search_meta ADD COLUMN spec_id TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has('meta_hash')) {
+    db.exec("ALTER TABLE spec_search_meta ADD COLUMN meta_hash TEXT NOT NULL DEFAULT ''");
   }
 }
 
@@ -898,10 +902,10 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
   getDb()
     .prepare(
       `INSERT INTO spec_search_meta (
-         file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms, updated
+         file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms, meta_hash, updated
        )
        VALUES (
-         @file_path, @doc_kind, @spec_id, @tags, @headings, @keywords, @title_terms, @path_terms, @scope_key, @scope_terms, @domain_terms, datetime('now')
+         @file_path, @doc_kind, @spec_id, @tags, @headings, @keywords, @title_terms, @path_terms, @scope_key, @scope_terms, @domain_terms, @meta_hash, datetime('now')
        )
        ON CONFLICT(file_path) DO UPDATE SET
          doc_kind = @doc_kind,
@@ -914,6 +918,7 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
          scope_key = @scope_key,
          scope_terms = @scope_terms,
          domain_terms = @domain_terms,
+         meta_hash = @meta_hash,
          updated = datetime('now')`,
     )
     .run({
@@ -928,13 +933,14 @@ export function upsertSpecSearchMeta(meta: SearchDocumentMeta): void {
       scope_key: meta.scopeKey,
       scope_terms: JSON.stringify(meta.scopeTerms),
       domain_terms: JSON.stringify(meta.domainTerms),
+      meta_hash: meta.metaHash,
     });
 }
 
 export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
   const row = getDb()
     .prepare(
-      `SELECT file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms
+      `SELECT file_path, doc_kind, spec_id, tags, headings, keywords, title_terms, path_terms, scope_key, scope_terms, domain_terms, meta_hash
        FROM spec_search_meta
        WHERE file_path = ?`,
     )
@@ -951,6 +957,7 @@ export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
         scope_key: string;
         scope_terms: string;
         domain_terms: string;
+        meta_hash: string;
       }
     | undefined;
 
@@ -968,7 +975,19 @@ export function getSpecSearchMeta(filePath: string): SearchDocumentMeta | null {
     scopeKey: row.scope_key,
     scopeTerms: JSON.parse(row.scope_terms) as string[],
     domainTerms: JSON.parse(row.domain_terms) as string[],
+    metaHash: row.meta_hash,
   };
+}
+
+/**
+ * 只读取已存的 meta_hash（frontmatter 派生字段指纹），供 incrementalIndex 高频比较。
+ * 不解析 JSON terms，比 getSpecSearchMeta 轻。行不存在返回 null（区别于 meta_hash 列的 ''）。
+ */
+export function getStoredMetaHash(filePath: string): string | null {
+  const row = getDb()
+    .prepare('SELECT meta_hash FROM spec_search_meta WHERE file_path = ?')
+    .get(filePath) as { meta_hash: string } | undefined;
+  return row ? row.meta_hash : null;
 }
 
 export function deleteSpecSearchMeta(filePath: string): void {

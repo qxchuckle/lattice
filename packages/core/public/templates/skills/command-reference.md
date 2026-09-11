@@ -17,6 +17,8 @@
 | `ltc user remove <name>` | 删除用户 |
 | `ltc fast-start log clear` | 清空日志 |
 
+`--json`：所有叶子命令均接受；无 JSON 输出的命令接受但不生效（输出保持人读格式）。例外：`config set --json` 语义为将输入 value 按 JSON 解析，非输出格式控制（见 [command-reference.md#ltc-config]）。
+
 ## `ltc init`
 
 初始化 `~/.lattice/`。
@@ -316,6 +318,15 @@
 ## `ltc config`
 
 `show [--json] [--scope] [--diff-defaults]` / `get <key> [--json] [--scope]` / `set <key> <value> [--json] [--scope]` / `unset <key> [--scope]`
+
+`set` 的 `--json` 为**输入语义**（全局"带 --json 调用"规则的例外）：
+
+| 调用 | value 解析 |
+|---|---|
+| `set <key> <value>` | 形如 JSON（`{...}` / `[...]` / 双引号串）自动解析，其余原样存字符串 |
+| `set <key> <value> --json` | 强制整个 value 按 JSON 解析，解析失败即报错（纯字符串如 `alice` 必报错） |
+
+标量 JSON（`123` / `true` / `null`）需 `--json` 才按类型写入；对象 / 数组不带即可。
 
 ## `ltc doctor`
 

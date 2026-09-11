@@ -446,6 +446,12 @@ export interface SearchDocumentMeta {
   scopeKey: string;
   scopeTerms: string[];
   domainTerms: string[];
+  /**
+   * frontmatter 派生字段指纹：对非正文索引输入（title/tags/specId/sourceType/username/projectIds）
+   * 取的 hash。incrementalIndex 用它区分"正文未变但 frontmatter 派生字段变"→ 只刷 FTS/meta 不重算向量。
+   * 正文变更由 embeddings.content_hash 独立判断，二者互补。
+   */
+  metaHash: string;
 }
 
 export type SpecSearchMeta = SearchDocumentMeta;

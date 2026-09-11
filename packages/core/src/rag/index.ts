@@ -21,6 +21,7 @@ import {
   searchVec,
   upsertFtsEntry,
   upsertSpecSearchMeta,
+  getStoredMetaHash,
   deleteFtsEntry,
   deleteSpecSearchMeta,
   countEmbeddings,
@@ -167,7 +168,7 @@ function buildSearchMeta(
   sourceType: SearchDocumentType,
   tags?: string[],
   specId?: string,
-): SearchDocumentMeta {
+): Omit<SearchDocumentMeta, 'metaHash'> {
   const { relativePath, directories, fileStem } = splitPathParts(filePath, sourceType);
   const headings = extractHeadings(content, 10);
   const titleTerms = extractKeywordCandidates(title);
@@ -212,6 +213,37 @@ function buildSearchMeta(
   };
 }
 
+/** computeMetaHash / indexFtsAndMeta 共用的 frontmatter 派生输入 */
+type MetaHashInput = {
+  title: string;
+  tags?: string[];
+  username: string;
+  sourceType: SearchDocumentType;
+  projectId?: string;
+  projectIds?: string[];
+  specId?: string;
+};
+
+/**
+ * frontmatter 派生字段指纹：对"非正文"索引输入取 hash（复用 contentHash）。
+ * 覆盖 FTS(title/tags/source_type/username/project_id) 与 spec_search_meta(spec_id 及全部
+ * *_terms/keywords——它们都派生自 title/tags/sourceType/filePath)。**排除 content**：正文由
+ * embeddings.content_hash 独立判断，纳入会让 frontmatter 变化也触发向量重算（退化成被否决的方案 Y）。
+ * 分隔符用 \u0001/\u0000 防字段拼接碰撞；tags/projectIds 保序（顺序变即视为变，与 FTS tags 列字符串一致）。
+ */
+export function computeMetaHash(meta: MetaHashInput): string {
+  const projectIds = meta.projectIds ?? (meta.projectId ? [meta.projectId] : []);
+  const payload = [
+    meta.title,
+    (meta.tags ?? []).join('\u0000'),
+    meta.specId ?? '',
+    meta.sourceType,
+    meta.username,
+    projectIds.join('\u0000'),
+  ].join('\u0001');
+  return contentHash(payload);
+}
+
 /** FTS + search meta 索引（同步，快） */
 export function indexFtsAndMeta(
   filePath: string,
@@ -227,18 +259,15 @@ export function indexFtsAndMeta(
     source?: string;
     specId?: string;
   },
-): { hash: string; encodedProjectIds: string } {
+): { hash: string; metaHash: string; encodedProjectIds: string } {
   const hash = contentHash(content);
+  const metaHash = computeMetaHash(meta);
   const projectIds = meta.projectIds ?? (meta.projectId ? [meta.projectId] : []);
   const encodedProjectIds = encodeProjectIds(projectIds);
-  const searchMeta = buildSearchMeta(
-    filePath,
-    meta.title,
-    content,
-    meta.sourceType,
-    meta.tags,
-    meta.specId,
-  );
+  const searchMeta: SearchDocumentMeta = {
+    ...buildSearchMeta(filePath, meta.title, content, meta.sourceType, meta.tags, meta.specId),
+    metaHash,
+  };
 
   upsertFtsEntry({
     file_path: filePath,
@@ -251,7 +280,7 @@ export function indexFtsAndMeta(
   });
   upsertSpecSearchMeta(searchMeta);
 
-  return { hash, encodedProjectIds };
+  return { hash, metaHash, encodedProjectIds };
 }
 
 /** 检查是否需要重新生成 embedding */
@@ -594,7 +623,7 @@ async function batchIndexDocuments(
   docs: SearchDoc[],
   config: Required<RAGEmbeddingConfig>,
   onProgress?: IndexProgressCallback,
-  progressBase?: { current: number; total: number; skipped: number },
+  progressBase?: { current: number; total: number; skipped: number; updated?: number },
 ): Promise<{ added: number; updated: number; chunksProcessed: number }> {
   let added = 0;
   let updated = 0;
@@ -611,12 +640,12 @@ async function batchIndexDocuments(
     const now = Date.now();
     if (!force && now - lastProgressTime < PROGRESS_INTERVAL_MS) return;
     lastProgressTime = now;
-    const base = progressBase ?? { current: 0, total: sortedDocs.length, skipped: 0 };
+    const base = progressBase ?? { current: 0, total: sortedDocs.length, skipped: 0, updated: 0 };
     onProgress({
       current: base.current + added + updated,
       total: base.total,
       added,
-      updated,
+      updated: (base.updated ?? 0) + updated,
       skipped: base.skipped,
       chunksProcessed: chunksProcessed + extraChunks,
       currentFile,
@@ -773,25 +802,53 @@ export async function incrementalIndex(
   // 获取已索引的文档路径
   const indexedPaths = listIndexedDocumentPaths();
 
-  // 先分区：跳过未变文档，需要索引的进入批量处理
+  // 先分区：正文变→批量重索引；正文未变但 frontmatter 派生字段变→只刷 FTS/meta（方案 X，不重算向量）；全未变→跳过
   const toIndex: SearchDoc[] = [];
   for (const doc of docs) {
     const hash = contentHash(doc.content);
     const { needsReembedding } = checkEmbeddingFreshness(doc.filePath, hash);
-    if (!needsReembedding) {
+    if (needsReembedding) {
+      toIndex.push(doc);
+      continue;
+    }
+    // 正文未变：再比 frontmatter 派生字段指纹（meta_hash），与 batchIndexDocuments/indexFtsAndMeta 构造一致
+    const meta = {
+      title: doc.title,
+      tags: doc.tags,
+      username: doc.username,
+      sourceType: doc.sourceType ?? ('spec' as SearchDocumentType),
+      projectId: doc.projectId,
+      projectIds: doc.projectIds,
+      source: doc.source,
+      specId: doc.specId,
+    };
+    const storedMetaHash = getStoredMetaHash(doc.filePath);
+    if (storedMetaHash !== null && storedMetaHash === computeMetaHash(meta)) {
+      // 正文 + 派生字段全未变 → 真跳过
       result.skipped++;
     } else {
-      toIndex.push(doc);
+      // 派生字段变（或存量 meta_hash 缺失/为空）→ 刷新 FTS + spec_search_meta + embeddings 元数据，
+      // 但绝不重算向量。对齐 indexSearchDocument 内容未变分支：title/username/project_id 随 frontmatter
+      // 变时，embeddings 表的冗余副本也须刷新，否则语义搜索结果（row.title 等）透出旧值。
+      const { encodedProjectIds } = indexFtsAndMeta(doc.filePath, doc.content, meta);
+      updateEmbeddingMetadataByFilePath(
+        doc.filePath,
+        meta.title,
+        meta.username,
+        encodedProjectIds,
+        meta.source,
+      );
+      result.updated++;
     }
   }
 
-  // 批量进度报告（跳过的部分）
-  if (onProgress && result.skipped > 0) {
+  // 批量进度报告（分区阶段：跳过 + 仅刷 meta 的部分）
+  if (onProgress && (result.skipped > 0 || result.updated > 0)) {
     onProgress({
-      current: result.skipped,
+      current: result.skipped + result.updated,
       total: docs.length,
       added: 0,
-      updated: 0,
+      updated: result.updated,
       skipped: result.skipped,
       chunksProcessed: 0,
     });
@@ -800,12 +857,13 @@ export async function incrementalIndex(
   // 跨文档批量索引（与 rebuildIndex 共用同一逻辑）
   if (toIndex.length > 0) {
     const batchResult = await batchIndexDocuments(toIndex, config, onProgress, {
-      current: result.skipped,
+      current: result.skipped + result.updated,
       total: docs.length,
       skipped: result.skipped,
+      updated: result.updated,
     });
     result.added = batchResult.added;
-    result.updated = batchResult.updated;
+    result.updated += batchResult.updated;
   }
 
   // 清理已不存在的文档索引

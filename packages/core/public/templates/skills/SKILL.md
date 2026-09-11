@@ -86,7 +86,7 @@ spec/PRD/项目变更后 → `ltc rag update`；报错 → `ltc rag rebuild`。
 - **全量读取**：Lattice 文档（spec/PRD/design/progress/skill）、`ltc search`/`context`、排错、`ltc doctor`
 - **可过滤**：git log、构建日志（`grep -nC 5`）、`git status --short`
 - **自检**：截断/缺预期关键字 → 重跑全量
-- 无依赖命令 `&&` 串联；能带 `--json` 就带
+- 无依赖命令 `&&` 串联；ltc 命令必须带 `--json` 调用（`config set` 除外：其 `--json` 为解析输入 value）
 
 ## --force
 
