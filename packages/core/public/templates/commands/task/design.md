@@ -40,12 +40,7 @@ read_file 读取该任务的 `design.md`（如已存在），了解之前的讨�
 
 ### 情况二：参数不是任务 ID
 
-按 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 完成**项目定位（第 0 步，必做）** + 归纳标题 + 查重 + 创建任务（参数由第 0 步定位结果决定）：
-
-```bash
-ltc task start <task-id>
-ltc context --task <task-id>
-```
+按 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 完成**项目定位（第 0 步，必做）** + 归纳标题 + 查重 + 创建（第 4 步 create→start 一次串联），随后执行 [task-workflows.md#task start 后的起手动作]。
 
 ### 情况三：无参数
 

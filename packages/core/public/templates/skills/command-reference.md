@@ -166,7 +166,7 @@
 
 ### `ltc task create <title>`
 
-- `-p, --project <ids...>` / `--current` / `--parent <id>`
+- `-p, --project <ids...>` / `--current` / `--parent <id>` / `-q, --quiet`（只输出任务 ID，便于 `ID=$(ltc task create ... -q) && ltc task start "$ID"` 串联）
 - `--current`：写入类——用户提供了路径/语义描述时必须先 `ltc project where`/`ltc project list --search` 定位，定位到用 `--project <id>`
 
 ### `ltc task info <id>`

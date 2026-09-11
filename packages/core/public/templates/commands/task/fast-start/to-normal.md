@@ -23,10 +23,10 @@
 ### 2. 创建并启动任务
 
 ```bash
-ltc task create "<标题>" --current
-ltc task start <task-id>
-ltc context --task <task-id>
+ID=$(ltc task create "<标题>" --current -q) && ltc task start "$ID"
 ```
+
+起手信息收集按 [task-workflows.md#task start 后的起手动作]（fast-start 阶段已读 spec，命中 [subagent-delegation.md#条件委派原则] 免委派则主线串行/续用）。
 
 ### 3. 回填 PRD
 

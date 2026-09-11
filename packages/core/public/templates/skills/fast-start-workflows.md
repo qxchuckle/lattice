@@ -65,7 +65,7 @@ ltc fast-start log clear [--force]
 前置：当前处于 fast-start + 对话已有实质工作。
 
 1. 归纳标题+查重（[task-workflows.md#命令参数非任务 ID 时：标题归纳与查重]）
-2. `ltc task create "<标题>" --current` + `ltc task start <id>` + `ltc context --task <id>`
+2. `ID=$(ltc task create "<标题>" --current -q) && ltc task start "$ID"`；起手信息收集按 [task-workflows.md#task start 后的起手动作]
 3. 回填 PRD（完整目标 + 已完成工作 + 剩余方案 + 文件索引 + 约束）
 4. `ltc task associate <id> --current`
 5. 此后按正常实施期循环执行
@@ -76,7 +76,7 @@ ltc fast-start log clear [--force]
 
 fast-start 下执行 `/lattice/task/archive`：
 
-1. 归纳标题 → `ltc task create` + `ltc task start`
+1. 归纳标题 → `ID=$(ltc task create "<标题>" -q) && ltc task start "$ID"`
 2. 回填 PRD（目标/最终方案/文件索引/完成总结）
 3. `ltc task associate <id> --current`
 4. 按正常归档流程（[task-workflows.md#归档]）

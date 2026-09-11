@@ -26,11 +26,9 @@ ltc task list --current --status in_progress
 ltc context --task <task-id> --query "<标题关键词>"
 ```
 
-### 3. 选读并筛选相关 spec（两步选读，宁多勿少）
+### 3. 选读并筛选相关 spec
 
-**第一步**：从 context 输出的 spec 列表中，按标题+描述筛选可能相关的 spec → `ltc spec show <name>` 取路径 → Read 读全文 → 判断是否确实相关，保留相关的，剔除无关的
-
-**第二步**：多次调用 `ltc search`，每次用空格隔开多个相关关键词形成关键词组（如 `ltc search "keyA keyB" --json`），用不同关键词组覆盖核心概念、同义词、模块名，直到信息充分 → 对新发现的高相关 spec 重复取路径+Read+筛选；任务只记列表
+按 [spec-workflows.md#按任务主题全文读取相关 spec] 两步选读（宁多勿少）：读取全文判断相关性，保留相关的、剔除无关的；任务只记列表。
 
 ### 4. 任务详情与进展
 

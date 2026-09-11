@@ -7,7 +7,7 @@
 **必须委派 `lattice-context` subagent（不支持时退化串行）。**
 
 ```bash
-ltc context --query "<主题>" && ltc status
+ltc context --query "<主题>"
 ```
 
 **必须带 `--query`**，输出含语义关联（相关 spec/任务/项目）。

@@ -6,12 +6,12 @@
 
 | 场景 | 必须委派的 subagent | 禁止主线直接执行的命令 |
 |------|---------------------|------------------------|
-| 任务起手信息收集 | `lattice-task-start` | `ltc context --task` + `ltc search` + `ltc spec show` + Read 组合 |
+| 任务起手信息收集 | `lattice-task-start` | `ltc context --task` + `ltc search` + Read 组合 |
 | 任务归档 | `lattice-task-archive` | `ltc task progress` + PRD 补全 + checkpoint + archive 组合 |
-| 项目上下文铺底 | `lattice-context` | `ltc context` + `ltc status` + `ltc spec list` 组合 |
+| 项目上下文铺底 | `lattice-context` | `ltc context` + `ltc spec list` 组合 |
 | 跨项目搜索 | `lattice-search` | 多路 `ltc search --json` 并行 |
 | 失忆恢复 | `lattice-task-handoff` | 恢复流程全部命令 |
-| 规范全文读取 | `lattice-spec-digest` | `ltc context` + 批量 `ltc spec show` + Read |
+| 规范全文读取 | `lattice-spec-digest` | `ltc context` + `ltc search` + Read 组合 |
 | 变更影响分析 | `lattice-impact` | context + search + grep 组合 |
 | 健康巡检 | `lattice-health` | `ltc doctor` + `rag status` + `spec conflicts` 组合 |
 
@@ -48,16 +48,13 @@
 
 同时满足才启用：1. 平台支持 subagent 2. 命令属读类 3. 输出体量大或需并行 4. 主线只需索引或结论。任一不满足 → 主线串行。
 
-## 适合临时委派的 6 类场景
+## 适合临时委派的场景
 
 | # | 场景 | 命令示例 | 回报格式 |
 |---|---|---|---|
-| 1 | 进入新项目上下文铺底 | `ltc context` + `status` + `task list --current` + `spec list` | 项目名+spec 路径索引+活跃任务+冲突 |
-| 2 | 跨项目相似经验调研 | 多关键字 `ltc search --json` 并行 | `{path,score,type,title}` 列表 + 相关性判断 |
-| 3 | 多任务并行梳理 | 对 N 个 task 并行 `context --task` / `progress` | 按 id 分组 `{title,status,last_checkpoint,blockers}` |
-| 4 | 跨多项目元信息汇总 | `project list --with-relations` + 并行 `project info` | `{projectId,name,mainPath,relations}` 列表 |
-| 5 | 健康巡检 | `doctor` + `rag status` + `spec conflicts` + `project list --orphaned` | 每项#健康/警告/错误+ 待修复数 |
-| 6 | link 候选 ID 调研 | 对候选并行 `project info` / `project where` | 候选对比表 |
+| 1 | 多任务并行梳理 | 对 N 个 task 并行 `context --task` / `progress` | 按 id 分组 `{title,status,last_checkpoint,blockers}` |
+| 2 | 跨多项目元信息汇总 | `project list --with-relations` + 并行 `project info` | `{projectId,name,mainPath,relations}` 列表 |
+| 3 | link 候选 ID 调研 | 对候选并行 `project info` / `project where` | 候选对比表 |
 
 ## 禁止委派
 

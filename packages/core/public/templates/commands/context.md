@@ -12,12 +12,7 @@
 
 ## 执行步骤
 
-1. 当前目录属于已注册项目时：
-
-   ```bash
-   ltc context
-   ltc status
-   ```
+1. 当前目录属于已注册项目时：委派 `lattice-context` subagent（不支持时退化串行跑 `ltc context --query "<当前请求/主题>"`）（[project-context.md#进入项目默认动作]）
 
 2. 用户在命令后提供了任务 ID 时额外运行：
 

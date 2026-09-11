@@ -29,15 +29,7 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 ## 三、实施期循环
 
-每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检。（[task-workflows.md#实施期循环]）
-
-1. PRD 硬触发命中 → 先改 PRD（[task-workflows.md#1. PRD 硬触发（T1~T8）]）
-2. 写代码前/checkpoint 前/complete 前/推翻方案后各有必做动作
-3. spec 每轮检查，非一次性
-4. 代码改完 → checkpoint；推翻方案 → pivot
-5. 可复用内容 → 询问用户沉淀 spec（[spec-workflows.md#沉淀判定]）
-6. 单输入多语义 → 拆多条 checkpoint
-7. 信息齐备再动手
+每轮：PRD 同步 → spec 选读 → 改代码 → checkpoint → 回答闭合自检（[task-workflows.md#实施期循环]）。
 
 兜底：3 轮无 checkpoint → 补 `note`。fast-start 不走循环，但 spec 全文读取和沉淀仍适用。
 
@@ -51,29 +43,11 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 信号：出现 "summary"/"continued from previous" · 不记得会话开头 · 对 spec/规范印象模糊。
 
-恢复（必须委派 `lattice-task-handoff`；不支持时串行）：
-
-1. 重载 lattice skill
-2. `ltc context --query` + 全文读取 spec + read PRD/design.md
-3. `task list --current` → `task info` → `task progress`
-4. 按优先级重载 checkpoint：correction/constraint（硬约束）→ decision/pivot（方向）→ 其余按需
-5. 构建锚定式恢复摘要（4 字段）：
-   - **intent**：当前任务目标（from PRD）
-   - **changes**：已完成改动（from milestone/decision）
-   - **decisions**：关键决策及理由
-   - **next**：下一步计划
-6. 回填缺失 checkpoint
+恢复必须委派 `lattice-task-handoff`（不支持时串行），按其模板重建上下文并产出 4 字段恢复摘要（intent / changes / decisions / next）。
 
 ## 六、任务完成闭环
 
-`task complete` 前：
-
-1. 前置采集（[task-workflows.md#归档]）
-2. 核对 + PRD 补全（对照 progress 核对决策/遗漏后补最终方案+总结）
-3. summary checkpoint
-4. `ltc rag update`
-5. spec 沉淀判定
-6. 项目关系审查
+`task complete` 前执行 [task-workflows.md#归档] 闭环。
 
 fast-start 归档：创建任务 → start → 回填 PRD → 按上述闭环。
 
