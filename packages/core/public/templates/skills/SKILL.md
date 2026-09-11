@@ -43,7 +43,7 @@ description: >-
 - 注册/识别项目 · 多路径判定 · AI 推断项目关系 · 非 cwd 路径首次出现 → [project-discovery.md]
 - 执行或索引 agent command · 不确定有哪些 slash command 可用 → [agent-commands.md]
 - 使用 fast-start 流程 · `ltc fast-start` 相关操作 → [fast-start-workflows.md]
-- 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 → [command-reference.md]
+- 使用不确定的 `ltc` 命令/参数/选项 · 需要确认完整参数格式 → [command-reference.md]（CLI 参数路由入口，按命令类别转 cli-*.md 子文档）
 - `ltc` 命令程序性异常报错 · RAG 搜索结果异常 · 索引/数据不一致 → [troubleshooting.md]
 
 ## 自主信息获取
