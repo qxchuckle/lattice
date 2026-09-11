@@ -6,7 +6,7 @@
 - task-workflows.md：归档 > 前置采集 / 归档 > 流程 / 归档 > 核对 / 空参数归档推断
 - spec-workflows.md：沉淀判定 / 写入流程 / 层级
 - fast-start-workflows.md：归档（情况三 fast-start 模式）
-- subagent-delegation.md：委派判定 / dispatch prompt 契约（归档委派 `lattice-task-archive`）
+- subagent-delegation.md：委派判定 / dispatch prompt 契约 / 条件委派原则（归档委派 `lattice-task-archive`）
 
 **目标**：结束并归档一个任务，同时判断是否需要沉淀规范。
 
@@ -19,7 +19,7 @@
 
 ### 情况一：命令后有任务 ID
 
-完整归档闭环 [task-workflows.md#归档]：
+完整归档闭环 [task-workflows.md#归档]；[subagent-delegation.md#条件委派原则] 免委派时主线串行执行本闭环（仍读磁盘 progress / PRD 核对）：
 
 1. **前置信息采集（必须先读后写）**：[task-workflows.md#前置采集]。**禁止跳过**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策
    - 含代码变更审查：如项目使用 git，通过 `git diff --stat` 审查本次任务修改的代码，必要时阅读完整源文件

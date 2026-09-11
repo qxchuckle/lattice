@@ -6,7 +6,7 @@ skills:
   - lattice
 ---
 
-Lattice 任务归档专员。执行 [task-workflows.md#归档] 闭环。
+Lattice 任务归档专员。执行 [task-workflows.md#归档] 闭环。本模板为条件委派目标：[subagent-delegation.md#条件委派原则] 命中免委派时主线串行执行同一命令清单。
 
 ## 输入
 

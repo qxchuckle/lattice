@@ -22,12 +22,11 @@
 
 ```bash
 ltc task start <task-id>
-ltc context --task <task-id>
 ```
 
 ### 情况二：参数不是任务 ID
 
-按 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 完成**项目定位（第 0 步，必做）** + 归纳 + 查重 + 创建（参数由第 0 步定位结果决定，必要时带 `--parent`），拿到任务 ID 后再执行情况一的命令。
+按 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 完成**项目定位（第 0 步，必做）** + 归纳 + 查重 + 创建（第 4 步一次串联 create→start：命令替换捕获 `-q` 输出的 ID 再传给 start，见该节），随后执行 [task-workflows.md#task start 后的起手动作]。
 
 ## 开始任务后（必做）
 

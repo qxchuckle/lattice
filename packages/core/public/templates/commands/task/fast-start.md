@@ -6,6 +6,7 @@
 - project-context.md：进入项目默认动作
 - spec-workflows.md：按任务主题全文读取相关 spec / 沉淀判定 / 写入流程
 - fast-start-workflows.md：fast-start 完整工作流（启动 / 轻量日志 / 复杂度检测 / 转正常模式 / 归档）
+- subagent-delegation.md：条件委派原则（fast-start 免委派，主线串行收集）
 
 **目标**：以轻量模式开始工作——获取项目上下文和 spec，但不创建任务、不写 PRD、不打 checkpoint。可选记录轻量日志。
 
@@ -23,8 +24,8 @@
 
 ## 执行步骤
 
-1. **获取项目上下文**：`ltc context`
-2. **全文读取相关 spec**：按 [spec-workflows.md#按任务主题全文读取相关 spec] 选读
+1. **获取项目上下文**：主线串行 `ltc context`（fast-start 免委派，[subagent-delegation.md#条件委派原则]）
+2. **全文读取相关 spec**：主线串行按 [spec-workflows.md#按任务主题全文读取相关 spec] 选读
 3. **输出简短确认**：已加载的项目上下文 + 读取了哪些 spec
 4. **直接开始工作**：不创建任务、不写 PRD、不打 checkpoint
 

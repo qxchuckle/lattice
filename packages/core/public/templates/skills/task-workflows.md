@@ -25,11 +25,11 @@ PRD 管"应该是什么"，progress 管"发生了什么"，design 管"怎么讨�
 
 ## 命令参数非任务 ID 时：标题归纳与查重
 
-0. **项目定位（必做）**：有路径 → `ltc project where <path>`；有语义 → `ltc project list --search <kw>`；定位到 → `--project <id>`，无 → `--current`
+0. **项目定位（必做）**：有路径 → `ltc project where <path>`；有语义 → `ltc project list --search <kw>`；与 `ltc task list --current` 用 `&&` 一次串联；定位到 → `--project <id>`，无 → `--current`
 1. 归纳简洁标题
-2. 查重：`ltc task list --current` + `ltc search "<标题>" --type task --json`
+2. 查重补漏：`ltc search "<标题>" --type task --json`
 3. 有相似 in_progress → 列候选给用户确认
-4. `ltc task create "<标题>" [--current | --project <id>] [--parent <id>]`
+4. `ID=$(ltc task create "<标题>" [--current | --project <id>] [--parent <id>] -q) && ltc task start "$ID"`
 
 ## 父子任务
 
@@ -41,11 +41,13 @@ ltc task update <id> --parent <id> / --clear-parent
 
 ## task start 后的起手动作
 
-**必须委派 `lattice-task-start` subagent（不支持时退化串行）。**
+**必须委派 `lattice-task-start` subagent（不支持时退化串行）；免委派客观条件见 [subagent-delegation.md#条件委派原则]。**
 
 ```bash
-ltc task start <task-id> && ltc context --task <task-id> --query "<主题>"
+ltc task start <task-id>
 ```
+
+信息收集（`ltc context --task <task-id> --query "<主题>"` + spec 选读）由被委派 subagent 执行；[subagent-delegation.md#条件委派原则] 免委派时主线串行执行同一清单。
 
 1. 按主题全文读取 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）：context 列表选读 + `ltc search` 补漏。读完全文后 → `ltc task ref-spec <task-id> <spec-id>` 关联（subagent 只读不关联，主线负责）
 2. 参考近似历史任务 PRD（按复杂性选读相关的）
@@ -151,7 +153,7 @@ ltc project relation add <a> <b> --type <type> --description "证据" --ai-infer
 
 ## 归档
 
-**必须委派 `lattice-task-archive` subagent（不支持时退化串行）。**
+**必须委派 `lattice-task-archive` subagent（不支持时退化串行）；免委派客观条件见 [subagent-delegation.md#条件委派原则]。**
 
 ### 前置采集（必做，未读就写总结 = 遗漏）
 

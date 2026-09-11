@@ -265,6 +265,7 @@ export function registerTaskCommand(program: Command): void {
     .option('-p, --project <ids...>', '关联项目 ID')
     .option('--current', '关联当前目录对应的项目')
     .option('--parent <id>', '指定父任务 ID')
+    .option('-q, --quiet', '只输出任务 ID（便于命令串联）')
     .action(async (title: string, opts) => {
       try {
         const username = await getUsername();
@@ -283,6 +284,7 @@ export function registerTaskCommand(program: Command): void {
           if (!parentTask) {
             logger.raw(chalk.yellow(`未找到父任务：${opts.parent}`));
             closeDb();
+            process.exitCode = 1;
             return;
           }
           parentTaskId = parentTask.id;
@@ -294,6 +296,11 @@ export function registerTaskCommand(program: Command): void {
         });
 
         closeDb();
+
+        if (opts.quiet) {
+          logger.raw(task.id);
+          return;
+        }
 
         logger.raw(chalk.green('✓ 任务已创建'));
         logger.raw(chalk.dim(`  ${task.id}`));

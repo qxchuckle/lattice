@@ -10,6 +10,8 @@ fast-start 是 `task/start` 的轻量变体：获取上下文和全文读取 spe
 
 ## 启动流程
 
+fast-start 免委派（[subagent-delegation.md#条件委派原则]）：铺底与 spec 选读由主线串行执行。
+
 1. `ltc context`
 2. 全文读取相关 spec（[spec-workflows.md#按任务主题全文读取相关 spec]）
 3. 输出简短确认
