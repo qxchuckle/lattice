@@ -14,7 +14,6 @@ export function registerDoctorCommand(program: Command): void {
     .option('--rebuild-fingerprints', '重新采集所有项目的指纹')
     .option('--recheck-scope-paths', '重新检查所有任务的 scopePaths 是否已属于某个已注册项目')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         await initDb();
@@ -33,7 +32,7 @@ export function registerDoctorCommand(program: Command): void {
 
         outputReport(report.entries);
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       } finally {
         closeDb();

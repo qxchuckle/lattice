@@ -298,7 +298,7 @@ export function registerInitCommand(program: Command): void {
         logger.raw(chalk.dim(`  用户名：${username}`));
         logger.raw(chalk.dim(`  目录：${root}`));
       } catch (err) {
-        console.error(chalk.red('初始化失败：'), (err as Error).message);
+        logger.stderr(chalk.red('初始化失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -387,12 +387,10 @@ async function detectAndConfigureAITools(): Promise<void> {
       } else {
         logger.raw(chalk.green(`  ✓ 已为 ${tool.name} 创建目录并注入${suffix}`));
       }
-      // 展示本次注入的具体文件/目录，~ 替换用户家目录以缩短输出
-      const homePrefix = home + '/';
+      // 展示本次注入的具体文件/目录（路径由 logger 输出层统一 home→~ 化，不截断）
       const kindWidth = Math.max(...injectedPaths.map((p) => p.kind.length));
       for (const { kind, path } of injectedPaths) {
-        const shortPath = path.startsWith(homePrefix) ? `~/${path.slice(homePrefix.length)}` : path;
-        logger.raw(chalk.dim(`      ${kind.padEnd(kindWidth)}  ${shortPath}`));
+        logger.raw(chalk.dim(`      ${kind.padEnd(kindWidth)}  ${path}`));
       }
     }
   }

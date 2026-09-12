@@ -22,6 +22,7 @@ import {
   paginate,
   paginationEntries,
   paginationNote,
+  projectTable,
   withPaginationOptions,
 } from '../utils';
 
@@ -32,7 +33,10 @@ export function registerTrashCommand(program: Command): void {
   withPaginationOptions(cmd.command('list').alias('ls').description('列出垃圾桶中的内容'))
     .option('--type <type>', '按类型筛选（task/project/spec）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -41,7 +45,7 @@ export function registerTrashCommand(program: Command): void {
         const filtered = opts.type ? items.filter((i: TrashMeta) => i.type === opts.type) : items;
 
         if (opts.json) {
-          outputJson(paginate(filtered, opts), opts.jsonFormat);
+          outputJson(projectTable(filtered, opts), opts.jsonFormat);
           return;
         }
 
@@ -66,7 +70,7 @@ export function registerTrashCommand(program: Command): void {
 
         logger.raw(chalk.dim('使用 lattice trash restore <id> 恢复，lattice trash purge 清空'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -126,7 +130,7 @@ export function registerTrashCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 已恢复：${restored.title}（${restored.type}）`));
         logger.raw(chalk.dim(`  原始位置：${restored.originalPath}`));
       } catch (err) {
-        console.error(chalk.red('恢复失败：'), (err as Error).message);
+        logger.stderr(chalk.red('恢复失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -187,7 +191,7 @@ export function registerTrashCommand(program: Command): void {
           logger.raw(chalk.yellow('请指定要删除的条目 ID，或使用 --all 清空整个垃圾桶'));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

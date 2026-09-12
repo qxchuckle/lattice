@@ -150,7 +150,6 @@ export function registerRagCommand(program: Command): void {
     .command('status')
     .description('查看索引状态')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         await getUsername();
@@ -199,7 +198,7 @@ export function registerRagCommand(program: Command): void {
         }
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -226,7 +225,7 @@ export function registerRagCommand(program: Command): void {
           ),
         );
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -285,7 +284,7 @@ export function registerRagCommand(program: Command): void {
         if ((err as Error).message) {
           logger.spinFail('更新失败');
         }
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         if (isModelLoadNetworkError()) {
           logger.raw(chalk.yellow(formatModelNetworkHint()));
         }

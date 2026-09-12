@@ -2,8 +2,15 @@ import type { ProjectRelation } from '@qcqx/lattice-core';
 import { useDebouncedValue } from './ui';
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../adapters';
-import { queryKeys } from '../lib';
-import type { ProjectMeta, TaskMeta, ParsedSpec, SearchResult } from '@qcqx/lattice-core';
+import { queryKeys, apiGet } from '../lib';
+import type {
+  ProjectMeta,
+  TaskMeta,
+  ParsedSpec,
+  SearchResult,
+  GlobalStatus,
+} from '@qcqx/lattice-core';
+import { homeToTildeWith } from '@qcqx/lattice-core';
 
 /**
  * 剥离域命名空间前缀（domain:<hash8>:task|project|spec:xxx → xxx）：
@@ -74,6 +81,24 @@ export function useStats() {
     queryFn: () => adapter.getStats(),
     staleTime: 60_000,
   });
+}
+
+/**
+ * 返回把绝对路径 ~化 的展示函数（home/pathSep 来自 server `/api/global-status`；浏览器无 homedir）。
+ * 未加载时返回原路径（安全降级）。**仅用于展示**——文件操作（openPathByPath 等）仍传绝对路径。
+ */
+export function useHomeTilde(): (path: string | null | undefined) => string {
+  const { data } = useQuery({
+    queryKey: ['global-status'],
+    queryFn: async (): Promise<GlobalStatus | null> => {
+      const d = await apiGet<GlobalStatus & { error?: string }>('/api/global-status');
+      return d.error ? null : d;
+    },
+    staleTime: 60_000,
+  });
+  const home = data?.home;
+  const sep = data?.pathSep;
+  return (path) => (path && home && sep ? homeToTildeWith(path, home, sep) : (path ?? ''));
 }
 
 export function useUsers() {

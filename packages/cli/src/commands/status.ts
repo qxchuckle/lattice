@@ -21,7 +21,24 @@ import {
   getGlobalStatus,
   openLatticeRoot,
 } from '@qcqx/lattice-core';
-import { logger, outputJson, resolveCurrentProject } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveCurrentProject,
+  dedupeItem,
+  projectItem,
+  projectList,
+  stripTaskList,
+  reportFailure,
+  reportFailureHint,
+} from '../utils';
+
+/** status 的 JSON 输出选项（投影开关随 opts 透传，避免逐层加位置参数） */
+interface StatusJsonOptions {
+  json?: boolean;
+  jsonFormat?: boolean;
+  jsonFull?: boolean;
+}
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -29,11 +46,14 @@ export function registerStatusCommand(program: Command): void {
     .description('显示 Lattice 状态')
     .option('--global', '显示全局状态')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出未投影的原始对象（完整时间戳、activeTasks 保留完整 referencedSpecs、不做列式）；默认 --json 走投影层',
+    )
     .action(async (opts) => {
       try {
         if (!(await isInitialized())) {
-          logger.raw(chalk.yellow('Lattice 未初始化。请先运行 lattice init'));
+          reportFailure('Lattice 未初始化。请先运行 lattice init');
           return;
         }
 
@@ -41,32 +61,28 @@ export function registerStatusCommand(program: Command): void {
         await initDb();
 
         if (opts.global) {
-          await showGlobalStatus(username, opts.json, opts.jsonFormat);
+          await showGlobalStatus(username, opts);
         } else {
-          await showProjectStatus(username, opts.json, opts.jsonFormat);
+          await showProjectStatus(username, opts);
         }
 
         closeDb();
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
 }
 
-async function showGlobalStatus(
-  _username: string,
-  json: boolean,
-  jsonFormat?: boolean,
-): Promise<void> {
+async function showGlobalStatus(_username: string, opts: StatusJsonOptions): Promise<void> {
   const status = await getGlobalStatus();
   if (!status) {
-    logger.raw(chalk.yellow('Lattice 未初始化'));
+    reportFailure('Lattice 未初始化');
     return;
   }
 
-  if (json) {
-    outputJson(status, jsonFormat);
+  if (opts.json) {
+    outputJson(projectItem(status, opts), opts.jsonFormat);
     return;
   }
 
@@ -98,47 +114,41 @@ export function registerOpenCommand(program: Command): void {
       }
     });
 }
-async function showProjectStatus(
-  username: string,
-  json: boolean,
-  jsonFormat?: boolean,
-): Promise<void> {
+async function showProjectStatus(username: string, opts: StatusJsonOptions): Promise<void> {
   const project = await resolveCurrentProject();
   if (!project) {
-    logger.raw(chalk.yellow('当前目录不是 Lattice 项目。使用 --global 查看全局状态。'));
+    reportFailure('当前目录不是 Lattice 项目。使用 --global 查看全局状态。');
     return;
   }
 
   // 检查绑定状态：db 中是否存在该 id
   const dbRow = findProjectById(project.id);
   if (!dbRow) {
-    logger.raw(
-      chalk.yellow(
-        `⚠ 当前 lattice.json 指向项目 ${project.id.slice(0, 8)}…，但 Lattice 中未找到对应项目`,
-      ),
+    reportFailure(
+      `⚠ 当前 lattice.json 指向项目 ${project.id.slice(0, 8)}…，但 Lattice 中未找到对应项目`,
     );
-    logger.raw(
-      chalk.dim(
-        '  修复建议：\n    1) lattice link --restore <id>  恢复绑定\n    2) lattice link              走指纹识别选单\n    3) lattice link --force-new   强制创建新项目',
-      ),
+    reportFailureHint(
+      '  修复建议：\n    1) lattice link --restore <id>  恢复绑定\n    2) lattice link              走指纹识别选单\n    3) lattice link --force-new   强制创建新项目',
     );
     return;
   }
 
   const meta = await getProjectMeta(username, project.id);
   if (!meta) {
-    logger.raw(chalk.yellow('项目元数据不存在，可能需要重新 scan'));
+    reportFailure('项目元数据不存在，可能需要重新 scan');
     return;
   }
 
   const specs = await getProjectSpecs(username, project.id);
 
-  let activeTasks: Awaited<ReturnType<typeof getTaskMeta>>[] = [];
+  type TaskMetaOrNil = Awaited<ReturnType<typeof getTaskMeta>>;
+  let activeTasks: NonNullable<TaskMetaOrNil>[] = [];
   try {
     const taskIds = getTasksForProject(project.id);
     const allTasks = await Promise.all(taskIds.map((id) => getTaskMeta(username, id)));
     activeTasks = allTasks.filter(
-      (t) => t !== null && t.status !== 'archived' && t.status !== 'completed',
+      (t): t is NonNullable<TaskMetaOrNil> =>
+        t !== null && t.status !== 'archived' && t.status !== 'completed',
     );
   } catch {
     // 忽略
@@ -173,8 +183,19 @@ async function showProjectStatus(
     ...(ancestorInfo.length > 0 ? { ancestors: ancestorInfo } : {}),
   };
 
-  if (json) {
-    outputJson(status, jsonFormat);
+  if (opts.json) {
+    outputJson(
+      opts.jsonFull
+        ? dedupeItem(status)
+        : {
+            ...status,
+            meta: projectItem(meta),
+            activeTasks: projectList(stripTaskList(activeTasks)),
+            binding: projectItem(status.binding),
+            ...(ancestorInfo.length > 0 ? { ancestors: projectList(ancestorInfo) } : {}),
+          },
+      opts.jsonFormat,
+    );
     return;
   }
 

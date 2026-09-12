@@ -61,7 +61,7 @@
 
 ## `ltc trash`
 
-垃圾桶管理（查看、恢复、清空已删除的内容）：`list [--type] [--json]` 列出内容 / `restore <id>` 恢复已删除内容 / `purge [id] [-f] [--all]` 彻底删除（不可恢复）。
+垃圾桶管理（查看、恢复、清空已删除的内容）：`list [--type] [--json] [--json-full] [--page-size <n>]` 列出内容（`--json` 为列式表，完整时间戳走 `--json-full`）/ `restore <id>` 恢复已删除内容 / `purge [id] [-f] [--all]` 彻底删除（不可恢复）。
 
 ## `ltc web`
 

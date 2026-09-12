@@ -20,6 +20,9 @@ export {
   type FingerprintDerived,
 } from './project/identity';
 
+// 路径展示纯函数（零 Node.js 依赖；home/sep 由调用方传入，供 web client 展示层 ~化）
+export { homeToTildeWith } from './path-display';
+
 // 类型（编译时擦除，无运行时影响）
 export type {
   ProjectMeta,

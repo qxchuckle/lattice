@@ -15,7 +15,7 @@
 - `--all-user` / `--user <users>`（互斥，需搭配 `--project`/`--current`）
 - `--json`
 - `--json-format`：JSON 缩进格式化（默认压缩）
-- `--json-full`：输出完整 `referencedSpecs` 明细（relativePath/scope/projectId/firstReadAt）；默认 `--json` 将 referencedSpecs 降为 spec id 数组
+- `--json-full`：输出原始任务对象数组（完整 `referencedSpecs` 明细 relativePath/scope/projectId/firstReadAt、完整时间戳）；默认 `--json` 为列式表（见 [command-reference.md#通用约定]），referencedSpecs 降为 spec id 数组、时间戳降到日期
 
 ### `ltc task create <title>`
 
@@ -28,7 +28,8 @@
 
 查看任务详情（元数据 + 关联 + 引用 spec）。
 
-- `--lineage` / `--tree` / `--descendants` / `--json`
+- `--lineage` / `--tree` / `--descendants`（人读视图开关）/ `--json`
+- `--json` 恒加载图视图，但**去掉完全重复的那份**（属去重复表示层，两种模式同理，故本命令无 `--json-full`）：`descendants` 与 `tree` 结构全同时不重复输出、`lineage` 只含任务自身（无父任务）时省略。detail 命令：保留完整时间戳与 `prd` 全文
 
 ### `ltc task update <id>`
 
@@ -61,7 +62,8 @@
 
 查看任务进展记录（checkpoint 历史）。
 
-- `--last <n>` / `--type <type>` / `--id <checkpointId>` / `--json`
+- `--last <n>` / `--type <type>` / `--id <checkpointId>`（单条详情，不翻页）/ `--page <n>` + `--page-size <n>` / `--json` / `--json-format`
+- `--json-full`：原始对象数组（完整时间戳）；默认 `--json` 为列式表，checkpoint 时间降到日期（先后顺序仍由行序保留）
 
 ### `ltc task associate <id>`
 
@@ -90,11 +92,11 @@ fast-start 轻量模式日志（不走完整任务周期时的过程记录）。
 
 ### `ltc fast-start log list`
 
-列出 fast-start 日志。`--last <n>` / `--page <n>` + `--page-size <n>`（分页：`--page-size` 触发时 `--json` 返回 `{entries,page,pageSize,total,totalPages}`，不传则返回全量数组）/ `--project <id>` / `--current` / `--json` / `--json-format`
+列出 fast-start 日志。`--last <n>` / `--page <n>` + `--page-size <n>`（分页见 [command-reference.md#通用约定]）/ `--project <id>` / `--current` / `--json`（列式表，`message`/`files` 全量保留）/ `--json-format` / `--json-full`（原始对象数组、完整时间戳）
 
 ### `ltc fast-start log search <query>`
 
-关键词搜索 fast-start 日志（标题 / 内容 / 文件 / 目录）。`--last <n>` / `--project <id>` / `--current` / `--json`
+关键词搜索 fast-start 日志（标题 / 内容 / 文件 / 目录）。`--last <n>` / `--page <n>` + `--page-size <n>` / `--project <id>` / `--current` / `--json`（列式表）/ `--json-format` / `--json-full`
 
 ### `ltc fast-start log show <id>` / `stats`
 

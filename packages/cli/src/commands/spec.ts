@@ -54,10 +54,16 @@ import {
   outputJson,
   resolveCurrentProject,
   stripSpecs,
+  dedupeItem,
+  projectItem,
   paginate,
   paginationEntries,
   paginationNote,
+  projectList,
+  projectTable,
   withPaginationOptions,
+  reportFailure,
+  reportFailureHint,
 } from '../utils';
 import {
   resolveBundledSpecTemplateNames,
@@ -95,8 +101,10 @@ export function registerSpecCommand(program: Command): void {
     .option('--scope <scope>', '过滤层级（project / user / global）')
     .option('--tag <tag>', '按标签过滤')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
-    .option('--json-full', 'JSON 输出含每个 spec 的 content 全文（默认剥离，正文走 spec show）')
+    .option(
+      '--json-full',
+      'JSON 输出原始分组对象（含每个 spec 的 content 全文、不做列式）；默认 --json 剥离 content（正文走 spec show）且每个分组的 specs 为列式表 {cols,rows}',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -160,12 +168,15 @@ export function registerSpecCommand(program: Command): void {
                 ? g.specs.map((s) => ({ ...s, scope: g.scope }))
                 : stripSpecs(g.specs, g.scope),
             );
-            outputJson(paginate(flat, opts), opts.jsonFormat);
+            outputJson(projectTable(flat, opts), opts.jsonFormat);
           } else {
             outputJson(
               opts.jsonFull
-                ? allSpecs
-                : allSpecs.map((group) => ({ ...group, specs: stripSpecs(group.specs) })),
+                ? dedupeItem(allSpecs)
+                : allSpecs.map((group) => ({
+                    ...group,
+                    specs: projectList(stripSpecs(group.specs)),
+                  })),
               opts.jsonFormat,
             );
           }
@@ -222,7 +233,7 @@ export function registerSpecCommand(program: Command): void {
 
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -238,7 +249,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--source <hash8>', '指定来源域（hash 前 8 位）直读域版本（D24）')
     .option('--detail', '输出文件内容')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (file: string, opts) => {
       try {
         const currentUsername = await getUsername();
@@ -255,7 +265,7 @@ export function registerSpecCommand(program: Command): void {
             ...knowledge.shadowed.filter((s) => s.lostSource.startsWith(hash8)).map((s) => s.entry),
           ];
           if (domainViews.length === 0) {
-            logger.raw(chalk.yellow(`未找到来源域 ${hash8}（可用的域中无匹配，或域不存在）`));
+            reportFailure(`未找到来源域 ${hash8}（可用的域中无匹配，或域不存在）`);
             closeDb();
             return;
           }
@@ -270,10 +280,8 @@ export function registerSpecCommand(program: Command): void {
               v.spec.frontmatter.title === file,
           );
           if (matched.length === 0) {
-            logger.raw(
-              chalk.yellow(
-                `域 ${hash8} 中未找到 spec：${file}（域内共 ${domainViews.length} 个 spec）`,
-              ),
+            reportFailure(
+              `域 ${hash8} 中未找到 spec：${file}（域内共 ${domainViews.length} 个 spec）`,
             );
             closeDb();
             return;
@@ -300,9 +308,7 @@ export function registerSpecCommand(program: Command): void {
         if (opts.user) {
           const allUsernames = await listAllUsernames();
           if (!allUsernames.includes(targetUsername)) {
-            logger.raw(
-              chalk.yellow(`用户不存在：${targetUsername}。可用用户：${allUsernames.join(', ')}`),
-            );
+            reportFailure(`用户不存在：${targetUsername}。可用用户：${allUsernames.join(', ')}`);
             closeDb();
             return;
           }
@@ -323,7 +329,7 @@ export function registerSpecCommand(program: Command): void {
         closeDb();
 
         if (matches.length === 0) {
-          logger.raw(chalk.yellow(`未找到 spec：${file}`));
+          reportFailure(`未找到 spec：${file}`);
           return;
         }
 
@@ -342,7 +348,9 @@ export function registerSpecCommand(program: Command): void {
             ...(targetUsername !== currentUsername ? { sourceUser: targetUsername } : {}),
             ...(opts.detail ? { content: m.spec.content } : {}),
           }));
-          outputJson(result, opts.jsonFormat);
+          // detail 命令：只做 L1 去重复表示（`fileName` / 退化的 `relativePath` 与 filePath 同值），
+          // 不做列式编码与精度降级，故不需要 --json-full
+          outputJson(dedupeItem(result), opts.jsonFormat);
           return;
         }
 
@@ -388,7 +396,7 @@ export function registerSpecCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -397,16 +405,43 @@ export function registerSpecCommand(program: Command): void {
   cmd
     .command('conflicts')
     .description('检测多层级同名 spec 冲突')
-    .action(async () => {
+    .option('--json', 'JSON 格式输出')
+    .option(
+      '--json-full',
+      'JSON 输出原始冲突数组（fileName + 嵌套 levels）；默认 --json 扁平化为列式表 {cols,rows}，每个层级一行',
+    )
+    .action(async (opts) => {
       try {
         const username = await getUsername();
         const projectId = await resolveCurrentProjectId();
         if (!projectId) {
-          logger.raw(chalk.yellow('当前目录不是 Lattice 项目'));
+          // machine 模式 stdout 只放可解析数据：错误走 stderr + 非零退出（cli-command-surface 输出流约定）
+          if (opts.json) {
+            logger.stderr(chalk.yellow('当前目录不是 Lattice 项目'));
+            process.exitCode = 1;
+            return;
+          }
+          reportFailure('当前目录不是 Lattice 项目');
           return;
         }
 
         const conflicts = await detectSpecConflicts(username, projectId);
+
+        if (opts.json) {
+          // 扁平化：每个层级一行（fileName 作为列重复），列全为原子值 → 列式表最划算；
+          // 无冲突时输出 {cols:[],rows:[]}，不泄漏人读文本
+          const flat = conflicts.flatMap((c) =>
+            c.levels.map((level) => ({
+              fileName: c.fileName,
+              scope: level.scope,
+              specId: level.specId,
+              filePath: level.filePath,
+              snippet: level.snippet,
+            })),
+          );
+          outputJson(projectList(opts.jsonFull ? conflicts : flat, opts), opts.jsonFormat);
+          return;
+        }
 
         if (conflicts.length === 0) {
           logger.raw(chalk.green('✓ 未检测到 spec 冲突'));
@@ -425,7 +460,7 @@ export function registerSpecCommand(program: Command): void {
         }
         logger.raw(chalk.dim('提示：项目级 spec 优先级最高，会覆盖同名的用户级和全局级 spec。'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -437,8 +472,20 @@ export function registerSpecCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('列出可用的 spec 模板')
-    .action(async () => {
+    .option('--json', 'JSON 格式输出')
+    .option(
+      '--json-full',
+      'JSON 输出原始模板对象数组（不做列式/压缩）；默认 --json 为列式表 {cols,rows}',
+    )
+    .action(async (opts) => {
       const templates = await listSpecTemplates();
+
+      // --json 优先于空态提示，避免 machine 模式 stdout 混入人读文本
+      if (opts.json) {
+        outputJson(projectList(templates, opts), opts.jsonFormat);
+        return;
+      }
+
       if (templates.length === 0) {
         logger.raw(chalk.yellow('当前没有可用模板。可先运行 lattice spec template sync-builtins'));
         return;
@@ -479,7 +526,7 @@ export function registerSpecCommand(program: Command): void {
           );
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -503,7 +550,7 @@ export function registerSpecCommand(program: Command): void {
           logger.raw(chalk.yellow(`  未找到：${result.missing.join(', ')}`));
         }
       } catch (err) {
-        console.error(chalk.red('同步内置模板失败：'), (err as Error).message);
+        logger.stderr(chalk.red('同步内置模板失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -522,7 +569,7 @@ export function registerSpecCommand(program: Command): void {
         logger.raw(chalk.dim(`  模板源目录：${result.templateSourceDir}`));
         logger.raw(chalk.dim(`  导入模板：${result.importedTemplates.join(', ') || '无'}`));
       } catch (err) {
-        console.error(chalk.red('拉取模板失败：'), (err as Error).message);
+        logger.stderr(chalk.red('拉取模板失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -549,7 +596,7 @@ export function registerSpecCommand(program: Command): void {
           logger.raw(chalk.green(`✓ ${repo}（导入 ${result.importedTemplates.length} 个模板）`));
         }
       } catch (err) {
-        console.error(chalk.red('同步模板失败：'), (err as Error).message);
+        logger.stderr(chalk.red('同步模板失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -558,7 +605,10 @@ export function registerSpecCommand(program: Command): void {
 
   withPaginationOptions(registryCmd.command('list').alias('ls').description('列出已注册的模板仓库'))
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (opts) => {
       try {
         const registries = await getConfiguredTemplateRegistries();
@@ -566,7 +616,7 @@ export function registerSpecCommand(program: Command): void {
         const infos = registries.length === 0 ? [] : await listSpecTemplateRegistries(registries);
 
         if (opts.json) {
-          outputJson(paginate(infos, opts), opts.jsonFormat);
+          outputJson(projectTable(infos, opts), opts.jsonFormat);
           return;
         }
 
@@ -591,7 +641,7 @@ export function registerSpecCommand(program: Command): void {
         }
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('列出模板仓库失败：'), (err as Error).message);
+        logger.stderr(chalk.red('列出模板仓库失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -617,7 +667,7 @@ export function registerSpecCommand(program: Command): void {
         logger.raw(chalk.dim(`  缓存目录：${removed.registryDir}`));
         logger.raw(chalk.dim(`  移除模板：${removed.importedTemplates.join(', ') || '无'}`));
       } catch (err) {
-        console.error(chalk.red('删除模板仓库失败：'), (err as Error).message);
+        logger.stderr(chalk.red('删除模板仓库失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -706,7 +756,7 @@ export function registerSpecCommand(program: Command): void {
         const report = lintSpecFrontmatter(parsed);
         printLintReport(report, { compact: true });
       } catch (err) {
-        console.error(chalk.red('创建 spec 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('创建 spec 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -797,7 +847,7 @@ export function registerSpecCommand(program: Command): void {
           printLintReport(lintSpecFrontmatter(reread), { compact: true });
         }
       } catch (err) {
-        console.error(chalk.red('修改 spec 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('修改 spec 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -808,7 +858,10 @@ export function registerSpecCommand(program: Command): void {
     .option('--scope <scope>', '限定层级（project / user / global）')
     .option('--all', '扫描全部 spec（含 project + user + global）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始报告对象数组（含 relativePath、不做列式/压缩）；默认 --json 为列式表 {cols,rows}，relativePath 与 filePath 重复故省略',
+    )
     .action(async (file: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -836,7 +889,7 @@ export function registerSpecCommand(program: Command): void {
           });
           if (matches.length === 0) {
             closeDb();
-            logger.raw(chalk.yellow(`未找到 spec：${file}`));
+            reportFailure(`未找到 spec：${file}`);
             process.exitCode = 1;
             return;
           }
@@ -851,7 +904,7 @@ export function registerSpecCommand(program: Command): void {
           }
         } else {
           closeDb();
-          logger.raw(chalk.yellow('用法：lattice spec lint <file> 或 lattice spec lint --all'));
+          reportFailure('用法：lattice spec lint <file> 或 lattice spec lint --all');
           process.exitCode = 1;
           return;
         }
@@ -859,7 +912,7 @@ export function registerSpecCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          outputJson(reports, opts.jsonFormat);
+          outputJson(projectList(reports, opts), opts.jsonFormat);
           // 有 error 时退出码非 0
           if (reports.some((r) => !r.ok)) process.exitCode = 1;
           return;
@@ -882,7 +935,7 @@ export function registerSpecCommand(program: Command): void {
         logger.raw(`\n${summary}`);
         if (totalErrors > 0) process.exitCode = 1;
       } catch (err) {
-        console.error(chalk.red('lint 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('lint 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -895,7 +948,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--scope <scope>', '限定层级（all / global / user / project），默认 all')
     .option('--dry-run', '仅报告不写入')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (name: string | undefined, opts) => {
       try {
         await initDb();
@@ -948,7 +1000,7 @@ export function registerSpecCommand(program: Command): void {
           process.exitCode = 1;
         }
       } catch (err) {
-        console.error(chalk.red('migrate 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('migrate 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -965,7 +1017,10 @@ export function registerSpecCommand(program: Command): void {
     )
     .option('--limit <n>', '最多展示几条（默认 20）', '20')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 的 specs 输出原始对象数组（含 relativePath、不做列式）；默认为列式表 {cols,rows}',
+    )
     .action(async (opts) => {
       try {
         await initDb();
@@ -1008,6 +1063,11 @@ export function registerSpecCommand(program: Command): void {
         ];
 
         if (missing.length === 0) {
+          // 空态也要给机读载荷（machine 模式 stdout 不得混入人读文本）
+          if (opts.json) {
+            outputJson({ total: 0, shown: 0, specs: projectList([], opts) }, opts.jsonFormat);
+            return;
+          }
           logger.raw(chalk.green('✓ 所有 spec 都已有 description'));
           return;
         }
@@ -1025,7 +1085,10 @@ export function registerSpecCommand(program: Command): void {
             title: m.spec.frontmatter.title ?? m.spec.fileName.replace(/\.md$/i, ''),
             contentSnippet: extractSnippet(m.spec.content, 3),
           }));
-          outputJson({ total: missing.length, shown: data.length, specs: data }, opts.jsonFormat);
+          outputJson(
+            { total: missing.length, shown: data.length, specs: projectList(data, opts) },
+            opts.jsonFormat,
+          );
           return;
         }
 
@@ -1063,7 +1126,7 @@ export function registerSpecCommand(program: Command): void {
           logger.raw(chalk.dim(`  ... 还有 ${missing.length - limit} 个，使用 --limit 调整`));
         }
       } catch (err) {
-        console.error(chalk.red('suggest-description 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('suggest-description 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -1088,7 +1151,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--verify <dir>', '不导出，仅校验已有导出目录与 manifest 一致性')
     .option('--strict', '警告升为错误（退出码非零）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         // 校验模式：纯文件操作，不触 DB
@@ -1168,7 +1230,7 @@ export function registerSpecCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('export 失败：'), (err as Error).message);
+        logger.stderr(chalk.red('export 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

@@ -23,9 +23,6 @@ export function registerUninjectCommand(program: Command): void {
     .action(async (opts) => {
       try {
         const home = homedir();
-        const homePrefix = home + '/';
-        const short = (p: string): string =>
-          p.startsWith(homePrefix) ? `~/${p.slice(homePrefix.length)}` : p;
 
         // 校验 --tool 平台 id
         const validIds = getAIToolConfigs(home).map((t) => t.id);
@@ -77,7 +74,7 @@ export function registerUninjectCommand(program: Command): void {
         logger.raw(chalk.yellow(`\n将清除以下内容（共 ${plan.findings.length} 项）：`));
         const byTool = new Map<string, InjectionFinding[]>();
         for (const f of plan.findings) {
-          const key = `${f.toolName} (${short(f.targetRoot)})`;
+          const key = `${f.toolName} (${f.targetRoot})`;
           const arr = byTool.get(key) ?? [];
           arr.push(f);
           byTool.set(key, arr);
@@ -85,11 +82,11 @@ export function registerUninjectCommand(program: Command): void {
         for (const [toolLabel, items] of byTool) {
           logger.raw(chalk.cyan(`\n  ${toolLabel}`));
           const kindWidth = Math.max(...items.map((i) => i.kind.length));
-          const pathWidth = Math.max(...items.map((i) => short(i.path).length));
+          const pathWidth = Math.max(...items.map((i) => i.path.length));
           for (const item of items) {
             logger.raw(
               chalk.dim(
-                `    ${item.kind.padEnd(kindWidth)}  ${short(item.path).padEnd(pathWidth)}  ${
+                `    ${item.kind.padEnd(kindWidth)}  ${item.path.padEnd(pathWidth)}  ${
                   item.detail
                 }`,
               ),
@@ -121,7 +118,7 @@ export function registerUninjectCommand(program: Command): void {
         );
         logger.raw(chalk.dim('  ~/.lattice 数据未改动；如需重新注入运行 ltc init。'));
       } catch (err) {
-        console.error(chalk.red('清除失败：'), (err as Error).message);
+        logger.stderr(chalk.red('清除失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

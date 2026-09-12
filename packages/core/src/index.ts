@@ -92,7 +92,11 @@ export {
   listUserDirs,
   findUpwards,
   findAllUpwards,
+  homeToTilde,
 } from './paths';
+
+// 路径展示纯函数（零依赖；browser.ts 亦导出供 web client 展示层 ~化）
+export { homeToTildeWith } from './path-display';
 
 // 配置
 export {

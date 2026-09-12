@@ -3,6 +3,7 @@ export {
   useEntityDetail,
   useProjectGitStatus,
   useStats,
+  useHomeTilde,
   useUsers,
   useProjectTaskSearch,
   useDomainsData,

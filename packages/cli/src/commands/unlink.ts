@@ -123,7 +123,7 @@ export function registerUnlinkCommand(program: Command): void {
 
         logger.raw(chalk.green('✓ 项目已取消 Lattice 注册（已删除 lattice.json）'));
       } catch (err) {
-        console.error(chalk.red('取消注册失败：'), (err as Error).message);
+        logger.stderr(chalk.red('取消注册失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

@@ -4,7 +4,7 @@ import { SettingOutlined, FolderOpenOutlined, CodeOutlined } from '@ant-design/i
 import { useQuery } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
 import { apiGet, apiPost } from '../../lib';
-import { useStats } from '../../hooks';
+import { useStats, useHomeTilde } from '../../hooks';
 import { ConfigModal } from './ConfigModal';
 
 interface GlobalStatus {
@@ -20,6 +20,7 @@ interface GlobalStatus {
 
 export const OverviewTab = memo(function OverviewTab() {
   const { data: stats } = useStats();
+  const shorten = useHomeTilde();
   const [configOpen, setConfigOpen] = useState(false);
   const { message } = App.useApp();
 
@@ -68,7 +69,7 @@ export const OverviewTab = memo(function OverviewTab() {
             <Descriptions.Item label='根目录'>
               <Space>
                 <span style={{ fontSize: 11, wordBreak: 'break-all' }}>
-                  {globalStatus.latticeRoot}
+                  {shorten(globalStatus.latticeRoot)}
                 </span>
                 <Tooltip title='在文件管理器中打开'>
                   <Button

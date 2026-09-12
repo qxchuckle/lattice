@@ -50,7 +50,7 @@ import {
   toggleDetailCollapse,
   openTerminal,
 } from '../store';
-import { useEntityDetail, useProjectTaskSearch } from '../hooks';
+import { useEntityDetail, useProjectTaskSearch, useHomeTilde } from '../hooks';
 import { getAdapter } from '../adapters';
 import { apiGet } from '../lib';
 import type { SpecNodeData } from '../types/graph';
@@ -244,6 +244,7 @@ function FilePathBar({
   entityId?: string | null;
 }) {
   const { message } = AntdApp.useApp();
+  const shorten = useHomeTilde();
   const pathQuery = useFilePath(path ? null : pathType, path ? null : entityId);
   const finalPath = path ?? pathQuery.data ?? null;
 
@@ -260,6 +261,9 @@ function FilePathBar({
 
   if (!finalPath) return null;
 
+  // 展示/复制用 ~/ 化路径（护隐私 + 与 CLI 一致）；打开/终端 action 仍用绝对 finalPath（server isPathSafe 需真实路径）
+  const displayPath = shorten(finalPath);
+
   const handleOpen = async (app: EditorApp) => {
     const adapter = getAdapter();
     const success = await adapter.openPathByPath(finalPath, app);
@@ -269,15 +273,15 @@ function FilePathBar({
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(finalPath).then(() => {
+    navigator.clipboard.writeText(displayPath).then(() => {
       message.success('已复制路径');
     });
   };
 
   return (
     <div className='file-path-bar'>
-      <span className='mono file-path-bar__text' title={finalPath}>
-        {finalPath}
+      <span className='mono file-path-bar__text' title={displayPath}>
+        {displayPath}
       </span>
       <Button size='small' type='text' icon={<CopyOutlined />} onClick={handleCopy} />
       <Dropdown.Button
@@ -316,6 +320,7 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   const navigate = useNavigate();
   const statusColor = getTaskStatusColor(task.status);
   const adapter = getAdapter();
+  const shorten = useHomeTilde();
   // 获取所有文档内容
   const prdQuery = useQuery({
     queryKey: ['content', 'prd', task.id],
@@ -562,8 +567,8 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
                     <List.Item className='detail-list-item' style={{ cursor: 'default' }}>
                       <div style={{ width: '100%' }}>
                         <div className='scope-path__path-row'>
-                          <span className='mono scope-path__path' title={sp.path}>
-                            {sp.path}
+                          <span className='mono scope-path__path' title={shorten(sp.path)}>
+                            {shorten(sp.path)}
                           </span>
                         </div>
                         <div className='scope-path__actions'>
@@ -1489,6 +1494,7 @@ function SpecDetail({ data }: { data: SpecNodeData }) {
 
 function ProjectPathBar({ projectId }: { projectId: string }) {
   const { message } = AntdApp.useApp();
+  const shorten = useHomeTilde();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<EditorApp>('finder');
 
@@ -1558,7 +1564,7 @@ function ProjectPathBar({ projectId }: { projectId: string }) {
           }}>
           {paths.map((p) => (
             <Radio key={p} value={p} className='path-radio'>
-              <span className='mono'>{p}</span>
+              <span className='mono'>{shorten(p)}</span>
             </Radio>
           ))}
         </Radio.Group>

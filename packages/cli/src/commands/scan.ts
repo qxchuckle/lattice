@@ -79,7 +79,7 @@ export function registerScanCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('扫描失败：'), (err as Error).message);
+        logger.stderr(chalk.red('扫描失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

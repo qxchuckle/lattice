@@ -82,6 +82,14 @@ export const logger = {
   },
 
   /**
+   * stderr 原样输出（走 safeLog → console.error）：不污染 stdout 的 machine 解析，
+   * 且 spinner 活跃时安全清屏/重绘。替代命令文件中直接调用的原生 console.error。
+   */
+  stderr: (...args: unknown[]): void => {
+    safeLog(console.error, ...args);
+  },
+
+  /**
    * 包名高亮
    */
   pkg: (name: string, version?: string): string => {

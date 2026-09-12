@@ -241,9 +241,9 @@ export function registerLinkCommand(program: Command): void {
         printParentRelations(parentRelations);
       } catch (err) {
         debug('link error', (err as Error).message);
-        console.error(chalk.red('注册失败：'), (err as Error).message);
+        logger.stderr(chalk.red('注册失败：'), (err as Error).message);
         if (_debugEnabled && (err as Error).stack) {
-          console.error(chalk.gray((err as Error).stack));
+          logger.stderr(chalk.gray((err as Error).stack));
         }
         process.exitCode = 1;
       }

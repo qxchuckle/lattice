@@ -43,7 +43,7 @@ export function registerSyncCommand(program: Command): void {
         }
         await runFullSync(opts);
       } catch (err) {
-        console.error(chalk.red('同步失败：'), (err as Error).message);
+        logger.stderr(chalk.red('同步失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -98,9 +98,9 @@ export function registerSyncCommand(program: Command): void {
         printSummary(remote, result.summary, result.warnings);
       } catch (err) {
         const msg = (err as Error).message;
-        console.error(chalk.red('关联失败：'), msg);
+        logger.stderr(chalk.red('关联失败：'), msg);
         if (msg.includes('域已存在')) {
-          console.error(
+          logger.stderr(
             chalk.dim('  已关联过该域：改用 route add 加推送规则，或 unlink 后重新 join'),
           );
         }
@@ -124,7 +124,7 @@ export function registerSyncCommand(program: Command): void {
           ),
         );
       } catch (err) {
-        console.error(chalk.red('解除失败：'), (err as Error).message);
+        logger.stderr(chalk.red('解除失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -155,7 +155,7 @@ export function registerSyncCommand(program: Command): void {
           );
         }
       } catch (err) {
-        console.error(chalk.red('读取失败：'), (err as Error).message);
+        logger.stderr(chalk.red('读取失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -179,7 +179,7 @@ export function registerSyncCommand(program: Command): void {
           chalk.green(`✓ 已添加规则 ${rule}（现 ${routes.length} 条，ltc sync 推送生效）`),
         );
       } catch (err) {
-        console.error(chalk.red('添加失败：'), (err as Error).message);
+        logger.stderr(chalk.red('添加失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -198,7 +198,7 @@ export function registerSyncCommand(program: Command): void {
         await writeSyncDomains(domains);
         logger.raw(chalk.green(`✓ 已移除规则 ${rule}（剩 ${routes.length} 条）`));
       } catch (err) {
-        console.error(chalk.red('移除失败：'), (err as Error).message);
+        logger.stderr(chalk.red('移除失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

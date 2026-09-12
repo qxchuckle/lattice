@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
-import { join as pathJoin } from 'node:path';
+import { join as pathJoin, sep } from 'node:path';
 import { mkdir, readFile, writeFile, rm, stat, readdir, access } from 'node:fs/promises';
+import { homeToTildeWith } from '../path-display';
 
 // ─── 根路径 ───
 
@@ -9,6 +10,14 @@ export function getLatticeRoot(): string {
   const envRoot = process.env.LATTICE_HOME;
   if (envRoot) return envRoot;
   return pathJoin(homedir(), '.lattice');
+}
+
+/**
+ * Node 版 home→~：用当前用户 home + 系统分隔符。规则见 `path-display.ts` 的 `homeToTildeWith`
+ * （纯字符串零依赖版，供浏览器 client 复用）。仅用于输出渲染层，存储/数据返回值绝不 ~化。
+ */
+export function homeToTilde(str: string): string {
+  return homeToTildeWith(str, homedir(), sep);
 }
 
 // ─── 缓存 ───

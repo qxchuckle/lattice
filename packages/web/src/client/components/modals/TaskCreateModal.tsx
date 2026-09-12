@@ -51,31 +51,29 @@ export const TaskCreateModal = memo(function TaskCreateModal({
 
   return (
     <Modal
-      title="创建任务"
+      title='创建任务'
       open={open}
       onCancel={onClose}
       onOk={handleSave}
       confirmLoading={saving}
-      width={480}
-    >
+      width={480}>
       <Form
         form={form}
-        layout="vertical"
-        size="small"
-        initialValues={{ projectIds: projectId ? [projectId] : [] }}
-      >
-        <Form.Item name="title" label="标题" rules={[{ required: true }]}>
-          <Input placeholder="任务标题" />
+        layout='vertical'
+        size='small'
+        initialValues={{ projectIds: projectId ? [projectId] : [] }}>
+        <Form.Item name='title' label='标题' rules={[{ required: true }]}>
+          <Input placeholder='任务标题' />
         </Form.Item>
-        <Form.Item name="projectIds" label="关联项目">
+        <Form.Item name='projectIds' label='关联项目'>
           <Select
-            mode="multiple"
-            placeholder="选择关联项目"
+            mode='multiple'
+            placeholder='选择关联项目'
             options={projects?.map((p) => ({ label: p.name, value: p.id }))}
           />
         </Form.Item>
-        <Form.Item name="parentTaskId" label="父任务 ID（可选）">
-          <Input placeholder="父任务 ID" />
+        <Form.Item name='parentTaskId' label='父任务 ID（可选）'>
+          <Input placeholder='父任务 ID' />
         </Form.Item>
       </Form>
     </Modal>

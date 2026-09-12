@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import os from 'node:os';
 import {
   getUsername,
   initDb,
@@ -10,7 +9,7 @@ import {
   isModelLoadNetworkError,
   formatModelNetworkHint,
 } from '@qcqx/lattice-core';
-import { logger, outputJson, cleanSearchResults } from '../utils';
+import { logger, outputJson, cleanSearchResults, projectList } from '../utils';
 import type { SearchResult } from '@qcqx/lattice-core';
 
 function parseUsersOption(input?: string): string[] {
@@ -32,20 +31,6 @@ function prettifySnippet(snippet: string): string {
     .replace(/\s+/g, ' ')
     .replace(/\*\*(.+?)\*\*/g, (_match, inner: string) => chalk.cyan.bold(inner))
     .trim();
-}
-
-// 将路径中的 $HOME 替换为 ~，并里路径裁叠到合理长度，保留首尾。
-function shortenPath(filePath: string, maxLength = 96): string {
-  if (!filePath) return '';
-  const home = os.homedir();
-  let p = filePath;
-  if (home && p.startsWith(home)) {
-    p = '~' + p.slice(home.length);
-  }
-  if (p.length <= maxLength) return p;
-  const head = Math.floor(maxLength * 0.4);
-  const tail = maxLength - head - 3;
-  return `${p.slice(0, head)}...${p.slice(p.length - tail)}`;
 }
 
 function inferScopeLabel(filePath: string, type: string): string {
@@ -96,8 +81,10 @@ export function registerSearchCommand(program: Command): void {
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
-    .option('--json-full', 'JSON 输出完整 meta（含内部调试字段）')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始结果数组（完整 meta 含内部调试字段、meta 不拍平、不做列式）；默认 --json 为列式表 {cols,rows}',
+    )
     .action(async (query: string, opts) => {
       let spinnerActive = false;
       try {
@@ -146,7 +133,10 @@ export function registerSearchCommand(program: Command): void {
         spinnerActive = false;
 
         if (opts.json) {
-          outputJson(opts.jsonFull ? results : cleanSearchResults(results), opts.jsonFormat);
+          outputJson(
+            projectList(opts.jsonFull ? results : cleanSearchResults(results), opts),
+            opts.jsonFormat,
+          );
           return;
         }
 
@@ -201,7 +191,7 @@ export function registerSearchCommand(program: Command): void {
         if (spinnerActive) {
           logger.spinFail('搜索失败');
         }
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       } finally {
         closeDb();
@@ -257,7 +247,7 @@ function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
     logger.raw(`    ${chalk.dim(`id：${specId}`)}`);
   }
   if (filePath) {
-    logger.raw(`    ${chalk.dim(shortenPath(filePath))}`);
+    logger.raw(`    ${chalk.dim(filePath)}`);
   }
 
   if (showDuplicates && dupCount > 0) {
@@ -267,7 +257,7 @@ function outputSingleResult(r: SearchResult, showDuplicates: boolean): void {
       const dSpecId = (d.specId as string) || '';
       const dScore = formatScorePercent(d.score as number | undefined, undefined);
       logger.raw(
-        `      ${chalk.dim('↳')} ${dSpecId ? chalk.dim(`id：${dSpecId} `) : ''}${chalk.dim(shortenPath(dPath))}` +
+        `      ${chalk.dim('↳')} ${dSpecId ? chalk.dim(`id：${dSpecId} `) : ''}${chalk.dim(dPath)}` +
           (dScore ? chalk.dim(` (${dScore})`) : ''),
       );
     }

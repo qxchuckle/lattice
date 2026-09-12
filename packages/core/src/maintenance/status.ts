@@ -1,4 +1,6 @@
 import { statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { sep } from 'node:path';
 import { getLatticeRoot, getDbPath } from '../paths';
 import { getUsername, readResolvedConfig, isInitialized } from '../config';
 import { listProjects } from '../project';
@@ -25,6 +27,9 @@ export interface GlobalStatus {
   gitEnabled: boolean;
   /** 扫描目录 */
   scanDirs: string[];
+  /** 用户 home 目录 + 路径分隔符：供 web client 展示层 home→~ 化（浏览器无 homedir，由 server 提供） */
+  home: string;
+  pathSep: string;
 }
 
 /** 获取 Lattice 全局状态。
@@ -60,5 +65,7 @@ export async function getGlobalStatus(): Promise<GlobalStatus | null> {
     dbPath,
     gitEnabled,
     scanDirs: config?.scanDirs ?? [],
+    home: homedir(),
+    pathSep: sep,
   };
 }

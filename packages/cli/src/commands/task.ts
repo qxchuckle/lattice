@@ -50,6 +50,10 @@ import {
   resolveAndRegisterUpwards,
   shouldSkipConfirm,
   stripTaskList,
+  dedupeItem,
+  reportFailure,
+  reportFailureHint,
+  projectTable,
   paginate,
   paginationEntries,
   paginationNote,
@@ -103,9 +107,9 @@ function formatLineage(lineage: TaskMeta[]): string[] {
 async function reportTaskNotFound(username: string, id: string): Promise<void> {
   const hint = await findDomainTaskHint(username, id);
   if (hint) {
-    logger.raw(chalk.yellow(domainReadOnlyMessage(hint)));
+    reportFailure(domainReadOnlyMessage(hint));
   } else {
-    logger.raw(chalk.yellow(`未找到任务：${id}`));
+    reportFailure(`未找到任务：${id}`);
   }
 }
 
@@ -123,8 +127,10 @@ export function registerTaskCommand(program: Command): void {
     .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
     .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
-    .option('--json-full', 'JSON 输出完整 referencedSpecs 明细（默认降为纯 id 数组）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（完整 referencedSpecs 明细与时间戳、不做列式；默认 --json 为列式表 {cols,rows}，referencedSpecs 降为 id 数组）',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -138,7 +144,7 @@ export function registerTaskCommand(program: Command): void {
         if (opts.current) {
           projectId = (await resolveCurrentProjectId()) ?? undefined;
           if (!projectId) {
-            logger.raw(chalk.yellow('当前目录不是 Lattice 项目'));
+            reportFailure('当前目录不是 Lattice 项目');
             closeDb();
             return;
           }
@@ -155,10 +161,8 @@ export function registerTaskCommand(program: Command): void {
           const allUsernames = await listAllUsernames();
           const invalid = filterUsernames.filter((u) => !allUsernames.includes(u));
           if (invalid.length > 0) {
-            logger.raw(
-              chalk.yellow(
-                `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
-              ),
+            reportFailure(
+              `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
             );
             closeDb();
             return;
@@ -167,7 +171,7 @@ export function registerTaskCommand(program: Command): void {
 
         // --all-user 与 --user 互斥
         if (opts.allUser && filterUsernames) {
-          logger.raw(chalk.yellow('--all-user 与 --user 不能同时使用'));
+          reportFailure('--all-user 与 --user 不能同时使用');
           closeDb();
           return;
         }
@@ -176,7 +180,7 @@ export function registerTaskCommand(program: Command): void {
 
         // 跨用户模式需要搭配 --project 或 --current
         if (crossUserMode && !projectId) {
-          logger.raw(chalk.yellow('--all-user / --user 需搭配 --project 或 --current 使用'));
+          reportFailure('--all-user / --user 需搭配 --project 或 --current 使用');
           closeDb();
           return;
         }
@@ -191,7 +195,7 @@ export function registerTaskCommand(program: Command): void {
 
           if (opts.json) {
             const projected: unknown[] = opts.jsonFull ? tasks : stripTaskList(tasks);
-            outputJson(paginate(projected, opts), opts.jsonFormat);
+            outputJson(projectTable(projected, opts), opts.jsonFormat);
             return;
           }
 
@@ -231,7 +235,7 @@ export function registerTaskCommand(program: Command): void {
 
           if (opts.json) {
             const projected: unknown[] = opts.jsonFull ? tasks : stripTaskList(tasks);
-            outputJson(paginate(projected, opts), opts.jsonFormat);
+            outputJson(projectTable(projected, opts), opts.jsonFormat);
             return;
           }
 
@@ -262,7 +266,7 @@ export function registerTaskCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -321,7 +325,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.dim(`  项目：${task.projects.join(', ')}`));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -334,7 +338,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--tree', '显示当前任务所在整棵任务树')
     .option('--descendants', '显示当前任务的后代树')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -347,7 +350,7 @@ export function registerTaskCommand(program: Command): void {
         const meta = await getTaskMeta(username, match.id);
 
         if (!meta) {
-          logger.raw(chalk.yellow(`未找到任务：${match.id}`));
+          reportFailure(`未找到任务：${match.id}`);
           return;
         }
 
@@ -356,14 +359,23 @@ export function registerTaskCommand(program: Command): void {
         const views = shouldLoadViews ? await getTaskGraphViews(username, match.id) : null;
 
         if (opts.json) {
+          // 图视图去重复表示（L1，与 --json-full 无关，故本命令不设该开关）：无父无子任务的
+          // descendants 与 tree 结构完全相同、lineage 只含任务自身（同一份信息 meta 已有）。
+          const lineage = views?.lineage ?? null;
+          const tree = views?.tree ?? null;
+          const descendants = views?.descendants ?? null;
+          const lineageIsSelfOnly =
+            Array.isArray(lineage) && lineage.length === 1 && lineage[0].id === meta.id;
+          const descendantsDupTree =
+            descendants !== null && JSON.stringify(descendants) === JSON.stringify(tree);
           outputJson(
-            {
+            dedupeItem({
               meta,
               prd,
-              lineage: views?.lineage ?? null,
-              tree: views?.tree ?? null,
-              descendants: views?.descendants ?? null,
-            },
+              ...(lineageIsSelfOnly ? {} : { lineage }),
+              tree,
+              ...(descendantsDupTree ? {} : { descendants }),
+            }),
             opts.jsonFormat,
           );
           return;
@@ -403,7 +415,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(formatTaskTree(views.descendants).join('\n'));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -477,7 +489,7 @@ export function registerTaskCommand(program: Command): void {
           if (opts.addCurrentProject) {
             const pid = await resolveCurrentProjectId();
             if (!pid) {
-              logger.raw(chalk.yellow('当前目录不是 Lattice 项目'));
+              reportFailure('当前目录不是 Lattice 项目');
               closeDb();
               return;
             }
@@ -533,7 +545,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.dim(`  项目：${updated.projects.join(', ')}`));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -554,7 +566,7 @@ export function registerTaskCommand(program: Command): void {
           await reportTaskNotFound(username, id);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -575,7 +587,7 @@ export function registerTaskCommand(program: Command): void {
           await reportTaskNotFound(username, id);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -596,7 +608,7 @@ export function registerTaskCommand(program: Command): void {
           await reportTaskNotFound(username, id);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -617,7 +629,7 @@ export function registerTaskCommand(program: Command): void {
           await reportTaskNotFound(username, id);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -628,7 +640,6 @@ export function registerTaskCommand(program: Command): void {
     .description('查看任务树')
     .option('--descendants', '只显示当前任务为根的后代树')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -643,7 +654,7 @@ export function registerTaskCommand(program: Command): void {
           : await getTaskContainingTree(username, match.id);
 
         if (!tree) {
-          logger.raw(chalk.yellow(`未找到任务树：${match.id}`));
+          reportFailure(`未找到任务树：${match.id}`);
           return;
         }
 
@@ -656,7 +667,7 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.dim('─'.repeat(40)));
         logger.raw(formatTaskTree(tree).join('\n'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -666,7 +677,6 @@ export function registerTaskCommand(program: Command): void {
     .command('lineage <id>')
     .description('查看父任务链路')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -678,7 +688,7 @@ export function registerTaskCommand(program: Command): void {
 
         const lineage = await getTaskLineage(username, match.id);
         if (!lineage) {
-          logger.raw(chalk.yellow(`未找到任务链路：${match.id}`));
+          reportFailure(`未找到任务链路：${match.id}`);
           return;
         }
 
@@ -691,7 +701,7 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.dim('─'.repeat(40)));
         logger.raw(formatLineage(lineage).join('\n'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -719,7 +729,7 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 任务「${match.title}」已移入垃圾桶`));
         logger.raw(chalk.dim('  使用 lattice trash list 查看，lattice trash restore <id> 恢复'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -733,7 +743,6 @@ export function registerTaskCommand(program: Command): void {
     .option('-m, --message <message>', '检查点内容')
     .option('--refs <spec-ids>', '同时为任务添加 spec 引用（逗号分隔 spec-id 或 spec 名称）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -747,8 +756,8 @@ export function registerTaskCommand(program: Command): void {
 
         if (!CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
           closeDb();
-          logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
-          logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
+          reportFailure(`无效的检查点类型：${opts.type}`);
+          reportFailureHint(`可选值：${CHECKPOINT_TYPES.join(' / ')}`);
           return;
         }
 
@@ -786,7 +795,7 @@ export function registerTaskCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 检查点已添加`));
         logger.raw(chalk.dim(`  [${entry.type}] ${entry.title} (${entry.id})`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -797,7 +806,10 @@ export function registerTaskCommand(program: Command): void {
     .option('--type <type>', '按类型过滤')
     .option('--id <checkpointId>', '查看指定检查点')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -811,7 +823,7 @@ export function registerTaskCommand(program: Command): void {
         if (opts.id) {
           const entry = await getCheckpoint(username, match.id, opts.id);
           if (!entry) {
-            logger.raw(chalk.yellow(`未找到检查点：${opts.id}`));
+            reportFailure(`未找到检查点：${opts.id}`);
             return;
           }
           if (opts.json) {
@@ -828,8 +840,8 @@ export function registerTaskCommand(program: Command): void {
 
         // 列表
         if (opts.type && !CHECKPOINT_TYPES.includes(opts.type as CheckpointType)) {
-          logger.raw(chalk.yellow(`无效的检查点类型：${opts.type}`));
-          logger.raw(chalk.dim(`可选值：${CHECKPOINT_TYPES.join(' / ')}`));
+          reportFailure(`无效的检查点类型：${opts.type}`);
+          reportFailureHint(`可选值：${CHECKPOINT_TYPES.join(' / ')}`);
           return;
         }
 
@@ -839,7 +851,7 @@ export function registerTaskCommand(program: Command): void {
         });
 
         if (opts.json) {
-          outputJson(paginate(entries, opts), opts.jsonFormat);
+          outputJson(projectTable(entries, opts), opts.jsonFormat);
           return;
         }
 
@@ -887,7 +899,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw('');
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -906,7 +918,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--remove-project <id>', '从 projects 中移除指定项目')
     .option('--clear-paths', '清空任务的 scopePaths')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -1003,7 +1014,7 @@ export function registerTaskCommand(program: Command): void {
         }
 
         if (!updated) {
-          logger.raw(chalk.yellow('更新失败'));
+          reportFailure('更新失败');
           return;
         }
 
@@ -1024,7 +1035,7 @@ export function registerTaskCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -1063,7 +1074,7 @@ export function registerTaskCommand(program: Command): void {
           process.exitCode = 1;
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -1093,7 +1104,7 @@ export function registerTaskCommand(program: Command): void {
           logger.raw(chalk.yellow(`  未找到：${result.notFound.join(', ')}`));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

@@ -3,7 +3,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
-import { resolveCurrentProject } from './utils';
+import { resolveCurrentProject, logger, setMachineMode } from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerUninjectCommand } from './commands/uninject';
 import { registerLinkCommand } from './commands/link';
@@ -54,54 +54,46 @@ registerTrashCommand(program);
 registerWebCommand(program);
 registerFastStartCommand(program);
 
-// 确保所有可执行命令都接受 --force 选项，避免 AI 调用时因 unknown option 报错
-function ensureForceOption(cmd: Command): void {
-  // 叶子命令：直接添加
+/**
+ * 命令选项兜底：遍历命令树，给**叶子命令**补齐缺失的选项，避免 AI 调用时因 unknown option
+ * 报错（`--force` / `--debug` / `--json` / `--json-format`）。
+ *
+ * **只补叶子，绝不补父命令**：commander 里祖先声明的同名选项会**遮蔽**后代的——实测给
+ * 「父命令自带 action」的形态（`sync` / `config`）补 `--json` 后，`sync domain list --json`
+ * 与 `config get <key> --json` 的 `opts().json` 变成 undefined，JSON 出口直接失效。
+ * 代价：`ltc sync --json` 这类「父命令自带 action」的调用会报 unknown option，
+ * 属可接受的例外（已在 command-reference.md 记录），远优于静默破坏子命令的 JSON 出口。
+ */
+function ensureOption(
+  cmd: Command,
+  long: string,
+  flags: string,
+  description: string,
+  skip?: (c: Command) => boolean,
+): void {
   if (cmd.commands.length === 0) {
-    const hasForce = cmd.options.some((opt) => opt.long === '--force');
-    if (!hasForce) {
-      cmd.option('-f, --force', '跳过确认');
+    if (!cmd.options.some((opt) => opt.long === long) && !skip?.(cmd)) {
+      cmd.option(flags, description);
     }
-  } else {
-    // 父命令：不给父级加 --force（避免拦截子命令的 --force），仅递归子命令
-    for (const sub of cmd.commands) {
-      ensureForceOption(sub);
-    }
+    return;
+  }
+  for (const sub of cmd.commands) {
+    ensureOption(sub, long, flags, description, skip);
   }
 }
-ensureForceOption(program);
 
-// 确保所有可执行命令都接受 --debug 选项
-function ensureDebugOption(cmd: Command): void {
-  if (cmd.commands.length === 0) {
-    const hasDebug = cmd.options.some((opt) => opt.long === '--debug');
-    if (!hasDebug) {
-      cmd.option('-d, --debug', '输出调试信息');
-    }
-  } else {
-    for (const sub of cmd.commands) {
-      ensureDebugOption(sub);
-    }
-  }
-}
-ensureDebugOption(program);
-
-// 确保所有可执行命令都接受 --json 选项，避免 AI 带 --json 调用时因 unknown option 报错
-function ensureJsonOption(cmd: Command): void {
-  // 叶子命令：直接添加（已自定义 --json 的命令保留原语义，如 config set 为解析输入 value）
-  if (cmd.commands.length === 0) {
-    const hasJson = cmd.options.some((opt) => opt.long === '--json');
-    if (!hasJson) {
-      cmd.option('--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
-    }
-  } else {
-    // 父命令：不给父级加 --json（避免拦截子命令的 --json），仅递归子命令
-    for (const sub of cmd.commands) {
-      ensureJsonOption(sub);
-    }
-  }
-}
-ensureJsonOption(program);
+// 已自定义同名选项的命令保留原语义（如 `config set --json` 是「按 JSON 解析输入 value」）
+ensureOption(program, '--force', '-f, --force', '跳过确认');
+ensureOption(program, '--debug', '-d, --debug', '输出调试信息');
+ensureOption(program, '--json', '--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
+// --json-format 与 --json 成对出现，不逐命令手写；config set 除外（其 --json 是输入解析语义，无输出排版）
+ensureOption(
+  program,
+  '--json-format',
+  '--json-format',
+  'JSON 输出时使用格式化（默认压缩）',
+  (c) => c.name() === 'set' && c.parent?.name() === 'config',
+);
 
 async function main(): Promise<void> {
   // 进程退出时确保 DB 正确关闭（WAL checkpoint）
@@ -117,6 +109,8 @@ async function main(): Promise<void> {
     // machine 输出模式（--json / -q）：stdout 只留数据，preAction 的提示性输出一律静音，从根源排除对 $(...)/管道解析的污染
     const cmdOpts = actionCommand.opts();
     const machineOutput = Boolean(cmdOpts.json || cmdOpts.quiet);
+    // 统一设置 machine 模式标志：命令内的失败/空态提示据此走 stderr（见 utils/machine-output.ts）
+    setMachineMode(machineOutput);
 
     if (!isRagIndexCmd) {
       try {
@@ -155,6 +149,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error);
+  // 顶层兜底：error 对象转 string 后经 logger.stderr 统一 home→~ 化（stack/message 可能含绝对路径）
+  logger.stderr(error instanceof Error ? (error.stack ?? error.message) : String(error));
   process.exitCode = 1;
 });

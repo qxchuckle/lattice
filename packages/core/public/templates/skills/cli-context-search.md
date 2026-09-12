@@ -9,6 +9,7 @@
 - `--global`：全局状态
 - `--json`
 - `--json-format`：JSON 输出格式化（默认压缩）
+- `--json-full`：未投影的原始对象（完整时间戳、`activeTasks` 保留完整 `referencedSpecs` 明细、不做列式）；默认 `--json` 的 `activeTasks`/`ancestors` 为列式表 `{cols,rows}`、referencedSpecs 降为 id 数组
 
 ## `ltc context`
 
@@ -20,7 +21,7 @@
 - `--current-user`：仅当前用户
 - `--json`
 - `--json-format`：JSON 缩进格式化（默认压缩）
-- `--json-full`：`querySearch` 段输出完整 meta（含 RAG 内部打分/调试字段）；默认 `--json` 的 `querySearch` 只留白名单字段、`matchedSections` 仅 headingPath。`specs` 段不受此开关影响（始终全量列出、含 description、不含 content）
+- `--json-full`：关闭瘦身层——各段为原始对象数组（`querySearch` 恢复嵌套 `meta` 与 RAG 内部打分/调试字段、时间戳完整、不做列式）；默认 `--json` 各段为列式表且 `querySearch` 只留白名单字段、`meta` 拍平为列、`matchedSections` 仅 headingPath（两层模型见 [command-reference.md#通用约定]）。`specs` 段两种模式均全量列出、含 description、不含 content（正文走 `spec show`）
 
 嵌套项目自动继承祖先 spec。级联：`当前 > 父级 > 祖先 > 用户级 > 全局`。
 
@@ -39,6 +40,6 @@
 - `--no-rerank`
 - `--json`：AI 优先带上
 - `--json-format`：JSON 缩进格式化（默认压缩）
-- `--json-full`：输出完整 meta（含 RAG 内部打分/调试字段）；默认 `--json` 只留白名单字段、`matchedSections` 仅 headingPath
+- `--json-full`：关闭瘦身层——原始结果数组、嵌套 `meta` 含 RAG 内部打分/调试字段、完整精度、不做列式；默认 `--json` 只留白名单字段、`meta` 拍平为列、`matchedSections` 仅 headingPath（两层模型见 [command-reference.md#通用约定]）。**去重复表示两种模式都生效**：`matchedVia` 删 `docType`（可由路径段推出），多任务引用时只留 `tasks`（`docTitle`/`docPath`/`taskId` 皆其派生）、单任务时留 `docTitle`+`docPath`（完整标题不可由路径 slug 机械还原，属相关信息不删）；与 `filePath`/`title` 同值的 `snippet` 省略
 
-`spec` 类结果输出含 **id**（普通输出 `id：spec-xxxxxxxx` 行 / `--json` 的 `meta.specId`），可直接用于 `task ref-spec`（依赖索引已含 id：加列后需跑过一次 `rag rebuild` 回填存量）。
+`spec` 类结果输出含 **id**（普通输出 `id：spec-xxxxxxxx` 行 / `--json` 的 `specId` 列，`--json-full` 下为 `meta.specId`），可直接用于 `task ref-spec`（依赖索引已含 id：加列后需跑过一次 `rag rebuild` 回填存量）。

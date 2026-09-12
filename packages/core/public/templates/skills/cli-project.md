@@ -29,13 +29,14 @@
 列出所有已注册项目（关键词匹配 + RAG 语义回退）。
 
 - `--group` / `--tag` / `--has-git` / `--orphaned` / `--with-relations` / `--json` / `--json-format`
-- `--json-full`：保留原始 DB 列（`local_path`/`git_remote`/`package_names`/`monorepo_packages` 等 snake_case）；默认 `--json` 去重只留解析后的 camelCase 字段（`localPaths`/`gitRemotes`/`packageNames`/`monorepoPackages`）
+- `--json-full`：关闭瘦身层——保留完整时间戳与空值字段、**保留完整 `git_first_commit`（40 位 sha；`id` 只含前 16 位，余下 24 位属瘦身层省略项）**、`--with-relations` 的行内关系明细，且不转列式表（两层模型见 [command-reference.md#通用约定]）。**重复表示在两种模式下都已去除**：与解析后 camelCase 字段（`localPaths`/`gitRemotes`/`packageNames`/`monorepoPackages`）同值的 snake_case 原始 DB 列、与 `id` 同值的 `ids`
+- `--with-relations`：`--json` 下关系明细整份只在**顶层 `relations` 表**出现一次（同一条关系不在两端项目行各存一份），行内 `relations` 列降为关系 id 数组；`--json-full` 保持行内嵌套明细
 - `--search <keyword>`：大小写不敏感匹配（名称/ID/路径/Git/包名/分组/标签）+ RAG 语义回退
 - `--keyword-only`：跳过语义搜索
 
 ### `ltc project where <path>`
 
-查询路径属于哪个已注册项目（精确 + 父目录前缀 + ID 匹配）。`--json`
+查询路径属于哪个已注册项目（精确 + 父目录前缀 + ID 匹配）。`--json` 输出 `{queryPath, exact, prefixMatches}`：`exact` 与 `project list` 行同 shape（解析后的 camelCase 字段，原始 DB 列作为重复表示已去除）。属 **detail 命令**：只跑去重复表示、保留完整精度与空值字段，故不设 `--json-full`。输出的绝对路径可直接喂回 `project where` / `Read` / `jq`（CLI 全链路不做 `~` 缩写）。
 
 ### `ltc project register [paths...]`
 
@@ -61,7 +62,7 @@
 
 查看项目间关系（默认聚合所有用户定义的关系）。
 
-- `--current-user` / `--user <users>`（互斥）/ `--json`
+- `--current-user` / `--user <users>`（互斥）/ `--page <n>` + `--page-size <n>` / `--json`（列式表）/ `--json-format` / `--json-full`
 - 默认聚合所有用户（其他用户标注 `[username]`）
 
 ### `ltc project relation add <project-a> <project-b>`
@@ -82,7 +83,9 @@
 
 ### `ltc project profile check`
 
-检测哪些项目的画像需要更新。`--project <id>` / `--json`
+检测哪些项目的画像需要更新。`--project <id>` / `--json`（各分组为列式表 `{cols,rows}`，条目省略与分组键同义的 `status`）/ `--json-full`（原始分组数组、保留 `status`）
+
+人读输出首行给摘要（`共 N 个项目：需要更新 a · 已最新 b · 未生成画像 c · 警告 d`），随后 `需要更新` / `警告` 逐项带理由、`未生成画像` 逐项列名；项目多时用 `--json` 配合 jq 取用。
 
 ### `ltc project profile brief <id>`
 

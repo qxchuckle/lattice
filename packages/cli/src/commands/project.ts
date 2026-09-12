@@ -46,11 +46,18 @@ import {
   outputJson,
   resolveAndRegisterUpwards,
   shouldSkipConfirm,
-  stripProjectRawColumns,
+  dedupeItem,
+  stripDerivableSha,
+  stripProfileStatus,
+  projectItem,
+  projectList,
+  projectTable,
   paginate,
   paginationEntries,
   paginationNote,
   withPaginationOptions,
+  reportFailure,
+  reportFailureHint,
 } from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
@@ -71,6 +78,26 @@ function rowGitRemotes(row: ProjectRow): string[] {
   return parseJsonArray(row.git_remote);
 }
 
+/**
+ * ProjectRow → JSON 输出行：补上解析后的 camelCase 数组字段。
+ * 原始 snake_case JSON 字符串列（`local_path` 等）与解析版同值、`git_first_commit` 与
+ * `id`（`git:<sha 前缀>`）重复，两者都由投影层 L1 `dedupeItem` 去掉（`--json-full` 同样生效）。
+ * `list` 与 `where` 共用，保证同一实体在所有出口是同一种 shape。
+ */
+function projectRowForJson(
+  row: ProjectRow,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    ...row,
+    localPaths: rowLocalPaths(row),
+    gitRemotes: rowGitRemotes(row),
+    packageNames: parseJsonArray(row.package_names),
+    monorepoPackages: parseJsonArray(row.monorepo_packages),
+    ...extra,
+  };
+}
+
 export function registerProjectCommand(program: Command): void {
   const cmd = program.command('project').description('管理已注册的项目');
 
@@ -87,10 +114,9 @@ export function registerProjectCommand(program: Command): void {
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .option(
       '--json-full',
-      'JSON 保留原始 DB 列（local_path/git_remote/package_names/monorepo_packages 等 snake_case）；默认去重只留解析后的 camelCase 字段',
+      'JSON 输出原始对象数组（保留 local_path/git_remote 等 snake_case 原始 DB 列、git_first_commit、完整时间戳，不做列式）；默认 --json 为列式表 {cols,rows}，只留解析后的 camelCase 字段',
     )
     .action(async (opts) => {
       try {
@@ -158,19 +184,39 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
+          // --with-relations：关系明细整份只在顶层出现一次——同一条关系原本在两端项目行各存一份
+          // （398 份实例 / 199 条关系）。行内 relations 降为关系 id 数组，明细见顶层 relations 表。
+          // --json-full 保持原始的行内嵌套明细。
+          const inlineRelations = opts.jsonFull || !opts.withRelations;
           const result = projects.map((p) => {
-            const row = {
-              ...p,
-              localPaths: rowLocalPaths(p),
-              gitRemotes: rowGitRemotes(p),
-              packageNames: parseJsonArray(p.package_names),
-              monorepoPackages: parseJsonArray(p.monorepo_packages),
+            const rels = relationsMap.get(p.id) ?? [];
+            const row = projectRowForJson(p, {
               matchedVia: matchProvenance[p.id] ?? null,
-              ...(opts.withRelations ? { relations: relationsMap.get(p.id) ?? [] } : {}),
-            };
-            return opts.jsonFull ? row : stripProjectRawColumns(row);
+              ...(opts.withRelations
+                ? { relations: inlineRelations ? rels : rels.map((r) => r.id) }
+                : {}),
+            });
+            // 完整 sha 的余下 24 位属 L2（可从 git/DB 取回）：仅默认模式省略，--json-full 保留
+            return opts.jsonFull ? row : stripDerivableSha(row);
           });
-          outputJson(paginate(result, opts), opts.jsonFormat);
+          const table = projectTable(result, opts);
+          if (opts.withRelations && !opts.jsonFull) {
+            const unique = new Map<string, Record<string, unknown>>();
+            for (const rels of relationsMap.values()) {
+              for (const rel of rels) {
+                if (!unique.has(rel.id)) unique.set(rel.id, rel);
+              }
+            }
+            outputJson(
+              {
+                ...(table as Record<string, unknown>),
+                relations: projectList([...unique.values()]),
+              },
+              opts.jsonFormat,
+            );
+            return;
+          }
+          outputJson(table, opts.jsonFormat);
           return;
         }
 
@@ -235,7 +281,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw('');
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -245,7 +291,6 @@ export function registerProjectCommand(program: Command): void {
     .command('info <id>')
     .description('查看项目详情')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -256,7 +301,7 @@ export function registerProjectCommand(program: Command): void {
           // 尝试前缀匹配
           const match = resolveProjectById(username, id);
           if (!match) {
-            logger.raw(chalk.yellow(`未找到项目：${id}`));
+            reportFailure(`未找到项目：${id}`);
             closeDb();
             return;
           }
@@ -270,12 +315,13 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          outputJson({ meta, relations, taskIds }, opts.jsonFormat);
+          // detail 命令：只做 L1 去重复表示（如 `meta.ids` 与 `meta.id` 同值时删），保留完整精度
+          outputJson(dedupeItem({ meta, relations, taskIds }), opts.jsonFormat);
           return;
         }
 
         if (!meta) {
-          logger.raw(chalk.yellow('项目元数据不存在'));
+          reportFailure('项目元数据不存在');
           return;
         }
 
@@ -322,7 +368,7 @@ export function registerProjectCommand(program: Command): void {
         if (relations.length) logger.raw(`  项目关系：${relations.length} 个`);
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -363,7 +409,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(chalk.yellow('更新失败'));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -391,7 +437,7 @@ export function registerProjectCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 项目 ${match.name} 已移入垃圾桶（含关系与指纹）`));
         logger.raw(chalk.dim('  使用 lattice trash list 查看，lattice trash restore <id> 恢复'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -401,7 +447,6 @@ export function registerProjectCommand(program: Command): void {
     .command('where <path>')
     .description('查询指定路径属于哪个已注册项目（含父目录前缀匹配与指纹回退）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (rawPath: string, opts) => {
       try {
         const absPath = normalizeLocalPath(pathResolve(rawPath));
@@ -423,21 +468,18 @@ export function registerProjectCommand(program: Command): void {
             }
           }
         }
-        // 3. 指纹回退（智能查找）
-        const smart = findProjectByPath(absPath);
         closeDb();
 
         if (opts.json) {
           outputJson(
-            {
+            dedupeItem({
               queryPath: absPath,
-              exact: exact ?? null,
+              exact: exact ? projectRowForJson(exact) : null,
               prefixMatches: prefixMatches.map((m) => ({
                 id: m.row?.id,
                 matchedPath: m.matchedPath,
               })),
-              fingerprintCandidates: smart ? [{ id: smart.id, name: smart.name }] : [],
-            },
+            }),
             opts.jsonFormat,
           );
           return;
@@ -459,17 +501,12 @@ export function registerProjectCommand(program: Command): void {
           }
         }
 
-        if (smart) {
-          logger.raw(chalk.cyan(`\n路径匹配：`));
-          logger.raw(`  ${smart.name} ${chalk.dim(`(${smart.id})`)}`);
-        }
-
-        if (!exact && prefixMatches.length === 0 && !smart) {
+        if (!exact && prefixMatches.length === 0) {
           logger.raw(chalk.yellow('未找到与该路径匹配的已注册项目'));
         }
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -479,7 +516,6 @@ export function registerProjectCommand(program: Command): void {
     .command('register [paths...]')
     .description('向上扫描路径的 ID 源（.git / lattice.json）并注册未注册项目（默认 cwd）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (rawPaths: string[], opts) => {
       try {
         const dirs = rawPaths.length > 0 ? rawPaths.map((p) => pathResolve(p)) : [pathResolve('.')];
@@ -513,7 +549,7 @@ export function registerProjectCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -531,7 +567,10 @@ export function registerProjectCommand(program: Command): void {
     .option('--current-user', '仅显示当前用户定义的关系')
     .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (id: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -549,10 +588,8 @@ export function registerProjectCommand(program: Command): void {
           const allUsernames = await listAllUsernames();
           const invalid = filterUsernames.filter((u) => !allUsernames.includes(u));
           if (invalid.length > 0) {
-            logger.raw(
-              chalk.yellow(
-                `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
-              ),
+            reportFailure(
+              `用户不存在：${invalid.join(', ')}。可用用户：${allUsernames.join(', ')}`,
             );
             closeDb();
             return;
@@ -561,7 +598,7 @@ export function registerProjectCommand(program: Command): void {
 
         // --current-user 与 --user 互斥
         if (opts.currentUser && filterUsernames) {
-          logger.raw(chalk.yellow('--current-user 与 --user 不能同时使用'));
+          reportFailure('--current-user 与 --user 不能同时使用');
           closeDb();
           return;
         }
@@ -569,7 +606,7 @@ export function registerProjectCommand(program: Command): void {
         if (id) {
           const match = resolveProjectById(username, id);
           if (!match) {
-            logger.raw(chalk.yellow(`未找到项目：${id}`));
+            reportFailure(`未找到项目：${id}`);
             closeDb();
             return;
           }
@@ -583,7 +620,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(paginate(relations, opts), opts.jsonFormat);
+            outputJson(projectTable(relations, opts), opts.jsonFormat);
             return;
           }
           if (relations.length === 0) {
@@ -624,7 +661,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(paginate(relationsAll, opts), opts.jsonFormat);
+            outputJson(projectTable(relationsAll, opts), opts.jsonFormat);
             return;
           }
           if (relationsAll.length === 0) {
@@ -661,7 +698,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw('');
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -717,7 +754,7 @@ export function registerProjectCommand(program: Command): void {
         logger.raw(chalk.dim(`  类型：${saved.type}`));
         if (saved.description) logger.raw(chalk.dim(`  描述：${saved.description}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -765,7 +802,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(chalk.yellow(`删除失败：${relationId}`));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -816,7 +853,7 @@ export function registerProjectCommand(program: Command): void {
           process.exitCode = 1;
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -831,7 +868,10 @@ export function registerProjectCommand(program: Command): void {
     .description('检测哪些项目的画像需要更新')
     .option('--project <id>', '检查指定项目')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化')
+    .option(
+      '--json-full',
+      'JSON 输出原始结果（分组条目保留 status 字段、不做列式/压缩）；默认 --json 各分组为列式表 {cols,rows}，status 由分组键表达故省略',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -840,14 +880,15 @@ export function registerProjectCommand(program: Command): void {
         if (opts.project) {
           const match = resolveProjectById(username, opts.project);
           if (!match) {
-            logger.raw(chalk.yellow(`未找到项目：${opts.project}`));
+            reportFailure(`未找到项目：${opts.project}`);
             closeDb();
             return;
           }
           const item = await checkSingleProfile(username, match.id, match.id, match.name);
           closeDb();
           if (opts.json) {
-            outputJson(item, opts.jsonFormat);
+            // 单项目模式：无分组键，status 是有效信息，只走通用 L1 去重 + L2 压缩
+            outputJson(projectItem(item, opts), opts.jsonFormat);
             return;
           }
           if (item.status === 'fresh') {
@@ -862,9 +903,29 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          outputJson(result, opts.jsonFormat);
+          outputJson(
+            opts.jsonFull
+              ? dedupeItem(result)
+              : {
+                  ...result,
+                  stale: projectList(stripProfileStatus(result.stale)),
+                  noProfile: projectList(stripProfileStatus(result.noProfile)),
+                  warnings: projectList(stripProfileStatus(result.warnings)),
+                },
+            opts.jsonFormat,
+          );
           return;
         }
+
+        // 摘要行先给结论（此前 400+ 项目名平铺成一行，答案被埋在文字墙里）
+        const total =
+          result.stale.length + result.fresh + result.noProfile.length + result.warnings.length;
+        logger.raw(
+          chalk.bold(
+            `共 ${total} 个项目：需要更新 ${result.stale.length} · 已最新 ${result.fresh} · 未生成画像 ${result.noProfile.length} · 警告 ${result.warnings.length}`,
+          ),
+        );
+        logger.raw('');
 
         if (result.stale.length > 0) {
           logger.raw(chalk.yellow(`需要更新（${result.stale.length}）：`));
@@ -873,21 +934,32 @@ export function registerProjectCommand(program: Command): void {
           }
           logger.raw('');
         }
+        // warnings 此前完全不渲染（JSON 有、人读没有）——补上，理由同 stale
+        if (result.warnings.length > 0) {
+          logger.raw(chalk.yellow(`警告（${result.warnings.length}）：`));
+          for (const item of result.warnings) {
+            logger.raw(chalk.yellow(`  ${item.name} — ${item.reasons.join('，')}`));
+          }
+          logger.raw('');
+        }
         if (result.fresh > 0) {
           logger.raw(chalk.green(`已是最新（${result.fresh}）：跳过`));
         }
         if (result.noProfile.length > 0) {
-          logger.raw(
-            chalk.dim(
-              `未生成画像（${result.noProfile.length}）：${result.noProfile.map((p) => p.name).join(', ')}`,
-            ),
-          );
+          logger.raw(chalk.dim(`未生成画像（${result.noProfile.length}）：`));
+          for (const item of result.noProfile) {
+            logger.raw(chalk.dim(`  ${item.name}`));
+          }
         }
-        if (result.stale.length === 0 && result.noProfile.length === 0) {
+        if (
+          result.stale.length === 0 &&
+          result.noProfile.length === 0 &&
+          result.warnings.length === 0
+        ) {
           logger.raw(chalk.green('✓ 所有项目画像均为最新'));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -917,7 +989,7 @@ export function registerProjectCommand(program: Command): void {
         }
         logger.raw(chalk.green(`✓ ${match.name} 画像缓存已更新`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -928,14 +1000,13 @@ export function registerProjectCommand(program: Command): void {
     .command('show <id>')
     .description('查看项目画像（summary + tags + cache 状态 + 文件路径）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
         await initDb();
         const match = resolveProjectById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          reportFailure(`未找到项目：${id}`);
           closeDb();
           return;
         }
@@ -964,7 +1035,7 @@ export function registerProjectCommand(program: Command): void {
           logger.raw(profile.summary);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -988,7 +1059,7 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
         logger.raw(profileDir);
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -999,21 +1070,20 @@ export function registerProjectCommand(program: Command): void {
     .command('brief <id>')
     .description('一次性获取项目画像所需的所有 lattice 内部信息')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
         await initDb();
         const match = resolveProjectById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          reportFailure(`未找到项目：${id}`);
           closeDb();
           return;
         }
         const brief = await getProfileBrief(username, match.id, match.id);
         closeDb();
         if (!brief) {
-          logger.raw(chalk.yellow(`无法获取项目信息：${id}`));
+          reportFailure(`无法获取项目信息：${id}`);
           return;
         }
 
@@ -1070,7 +1140,7 @@ export function registerProjectCommand(program: Command): void {
           }
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -1089,7 +1159,7 @@ export function registerProjectCommand(program: Command): void {
         await initDb();
         const match = resolveProjectById(username, id);
         if (!match) {
-          logger.raw(chalk.yellow(`未找到项目：${id}`));
+          reportFailure(`未找到项目：${id}`);
           closeDb();
           return;
         }
@@ -1103,7 +1173,7 @@ export function registerProjectCommand(program: Command): void {
         logger.raw(`标签：${tags.length > 0 ? tags.join(', ') : chalk.dim('无')}`);
         logger.raw(`文件：${profileDir}/tags.json`);
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -1135,7 +1205,7 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
         logger.raw(chalk.green(`✓ 标签已设置：${tags.join(', ')}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -1163,7 +1233,7 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
         logger.raw(chalk.green(`✓ 标签已追加，当前：${result.join(', ')}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }
@@ -1193,7 +1263,7 @@ export function registerProjectCommand(program: Command): void {
           chalk.green(`✓ 标签已删除，剩余：${result.length > 0 ? result.join(', ') : '无'}`),
         );
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         closeDb();
         process.exitCode = 1;
       }

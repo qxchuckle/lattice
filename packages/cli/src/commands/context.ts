@@ -25,6 +25,11 @@ import {
   cleanSearchResults,
   stripSpecs,
   stripSpecContent,
+  stripTaskList,
+  projectItem,
+  projectList,
+  reportFailure,
+  reportFailureHint,
 } from '../utils';
 
 /** 剥离 cascadedSpecs 并自动标记 scope（stripSpecContent 来自公共投影层 utils/json-projection） */
@@ -98,8 +103,10 @@ export function registerContextCommand(program: Command): void {
     .option('--query <text>', '语义化查询（主题/意图/任务描述）：补充搜索相关的 spec、任务、项目')
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
-    .option('--json-full', 'JSON 输出完整 querySearch meta（含 RAG 内部打分/调试字段）')
+    .option(
+      '--json-full',
+      'JSON 输出未投影对象（完整 querySearch meta 含 RAG 内部打分/调试字段、各段为对象数组不做列式与压缩）；默认 --json 各段为列式表 {cols,rows}。spec content 两者均不含，正文走 spec show',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -124,19 +131,20 @@ export function registerContextCommand(program: Command): void {
 
           if (opts.json) {
             const jsonCtx = {
-              task: ctx.task,
-              directSpecs: stripSpecs(ctx.directSpecs, 'project'),
-              relatedSpecs: stripSpecs(ctx.relatedSpecs, 'related'),
-              semanticSpecs: stripSpecs(ctx.semanticSpecs, 'semantic'),
+              task: projectItem(ctx.task, opts),
+              directSpecs: projectList(stripSpecs(ctx.directSpecs, 'project'), opts),
+              relatedSpecs: projectList(stripSpecs(ctx.relatedSpecs, 'related'), opts),
+              semanticSpecs: projectList(stripSpecs(ctx.semanticSpecs, 'semantic'), opts),
               crossUserData: ctx.crossUserData?.map((d) => ({
                 ...d,
-                directSpecs: stripSpecs(d.directSpecs, 'project'),
+                directSpecs: projectList(stripSpecs(d.directSpecs, 'project'), opts),
               })),
               querySearch:
                 queryResults.length > 0
-                  ? opts.jsonFull
-                    ? queryResults
-                    : cleanSearchResults(queryResults)
+                  ? projectList(
+                      opts.jsonFull ? queryResults : cleanSearchResults(queryResults),
+                      opts,
+                    )
                   : undefined,
             };
             outputJson(jsonCtx, opts.jsonFormat);
@@ -231,7 +239,7 @@ export function registerContextCommand(program: Command): void {
           // 解析当前项目及祖先
           const resolved = await resolveCurrentProjectWithAncestors();
           if (!resolved) {
-            logger.raw(chalk.yellow('当前目录不是 Lattice 项目。请指定 --project 或 --task'));
+            reportFailure('当前目录不是 Lattice 项目。请指定 --project 或 --task');
             closeDb();
             return;
           }
@@ -252,7 +260,7 @@ export function registerContextCommand(program: Command): void {
         }
 
         if (!projectId) {
-          logger.raw(chalk.yellow('无法确定项目 ID'));
+          reportFailure('无法确定项目 ID');
           closeDb();
           return;
         }
@@ -311,21 +319,23 @@ export function registerContextCommand(program: Command): void {
             .map((s) => (queryMatchedPaths.has(s.filePath as string) ? { ...s, query: true } : s))
             .sort((a, b) => (b.query ? 1 : 0) - (a.query ? 1 : 0));
           const jsonCtx = {
-            profile: profileData ?? undefined,
-            specs,
-            activeTasks: ctx.activeTasks,
-            relatedProjects: ctx.relatedProjects.length > 0 ? ctx.relatedProjects : undefined,
+            profile: profileData ? projectItem(profileData, opts) : undefined,
+            specs: projectList(specs, opts),
+            activeTasks: projectList(
+              opts.jsonFull ? ctx.activeTasks : stripTaskList(ctx.activeTasks),
+              opts,
+            ),
+            relatedProjects:
+              ctx.relatedProjects.length > 0 ? projectList(ctx.relatedProjects, opts) : undefined,
             crossUserData: ctx.crossUserData?.map((d) => ({
               ...d,
-              projectSpecs: stripSpecs(d.projectSpecs, 'project'),
-              userSpecs: stripSpecs(d.userSpecs, 'user'),
+              projectSpecs: projectList(stripSpecs(d.projectSpecs, 'project'), opts),
+              userSpecs: projectList(stripSpecs(d.userSpecs, 'user'), opts),
             })),
-            ancestors: ctx.ancestors?.length ? ctx.ancestors : undefined,
+            ancestors: ctx.ancestors?.length ? projectList(ctx.ancestors, opts) : undefined,
             querySearch:
               queryResults.length > 0
-                ? opts.jsonFull
-                  ? queryResults
-                  : cleanSearchResults(queryResults)
+                ? projectList(opts.jsonFull ? queryResults : cleanSearchResults(queryResults), opts)
                 : undefined,
           };
           outputJson(jsonCtx, opts.jsonFormat);
@@ -345,7 +355,7 @@ export function registerContextCommand(program: Command): void {
           formatQuerySection(queryResults);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

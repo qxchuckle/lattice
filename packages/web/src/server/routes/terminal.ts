@@ -20,7 +20,6 @@ interface ITerminalProcess {
 // 使用 optionalDependencies，加载失败不阻断 lattice-web 安装
 // 运行时动态 import，有则 PTY 完整体验，无则降级 spawn
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ptyModule: any = null;
 let ptyTried = false;
 
@@ -44,7 +43,6 @@ function getDefaultShell(): string {
 }
 
 function createPtyProcess(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pty: any,
   shell: string,
   cwd: string,
@@ -137,7 +135,6 @@ interface ClientMessage {
   data?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function send(ws: { send: (data: string) => void }, payload: Record<string, unknown>) {
   try {
     ws.send(JSON.stringify(payload));
@@ -159,11 +156,11 @@ export function registerTerminalRoutes(app: FastifyInstance): void {
   // WebSocket 终端端点
   // @fastify/websocket 扩展了 FastifyInstance 的 get 方法支持 websocket 选项，
   // 但 TypeScript 类型声明需要运行时注册后才完整，这里用类型断言注册
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   (app as any).get(
     '/api/terminal/ws',
     { websocket: true },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     async (socket: any, req: any) => {
       // 鉴权校验（authGuard 已在握手阶段拦截，此处双保险防止绕过）
       if (await isAuthEnabled()) {

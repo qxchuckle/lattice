@@ -22,7 +22,11 @@ import {
   paginate,
   paginationEntries,
   paginationNote,
+  dedupeItem,
+  projectTable,
   withPaginationOptions,
+  reportFailure,
+  reportFailureHint,
 } from '../utils';
 
 export function registerFastStartCommand(program: Command): void {
@@ -40,7 +44,6 @@ export function registerFastStartCommand(program: Command): void {
     .option('--cwd <dir>', '工作目录（默认当前目录）')
     .option('--project <id>', '关联项目 ID（默认自动检测）')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (title: string, opts) => {
       try {
         const username = await getUsername();
@@ -90,7 +93,7 @@ export function registerFastStartCommand(program: Command): void {
         }
         logger.raw(chalk.dim(`  存储：${getFastStartLogDir(username)}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -101,7 +104,10 @@ export function registerFastStartCommand(program: Command): void {
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -111,7 +117,7 @@ export function registerFastStartCommand(program: Command): void {
           if (cur) {
             projectId = cur.id;
           } else {
-            logger.raw(chalk.yellow('当前目录不是 Lattice 项目'));
+            reportFailure('当前目录不是 Lattice 项目');
             return;
           }
         }
@@ -121,13 +127,13 @@ export function registerFastStartCommand(program: Command): void {
           projectId,
         });
 
-        // 通用翻页（pagination helper）：不传 --page-size 输出全部；传了则窗口化 + 附 total/totalPages
-        const result = paginate(allEntries, opts);
-
+        // JSON 走投影（列式表 + 条目压缩，`--json-full` 输出原始对象数组）；人读走翻页渲染
         if (opts.json) {
-          outputJson(result, opts.jsonFormat);
+          outputJson(projectTable(allEntries, opts), opts.jsonFormat);
           return;
         }
+
+        const result = paginate(allEntries, opts);
 
         const entries = paginationEntries(result);
         if (entries.length === 0) {
@@ -153,7 +159,7 @@ export function registerFastStartCommand(program: Command): void {
           logger.raw('');
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -169,7 +175,10 @@ export function registerFastStartCommand(program: Command): void {
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (query: string, opts) => {
       try {
         const username = await getUsername();
@@ -179,7 +188,7 @@ export function registerFastStartCommand(program: Command): void {
           if (cur) {
             projectId = cur.id;
           } else {
-            logger.raw(chalk.yellow('当前目录不是 Lattice 项目'));
+            reportFailure('当前目录不是 Lattice 项目');
             return;
           }
         }
@@ -190,12 +199,12 @@ export function registerFastStartCommand(program: Command): void {
           last: opts.last,
         });
 
-        const result = paginate(allEntries, opts);
-
         if (opts.json) {
-          outputJson(result, opts.jsonFormat);
+          outputJson(projectTable(allEntries, opts), opts.jsonFormat);
           return;
         }
+
+        const result = paginate(allEntries, opts);
 
         const entries = paginationEntries(result);
         if (entries.length === 0) {
@@ -221,7 +230,7 @@ export function registerFastStartCommand(program: Command): void {
           logger.raw('');
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -231,18 +240,18 @@ export function registerFastStartCommand(program: Command): void {
     .command('show <id>')
     .description('查看单条 fast-start 日志')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
         const entry = await getLogEntry(username, id);
         if (!entry) {
-          logger.raw(chalk.yellow(`未找到日志：${id}`));
+          reportFailure(`未找到日志：${id}`);
           return;
         }
 
         if (opts.json) {
-          outputJson(entry, opts.jsonFormat);
+          // detail 命令：只做 L1 去重复表示，保留完整时间戳与 message/files 全文
+          outputJson(dedupeItem(entry), opts.jsonFormat);
           return;
         }
 
@@ -268,7 +277,7 @@ export function registerFastStartCommand(program: Command): void {
           logger.raw(entry.message);
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -303,7 +312,7 @@ export function registerFastStartCommand(program: Command): void {
         const fileCount = await clearAllLogs(username);
         logger.raw(chalk.green(`✓ 已清空 ${fileCount} 个日志文件`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -313,7 +322,6 @@ export function registerFastStartCommand(program: Command): void {
     .command('stats')
     .description('查看 fast-start 日志统计')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -338,7 +346,7 @@ export function registerFastStartCommand(program: Command): void {
         }
         logger.raw(chalk.dim(`  存储目录：${getFastStartLogDir(username)}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

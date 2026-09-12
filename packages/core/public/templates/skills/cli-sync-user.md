@@ -36,4 +36,4 @@
 
 ## `ltc user`
 
-管理 Lattice 用户：`list [--json]` 列出所有用户 / `current` 显示当前用户名 / `switch <name>` 切换当前用户 / `create <name>` 新建用户 / `rename <old> <new>` 重命名（含数据库和文件系统）/ `remove <name> [--force]` 删除用户。
+管理 Lattice 用户：`list [--json] [--json-full] [--page-size <n>]` 列出所有用户（`--json` 为列式表，列 `name`/`current`）/ `current [--json]` 显示当前用户名（人读输出裸值供 shell 捕获，`--json` 输出 JSON 字符串）/ `switch <name>` 切换当前用户 / `create <name>` 新建用户 / `rename <old> <new>` 重命名（含数据库和文件系统）/ `remove <name> [--force]` 删除用户。

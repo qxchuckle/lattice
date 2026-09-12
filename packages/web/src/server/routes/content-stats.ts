@@ -15,19 +15,22 @@ import {
 import { resolveFilePath } from './shared';
 
 export function registerContentRoutes(app: FastifyInstance): void {
-  app.post<{ Body: { type: string; entityId: string; content: string } }>('/api/content/save', async (req) => {
-    const username = await getUsername();
-    const { type, entityId, content } = req.body;
-    const path = await resolveFilePath(type, entityId, username);
-    if (!path) return { error: 'not_found', message: '文件不存在' };
-    await writeText(path, content);
-    try {
-      await updateRagIndex();
-    } catch {
-      // rag update 失败不影响保存结果
-    }
-    return { success: true };
-  });
+  app.post<{ Body: { type: string; entityId: string; content: string } }>(
+    '/api/content/save',
+    async (req) => {
+      const username = await getUsername();
+      const { type, entityId, content } = req.body;
+      const path = await resolveFilePath(type, entityId, username);
+      if (!path) return { error: 'not_found', message: '文件不存在' };
+      await writeText(path, content);
+      try {
+        await updateRagIndex();
+      } catch {
+        // rag update 失败不影响保存结果
+      }
+      return { success: true };
+    },
+  );
 }
 
 export function registerStatsRoutes(app: FastifyInstance): void {
@@ -67,15 +70,18 @@ export function registerStatsRoutes(app: FastifyInstance): void {
 
   // ── 用编辑器打开路径 ──
 
-  app.post<{ Body: { type: string; entityId: string; app: string } }>('/api/open-with-editor', async (req) => {
-    const username = await getUsername();
-    const { type, entityId, app } = req.body;
-    const path = await resolveFilePath(type, entityId, username);
-    if (!path) return { error: 'not_found', message: '文件不存在' };
-    const result = await openWithEditor(path, app as EditorApp);
-    if (result.success) {
-      return { success: true, message: result.message };
-    }
-    return { error: 'exec_failed', message: result.message };
-  });
+  app.post<{ Body: { type: string; entityId: string; app: string } }>(
+    '/api/open-with-editor',
+    async (req) => {
+      const username = await getUsername();
+      const { type, entityId, app } = req.body;
+      const path = await resolveFilePath(type, entityId, username);
+      if (!path) return { error: 'not_found', message: '文件不存在' };
+      const result = await openWithEditor(path, app as EditorApp);
+      if (result.success) {
+        return { success: true, message: result.message };
+      }
+      return { error: 'exec_failed', message: result.message };
+    },
+  );
 }

@@ -16,4 +16,12 @@ export function setAdapter(adapter: LatticeDataAdapter): void {
   currentAdapter = adapter;
 }
 
-export type { LatticeDataAdapter, TaskQueryOpts, SpecScope, SpecResult, SearchOpts, EditorApp, DashboardStats } from './types';
+export type {
+  LatticeDataAdapter,
+  TaskQueryOpts,
+  SpecScope,
+  SpecResult,
+  SearchOpts,
+  EditorApp,
+  DashboardStats,
+} from './types';

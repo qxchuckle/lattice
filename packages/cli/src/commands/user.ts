@@ -24,6 +24,7 @@ import {
   paginate,
   paginationEntries,
   paginationNote,
+  projectTable,
   withPaginationOptions,
 } from '../utils';
 
@@ -33,7 +34,10 @@ export function registerUserCommand(program: Command): void {
   // list
   withPaginationOptions(cmd.command('list').alias('ls').description('列出所有用户'))
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
+    )
     .action(async (opts) => {
       try {
         const currentUser = await getUsername();
@@ -42,7 +46,7 @@ export function registerUserCommand(program: Command): void {
         const items = users.map((u) => ({ name: u, current: u === currentUser }));
 
         if (opts.json) {
-          outputJson(paginate(items, opts), opts.jsonFormat);
+          outputJson(projectTable(items, opts), opts.jsonFormat);
           return;
         }
 
@@ -60,7 +64,7 @@ export function registerUserCommand(program: Command): void {
         }
         logger.raw('');
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -69,12 +73,18 @@ export function registerUserCommand(program: Command): void {
   cmd
     .command('current')
     .description('显示当前用户名')
-    .action(async () => {
+    .option('--json', 'JSON 格式输出')
+    .action(async (opts) => {
       try {
         const username = await getUsername();
+        // 人读输出裸值（供 shell 直接捕获）；--json 输出合法 JSON 字符串，避免消费方 JSON.parse 失败
+        if (opts.json) {
+          outputJson(username, opts.jsonFormat);
+          return;
+        }
         logger.raw(username);
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -96,7 +106,7 @@ export function registerUserCommand(program: Command): void {
           logger.raw(chalk.green(`✓ 已切换到用户 ${name}`));
         }
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -120,7 +130,7 @@ export function registerUserCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 用户 ${name} 已创建`));
         logger.raw(chalk.dim(`使用 lattice user switch ${name} 切换到该用户`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -150,7 +160,7 @@ export function registerUserCommand(program: Command): void {
         logger.raw(chalk.green(`✓ 用户 ${oldName} 已重命名为 ${newName}`));
         logger.raw(chalk.dim('数据库中的 username 字段已同步更新'));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       } finally {
         closeDb();
@@ -190,7 +200,7 @@ export function registerUserCommand(program: Command): void {
         await removeDir(getUserDir(name));
         logger.raw(chalk.green(`✓ 用户 ${name} 已删除`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

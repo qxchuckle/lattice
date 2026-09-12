@@ -17,7 +17,7 @@ import {
   deleteByPath,
   diffConfig,
 } from '@qcqx/lattice-core';
-import { logger, outputJson } from '../utils';
+import { logger, outputJson, reportFailure, reportFailureHint } from '../utils';
 
 type ConfigScope = 'global' | 'local';
 
@@ -45,7 +45,6 @@ export function registerConfigCommand(program: Command): void {
     .command('show')
     .description('显示完整配置')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .option('--diff-defaults', '仅显示与默认值不同的配置')
     .action(async (...args: unknown[]) => {
@@ -63,7 +62,6 @@ export function registerConfigCommand(program: Command): void {
     .command('get <key>')
     .description('读取单个配置项，使用点路径')
     .option('--json', 'JSON 格式输出')
-    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .action(
       async (
@@ -77,7 +75,7 @@ export function registerConfigCommand(program: Command): void {
           const value = getByPath(config, key);
 
           if (value === undefined) {
-            logger.raw(chalk.yellow(`未找到配置项：${key}`));
+            reportFailure(`未找到配置项：${key}`);
             process.exitCode = 1;
             return;
           }
@@ -89,7 +87,7 @@ export function registerConfigCommand(program: Command): void {
 
           logger.raw(String(value));
         } catch (err) {
-          console.error(chalk.red('错误：'), (err as Error).message);
+          logger.stderr(chalk.red('错误：'), (err as Error).message);
           process.exitCode = 1;
         }
       },
@@ -116,7 +114,7 @@ export function registerConfigCommand(program: Command): void {
           await saveConfig(scope, config);
           logger.raw(chalk.green(`✓ 已更新 ${scope} 配置 ${key}`));
         } catch (err) {
-          console.error(chalk.red('错误：'), (err as Error).message);
+          logger.stderr(chalk.red('错误：'), (err as Error).message);
           process.exitCode = 1;
         }
       },
@@ -134,7 +132,7 @@ export function registerConfigCommand(program: Command): void {
         const deleted = deleteByPath(config, key);
 
         if (!deleted) {
-          logger.raw(chalk.yellow(`未找到配置项：${key}`));
+          reportFailure(`未找到配置项：${key}`);
           process.exitCode = 1;
           return;
         }
@@ -142,7 +140,7 @@ export function registerConfigCommand(program: Command): void {
         await saveConfig(scope, config);
         logger.raw(chalk.green(`✓ 已移除 ${scope} 配置 ${key}`));
       } catch (err) {
-        console.error(chalk.red('错误：'), (err as Error).message);
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
@@ -241,7 +239,7 @@ async function showConfig(
     logger.raw(JSON.stringify(output, null, 2));
     logger.raw('');
   } catch (err) {
-    console.error(chalk.red('错误：'), (err as Error).message);
+    logger.stderr(chalk.red('错误：'), (err as Error).message);
     process.exitCode = 1;
   }
 }
