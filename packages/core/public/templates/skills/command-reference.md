@@ -19,6 +19,10 @@
 
 `--json`：所有叶子命令均接受；无 JSON 输出的命令接受但不生效（输出保持人读格式）。例外：`config set --json` 语义为将输入 value 按 JSON 解析，非输出格式控制（见 [cli-system.md#ltc-config]）。
 
+`--json-format`：产出 JSON 的命令通用，改**排版**为缩进格式化（默认单行压缩），不改字段。`--json-full`：**限 `context` / `search` / `spec list` / `task list`**，输出未经投影的**全量字段**——这四者默认 `--json` 只留消费必需字段（搜索结果去 RAG 内部打分/调试 meta、`spec list` 去 spec 正文 content、`task list` 的 referencedSpecs 降为 id 数组），各命令精简范围见其字典。两者正交：`--json-format` 管排版、`--json-full` 管字段。
+
+`--page <n>` / `--page-size <n>`：**list 类命令通用翻页**（`task list` / `task progress` / `project list` / `project relation list` / `spec list` / `spec template registry list` / `user list` / `trash list` / `fast-start log list` / `fast-start log search`）。默认不传 = 输出全部（`--json` 仍是数组，向后兼容）；传 `--page-size` 则窗口化，`--json` 返回 `{entries, page, pageSize, total, totalPages}`（带 total/totalPages，翻页可达全部、信息不丢）。翻页在既有过滤（`--last`/`--project`/`--type` 等）之后生效。`spec list` 特殊：默认按 scope 分组，翻页时扁平化为 spec 数组（每条带 scope）。
+
 ## 命令分类路由
 
 通用约定（`--force`/`--json`）适用于全部命令。按类别读参数字典：

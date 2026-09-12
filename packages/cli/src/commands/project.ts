@@ -41,7 +41,17 @@ import {
   updateRagIndex,
 } from '@qcqx/lattice-core';
 import type { ProjectRow, RelationWithSource, ProjectMatchProvenance } from '@qcqx/lattice-core';
-import { logger, outputJson, resolveAndRegisterUpwards, shouldSkipConfirm } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveAndRegisterUpwards,
+  shouldSkipConfirm,
+  stripProjectRawColumns,
+  paginate,
+  paginationEntries,
+  paginationNote,
+  withPaginationOptions,
+} from '../utils';
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -65,10 +75,7 @@ export function registerProjectCommand(program: Command): void {
   const cmd = program.command('project').description('管理已注册的项目');
 
   // ─── list ───
-  cmd
-    .command('list')
-    .alias('ls')
-    .description('列出所有已注册项目')
+  withPaginationOptions(cmd.command('list').alias('ls').description('列出所有已注册项目'))
     .option('--group <group>', '按分组过滤')
     .option('--tag <tag>', '按标签过滤')
     .option(
@@ -81,6 +88,10 @@ export function registerProjectCommand(program: Command): void {
     .option('--with-relations', '附带显示项目关系')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option(
+      '--json-full',
+      'JSON 保留原始 DB 列（local_path/git_remote/package_names/monorepo_packages 等 snake_case）；默认去重只留解析后的 camelCase 字段',
+    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -147,16 +158,19 @@ export function registerProjectCommand(program: Command): void {
         closeDb();
 
         if (opts.json) {
-          const result = projects.map((p) => ({
-            ...p,
-            localPaths: rowLocalPaths(p),
-            gitRemotes: rowGitRemotes(p),
-            packageNames: parseJsonArray(p.package_names),
-            monorepoPackages: parseJsonArray(p.monorepo_packages),
-            matchedVia: matchProvenance[p.id] ?? null,
-            ...(opts.withRelations ? { relations: relationsMap.get(p.id) ?? [] } : {}),
-          }));
-          outputJson(result, opts.jsonFormat);
+          const result = projects.map((p) => {
+            const row = {
+              ...p,
+              localPaths: rowLocalPaths(p),
+              gitRemotes: rowGitRemotes(p),
+              packageNames: parseJsonArray(p.package_names),
+              monorepoPackages: parseJsonArray(p.monorepo_packages),
+              matchedVia: matchProvenance[p.id] ?? null,
+              ...(opts.withRelations ? { relations: relationsMap.get(p.id) ?? [] } : {}),
+            };
+            return opts.jsonFull ? row : stripProjectRawColumns(row);
+          });
+          outputJson(paginate(result, opts), opts.jsonFormat);
           return;
         }
 
@@ -178,8 +192,9 @@ export function registerProjectCommand(program: Command): void {
             ),
           );
         }
-        logger.raw(chalk.blue(`共 ${projects.length} 个项目：\n`));
-        for (const p of projects) {
+        const paged = paginate(projects, opts);
+        logger.raw(chalk.blue(`${paginationNote(paged) ?? `共 ${projects.length} 个项目`}：\n`));
+        for (const p of paginationEntries(paged)) {
           const { parsedGroups: groups, parsedTags: tags } = parseProjectRow(p);
           const localPaths = rowLocalPaths(p);
           const gitRemotes = rowGitRemotes(p);
@@ -507,10 +522,12 @@ export function registerProjectCommand(program: Command): void {
   const relationCmd = cmd.command('relation').description('管理项目间关系');
 
   // relation list
-  relationCmd
-    .command('list [id]')
-    .alias('ls')
-    .description('查看项目关系（默认聚合所有用户定义的关系）')
+  withPaginationOptions(
+    relationCmd
+      .command('list [id]')
+      .alias('ls')
+      .description('查看项目关系（默认聚合所有用户定义的关系）'),
+  )
     .option('--current-user', '仅显示当前用户定义的关系')
     .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
     .option('--json', 'JSON 格式输出')
@@ -566,7 +583,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(relations, opts.jsonFormat);
+            outputJson(paginate(relations, opts), opts.jsonFormat);
             return;
           }
           if (relations.length === 0) {
@@ -574,10 +591,14 @@ export function registerProjectCommand(program: Command): void {
             return;
           }
 
+          const pagedRel = paginate(relations, opts);
+          const relNote = paginationNote(pagedRel);
           logger.raw(
-            chalk.blue(`\n项目 ${chalk.bold(match.name)} 的关系（${relations.length} 个）：\n`),
+            chalk.blue(
+              `\n项目 ${chalk.bold(match.name)} 的关系（${relNote ?? `${relations.length} 个`}）：\n`,
+            ),
           );
-          for (const r of relations) {
+          for (const r of paginationEntries(pagedRel)) {
             const otherId = r.projectA === match.id ? r.projectB : r.projectA;
             const otherProject = projects.find((p) => p.id === otherId);
             const otherName = otherProject?.name ?? otherId;
@@ -603,7 +624,7 @@ export function registerProjectCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(relationsAll, opts.jsonFormat);
+            outputJson(paginate(relationsAll, opts), opts.jsonFormat);
             return;
           }
           if (relationsAll.length === 0) {
@@ -615,8 +636,13 @@ export function registerProjectCommand(program: Command): void {
             }
           }
 
-          logger.raw(chalk.blue(`\n共 ${relationsAll.length} 条项目关系：\n`));
-          for (const r of relationsAll) {
+          const pagedAll = paginate(relationsAll, opts);
+          logger.raw(
+            chalk.blue(
+              `\n${paginationNote(pagedAll) ?? `共 ${relationsAll.length} 条项目关系`}：\n`,
+            ),
+          );
+          for (const r of paginationEntries(pagedAll)) {
             const nameA = projects.find((p) => p.id === r.projectA)?.name ?? r.projectA;
             const nameB = projects.find((p) => p.id === r.projectB)?.name ?? r.projectB;
             const sourceTag = r.sourceUser !== username ? chalk.magenta(` [${r.sourceUser}]`) : '';

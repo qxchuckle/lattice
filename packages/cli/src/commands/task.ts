@@ -49,6 +49,11 @@ import {
   resolveCurrentProject,
   resolveAndRegisterUpwards,
   shouldSkipConfirm,
+  stripTaskList,
+  paginate,
+  paginationEntries,
+  paginationNote,
+  withPaginationOptions,
 } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
@@ -108,10 +113,7 @@ export function registerTaskCommand(program: Command): void {
   const cmd = program.command('task').description('管理跨项目任务');
 
   // list
-  cmd
-    .command('list')
-    .alias('ls')
-    .description('列出任务')
+  withPaginationOptions(cmd.command('list').alias('ls').description('列出任务'))
     .option(
       '--status <status>',
       '按状态过滤（planning / in_progress / completed / archived / all）',
@@ -122,6 +124,7 @@ export function registerTaskCommand(program: Command): void {
     .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option('--json-full', 'JSON 输出完整 referencedSpecs 明细（默认降为纯 id 数组）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -187,7 +190,8 @@ export function registerTaskCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(tasks, opts.jsonFormat);
+            const projected: unknown[] = opts.jsonFull ? tasks : stripTaskList(tasks);
+            outputJson(paginate(projected, opts), opts.jsonFormat);
             return;
           }
 
@@ -196,7 +200,9 @@ export function registerTaskCommand(program: Command): void {
             return;
           }
 
-          logger.raw(chalk.blue(`共 ${tasks.length} 个任务（跨用户）：\n`));
+          const result = paginate(tasks, opts);
+          const note = paginationNote(result);
+          logger.raw(chalk.blue(`${note ?? `共 ${tasks.length} 个任务`}（跨用户）：\n`));
 
           const statusIcon: Record<string, string> = {
             planning: '📋',
@@ -205,7 +211,7 @@ export function registerTaskCommand(program: Command): void {
             archived: '📦',
           };
 
-          for (const t of tasks) {
+          for (const t of paginationEntries(result)) {
             const icon = statusIcon[t.status] ?? '•';
             const sourceTag = t.sourceUser !== username ? chalk.magenta(` [${t.sourceUser}]`) : '';
             logger.raw(
@@ -224,7 +230,8 @@ export function registerTaskCommand(program: Command): void {
           closeDb();
 
           if (opts.json) {
-            outputJson(tasks, opts.jsonFormat);
+            const projected: unknown[] = opts.jsonFull ? tasks : stripTaskList(tasks);
+            outputJson(paginate(projected, opts), opts.jsonFormat);
             return;
           }
 
@@ -233,7 +240,9 @@ export function registerTaskCommand(program: Command): void {
             return;
           }
 
-          logger.raw(chalk.blue(`共 ${tasks.length} 个任务：\n`));
+          const result = paginate(tasks, opts);
+          const note = paginationNote(result);
+          logger.raw(chalk.blue(`${note ?? `共 ${tasks.length} 个任务`}：\n`));
 
           const statusIcon: Record<string, string> = {
             planning: '📋',
@@ -242,7 +251,7 @@ export function registerTaskCommand(program: Command): void {
             archived: '📦',
           };
 
-          for (const t of tasks) {
+          for (const t of paginationEntries(result)) {
             const icon = statusIcon[t.status] ?? '•';
             logger.raw(`  ${icon} ${chalk.bold(t.title)} ${chalk.dim(`[${t.status}]`)}`);
             logger.raw(`    ${chalk.dim(t.id)}`);
@@ -783,9 +792,7 @@ export function registerTaskCommand(program: Command): void {
     });
 
   // progress
-  cmd
-    .command('progress <id>')
-    .description('查看任务进展记录')
+  withPaginationOptions(cmd.command('progress <id>').description('查看任务进展记录'))
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--type <type>', '按类型过滤')
     .option('--id <checkpointId>', '查看指定检查点')
@@ -832,7 +839,7 @@ export function registerTaskCommand(program: Command): void {
         });
 
         if (opts.json) {
-          outputJson(entries, opts.jsonFormat);
+          outputJson(paginate(entries, opts), opts.jsonFormat);
           return;
         }
 
@@ -858,9 +865,14 @@ export function registerTaskCommand(program: Command): void {
           summary: '📝',
         };
 
-        logger.raw(chalk.blue(`\n任务「${match.title}」的进展记录（共 ${entries.length} 条）：\n`));
+        const pagedEntries = paginate(entries, opts);
+        logger.raw(
+          chalk.blue(
+            `\n任务「${match.title}」的进展记录（${paginationNote(pagedEntries) ?? `共 ${entries.length} 条`}）：\n`,
+          ),
+        );
 
-        for (const entry of entries) {
+        for (const entry of paginationEntries(pagedEntries)) {
           const icon = typeIcon[entry.type] ?? '•';
           const timeStr = entry.time.slice(0, 16).replace('T', ' ');
           logger.raw(

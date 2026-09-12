@@ -10,44 +10,8 @@ import {
   isModelLoadNetworkError,
   formatModelNetworkHint,
 } from '@qcqx/lattice-core';
-import { logger, outputJson } from '../utils';
+import { logger, outputJson, cleanSearchResults } from '../utils';
 import type { SearchResult } from '@qcqx/lattice-core';
-
-/** 精简 JSON 输出：只保留对调用方有用的字段 */
-const META_FIELDS_KEEP = new Set([
-  'filePath',
-  'specId',
-  'username',
-  'projectIds',
-  'semanticRank',
-  'semanticDistance',
-  'matchedSections',
-  'normalizedScore',
-  'weakMatch',
-  'duplicates',
-  'taskId',
-  'matchedVia',
-]);
-
-function cleanResultsForJson(results: SearchResult[]): unknown[] {
-  return results.map((r) => {
-    const meta = r.meta as Record<string, unknown>;
-    const cleanMeta: Record<string, unknown> = {};
-    for (const key of Object.keys(meta)) {
-      if (META_FIELDS_KEEP.has(key) && meta[key] !== null && meta[key] !== undefined) {
-        const val = meta[key];
-        cleanMeta[key] = typeof val === 'number' ? Math.round(val * 10000) / 10000 : val;
-      }
-    }
-    return {
-      type: r.type,
-      title: r.title,
-      snippet: r.snippet,
-      score: Math.round((r.score ?? 0) * 10000) / 10000,
-      meta: cleanMeta,
-    };
-  });
-}
 
 function parseUsersOption(input?: string): string[] {
   return Array.from(
@@ -182,7 +146,7 @@ export function registerSearchCommand(program: Command): void {
         spinnerActive = false;
 
         if (opts.json) {
-          outputJson(opts.jsonFull ? results : cleanResultsForJson(results), opts.jsonFormat);
+          outputJson(opts.jsonFull ? results : cleanSearchResults(results), opts.jsonFormat);
           return;
         }
 

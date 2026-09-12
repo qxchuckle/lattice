@@ -49,7 +49,16 @@ import {
   type SpecMatch,
   type SpecLintReport,
 } from '@qcqx/lattice-core';
-import { logger, outputJson, resolveCurrentProject } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveCurrentProject,
+  stripSpecs,
+  paginate,
+  paginationEntries,
+  paginationNote,
+  withPaginationOptions,
+} from '../utils';
 import {
   resolveBundledSpecTemplateNames,
   syncBundledSpecTemplatesWithPrompt,
@@ -82,14 +91,12 @@ export function registerSpecCommand(program: Command): void {
   const cmd = program.command('spec').description('管理 Spec 文件');
 
   // list
-  cmd
-    .command('list')
-    .alias('ls')
-    .description('列出 spec 文件')
+  withPaginationOptions(cmd.command('list').alias('ls').description('列出 spec 文件'))
     .option('--scope <scope>', '过滤层级（project / user / global）')
     .option('--tag <tag>', '按标签过滤')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option('--json-full', 'JSON 输出含每个 spec 的 content 全文（默认剥离，正文走 spec show）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -146,13 +153,41 @@ export function registerSpecCommand(program: Command): void {
         }
 
         if (opts.json) {
-          outputJson(allSpecs, opts.jsonFormat);
+          if (opts.pageSize) {
+            // 翻页：跨 scope 扁平化（每 spec 带 scope）后分页
+            const flat = allSpecs.flatMap((g) =>
+              opts.jsonFull
+                ? g.specs.map((s) => ({ ...s, scope: g.scope }))
+                : stripSpecs(g.specs, g.scope),
+            );
+            outputJson(paginate(flat, opts), opts.jsonFormat);
+          } else {
+            outputJson(
+              opts.jsonFull
+                ? allSpecs
+                : allSpecs.map((group) => ({ ...group, specs: stripSpecs(group.specs) })),
+              opts.jsonFormat,
+            );
+          }
           return;
         }
 
         const total = allSpecs.reduce((n, g) => n + g.specs.length, 0);
         if (total === 0) {
           logger.raw(chalk.dim('暂无 spec 文件。'));
+          return;
+        }
+
+        if (opts.pageSize) {
+          // 翻页模式：跨 scope 扁平化后分页展示
+          const flat = allSpecs.flatMap((g) => g.specs.map((s) => ({ s, scope: g.scope })));
+          const paged = paginate(flat, opts);
+          logger.raw(chalk.blue(`${paginationNote(paged) ?? `共 ${total} 个`} spec：\n`));
+          for (const { s, scope } of paginationEntries(paged)) {
+            const title = s.frontmatter.title ?? s.fileName.replace('.md', '');
+            logger.raw(`  ${chalk.bold(title)} ${chalk.dim(`[${scope}] (${s.relativePath})`)}`);
+            if (s.frontmatter.id) logger.raw(`    ${chalk.dim(`id：${s.frontmatter.id}`)}`);
+          }
           return;
         }
 
@@ -521,30 +556,30 @@ export function registerSpecCommand(program: Command): void {
 
   const registryCmd = templateCmd.command('registry').description('管理模板仓库');
 
-  registryCmd
-    .command('list')
-    .alias('ls')
-    .description('列出已注册的模板仓库')
+  withPaginationOptions(registryCmd.command('list').alias('ls').description('列出已注册的模板仓库'))
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
     .action(async (opts) => {
       try {
         const registries = await getConfiguredTemplateRegistries();
 
-        if (registries.length === 0) {
+        const infos = registries.length === 0 ? [] : await listSpecTemplateRegistries(registries);
+
+        if (opts.json) {
+          outputJson(paginate(infos, opts), opts.jsonFormat);
+          return;
+        }
+
+        if (infos.length === 0) {
           logger.raw(chalk.dim('暂无已注册模板仓库。'));
           return;
         }
 
-        const infos = await listSpecTemplateRegistries(registries);
-
-        if (opts.json) {
-          outputJson(infos, opts.jsonFormat);
-          return;
-        }
-
-        logger.raw(chalk.blue(`\n共 ${infos.length} 个模板仓库：\n`));
-        for (const info of infos) {
+        const pagedInfos = paginate(infos, opts);
+        logger.raw(
+          chalk.blue(`\n${paginationNote(pagedInfos) ?? `共 ${infos.length} 个模板仓库`}：\n`),
+        );
+        for (const info of paginationEntries(pagedInfos)) {
           logger.raw(
             `  ${chalk.bold(info.repoUrl)} ${chalk.dim(info.exists ? '[已拉取]' : '[缺失]')}`,
           );

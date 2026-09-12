@@ -29,6 +29,7 @@
 列出所有已注册项目（关键词匹配 + RAG 语义回退）。
 
 - `--group` / `--tag` / `--has-git` / `--orphaned` / `--with-relations` / `--json` / `--json-format`
+- `--json-full`：保留原始 DB 列（`local_path`/`git_remote`/`package_names`/`monorepo_packages` 等 snake_case）；默认 `--json` 去重只留解析后的 camelCase 字段（`localPaths`/`gitRemotes`/`packageNames`/`monorepoPackages`）
 - `--search <keyword>`：大小写不敏感匹配（名称/ID/路径/Git/包名/分组/标签）+ RAG 语义回退
 - `--keyword-only`：跳过语义搜索
 

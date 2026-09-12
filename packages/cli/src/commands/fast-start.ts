@@ -14,7 +14,16 @@ import {
   closeDb,
   MAX_ENTRIES_PER_FILE,
 } from '@qcqx/lattice-core';
-import { logger, outputJson, resolveCurrentProject, shouldSkipConfirm } from '../utils';
+import {
+  logger,
+  outputJson,
+  resolveCurrentProject,
+  shouldSkipConfirm,
+  paginate,
+  paginationEntries,
+  paginationNote,
+  withPaginationOptions,
+} from '../utils';
 
 export function registerFastStartCommand(program: Command): void {
   const cmd = program.command('fast-start').description('fast-start 轻量模式日志');
@@ -87,10 +96,7 @@ export function registerFastStartCommand(program: Command): void {
     });
 
   // log list
-  log
-    .command('list')
-    .alias('ls')
-    .description('列出 fast-start 日志')
+  withPaginationOptions(log.command('list').alias('ls').description('列出 fast-start 日志'))
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
@@ -110,22 +116,27 @@ export function registerFastStartCommand(program: Command): void {
           }
         }
 
-        const entries = await listLogEntries(username, {
+        const allEntries = await listLogEntries(username, {
           last: opts.last,
           projectId,
         });
 
+        // 通用翻页（pagination helper）：不传 --page-size 输出全部；传了则窗口化 + 附 total/totalPages
+        const result = paginate(allEntries, opts);
+
         if (opts.json) {
-          outputJson(entries, opts.jsonFormat);
+          outputJson(result, opts.jsonFormat);
           return;
         }
 
+        const entries = paginationEntries(result);
         if (entries.length === 0) {
           logger.raw(chalk.dim('暂无 fast-start 日志。'));
           return;
         }
 
-        logger.raw(chalk.blue(`共 ${entries.length} 条 fast-start 日志：\n`));
+        const note = paginationNote(result);
+        logger.raw(chalk.blue(`${note ?? `共 ${entries.length} 条`} fast-start 日志：\n`));
 
         for (const entry of entries) {
           const timeStr = entry.time.slice(0, 16).replace('T', ' ');
@@ -148,10 +159,12 @@ export function registerFastStartCommand(program: Command): void {
     });
 
   // log search
-  log
-    .command('search <query>')
-    .alias('find')
-    .description('关键词搜索 fast-start 日志（搜索标题 / 内容 / 文件 / 目录）')
+  withPaginationOptions(
+    log
+      .command('search <query>')
+      .alias('find')
+      .description('关键词搜索 fast-start 日志（搜索标题 / 内容 / 文件 / 目录）'),
+  )
     .option('--last <n>', '只返回最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
@@ -171,23 +184,27 @@ export function registerFastStartCommand(program: Command): void {
           }
         }
 
-        const entries = await searchLogEntries(username, {
+        const allEntries = await searchLogEntries(username, {
           query,
           projectId,
           last: opts.last,
         });
 
+        const result = paginate(allEntries, opts);
+
         if (opts.json) {
-          outputJson(entries, opts.jsonFormat);
+          outputJson(result, opts.jsonFormat);
           return;
         }
 
+        const entries = paginationEntries(result);
         if (entries.length === 0) {
           logger.raw(chalk.dim(`未找到匹配「${query}」的日志。`));
           return;
         }
 
-        logger.raw(chalk.blue(`找到 ${entries.length} 条匹配「${query}」的日志：\n`));
+        const note = paginationNote(result);
+        logger.raw(chalk.blue(`${note ?? `找到 ${entries.length} 条`}匹配「${query}」的日志：\n`));
 
         for (const entry of entries) {
           const timeStr = entry.time.slice(0, 16).replace('T', ' ');

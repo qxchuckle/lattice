@@ -12,6 +12,8 @@
 
 - `--scope <scope>`：`project`/`user`/`global`
 - `--tag <tag>` / `--json`
+- `--json-format`：JSON 缩进格式化（默认压缩）
+- `--json-full`：输出含每个 spec 的 `content` 全文；默认 `--json` 剥离 content（正文走 `spec show`），保留 title/id/description/tags/filePath
 
 ### `ltc spec show <file>`
 

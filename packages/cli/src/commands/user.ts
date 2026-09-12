@@ -17,30 +17,46 @@ import {
   initDb,
   closeDb,
 } from '@qcqx/lattice-core';
-import { logger, shouldSkipConfirm } from '../utils';
+import {
+  logger,
+  shouldSkipConfirm,
+  outputJson,
+  paginate,
+  paginationEntries,
+  paginationNote,
+  withPaginationOptions,
+} from '../utils';
 
 export function registerUserCommand(program: Command): void {
   const cmd = program.command('user').description('管理 Lattice 用户');
 
   // list
-  cmd
-    .command('list')
-    .alias('ls')
-    .description('列出所有用户')
-    .action(async () => {
+  withPaginationOptions(cmd.command('list').alias('ls').description('列出所有用户'))
+    .option('--json', 'JSON 格式输出')
+    .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .action(async (opts) => {
       try {
         const currentUser = await getUsername();
         const users = await listUserDirs();
+
+        const items = users.map((u) => ({ name: u, current: u === currentUser }));
+
+        if (opts.json) {
+          outputJson(paginate(items, opts), opts.jsonFormat);
+          return;
+        }
 
         if (users.length === 0) {
           logger.raw(chalk.dim('暂无用户'));
           return;
         }
 
-        logger.raw(chalk.blue(`共 ${users.length} 个用户：\n`));
-        for (const u of users) {
-          const isCurrent = u === currentUser;
-          logger.raw(`  ${isCurrent ? chalk.green('→') : ' '} ${isCurrent ? chalk.bold(u) : u}`);
+        const paged = paginate(items, opts);
+        logger.raw(chalk.blue(`${paginationNote(paged) ?? `共 ${users.length} 个用户`}：\n`));
+        for (const item of paginationEntries(paged)) {
+          logger.raw(
+            `  ${item.current ? chalk.green('→') : ' '} ${item.current ? chalk.bold(item.name) : item.name}`,
+          );
         }
         logger.raw('');
       } catch (err) {

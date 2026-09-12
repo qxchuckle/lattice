@@ -14,7 +14,6 @@ import {
   unifiedSearch,
   type ContextOptions,
   type AncestorProjectInfo,
-  type ParsedSpec,
   type ProjectContext,
   type SearchResult,
 } from '@qcqx/lattice-core';
@@ -23,43 +22,14 @@ import {
   outputJson,
   resolveCurrentProject,
   resolveCurrentProjectWithAncestors,
+  cleanSearchResults,
+  stripSpecs,
+  stripSpecContent,
 } from '../utils';
 
-/** 剥离 spec 的 content 和冗余字段，JSON 输出精简 */
-function stripSpecContent(spec: ParsedSpec, scope?: string): Record<string, unknown> {
-  const { id, title, description, tags } = spec.frontmatter;
-  return {
-    title: title ?? spec.fileName,
-    filePath: spec.filePath,
-    ...(id ? { id } : {}),
-    ...(description ? { description } : {}),
-    ...(tags?.length ? { tags } : {}),
-    ...(scope ? { scope } : {}),
-  };
-}
-
-/** 剥离 spec 数组中的 content */
-function stripSpecs(specs: ParsedSpec[], scope?: string): Record<string, unknown>[] {
-  return specs.map((s) => stripSpecContent(s, scope));
-}
-
-/** 剥离 cascadedSpecs 并自动标记 scope */
+/** 剥离 cascadedSpecs 并自动标记 scope（stripSpecContent 来自公共投影层 utils/json-projection） */
 function stripCascadedSpecs(ctx: ProjectContext): Record<string, unknown>[] {
   return ctx.cascadedSpecs.map((spec) => stripSpecContent(spec, resolveSpecScope(spec, ctx)));
-}
-
-/** 截断搜索结果中的长小数 */
-function truncateScores(results: SearchResult[]): SearchResult[] {
-  return results.map((r) => ({
-    ...r,
-    score: Math.round((r.score ?? 0) * 10000) / 10000,
-    meta: Object.fromEntries(
-      Object.entries(r.meta as Record<string, unknown>).map(([k, v]) => [
-        k,
-        typeof v === 'number' ? Math.round(v * 10000) / 10000 : v,
-      ]),
-    ),
-  }));
 }
 
 /** 语义搜索节：调用 unifiedSearch 并格式化输出 */
@@ -129,6 +99,7 @@ export function registerContextCommand(program: Command): void {
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
     .option('--json-format', 'JSON 输出时使用格式化（默认压缩）')
+    .option('--json-full', 'JSON 输出完整 querySearch meta（含 RAG 内部打分/调试字段）')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -161,7 +132,12 @@ export function registerContextCommand(program: Command): void {
                 ...d,
                 directSpecs: stripSpecs(d.directSpecs, 'project'),
               })),
-              querySearch: queryResults.length > 0 ? truncateScores(queryResults) : undefined,
+              querySearch:
+                queryResults.length > 0
+                  ? opts.jsonFull
+                    ? queryResults
+                    : cleanSearchResults(queryResults)
+                  : undefined,
             };
             outputJson(jsonCtx, opts.jsonFormat);
             return;
@@ -345,7 +321,12 @@ export function registerContextCommand(program: Command): void {
               userSpecs: stripSpecs(d.userSpecs, 'user'),
             })),
             ancestors: ctx.ancestors?.length ? ctx.ancestors : undefined,
-            querySearch: queryResults.length > 0 ? truncateScores(queryResults) : undefined,
+            querySearch:
+              queryResults.length > 0
+                ? opts.jsonFull
+                  ? queryResults
+                  : cleanSearchResults(queryResults)
+                : undefined,
           };
           outputJson(jsonCtx, opts.jsonFormat);
           return;

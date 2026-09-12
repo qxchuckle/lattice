@@ -14,6 +14,8 @@
 - `--project <id>` / `--current`
 - `--all-user` / `--user <users>`（互斥，需搭配 `--project`/`--current`）
 - `--json`
+- `--json-format`：JSON 缩进格式化（默认压缩）
+- `--json-full`：输出完整 `referencedSpecs` 明细（relativePath/scope/projectId/firstReadAt）；默认 `--json` 将 referencedSpecs 降为 spec id 数组
 
 ### `ltc task create <title>`
 
@@ -88,7 +90,7 @@ fast-start 轻量模式日志（不走完整任务周期时的过程记录）。
 
 ### `ltc fast-start log list`
 
-列出 fast-start 日志。`--last <n>` / `--project <id>` / `--current` / `--json`
+列出 fast-start 日志。`--last <n>` / `--page <n>` + `--page-size <n>`（分页：`--page-size` 触发时 `--json` 返回 `{entries,page,pageSize,total,totalPages}`，不传则返回全量数组）/ `--project <id>` / `--current` / `--json` / `--json-format`
 
 ### `ltc fast-start log search <query>`
 
