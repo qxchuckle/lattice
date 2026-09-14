@@ -69,10 +69,12 @@
 1. 命令带 `--json`
 2. 信息提供型（context / task-start / spec-digest / task-handoff / search / impact）：读取并筛选相关 spec 与任务，返回经过滤的目录（路径 + ID + 元信息 + 相关性说明），**不返回文档全文**；返回的路径必须完整可用（绝对路径、确认存在、取自命令输出）
 3. **主线收到目录后必须 Read 相关文档全文**（spec / PRD / design.md）——这是硬义务，不是可选动作；跳过 Read = 在没有规范约束的情况下工作
-4. 信息提供型 subagent 的 dispatch prompt **只提供输入参数**（任务 ID、主题、工作目录），执行步骤和返回格式由 subagent 定义文件控制——禁止在 prompt 中要求"返回全文 / 返回完整内容"或重复指定执行流程；违反 = 以 prompt 覆盖 subagent 定义中的"不返回全文"硬约束
+4. dispatch prompt 的内容按 subagent 类型分支约束：
+   - **信息提供型**：**只提供输入参数**（任务 ID、主题、工作目录），执行步骤和返回格式由 subagent 定义文件控制——禁止在 prompt 中要求"返回全文 / 返回完整内容"或重复指定执行流程；违反 = 以 prompt 覆盖 subagent 定义中的"不返回全文"硬约束
+   - **执行型**：prompt 里的每条元数据事实（父子链路 / 任务状态 / 是否已提交 / 关联项目）**必须本轮已用 `ltc` 核实**；未核实的一律不写，交 subagent 自己查。凭记忆断言 = 把错误前提注入执行流程（实测后果：主线断言"本任务无父子链路"、实际存在 in_progress 子任务 → subagent 照做即违规归档）。违规识别：prompt 含状态 / 链路类陈述，但本轮无对应 `ltc task info` / `ltc task tree` 调用记录 → 删掉该陈述或先核实
 5. 主线可自主调用 `ltc search` / `ltc context` 等方法补全信息——不被 subagent 目录限制；`ltc search` 单次用空格隔开多个相关关键词形成关键词组，多次用不同关键词组，直到信息充分
 6. 分析型（health）：返回诊断结论与修复建议
-7. 执行型（task-archive）：返回执行报告
+7. 执行型（task-archive）：返回执行报告；**报告与主线陈述矛盾时以磁盘 / CLI 输出为准**——矛盾即主线前提有误，先复核再决定下一步，禁止用记忆覆盖 subagent 的实测结果
 8. 不递归委派
 9. 失败回退：subagent 报信息不足 → 主线自己跑全量再判断
 
