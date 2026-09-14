@@ -44,7 +44,6 @@ export function registerConfigCommand(program: Command): void {
   cmd
     .command('show')
     .description('显示完整配置')
-    .option('--json', 'JSON 格式输出')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .option('--diff-defaults', '仅显示与默认值不同的配置')
     .action(async (...args: unknown[]) => {
@@ -61,7 +60,6 @@ export function registerConfigCommand(program: Command): void {
   cmd
     .command('get <key>')
     .description('读取单个配置项，使用点路径')
-    .option('--json', 'JSON 格式输出')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .action(
       async (
@@ -96,7 +94,6 @@ export function registerConfigCommand(program: Command): void {
   cmd
     .command('set <key> <value>')
     .description('设置单个配置项，使用点路径')
-    .option('--json', '将 value 按 JSON 解析')
     .option('--scope <scope>', '配置范围（global 或 local）')
     .action(
       async (

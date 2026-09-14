@@ -102,7 +102,6 @@ export function registerSpecCommand(program: Command): void {
     .description('列出 spec 文件')
     .option('--scope <scope>', '过滤层级（project / user / global）')
     .option('--tag <tag>', '按标签过滤')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -246,7 +245,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--user <username>', '查看指定用户的 spec（默认当前用户）')
     .option('--source <hash8>', '指定来源域（hash 前 8 位）直读域版本（D24）')
     .option('--detail', '输出文件内容')
-    .option('--json', 'JSON 格式输出')
     .action(async (file: string, opts) => {
       try {
         const currentUsername = await getUsername();
@@ -403,7 +401,6 @@ export function registerSpecCommand(program: Command): void {
   cmd
     .command('conflicts')
     .description('检测多层级同名 spec 冲突')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -466,7 +463,6 @@ export function registerSpecCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('列出可用的 spec 模板')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       const templates = await listSpecTemplates();
 
@@ -597,7 +593,6 @@ export function registerSpecCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('列出已注册的模板仓库')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const registries = await getConfiguredTemplateRegistries();
@@ -846,7 +841,6 @@ export function registerSpecCommand(program: Command): void {
     .description('校验 spec frontmatter 完整性（支持模糊匹配和 glob）')
     .option('--scope <scope>', '限定层级（project / user / global）')
     .option('--all', '扫描全部 spec（含 project + user + global）')
-    .option('--json', 'JSON 格式输出')
     .action(async (file: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -932,7 +926,6 @@ export function registerSpecCommand(program: Command): void {
     .description('批量迁移历史 spec：自动补 id / updated / title（不自动补 description）')
     .option('--scope <scope>', '限定层级（all / global / user / project），默认 all')
     .option('--dry-run', '仅报告不写入')
-    .option('--json', 'JSON 格式输出')
     .action(async (name: string | undefined, opts) => {
       try {
         await initDb();
@@ -1001,7 +994,6 @@ export function registerSpecCommand(program: Command): void {
       '限定层级（all / global / user / project），默认 all；project = 全部项目',
     )
     .option('--limit <n>', '最多展示几条（默认 20）', '20')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         await initDb();
@@ -1131,7 +1123,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--clean', '清空重导（仅限含本工具 manifest.yaml 的目录）')
     .option('--verify <dir>', '不导出，仅校验已有导出目录与 manifest 一致性')
     .option('--strict', '警告升为错误（退出码非零）')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         // 校验模式：纯文件操作，不触 DB

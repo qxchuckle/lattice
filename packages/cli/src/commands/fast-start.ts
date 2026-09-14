@@ -42,7 +42,6 @@ export function registerFastStartCommand(program: Command): void {
     .option('--files <files...>', '涉及的文件列表')
     .option('--cwd <dir>', '工作目录（默认当前目录）')
     .option('--project <id>', '关联项目 ID（默认自动检测）')
-    .option('--json', 'JSON 格式输出')
     .action(async (title: string, opts) => {
       try {
         const username = await getUsername();
@@ -105,7 +104,6 @@ export function registerFastStartCommand(program: Command): void {
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -170,7 +168,6 @@ export function registerFastStartCommand(program: Command): void {
     .option('--last <n>', '只返回最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
-    .option('--json', 'JSON 格式输出')
     .action(async (query: string, opts) => {
       try {
         const username = await getUsername();
@@ -231,7 +228,6 @@ export function registerFastStartCommand(program: Command): void {
   log
     .command('show <id>')
     .description('查看单条 fast-start 日志')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -313,7 +309,6 @@ export function registerFastStartCommand(program: Command): void {
   log
     .command('stats')
     .description('查看 fast-start 日志统计')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();

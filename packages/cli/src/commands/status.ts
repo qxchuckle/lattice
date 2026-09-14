@@ -45,7 +45,6 @@ export function registerStatusCommand(program: Command): void {
     .command('status')
     .description('显示 Lattice 状态')
     .option('--global', '显示全局状态')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         if (!(await isInitialized())) {

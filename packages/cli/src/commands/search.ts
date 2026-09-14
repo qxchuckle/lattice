@@ -80,7 +80,6 @@ export function registerSearchCommand(program: Command): void {
     .option('--project-limit <n>', '项目结果数量（覆盖 --limit）')
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
-    .option('--json', 'JSON 格式输出')
     .action(async (query: string, opts) => {
       let spinnerActive = false;
       try {

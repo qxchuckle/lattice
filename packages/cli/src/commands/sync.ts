@@ -132,7 +132,6 @@ export function registerSyncCommand(program: Command): void {
   domain
     .command('list')
     .description('域列表（数组顺序 = 读时遮蔽优先级）')
-    .option('--json', 'JSON 输出')
     .action(async (opts) => {
       try {
         const domains = await listDomains();

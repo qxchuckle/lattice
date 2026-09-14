@@ -115,7 +115,6 @@ export function registerProjectCommand(program: Command): void {
     .option('--has-git', '只显示含 git remote 的项目')
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -288,7 +287,6 @@ export function registerProjectCommand(program: Command): void {
   cmd
     .command('info <id>')
     .description('查看项目详情')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -444,7 +442,6 @@ export function registerProjectCommand(program: Command): void {
   cmd
     .command('where <path>')
     .description('查询指定路径属于哪个已注册项目（含父目录前缀匹配与指纹回退）')
-    .option('--json', 'JSON 格式输出')
     .action(async (rawPath: string, opts) => {
       try {
         const absPath = normalizeLocalPath(pathResolve(rawPath));
@@ -513,7 +510,6 @@ export function registerProjectCommand(program: Command): void {
   cmd
     .command('register [paths...]')
     .description('向上扫描路径的 ID 源（.git / lattice.json）并注册未注册项目（默认 cwd）')
-    .option('--json', 'JSON 格式输出')
     .action(async (rawPaths: string[], opts) => {
       try {
         const dirs = rawPaths.length > 0 ? rawPaths.map((p) => pathResolve(p)) : [pathResolve('.')];
@@ -562,7 +558,6 @@ export function registerProjectCommand(program: Command): void {
     .description('查看项目关系（默认聚合所有用户定义的关系）')
     .option('--current-user', '仅显示当前用户定义的关系')
     .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -859,7 +854,6 @@ export function registerProjectCommand(program: Command): void {
     .command('check')
     .description('检测哪些项目的画像需要更新')
     .option('--project <id>', '检查指定项目')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -987,7 +981,6 @@ export function registerProjectCommand(program: Command): void {
   profileCmd
     .command('show <id>')
     .description('查看项目画像（summary + tags + cache 状态 + 文件路径）')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -1057,7 +1050,6 @@ export function registerProjectCommand(program: Command): void {
   profileCmd
     .command('brief <id>')
     .description('一次性获取项目画像所需的所有 lattice 内部信息')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -1140,7 +1132,6 @@ export function registerProjectCommand(program: Command): void {
   tagsCmd
     .command('show <id>')
     .description('查看项目标签')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();

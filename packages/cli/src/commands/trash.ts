@@ -34,7 +34,6 @@ export function registerTrashCommand(program: Command): void {
     .alias('ls')
     .description('列出垃圾桶中的内容')
     .option('--type <type>', '按类型筛选（task/project/spec）')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();

@@ -102,7 +102,6 @@ export function registerContextCommand(program: Command): void {
     .option('--project <id>', '指定项目 ID')
     .option('--query <text>', '语义化查询（主题/意图/任务描述）：补充搜索相关的 spec、任务、项目')
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();

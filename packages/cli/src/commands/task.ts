@@ -128,7 +128,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--current', '自动识别当前目录对应的项目')
     .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
     .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -335,7 +334,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--lineage', '显示父任务链路')
     .option('--tree', '显示当前任务所在整棵任务树')
     .option('--descendants', '显示当前任务的后代树')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -637,7 +635,6 @@ export function registerTaskCommand(program: Command): void {
     .command('tree <id>')
     .description('查看任务树')
     .option('--descendants', '只显示当前任务为根的后代树')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -674,7 +671,6 @@ export function registerTaskCommand(program: Command): void {
   cmd
     .command('lineage <id>')
     .description('查看父任务链路')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -740,7 +736,6 @@ export function registerTaskCommand(program: Command): void {
     .requiredOption('--title <title>', '检查点标题')
     .option('-m, --message <message>', '检查点内容')
     .option('--refs <spec-ids>', '同时为任务添加 spec 引用（逗号分隔 spec-id 或 spec 名称）')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -805,7 +800,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--type <type>', '按类型过滤')
     .option('--id <checkpointId>', '查看指定检查点')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();
@@ -913,7 +907,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--remove-path <path>', '从 scopePaths 中移除指定路径')
     .option('--remove-project <id>', '从 projects 中移除指定项目')
     .option('--clear-paths', '清空任务的 scopePaths')
-    .option('--json', 'JSON 格式输出')
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();

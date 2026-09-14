@@ -149,7 +149,6 @@ export function registerRagCommand(program: Command): void {
   cmd
     .command('status')
     .description('查看索引状态')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         await getUsername();

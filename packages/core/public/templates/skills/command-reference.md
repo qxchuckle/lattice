@@ -21,6 +21,8 @@
 
 按命令有无 JSON 数据出口分两种行为：**有**出口 → 返回 JSON；**无**出口 → 成功路径仍输出人读文本（stdout、退出码 0，与不带 `--json` 逐字相同），失败路径进 machine 模式（提示走 stderr、退出码 1，见下段）。`--json` 是 machine 模式开关而非投影开关：写命令多数没有 `-q`，它是这些命令唯一的 machine 入口。语义例外：`config set --json` 是将输入 value 按 JSON 解析，非输出格式控制（见 [cli-system.md#ltc-config]）。
 
+**位置参数以 `-` 开头**：**含空格**的（任务标题、搜索查询等自由文本）已由 CLI 自动按位置参数解析——`ltc task create "--json 开头的标题" --current -q` 与 `ltc search "--json 开头的查询" --json` 都正常，**无需 `--`**，且选项仍可放在位置参数之后。仍需 `--` 分隔的两种形态：**一是**值**恰好等于**某个已注册选项（`ltc search -- "--json"` 搜字面量 `--json`；不加 `--` 会被当选项吃掉，再报 `missing required argument 'query'`）；**二是**值以 `-` 开头但**不含空格**（`ltc task create -- "--fix"`）。写 `--` 时所有选项必须放在它前面（`ltc search -- "q" --json` 报 `too many arguments`）。拼错的选项不会被自动消化——判据是「含空格」，而合法选项名不含空格，故 `--jsonn` 仍报 `unknown option` 并给 `(Did you mean --json?)`。
+
 machine 模式（`--json` / `-q`）下的**失败与空态**：提示走 **stderr** + 退出码 **1**，stdout 保持空（绝不吐人读文本）；「成功但结果为空」仍给合法空载荷（`{cols:[],rows:[]}`、`{total:0,...}`）。因此 `$(ltc ... --json)` 与管道永不会捕到非数据字节，失败可由退出码识别。人读模式下这些提示仍在 stdout、退出码不变。
 
 `--json-format`：凡接受 `--json` 的命令均自动接受（`config set` 除外——其 `--json` 是输入解析语义），改**排版**为缩进格式化（默认单行压缩），不改字段与 shape。

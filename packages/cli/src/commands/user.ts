@@ -35,7 +35,6 @@ export function registerUserCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('列出所有用户')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const currentUser = await getUsername();
@@ -71,7 +70,6 @@ export function registerUserCommand(program: Command): void {
   cmd
     .command('current')
     .description('显示当前用户名')
-    .option('--json', 'JSON 格式输出')
     .action(async (opts) => {
       try {
         const username = await getUsername();
