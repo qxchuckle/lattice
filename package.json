@@ -50,6 +50,7 @@
     "format:check": "prettier --check .",
     "lint-staged": "lint-staged",
     "check-types": "pnpm -r run check-types",
+    "check:cli-doc": "node packages/cli/scripts/check-projection-doc-sync.mjs",
     "rag:benchmark": "node scripts/rag-benchmark.mjs",
     "clean": "pnpm -r run clean"
   },

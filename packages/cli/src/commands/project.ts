@@ -55,7 +55,6 @@ import {
   paginate,
   paginationEntries,
   paginationNote,
-  withPaginationOptions,
   reportFailure,
   reportFailureHint,
 } from '../utils';
@@ -102,7 +101,10 @@ export function registerProjectCommand(program: Command): void {
   const cmd = program.command('project').description('管理已注册的项目');
 
   // ─── list ───
-  withPaginationOptions(cmd.command('list').alias('ls').description('列出所有已注册项目'))
+  cmd
+    .command('list')
+    .alias('ls')
+    .description('列出所有已注册项目')
     .option('--group <group>', '按分组过滤')
     .option('--tag <tag>', '按标签过滤')
     .option(
@@ -114,10 +116,6 @@ export function registerProjectCommand(program: Command): void {
     .option('--orphaned', '只显示所有 localPath 都已失效的项目')
     .option('--with-relations', '附带显示项目关系')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（保留 local_path/git_remote 等 snake_case 原始 DB 列、git_first_commit、完整时间戳，不做列式）；默认 --json 为列式表 {cols,rows}，只留解析后的 camelCase 字段',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -558,19 +556,13 @@ export function registerProjectCommand(program: Command): void {
   const relationCmd = cmd.command('relation').description('管理项目间关系');
 
   // relation list
-  withPaginationOptions(
-    relationCmd
-      .command('list [id]')
-      .alias('ls')
-      .description('查看项目关系（默认聚合所有用户定义的关系）'),
-  )
+  relationCmd
+    .command('list [id]')
+    .alias('ls')
+    .description('查看项目关系（默认聚合所有用户定义的关系）')
     .option('--current-user', '仅显示当前用户定义的关系')
     .option('--user <users>', '仅显示指定用户定义的关系（逗号分隔多个用户名）')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (id: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -868,10 +860,6 @@ export function registerProjectCommand(program: Command): void {
     .description('检测哪些项目的画像需要更新')
     .option('--project <id>', '检查指定项目')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始结果（分组条目保留 status 字段、不做列式/压缩）；默认 --json 各分组为列式表 {cols,rows}，status 由分组键表达故省略',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();

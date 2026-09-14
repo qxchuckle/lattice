@@ -23,20 +23,18 @@ import {
   paginationEntries,
   paginationNote,
   projectTable,
-  withPaginationOptions,
 } from '../utils';
 
 export function registerTrashCommand(program: Command): void {
   const cmd = program.command('trash').description('垃圾桶管理（查看、恢复、清空已删除的内容）');
 
   // list
-  withPaginationOptions(cmd.command('list').alias('ls').description('列出垃圾桶中的内容'))
+  cmd
+    .command('list')
+    .alias('ls')
+    .description('列出垃圾桶中的内容')
     .option('--type <type>', '按类型筛选（task/project/spec）')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();

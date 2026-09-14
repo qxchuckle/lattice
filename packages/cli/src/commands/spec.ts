@@ -61,7 +61,6 @@ import {
   paginationNote,
   projectList,
   projectTable,
-  withPaginationOptions,
   reportFailure,
   reportFailureHint,
 } from '../utils';
@@ -97,14 +96,13 @@ export function registerSpecCommand(program: Command): void {
   const cmd = program.command('spec').description('管理 Spec 文件');
 
   // list
-  withPaginationOptions(cmd.command('list').alias('ls').description('列出 spec 文件'))
+  cmd
+    .command('list')
+    .alias('ls')
+    .description('列出 spec 文件')
     .option('--scope <scope>', '过滤层级（project / user / global）')
     .option('--tag <tag>', '按标签过滤')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始分组对象（含每个 spec 的 content 全文、不做列式）；默认 --json 剥离 content（正文走 spec show）且每个分组的 specs 为列式表 {cols,rows}',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -406,10 +404,6 @@ export function registerSpecCommand(program: Command): void {
     .command('conflicts')
     .description('检测多层级同名 spec 冲突')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始冲突数组（fileName + 嵌套 levels）；默认 --json 扁平化为列式表 {cols,rows}，每个层级一行',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -473,10 +467,6 @@ export function registerSpecCommand(program: Command): void {
     .alias('ls')
     .description('列出可用的 spec 模板')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始模板对象数组（不做列式/压缩）；默认 --json 为列式表 {cols,rows}',
-    )
     .action(async (opts) => {
       const templates = await listSpecTemplates();
 
@@ -603,12 +593,11 @@ export function registerSpecCommand(program: Command): void {
 
   const registryCmd = templateCmd.command('registry').description('管理模板仓库');
 
-  withPaginationOptions(registryCmd.command('list').alias('ls').description('列出已注册的模板仓库'))
+  registryCmd
+    .command('list')
+    .alias('ls')
+    .description('列出已注册的模板仓库')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (opts) => {
       try {
         const registries = await getConfiguredTemplateRegistries();
@@ -858,10 +847,6 @@ export function registerSpecCommand(program: Command): void {
     .option('--scope <scope>', '限定层级（project / user / global）')
     .option('--all', '扫描全部 spec（含 project + user + global）')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始报告对象数组（含 relativePath、不做列式/压缩）；默认 --json 为列式表 {cols,rows}，relativePath 与 filePath 重复故省略',
-    )
     .action(async (file: string | undefined, opts) => {
       try {
         const username = await getUsername();
@@ -1017,10 +1002,6 @@ export function registerSpecCommand(program: Command): void {
     )
     .option('--limit <n>', '最多展示几条（默认 20）', '20')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 的 specs 输出原始对象数组（含 relativePath、不做列式）；默认为列式表 {cols,rows}',
-    )
     .action(async (opts) => {
       try {
         await initDb();

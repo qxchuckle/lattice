@@ -25,19 +25,17 @@ import {
   paginationEntries,
   paginationNote,
   projectTable,
-  withPaginationOptions,
 } from '../utils';
 
 export function registerUserCommand(program: Command): void {
   const cmd = program.command('user').description('管理 Lattice 用户');
 
   // list
-  withPaginationOptions(cmd.command('list').alias('ls').description('列出所有用户'))
+  cmd
+    .command('list')
+    .alias('ls')
+    .description('列出所有用户')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（不做列式/压缩；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (opts) => {
       try {
         const currentUser = await getUsername();

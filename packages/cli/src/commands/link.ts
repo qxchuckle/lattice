@@ -60,7 +60,9 @@ export function registerLinkCommand(program: Command): void {
     .option('--tags <tags>', '标签（逗号分隔）')
     .option('--template <templates>', '应用 spec 模板（逗号分隔，或使用 all）')
     .option('--restore <id>', '绑定到已有项目 ID（用于 git 历史不同但确认为同一项目的场景）')
-    .option('-y, --yes', '跳过交互确认')
+    // link 全程非交互（命中已注册项目即幂等更新、未命中即新建），本选项无行为差异；
+    // 保留而不删除是为了兼容既有调用（删掉会让带 -y 的脚本报 unknown option）
+    .option('-y, --yes', '接受但无行为差异（link 全程非交互）')
     .action(async (opts) => {
       setDebug(!!opts.debug);
       try {

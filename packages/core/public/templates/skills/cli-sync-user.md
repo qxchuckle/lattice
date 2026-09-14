@@ -4,7 +4,7 @@
 
 ## `ltc sync`
 
-同步数据（origin 单仓多机同步 + 域经验包协作）。`--pull` / `--push`（origin 单仓专用）/ `--only <origin|domains>`（只执行一轨）/ `--json`（域同步结果结构化输出）。
+同步数据（origin 单仓多机同步 + 域经验包协作）。`--pull` / `--push`（origin 单仓专用）/ `--only <origin|domains>`（只执行一轨）。本命令**自带 action 且有子命令**，故不接受 `--json`（报 unknown option 到 stderr、退出码 1）；域清单的机读出口是 `ltc sync domain list --json`。
 
 默认先 origin（若启用 git）再逐域：全部域 pull（use=off 也保持镜像新鲜）+ 有 routes/有指纹的域 push。
 

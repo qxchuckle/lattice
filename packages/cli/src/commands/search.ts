@@ -81,10 +81,6 @@ export function registerSearchCommand(program: Command): void {
     .option('--no-rerank', '关闭轻量 rerank，对比 first-stage 排序')
     .option('--show-duplicates', '展开同名重复项的详细信息')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始结果数组（完整 meta 含内部调试字段、meta 不拍平、不做列式）；默认 --json 为列式表 {cols,rows}',
-    )
     .action(async (query: string, opts) => {
       let spinnerActive = false;
       try {

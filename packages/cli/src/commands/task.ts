@@ -57,7 +57,6 @@ import {
   paginate,
   paginationEntries,
   paginationNote,
-  withPaginationOptions,
 } from '../utils';
 
 const TASK_STATUSES: TaskStatus[] = ['planning', 'in_progress', 'completed', 'archived'];
@@ -117,7 +116,10 @@ export function registerTaskCommand(program: Command): void {
   const cmd = program.command('task').description('管理跨项目任务');
 
   // list
-  withPaginationOptions(cmd.command('list').alias('ls').description('列出任务'))
+  cmd
+    .command('list')
+    .alias('ls')
+    .description('列出任务')
     .option(
       '--status <status>',
       '按状态过滤（planning / in_progress / completed / archived / all）',
@@ -127,10 +129,6 @@ export function registerTaskCommand(program: Command): void {
     .option('--all-user', '聚合所有用户的任务（需搭配 --project 或 --current）')
     .option('--user <users>', '聚合指定用户的任务（逗号分隔，需搭配 --project 或 --current）')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（完整 referencedSpecs 明细与时间戳、不做列式；默认 --json 为列式表 {cols,rows}，referencedSpecs 降为 id 数组）',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -801,15 +799,13 @@ export function registerTaskCommand(program: Command): void {
     });
 
   // progress
-  withPaginationOptions(cmd.command('progress <id>').description('查看任务进展记录'))
+  cmd
+    .command('progress <id>')
+    .description('查看任务进展记录')
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--type <type>', '按类型过滤')
     .option('--id <checkpointId>', '查看指定检查点')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (id: string, opts) => {
       try {
         const username = await getUsername();

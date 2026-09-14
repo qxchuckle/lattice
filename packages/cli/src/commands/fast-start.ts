@@ -24,7 +24,6 @@ import {
   paginationNote,
   dedupeItem,
   projectTable,
-  withPaginationOptions,
   reportFailure,
   reportFailureHint,
 } from '../utils';
@@ -99,15 +98,14 @@ export function registerFastStartCommand(program: Command): void {
     });
 
   // log list
-  withPaginationOptions(log.command('list').alias('ls').description('列出 fast-start 日志'))
+  log
+    .command('list')
+    .alias('ls')
+    .description('列出 fast-start 日志')
     .option('--last <n>', '只显示最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();
@@ -165,20 +163,14 @@ export function registerFastStartCommand(program: Command): void {
     });
 
   // log search
-  withPaginationOptions(
-    log
-      .command('search <query>')
-      .alias('find')
-      .description('关键词搜索 fast-start 日志（搜索标题 / 内容 / 文件 / 目录）'),
-  )
+  log
+    .command('search <query>')
+    .alias('find')
+    .description('关键词搜索 fast-start 日志（搜索标题 / 内容 / 文件 / 目录）')
     .option('--last <n>', '只返回最近 N 条', parseInt)
     .option('--project <id>', '按项目 ID 过滤')
     .option('--current', '自动识别当前目录对应的项目并过滤')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出原始对象数组（完整时间戳、不做列式；默认 --json 为列式表 {cols,rows}）',
-    )
     .action(async (query: string, opts) => {
       try {
         const username = await getUsername();

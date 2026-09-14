@@ -3,7 +3,13 @@ import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
-import { resolveCurrentProject, logger, setMachineMode } from './utils';
+import {
+  resolveCurrentProject,
+  logger,
+  setMachineMode,
+  jsonFullHintFor,
+  isPaginatedCommand,
+} from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerUninjectCommand } from './commands/uninject';
 import { registerLinkCommand } from './commands/link';
@@ -55,45 +61,64 @@ registerWebCommand(program);
 registerFastStartCommand(program);
 
 /**
- * 命令选项兜底：遍历命令树，给**叶子命令**补齐缺失的选项，避免 AI 调用时因 unknown option
- * 报错（`--force` / `--debug` / `--json` / `--json-format`）。
+ * 遍历命令树的**叶子命令**；`commandPath` 是空格分隔的全路径（不含程序名，如 `fast-start log list`）。
+ */
+function walkLeafCommands(
+  cmd: Command,
+  path: string[],
+  visit: (leaf: Command, commandPath: string) => void,
+): void {
+  if (cmd.commands.length === 0) {
+    visit(cmd, path.join(' '));
+    return;
+  }
+  for (const sub of cmd.commands) {
+    walkLeafCommands(sub, [...path, sub.name()], visit);
+  }
+}
+
+/**
+ * 命令选项兜底：给**叶子命令**补齐缺失的选项，避免 AI 调用时因 unknown option 报错。
  *
  * **只补叶子，绝不补父命令**：commander 里祖先声明的同名选项会**遮蔽**后代的——实测给
  * 「父命令自带 action」的形态（`sync` / `config`）补 `--json` 后，`sync domain list --json`
  * 与 `config get <key> --json` 的 `opts().json` 变成 undefined，JSON 出口直接失效。
  * 代价：`ltc sync --json` 这类「父命令自带 action」的调用会报 unknown option，
  * 属可接受的例外（已在 command-reference.md 记录），远优于静默破坏子命令的 JSON 出口。
+ *
+ * `--json-full` 与翻页参数**由投影声明表驱动**（`utils/projection-manifest.ts`）：hint 文案与
+ * 「哪些命令接翻页」都只有一份真源，命令文件不手写。`detail` / `raw` 类命令查不到 hint →
+ * 不注册 `--json-full`（避免声明了却与默认输出无差异的死选项）。
  */
-function ensureOption(
-  cmd: Command,
-  long: string,
-  flags: string,
-  description: string,
-  skip?: (c: Command) => boolean,
-): void {
-  if (cmd.commands.length === 0) {
-    if (!cmd.options.some((opt) => opt.long === long) && !skip?.(cmd)) {
-      cmd.option(flags, description);
-    }
-    return;
+function ensureLeafOptions(leaf: Command, commandPath: string): void {
+  const add = (
+    long: string,
+    flags: string,
+    description: string,
+    parser?: (value: string, previous: number) => number,
+  ): void => {
+    if (leaf.options.some((opt) => opt.long === long)) return;
+    if (parser) leaf.option(flags, description, parser);
+    else leaf.option(flags, description);
+  };
+
+  add('--force', '-f, --force', '跳过确认');
+  add('--debug', '-d, --debug', '输出调试信息');
+  add('--json', '--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
+  // --json-format 与 --json 成对出现；config set 除外（其 --json 是输入 value 的解析语义，无输出排版）
+  if (!(leaf.name() === 'set' && leaf.parent?.name() === 'config')) {
+    add('--json-format', '--json-format', 'JSON 输出时使用格式化（默认压缩）');
   }
-  for (const sub of cmd.commands) {
-    ensureOption(sub, long, flags, description, skip);
+
+  const fullHint = jsonFullHintFor(commandPath);
+  if (fullHint) add('--json-full', '--json-full', fullHint);
+  if (isPaginatedCommand(commandPath)) {
+    add('--page', '--page <n>', '页码（1-based，配合 --page-size；默认输出全部）', parseInt);
+    add('--page-size', '--page-size <n>', '每页条数（不传则一次输出全部）', parseInt);
   }
 }
 
-// 已自定义同名选项的命令保留原语义（如 `config set --json` 是「按 JSON 解析输入 value」）
-ensureOption(program, '--force', '-f, --force', '跳过确认');
-ensureOption(program, '--debug', '-d, --debug', '输出调试信息');
-ensureOption(program, '--json', '--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
-// --json-format 与 --json 成对出现，不逐命令手写；config set 除外（其 --json 是输入解析语义，无输出排版）
-ensureOption(
-  program,
-  '--json-format',
-  '--json-format',
-  'JSON 输出时使用格式化（默认压缩）',
-  (c) => c.name() === 'set' && c.parent?.name() === 'config',
-);
+walkLeafCommands(program, [], ensureLeafOptions);
 
 async function main(): Promise<void> {
   // 进程退出时确保 DB 正确关闭（WAL checkpoint）
@@ -107,6 +132,11 @@ async function main(): Promise<void> {
     const isRagIndexCmd = parentName === 'rag' && (name === 'rebuild' || name === 'update');
 
     // machine 输出模式（--json / -q）：stdout 只留数据，preAction 的提示性输出一律静音，从根源排除对 $(...)/管道解析的污染
+    // --json-full 是 --json 的形态开关：单独给出时隐含 JSON 输出，否则命令静默走人读分支、
+    // $(...) 捕到的不是数据（与 machine 纯净度同源）
+    if (actionCommand.opts().jsonFull && !actionCommand.opts().json) {
+      actionCommand.setOptionValue('json', true);
+    }
     const cmdOpts = actionCommand.opts();
     const machineOutput = Boolean(cmdOpts.json || cmdOpts.quiet);
     // 统一设置 machine 模式标志：命令内的失败/空态提示据此走 stderr（见 utils/machine-output.ts）

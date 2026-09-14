@@ -1,5 +1,3 @@
-import type { Command } from 'commander';
-
 /**
  * list 类命令通用翻页能力（CLI 输出层）。
  *
@@ -7,7 +5,9 @@ import type { Command } from 'commander';
  * 元数据，消费方据此可翻遍全部（翻页 ≠ 截断，信息完整可达）。
  *
  * 本模块只负责窗口切分与人读渲染；`--json` 的输出 shape 由 json-projection 的
- * `projectTable` 决定（列式表 `{cols, rows}` 与分页元数据并列）。
+ * `projectTable` 决定（列式表 `{cols, rows}` 与分页元数据并列）。`--page` / `--page-size`
+ * 选项由 `index.ts` 的 walker 按 projection-manifest 的 `kind = 'table'` 派生注册，
+ * 命令文件不手写。
  *
  * 翻页在命令既有过滤（`--last`/`--project`/`--limit` 等）之后组合：filter → paginate。
  */
@@ -30,13 +30,6 @@ export interface Paginated<T> extends PaginationMeta {
 
 /** paginate 返回：未分页是原数组，分页是带元数据的窗口对象 */
 export type MaybePaginated<T> = T[] | Paginated<T>;
-
-/** 给 list 类命令注册统一翻页参数（默认不传 = 输出全部） */
-export function withPaginationOptions<C extends Command>(cmd: C): C {
-  return cmd
-    .option('--page <n>', '页码（1-based，配合 --page-size；默认输出全部）', parseInt)
-    .option('--page-size <n>', '每页条数（不传则一次输出全部）', parseInt);
-}
 
 /** 未传 pageSize → 原样返回全部数组；传了 → 返回带元数据的分页窗口 */
 export function paginate<T>(items: T[], opts: PaginationOptions): MaybePaginated<T> {

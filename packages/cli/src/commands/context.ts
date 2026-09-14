@@ -103,10 +103,6 @@ export function registerContextCommand(program: Command): void {
     .option('--query <text>', '语义化查询（主题/意图/任务描述）：补充搜索相关的 spec、任务、项目')
     .option('--current-user', '仅显示当前用户数据，禁用跨用户聚合')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出未投影对象（完整 querySearch meta 含 RAG 内部打分/调试字段、各段为对象数组不做列式与压缩）；默认 --json 各段为列式表 {cols,rows}。spec content 两者均不含，正文走 spec show',
-    )
     .action(async (opts) => {
       try {
         const username = await getUsername();

@@ -46,10 +46,6 @@ export function registerStatusCommand(program: Command): void {
     .description('显示 Lattice 状态')
     .option('--global', '显示全局状态')
     .option('--json', 'JSON 格式输出')
-    .option(
-      '--json-full',
-      'JSON 输出未投影的原始对象（完整时间戳、activeTasks 保留完整 referencedSpecs、不做列式）；默认 --json 走投影层',
-    )
     .action(async (opts) => {
       try {
         if (!(await isInitialized())) {

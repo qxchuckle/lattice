@@ -11,8 +11,7 @@
 - `--name <name>` / `--description <desc>` / `--groups <groups>` / `--tags <tags>`
 - `--template <templates>`：应用 spec 模板（逗号分隔或 `all`）
 - `--restore <id>`：重新绑定已有项目
-- `--force-new`：强制新建
-- `-y, --yes`：非交互（检测到候选仅警告并新建）
+- `-y, --yes`：接受但无行为差异——`link` 全程非交互（命中已注册项目即幂等更新、未命中即新建）
 
 ## `ltc unlink`
 

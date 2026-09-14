@@ -23,7 +23,7 @@ machine 模式（`--json` / `-q`）下的**失败与空态**：提示走 **stder
 
 `--json-format`：凡接受 `--json` 的命令均自动接受（`config set` 除外——其 `--json` 是输入解析语义），改**排版**为缩进格式化（默认单行压缩），不改字段与 shape。
 
-`--json-full`：**限已接投影层的命令**（list 类、`search`、`context`、`status`、`spec lint`、`spec conflicts`、`spec template list`、`spec suggest-description`、`project profile check`），关闭下表的**瘦身层**：恢复被省略的空值字段、完整 ISO 时间戳、RAG 内部打分/调试 meta、detail 正文（`spec list` 的 content）、`task list` 的 referencedSpecs 明细、画像检查条目的 `status`，且不转列式表。它**不恢复重复表示**——去重层两种模式都生效。
+`--json-full`：关闭下表的**瘦身层**——恢复被省略的空值字段、完整 ISO 时间戳、RAG 内部打分/调试 meta、detail 正文（`spec list` 的 content）、`task list` 的 referencedSpecs 明细、画像检查条目的 `status`，且不转列式表。它**不恢复重复表示**——去重层两种模式都生效。单独给出（不带 `--json`）等同 `--json --json-full`。适用命令：`context` · `search` · `status` · `project list` · `project relation list` · `project profile check` · `task list` · `task progress` · `fast-start log list` · `fast-start log search` · `spec list` · `spec template registry list` · `spec conflicts` · `spec template list` · `spec lint` · `spec suggest-description` · `user list` · `trash list`。
 
 `--json` 输出经两层正交处理：
 
