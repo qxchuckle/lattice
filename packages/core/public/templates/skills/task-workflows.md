@@ -23,6 +23,27 @@ PRD 管"应该是什么"，progress 管"发生了什么"，design 管"怎么讨�
 - 未显式 design 但出现方案讨论 → 主动追加 design.md
 - design 退出时 → 结论段精简为核心决策（[lattice-rules.md#二、Design 模式约束]）
 
+## 是否新建任务：轻量改动挂既有任务
+
+改动同时满足下表三条 → **不新建任务**，直接改，改完记入**最近一个主题相关的任务**（archived 也可追加）：
+
+| 条件 | 判定 |
+|---|---|
+| 范围 | 单一主题、无方案设计、无需多轮决策（文案/注释修正、删除已收敛的副本、补一条文档规则） |
+| 归属 | 存在主题相关的既有任务，其 PRD 能自然容纳这次改动（同一模块 / 同一问题的延续） |
+| 记录 | 改动仍进 PRD + checkpoint——**不是**绕过记录，只是不新建任务壳 |
+
+任一不满足 → 走 [task-workflows.md#命令参数非任务 ID 时：标题归纳与查重] 新建。
+
+**挂既有任务的必做动作**：
+
+1. PRD 追加一节（本轮目标 / 改动 / 验收 / 与既有轮次的关系），并同步「修改文件索引」与「遗留事项」
+2. `ltc task checkpoint <id> --type <type>`——拍板用 `decision`，推翻既有判定用 `correction`，验证通过用 `milestone`
+3. 任务已 archived 且其 summary checkpoint 写于本轮之前 → **必须补一条覆盖全部轮次的 summary**（旧口径已过期，`ltc search` / `task progress` 读到的会是不完整总结）
+4. `ltc rag update`
+
+**违规识别**：改动进了代码，但既没新建任务、也没挂进任何 PRD → 命中 [lattice-rules.md#八、禁令] 的「绕过 PRD 改代码」。「不新建任务」只免除任务壳，不免除记录。
+
 ## 命令参数非任务 ID 时：标题归纳与查重
 
 0. **项目定位（必做）**：有路径 → `ltc project where <path>`；有语义 → `ltc project list --search <kw>`；与 `ltc task list --current` 用 `&&` 一次串联；定位到 → `--project <id>`，无 → `--current`
@@ -56,7 +77,9 @@ ltc task start <task-id>
 5. 同步项目关联（[task-workflows.md#项目关联同步]）：新路径 `--paths`，新已注册项目 `--project <id>`
 6. 输出整体确认（ID + 状态 + 标题 + 关联项目 + 父任务 + 关键约束）
 
-## 实施期循环（每轮用户输入到来时）
+## 实施期循环
+
+每轮用户输入到来时循环：
 
 ```
 用户输入 → 1.PRD硬触发？→ 2.spec选读？→ 3.写代码 → 4.checkpoint → 5.回答闭合自检（[lattice-rules.md#十、回答闭合自检]）
@@ -155,7 +178,9 @@ ltc project relation add <a> <b> --type <type> --description "证据" --ai-infer
 
 **必须委派 `lattice-task-archive` subagent（不支持时退化串行）；免委派客观条件见 [subagent-delegation.md#条件委派原则]。**
 
-### 前置采集（必做，未读就写总结 = 遗漏）
+### 前置采集
+
+**必做**——未读 PRD + progress + design.md 就写归档总结 = 必然遗漏关键决策。
 
 ```bash
 ltc task info <id> && ltc task progress <id>

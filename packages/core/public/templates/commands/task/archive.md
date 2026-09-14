@@ -26,7 +26,7 @@
 2. **核对 + 更新 PRD**：写 PRD 前先对照 progress 核对（[task-workflows.md#核对]）——决策全在 PRD/checkpoint · 无遗漏改动 · 项目关系；核对通过后补充最终方案、关键结果、取舍、遗留问题、"任务完成总结"段落
    - 任务有父 / 子任务时先用 `ltc task lineage` / `ltc task tree --descendants` 检查链路是否仍合理
 3. **summary checkpoint** + **complete** + **archive** + **`ltc rag update`**
-4. **spec 沉淀判定**：见下文"归档前检查"段
+4. **spec 沉淀判定**：[archive.md#归档前检查（spec 沉淀判定）]
 
 ### 情况二：参数为空 / 不是任务 ID
 

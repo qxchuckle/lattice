@@ -90,4 +90,4 @@ spec/PRD/项目变更后 → `ltc rag update`；报错 → `ltc rag rebuild`。
 
 ## --force
 
-AI 调用必须带 `-f`：`init` / `uninject` / `unlink` / `project remove` / `project relation remove` / `task delete` / `user remove` / `fast-start log clear`。完整清单 [command-reference.md#通用约定]。
+AI 调用必须带 `-f`：`init` / `init scan` / `uninject` / `unlink` / `project relation remove` / `project merge` / `user rename` / `user remove` / `trash purge` / `fast-start log clear`。完整清单 [command-reference.md#通用约定]。

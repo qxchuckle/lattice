@@ -33,6 +33,8 @@ design 后禁改业务代码。允许：read / grep / search / lsp / ltc / 写 d
 
 兜底：3 轮无 checkpoint → 补 `note`。fast-start 不走循环，但 spec 全文读取和沉淀仍适用。
 
+轻量改动（单一主题 + 有主题相关既有任务）不新建任务壳，挂既有任务 PRD + checkpoint（[task-workflows.md#是否新建任务：轻量改动挂既有任务]）；免除的只是任务壳，不免除记录。
+
 ## 四、项目关联同步
 
 实时维护 task.json `projects`/`scopePaths`/`referencedSpecs`。发现新项目/路径/spec 当轮同步（[task-workflows.md#项目关联同步]）。

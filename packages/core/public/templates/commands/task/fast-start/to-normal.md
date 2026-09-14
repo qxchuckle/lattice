@@ -4,7 +4,7 @@
 
 **[依赖文档]**（均位于 lattice skill 目录）：
 - fast-start-workflows.md：转正常模式（to-normal）
-- task-workflows.md：命令参数非任务 ID 时：标题归纳与查重 / task start 后的起手动作 / 实施期循环（每轮用户输入到来时）
+- task-workflows.md：命令参数非任务 ID 时：标题归纳与查重 / task start 后的起手动作 / 实施期循环
 - spec-workflows.md：按任务主题全文读取相关 spec
 
 **目标**：将当前 fast-start 会话转入正常任务模式——创建任务、回填 PRD、后续按正常实施期循环执行。
@@ -45,7 +45,7 @@ ltc task associate <task-id> --current
 
 ### 5. 后续按正常模式执行
 
-从此刻起，完全按 [task-workflows.md#实施期循环（每轮用户输入到来时）] 执行。
+从此刻起，完全按 [task-workflows.md#实施期循环] 执行。
 
 ## 输出要求
 

@@ -42,7 +42,7 @@
 - 无漂移：`✓ 工作流仍在轨：[任务 ID 简写]-[任务标题]。`（一行）
 - 已纠偏：`✓ 已纠偏：补打 N 个 checkpoint / 同步 PRD x 处。`（一行）
 - 带附加请求：上面一行后直接接续处理请求，不分段
-- 严重漂移：见下节
+- 严重漂移：[keep.md#严重漂移升级]
 
 禁止：默认输出表格 / 多段标题 / 罗列 CLI 原始输出。
 
@@ -60,7 +60,7 @@
 ## 约束
 
 - 无漂移不无中生有打 checkpoint / 改 PRD
-- 仅允许写入：`ltc task checkpoint` / `ltc task associate` / `search_replace` 同 PRD / §十 闭合动作（ref-spec / register / relation add / spec migrate / rag update）
+- 仅允许写入：`ltc task checkpoint` / `ltc task associate` / `search_replace` 同 PRD / [lattice-rules.md#十、回答闭合自检] 闭合动作（ref-spec / register / relation add / spec migrate / rag update）
 - 不在 Lattice 项目目录 → 仅做 skill 与对话级保持，告知用户后继续
 - 无活跃任务 → 跳过 1 / 4 / 5 / 6 步，仅核对工作流约束与 spec 清单
 - 不替代常规 checkpoint：实施期循环该打的照打，不堆到本命令集中触发
