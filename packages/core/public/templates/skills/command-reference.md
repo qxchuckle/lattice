@@ -17,7 +17,9 @@
 | `ltc user remove <name>` | 删除用户 |
 | `ltc fast-start log clear` | 清空日志 |
 
-`--json`：所有**叶子**命令均接受；无 JSON 输出的命令接受但不生效（输出保持人读格式）。两个例外：① `config set --json` 语义为将输入 value 按 JSON 解析，非输出格式控制（见 [cli-system.md#ltc-config]）；② **父命令自带 action 的**（`sync`、`config`）不接受 `--json`，会报 `unknown option` 到 stderr 并退出 1——commander 里祖先声明的同名选项会**遮蔽**后代，给它补 `--json` 会让 `sync domain list --json` / `config get <key> --json` 静默失效。
+`--json`：所有**叶子**命令均接受，**父命令一律不接受**（选项兜底只补叶子）。父命令里实际会踩到的是自带 action 的两个——`ltc sync --json` / `ltc config --json` 报 `unknown option` 到 stderr 并退出 1，规避是调子命令（`ltc sync domain list --json` / `ltc config show --json`）；不给父命令补 `--json` 是因为 commander 里祖先声明的同名选项会**遮蔽**后代，补了会让 `sync domain list --json` / `config get <key> --json` 的 `opts().json` 变 undefined、JSON 出口静默失效。
+
+按命令有无 JSON 数据出口分两种行为：**有**出口 → 返回 JSON；**无**出口 → 成功路径仍输出人读文本（stdout、退出码 0，与不带 `--json` 逐字相同），失败路径进 machine 模式（提示走 stderr、退出码 1，见下段）。`--json` 是 machine 模式开关而非投影开关：写命令多数没有 `-q`，它是这些命令唯一的 machine 入口。语义例外：`config set --json` 是将输入 value 按 JSON 解析，非输出格式控制（见 [cli-system.md#ltc-config]）。
 
 machine 模式（`--json` / `-q`）下的**失败与空态**：提示走 **stderr** + 退出码 **1**，stdout 保持空（绝不吐人读文本）；「成功但结果为空」仍给合法空载荷（`{cols:[],rows:[]}`、`{total:0,...}`）。因此 `$(ltc ... --json)` 与管道永不会捕到非数据字节，失败可由退出码识别。人读模式下这些提示仍在 stdout、退出码不变。
 

@@ -89,6 +89,12 @@ function walkLeafCommands(
  * `--json-full` 与翻页参数**由投影声明表驱动**（`utils/projection-manifest.ts`）：hint 文案与
  * 「哪些命令接翻页」都只有一份真源，命令文件不手写。`detail` / `raw` 类命令查不到 hint →
  * 不注册 `--json-full`（避免声明了却与默认输出无差异的死选项）。
+ *
+ * `--json` **不由声明表驱动**（无条件补全部叶子）：它是 machine 模式开关（`preAction` 里
+ * `machineOutput = json || quiet` → `setMachineMode`），不是投影开关——无 JSON 数据出口的写命令
+ * 靠它把失败提示改道 stderr + 退出码 1，且多数没有 `-q`，删掉即复活「未找到 X 吐 stdout 且退出 0」
+ * 的缺陷，也会让 SKILL.md「ltc 命令必须带 --json」在这些命令上报 unknown option。
+ * 判据：**选项是否只在「有 JSON 数据出口」时才有意义**——是 → 声明表驱动；否 → 无条件补。
  */
 function ensureLeafOptions(leaf: Command, commandPath: string): void {
   const add = (
@@ -104,7 +110,11 @@ function ensureLeafOptions(leaf: Command, commandPath: string): void {
 
   add('--force', '-f, --force', '跳过确认');
   add('--debug', '-d, --debug', '输出调试信息');
-  add('--json', '--json', 'JSON 格式输出（无 JSON 输出的命令接受但不生效）');
+  add(
+    '--json',
+    '--json',
+    'JSON 格式输出；无 JSON 数据出口的命令成功时仍出人读文本，失败提示走 stderr 且退出码 1',
+  );
   // --json-format 与 --json 成对出现；config set 除外（其 --json 是输入 value 的解析语义，无输出排版）
   if (!(leaf.name() === 'set' && leaf.parent?.name() === 'config')) {
     add('--json-format', '--json-format', 'JSON 输出时使用格式化（默认压缩）');
