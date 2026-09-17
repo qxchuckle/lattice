@@ -1,30 +1,49 @@
 import type { ParsedSpec } from '../types';
 import { writeSpec, normalizeSpecFrontmatter, formatSpecParseError } from './io';
 import { isValidSpecId } from './id';
-import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from './cascade';
+import { getGlobalSpecs, getUserSpecs, getAllProjectSpecsGrouped } from './cascade';
 import { getUsername } from '../config';
 import { getProjectSpecDir, getUserSpecDir, getGlobalSpecDir, getFileMtime } from '../paths';
 
+/** spec 所属层级 */
+export type MigrateSpecLevel = 'global' | 'user' | 'project';
+
+/** 迁移结果中单条 spec 的归属信息（全项目视角下用于溯源、展示与跨项目确认判定） */
+export interface MigrateSpecRef {
+  filePath: string;
+  level: MigrateSpecLevel;
+  /** 仅 project 级非空 */
+  projectId: string | null;
+  /** 仅 project 级非空 */
+  projectName: string | null;
+}
+
 export interface MigrateResult {
   /** 成功 backfill 的 spec */
-  migrated: { filePath: string; addedFields: string[] }[];
-  /** 跳过的（已经合规） */
+  migrated: (MigrateSpecRef & { addedFields: string[] })[];
+  /** 跳过的（已合规） */
   skipped: string[];
   /** 出错的 */
-  errors: { filePath: string; message: string }[];
+  errors: (MigrateSpecRef & { message: string })[];
   /** 缺 description 但不自动补（仅报告） */
-  needsDescription: string[];
+  needsDescription: MigrateSpecRef[];
 }
 
 export interface MigrateOptions {
-  /** 限定 scope（默认 all） */
+  /** 限定 scope（默认 all）；project / all 的 project 级覆盖全部已注册项目 */
   scope?: 'all' | 'global' | 'user' | 'project';
   /** 是否仅报告不写入 */
   dryRun?: boolean;
-  /** 项目 ID（scope 为 project 时必填） */
-  projectId?: string | null;
   /** 按名称过滤（支持 fileName / relativePath / title 的子串或精确匹配） */
   filter?: string;
+}
+
+/** 扫描集内的单条 spec：附带层级与项目归属 */
+interface SpecEntry {
+  spec: ParsedSpec;
+  level: MigrateSpecLevel;
+  projectId: string | null;
+  projectName: string | null;
 }
 
 /**
@@ -38,18 +57,31 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
   const scope = options?.scope ?? 'all';
   const dryRun = options?.dryRun ?? false;
   const username = await getUsername();
-  const projectId = options?.projectId ?? null;
 
-  const allSpecs: ParsedSpec[] = [];
+  const allSpecs: SpecEntry[] = [];
 
   if (scope === 'all' || scope === 'global') {
-    allSpecs.push(...(await getGlobalSpecs()));
+    for (const spec of await getGlobalSpecs()) {
+      allSpecs.push({ spec, level: 'global', projectId: null, projectName: null });
+    }
   }
   if (scope === 'all' || scope === 'user') {
-    allSpecs.push(...(await getUserSpecs(username)));
+    for (const spec of await getUserSpecs(username)) {
+      allSpecs.push({ spec, level: 'user', projectId: null, projectName: null });
+    }
   }
-  if ((scope === 'all' || scope === 'project') && projectId) {
-    allSpecs.push(...(await getProjectSpecs(username, projectId)));
+  if (scope === 'all' || scope === 'project') {
+    // 全量视角：project 级覆盖全部已注册项目（与 lint / suggest-description / export 一致）
+    for (const group of await getAllProjectSpecsGrouped(username)) {
+      for (const spec of group.specs) {
+        allSpecs.push({
+          spec,
+          level: 'project',
+          projectId: group.projectId,
+          projectName: group.projectName,
+        });
+      }
+    }
   }
 
   const result: MigrateResult = {
@@ -61,10 +93,10 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
 
   const filter = options?.filter?.toLowerCase() ?? null;
   const filteredSpecs = filter
-    ? allSpecs.filter((s) => {
-        const name = s.fileName.replace(/\.md$/i, '').toLowerCase();
-        const rel = s.relativePath.toLowerCase();
-        const title = (s.frontmatter.title ?? '').toLowerCase();
+    ? allSpecs.filter(({ spec }) => {
+        const name = spec.fileName.replace(/\.md$/i, '').toLowerCase();
+        const rel = spec.relativePath.toLowerCase();
+        const title = (spec.frontmatter.title ?? '').toLowerCase();
         return (
           name === filter ||
           rel === filter ||
@@ -75,12 +107,15 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
       })
     : allSpecs;
 
-  for (const spec of filteredSpecs) {
+  for (const { spec, level, projectId, projectName } of filteredSpecs) {
     try {
       // YAML 语法错误：跳过迁移（writeSpec 会重建 frontmatter，原内容将丢失）
       if (spec.parseError) {
         result.errors.push({
           filePath: spec.filePath,
+          level,
+          projectId,
+          projectName,
           message: `frontmatter YAML 解析失败，已跳过（避免重写丢失原字段）：${formatSpecParseError(spec.parseError)}`,
         });
         continue;
@@ -110,7 +145,7 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
       if (!needsId && !needsTitle && !needsUpdated) {
         // id / title / updated 都正常，不需要迁移（description 只报告）
         if (needsDescription) {
-          result.needsDescription.push(spec.filePath);
+          result.needsDescription.push({ filePath: spec.filePath, level, projectId, projectName });
         }
         result.skipped.push(spec.filePath);
         continue;
@@ -128,7 +163,7 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
         addedFields.push('title');
       }
       if (needsDescription) {
-        result.needsDescription.push(spec.filePath);
+        result.needsDescription.push({ filePath: spec.filePath, level, projectId, projectName });
       }
 
       if (!dryRun) {
@@ -136,10 +171,13 @@ export async function migrateSpecs(options?: MigrateOptions): Promise<MigrateRes
         await writeSpec(spec.filePath, fm, spec.content);
       }
 
-      result.migrated.push({ filePath: spec.filePath, addedFields });
+      result.migrated.push({ filePath: spec.filePath, level, projectId, projectName, addedFields });
     } catch (e) {
       result.errors.push({
         filePath: spec.filePath,
+        level,
+        projectId,
+        projectName,
         message: (e as Error).message,
       });
     }

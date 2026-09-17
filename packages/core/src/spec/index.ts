@@ -32,7 +32,7 @@ export {
 } from './lint';
 export type { SpecLintIssue, SpecLintReport } from './lint';
 export { migrateSpecs } from './migrate';
-export type { MigrateResult, MigrateOptions } from './migrate';
+export type { MigrateResult, MigrateOptions, MigrateSpecRef, MigrateSpecLevel } from './migrate';
 export {
   exportSpecs,
   verifySpecExport,

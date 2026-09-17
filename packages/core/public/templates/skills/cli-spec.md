@@ -64,7 +64,7 @@
 
 ### `ltc spec migrate [name]`
 
-批量迁移历史 spec：自动补 id / 刷新 updated / 补 title（不自动补 description）。编辑 spec 正文后必跑。`--scope`（默认 all）/ `--dry-run` / `--json` / `--json-format`
+批量迁移历史 spec：自动补 id / 刷新 updated / 补 title（不自动补 description）。编辑 spec 正文后必跑。project 级覆盖全部已注册项目（与 lint / suggest-description 一致，非仅 cwd）。写操作带确认闸：交互式将写入 cwd 之外项目的 spec 时先确认，`-f`/`--dry-run`/`--json`/非 TTY 跳过（不阻塞脚本）。`--scope`（默认 all）/ `--dry-run` / `--json` / `--json-format`；输出逐条带 `[project · 名]` / `[user]` / `[global]` 层级标签，`--json` 的 migrated/needsDescription/errors 条目含 `level`/`projectName`。
 
 ### `ltc spec export`
 

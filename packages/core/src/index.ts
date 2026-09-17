@@ -346,6 +346,8 @@ export type {
   SpecLintReport,
   MigrateResult,
   MigrateOptions,
+  MigrateSpecRef,
+  MigrateSpecLevel,
   SpecExportOptions,
   SpecExportScope,
   SpecExportSource,

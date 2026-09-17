@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { confirm } from '@inquirer/prompts';
 import * as path from 'node:path';
 import {
   getUsername,
@@ -53,6 +54,8 @@ import {
   logger,
   outputJson,
   resolveCurrentProject,
+  shouldSkipConfirm,
+  isMachineMode,
   stripSpecs,
   dedupeItem,
   projectItem,
@@ -71,6 +74,11 @@ import {
 
 async function resolveCurrentProjectId(): Promise<string | null> {
   return (await resolveCurrentProject())?.id ?? null;
+}
+
+/** migrate 输出的层级/项目标签，与 suggest-description 展示口径一致（[project · 名] / [user] / [global]） */
+function migrateLevelLabel(ref: { level: string; projectName: string | null }): string {
+  return ref.level === 'project' ? `[project · ${ref.projectName ?? '?'}]` : `[${ref.level}]`;
 }
 
 async function getConfiguredTemplateRegistries(): Promise<string[]> {
@@ -923,19 +931,46 @@ export function registerSpecCommand(program: Command): void {
   cmd
     .command('migrate')
     .argument('[name]', '指定要迁移的 spec 名称（支持模糊匹配），省略则批量全部')
-    .description('批量迁移历史 spec：自动补 id / updated / title（不自动补 description）')
-    .option('--scope <scope>', '限定层级（all / global / user / project），默认 all')
+    .description(
+      '批量迁移历史 spec：自动补 id / updated / title（不自动补 description）；project 级覆盖全部已注册项目',
+    )
+    .option(
+      '--scope <scope>',
+      '限定层级（all / global / user / project），默认 all；project/all 为全项目视角',
+    )
     .option('--dry-run', '仅报告不写入')
     .action(async (name: string | undefined, opts) => {
       try {
         await initDb();
-        const projectId = (await resolveCurrentProject())?.id ?? null;
-        const result = await migrateSpecs({
-          scope: opts.scope ?? 'all',
-          dryRun: opts.dryRun ?? false,
-          projectId,
-          filter: name,
-        });
+        const scope = opts.scope ?? 'all';
+        const dryRun = opts.dryRun ?? false;
+
+        // 写前确认闸：仅交互式人读（非 dry-run、未 -f、非 machine、有 TTY）可能触发。
+        // machine 模式（--json/-q）与非 TTY 直接跳过——migrate 是 additive 幂等写，fail-open 不阻塞 AI/脚本。
+        const mayConfirm =
+          !dryRun && !shouldSkipConfirm(opts) && !isMachineMode() && Boolean(process.stdout.isTTY);
+        if (mayConfirm) {
+          // 预览 pass（dry-run）算出将写入的「cwd 之外项目」集合，仅对新引入的跨项目写设闸
+          const cwdProjectId = await resolveCurrentProjectId();
+          const preview = await migrateSpecs({ scope, dryRun: true, filter: name });
+          const foreign = preview.migrated.filter(
+            (m) => m.level === 'project' && m.projectId && m.projectId !== cwdProjectId,
+          );
+          if (foreign.length > 0) {
+            const names = [...new Set(foreign.map((m) => m.projectName ?? m.projectId ?? '?'))];
+            const confirmed = await confirm({
+              message: `本次将写入当前项目之外的 ${names.length} 个项目（${names.join('、')}）下的 ${foreign.length} 个 spec，确认继续？`,
+              default: false,
+            });
+            if (!confirmed) {
+              closeDb();
+              logger.raw(chalk.dim('已取消'));
+              return;
+            }
+          }
+        }
+
+        const result = await migrateSpecs({ scope, dryRun, filter: name });
         closeDb();
 
         if (opts.json) {
@@ -944,14 +979,15 @@ export function registerSpecCommand(program: Command): void {
           return;
         }
 
-        if (opts.dryRun) {
+        if (dryRun) {
           logger.raw(chalk.dim('(dry-run 模式，不写入文件)\n'));
         }
 
         if (result.migrated.length > 0) {
           logger.raw(chalk.green(`✓ 已迁移 ${result.migrated.length} 个 spec：`));
           for (const m of result.migrated) {
-            logger.raw(chalk.dim(`  ${m.filePath}  [+${m.addedFields.join(', +')}]`));
+            const label = migrateLevelLabel(m);
+            logger.raw(chalk.dim(`  ${label} ${m.filePath}  [+${m.addedFields.join(', +')}]`));
           }
         }
         if (result.skipped.length > 0) {
@@ -964,7 +1000,7 @@ export function registerSpecCommand(program: Command): void {
             ),
           );
           for (const p of result.needsDescription.slice(0, 10)) {
-            logger.raw(chalk.dim(`  ${p}`));
+            logger.raw(chalk.dim(`  ${migrateLevelLabel(p)} ${p.filePath}`));
           }
           if (result.needsDescription.length > 10) {
             logger.raw(chalk.dim(`  ... 还有 ${result.needsDescription.length - 10} 个`));
@@ -973,7 +1009,7 @@ export function registerSpecCommand(program: Command): void {
         if (result.errors.length > 0) {
           logger.raw(chalk.red(`\n✗ ${result.errors.length} 个出错：`));
           for (const e of result.errors) {
-            logger.raw(chalk.red(`  ${e.filePath}: ${e.message}`));
+            logger.raw(chalk.red(`  ${migrateLevelLabel(e)} ${e.filePath}: ${e.message}`));
           }
           process.exitCode = 1;
         }
