@@ -208,9 +208,12 @@ test('默认导出：结构 / 前缀 / 归档默认 / digest / SKILL.md 自描�
   assert.match(digest, /\[proj-alpha\]\(\.\.\/spec-catalog\.md#proj-alpha\)/);
   assert.match(digest, /## 相关规范/);
   assert.match(digest, /\[Alpha 约定\]\(\.\.\/proj-alpha\/tester__alpha-conv\.md\)/);
-  assert.match(digest, /## 过程要点/);
-  assert.match(digest, /采用方案 A/);
-  assert.ok(!digest.includes('环境事实'), 'note 类型不进过程要点');
+  assert.match(digest, /## 过程记录/);
+  assert.match(digest, /\[decision\] 采用方案 A/);
+  assert.match(digest, /\[note\] 环境事实/, 'process 全量（含 note 类型）');
+  assert.match(digest, /## 设计档案/);
+  assert.match(digest, /### Design/, 'design 嵌入标题降两级（嵌套于设计档案节）');
+  assert.match(digest, /被否决方案 B/);
 
   const manifestRaw = await readFile(join(OUT, 'manifest.yaml'), 'utf8');
   assert.match(manifestRaw, /tool: lattice-export/);
@@ -293,7 +296,8 @@ test('任务深度：prd（无附加节）与 full（原样目录 + README 交�
   const OUTP = join(env.tmpRoot, 'out-prd');
   await exportSkill({ execUser: U, outputDir: OUTP, kinds: ['task'], taskDepth: 'prd' });
   const prd = await readFile(join(OUTP, `tasks/${tb(T1)}.md`), 'utf8');
-  assert.ok(!prd.includes('## 过程要点'));
+  assert.ok(!prd.includes('## 过程记录'));
+  assert.ok(!prd.includes('## 设计档案'));
   assert.ok(!prd.includes('## 相关规范'));
   assert.match(prd, /完成 alpha 能力/);
 

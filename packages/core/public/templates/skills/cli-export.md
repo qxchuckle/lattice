@@ -21,12 +21,12 @@
 - `--user <name>` / `--exclude-user <name>`：用户（默认当前用户；`all`=全部用户）
 - `--project <v>` / `--exclude-project <v>`：项目 id / 名称 / 包名，子串或 `*` 通配；项目白名单只保留项目级 spec，黑名单对任务为「涉及即剔除」
 - `--tag <tag>` / `--exclude-tag <tag>`：spec 标签（精确）
-- `--filter <kw>` / `--exclude-filter <kw>`：关键词（spec 元数据+项目元数据；task 标题+PRD+checkpoint；自由文本，仅重复）
+- `--filter <kw>` / `--exclude-filter <kw>`：关键词（spec 元数据+项目元数据；task 标题+PRD+设计档案+过程记录；自由文本，仅重复）
 - `--spec <v>` / `--exclude-spec <v>`：spec 精确条目（id / 文件名，前缀或 `*`）
 - `--task <v>` / `--exclude-task <v>`：任务精确条目（id 前缀或 `*`）
 - `--task-status <s>`：planning / in_progress / completed / archived / all（默认 archived）
 - `--task-since <date>` / `--task-until <date>`：任务创建时间窗（YYYY-MM-DD，UTC，双端 inclusive）
-- `--task-depth <d>`：digest（默认：frontmatter + PRD + 相关规范 + 过程要点）/ prd / full（原样目录 + README）
+- `--task-depth <d>`：digest（默认：frontmatter + PRD + 关联项目 + 相关规范 + 设计档案 + 过程记录）/ prd（仅 frontmatter + PRD）/ full（原样目录 + README）
 
 产物与校验：
 

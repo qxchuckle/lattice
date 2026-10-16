@@ -44,7 +44,7 @@ export interface ExportOptions {
   taskDepth?: TaskExportDepth;
 
   // ── 通用（spec + task） ──
-  /** 关键词白名单（可多个，任一命中）：spec 元数据+项目元数据；task 标题/PRD/checkpoint */
+  /** 关键词白名单（可多个，任一命中）：spec 元数据+项目元数据；task 标题/PRD/设计档案/过程记录 */
   filters?: string[];
   /** 关键词黑名单（命中即剔除） */
   excludeFilters?: string[];

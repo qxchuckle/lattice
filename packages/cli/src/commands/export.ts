@@ -67,7 +67,7 @@ export function registerExportCommand(program: Command): void {
     .option('--exclude-project <v>', '项目黑名单：涉及即剔除（子串或 * 通配；可重复）', multi, [])
     .option(
       '--filter <kw>',
-      '关键词白名单（可重复；spec 元数据 / task 标题+PRD+checkpoint）',
+      '关键词白名单（可重复；spec 元数据 / task 标题+PRD+设计+过程记录）',
       multiRaw,
       [],
     )

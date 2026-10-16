@@ -3,7 +3,7 @@
  *
  * - 默认仅 archived；时间窗按 created（YYYY-MM-DD，UTC 日期边界，双端 inclusive）
  * - 项目维度：涉及被排除项目即整条剔除；白名单要求任务关联项目命中
- * - digest = frontmatter + PRD 全文 + 相关规范（导出命中的 referencedSpecs）+ 过程要点（四类 checkpoint）
+ * - digest = frontmatter + PRD 全文 + 关联项目 + 相关规范 + 设计档案 + 过程记录（progress 全量）
  */
 import { posix } from 'node:path';
 import { minimatch } from 'minimatch';
@@ -42,11 +42,9 @@ export interface RenderedTask {
 
 interface TaskLoad {
   prd: string;
+  design: string;
   checkpoints: CheckpointEntry[];
 }
-
-/** digest「过程要点」摘录的 checkpoint 类型 */
-const DIGEST_CHECKPOINT_TYPES = new Set(['decision', 'constraint', 'correction', 'pivot']);
 
 export async function collectTaskCandidates(users: string[]): Promise<TaskCandidate[]> {
   const out: TaskCandidate[] = [];
@@ -99,6 +97,7 @@ export async function filterTasks(
     const cached = loadCache.get(key);
     if (cached) return cached;
     const prd = (await getTaskPrd(c.user, c.meta.id)) ?? '';
+    const design = (await getTaskDesign(c.user, c.meta.id)) ?? '';
     let checkpoints: CheckpointEntry[];
     try {
       const progress = await readProgress(c.user, c.meta.id);
@@ -106,7 +105,7 @@ export async function filterTasks(
     } catch {
       checkpoints = [];
     }
-    const loaded = { prd, checkpoints };
+    const loaded = { prd, design, checkpoints };
     loadCache.set(key, loaded);
     return loaded;
   };
@@ -158,12 +157,13 @@ export async function filterTasks(
       c.resolvedProjectIds = resolveProjectRefs(c.meta.projects ?? [], indexFor(c.user));
     }
 
-    // 关键词（title / PRD / checkpoint 消息；召回口径）
+    // 关键词（title / PRD / 设计档案 / checkpoint 消息；与导出内容同域的召回口径）
     if (!drop && (opts.filters?.length || opts.excludeFilters?.length)) {
-      const { prd, checkpoints } = await load(c);
+      const { prd, design, checkpoints } = await load(c);
       const haystack = [
         c.meta.title ?? '',
         prd,
+        design,
         ...checkpoints.map((e) => `${e.title}\n${e.message}`),
       ]
         .join('\n')
@@ -236,14 +236,13 @@ function buildProjectsSection(
   return ['## 关联项目', '', ...lines, ''];
 }
 
-/** 过程要点：四类 checkpoint，升序，压平单行不截断 */
+/** 过程记录：progress 全量（11 类 checkpoint，含类型标签），升序，压平单行不截断 */
 function buildDigestSection(checkpoints: CheckpointEntry[]): string[] {
-  const picked = checkpoints.filter((e) => DIGEST_CHECKPOINT_TYPES.has(e.type));
-  if (picked.length === 0) return [];
-  const lines = picked.map(
-    (e) => `- ${flat(e.title)}（${(e.time ?? '').slice(0, 10)}）：${flat(e.message)}`,
+  if (checkpoints.length === 0) return [];
+  const lines = checkpoints.map(
+    (e) => `- [${e.type}] ${flat(e.title)}（${(e.time ?? '').slice(0, 10)}）：${flat(e.message)}`,
   );
-  return ['## 过程要点', '', ...lines, ''];
+  return ['## 过程记录', '', ...lines, ''];
 }
 
 function buildTaskFrontmatter(meta: TaskMeta, displayProjects: string[]): string {
@@ -258,9 +257,29 @@ function buildTaskFrontmatter(meta: TaskMeta, displayProjects: string[]): string
   return stringifyYaml(fm, { lineWidth: 0 });
 }
 
+/** 嵌入外部文档时标题降级（仅结构变换，不动内容；代码 fence 内不处理；H6 封顶） */
+function demoteHeadings(text: string, levels = 2): string {
+  let inFence = false;
+  return text
+    .split('\n')
+    .map((line) => {
+      if (/^```/.test(line.trim())) {
+        inFence = !inFence;
+        return line;
+      }
+      const m = line.match(/^(#{1,6})\s(.*)$/);
+      if (!inFence && m) {
+        const level = Math.min(6, m[1].length + levels);
+        return `${'#'.repeat(level)} ${m[2]}`;
+      }
+      return line;
+    })
+    .join('\n');
+}
+
 /**
  * 渲染单个任务。
- * - digest：frontmatter + PRD + 相关规范 + 过程要点
+ * - digest：frontmatter + PRD + 关联项目 + 相关规范 + 设计档案 + 过程记录
  * - prd：frontmatter + PRD
  * - full：目录（prd/progress/design 原样 + README.md 生成）
  */
@@ -344,6 +363,9 @@ export async function renderTask(
     if (projectsSec.length > 0) lines.push(...projectsSec);
     const related = buildRelatedSection(meta, exportPath, specIndex);
     if (related.length > 0) lines.push(...related);
+    // 设计档案：被否决方案的唯一承载点（参考价值：防止重提已否决方案）；嵌入时标题降两级（嵌套于本节之下）
+    const designRaw = (await getTaskDesign(user, meta.id)) ?? '';
+    if (designRaw.trim()) lines.push('## 设计档案', '', demoteHeadings(designRaw).trimEnd(), '');
     let checkpoints: CheckpointEntry[];
     try {
       const progress = await readProgress(user, meta.id);
