@@ -121,7 +121,7 @@ export interface ProjectSpecGroup {
 /**
  * 获取所有已注册项目的 spec（按项目归组，含项目名归属）
  *
- * 供跨项目全量视角的命令使用（与 spec export 的 collectSpecs 视角对齐）：
+ * 供跨项目全量视角的命令使用（与 `ltc export` 的 spec 收集视角对齐）：
  * 返回值携带归属信息，调用方无需从 filePath 反推项目。
  * 跳过无 spec 的项目。
  */

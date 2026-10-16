@@ -25,12 +25,13 @@
  * （"两种模式都已去除"要点明是去重层，避免被读成 `--json-full` 也压缩）。
  */
 
-/** hub `command-reference.md` 路由表里的 6 个职责域分片 */
+/** hub `command-reference.md` 路由表里的职责域分片 */
 export type CommandDocShard =
   | 'cli-context-search.md'
   | 'cli-project.md'
   | 'cli-task.md'
   | 'cli-spec.md'
+  | 'cli-export.md'
   | 'cli-sync-user.md'
   | 'cli-system.md';
 
@@ -263,10 +264,10 @@ export const PROJECTION_MANIFEST: readonly ProjectionEntry[] = [
     note: '写命令，返回迁移结果（changed / skipped 清单）',
   },
   {
-    command: 'spec export',
+    command: 'export',
     kind: 'raw',
-    doc: 'cli-spec.md',
-    note: '报告型输出（导出结果 + missingDescriptions），非列表数据',
+    doc: 'cli-export.md',
+    note: '报告型输出（导出结果 + 警告 + 统计 + 项目过滤命中），非列表数据',
   },
 
   /* ─── 同步与多用户（cli-sync-user.md） ─── */

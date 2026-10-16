@@ -39,11 +39,8 @@ import {
   lintSpecs,
   isValidSpecId,
   migrateSpecs,
-  exportSpecs,
-  verifySpecExport,
   createComposite,
   sourceLabel,
-  type SpecExportScope,
   type ProjectSpecGroup,
   type SpecFrontmatter,
   type ParsedSpec,
@@ -1036,7 +1033,7 @@ export function registerSpecCommand(program: Command): void {
         const username = await getUsername();
         const scope = (opts.scope ?? 'all') as string;
 
-        // 三层数据源：project 级覆盖全部已注册项目，与 spec export 视角对齐
+        // 三层数据源：project 级覆盖全部已注册项目，与 ltc export 视角对齐
         const [globalSpecs, userSpecs, projectGroups] = await Promise.all([
           scope === 'all' || scope === 'global' ? getGlobalSpecs() : Promise.resolve([]),
           scope === 'all' || scope === 'user' ? getUserSpecs(username) : Promise.resolve([]),
@@ -1136,109 +1133,6 @@ export function registerSpecCommand(program: Command): void {
         }
       } catch (err) {
         logger.stderr(chalk.red('suggest-description 失败：'), (err as Error).message);
-        process.exitCode = 1;
-      }
-    });
-  // export
-  cmd
-    .command('export')
-    .description('导出 spec 为标准 Agent Skills 目录结构（SKILL.md + manifest.yaml + 分区文件夹）')
-    .option(
-      '--filter <kw>',
-      '关键词筛选（可多次）：tags/文件名/标题/description；项目级含所属项目元数据',
-      collectArg,
-      [],
-    )
-    .option('--tag <tag>', '精确 tag 筛选（可多次）', collectArg, [])
-    .option('--project <id|name>', '指定项目全量导出（可多次）', collectArg, [])
-    .option('--scope <level>', '层级过滤（all / global / user / project），默认 all')
-    .option('--user <name>', '导出用户（可多次；all=全部用户），默认当前用户', collectArg, [])
-    .option('--name <name>', 'skill 名（SKILL.md frontmatter name），默认 lattice-specs')
-    .option('--description <d>', '覆盖自动生成的 description')
-    .option('-o, --output <dir>', '输出目录，默认 ~/.lattice/.cache/export-spec/<skill名>/')
-    .option('--clean', '清空重导（仅限含本工具 manifest.yaml 的目录）')
-    .option('--verify <dir>', '不导出，仅校验已有导出目录与 manifest 一致性')
-    .option('--strict', '警告升为错误（退出码非零）')
-    .action(async (opts) => {
-      try {
-        // 校验模式：纯文件操作，不触 DB
-        if (opts.verify) {
-          const result = await verifySpecExport(opts.verify);
-          if (opts.json) {
-            outputJson(result, opts.jsonFormat);
-          } else if (result.ok) {
-            logger.raw(chalk.green(`✓ 校验通过：${result.checked} 个文件与 manifest 一致`));
-          } else {
-            logger.raw(chalk.red(`✗ 发现 ${result.issues.length} 个问题：`));
-            for (const issue of result.issues) {
-              logger.raw(`  • [${issue.type}] ${issue.path} — ${issue.message}`);
-            }
-            process.exitCode = 1;
-          }
-          return;
-        }
-
-        const scope = (opts.scope ?? 'all') as SpecExportScope;
-        if (!['all', 'global', 'user', 'project'].includes(scope)) {
-          throw new Error(`无效 --scope：${opts.scope}（可选 all / global / user / project）`);
-        }
-
-        await initDb();
-        const username = await getUsername();
-        const result = await exportSpecs({
-          filters: opts.filter?.length ? opts.filter : undefined,
-          tags: opts.tag?.length ? opts.tag : undefined,
-          projects: opts.project?.length ? opts.project : undefined,
-          scope,
-          users: opts.user?.length ? opts.user : [username],
-          skillName: opts.name,
-          description: opts.description,
-          outputDir: opts.output,
-          clean: opts.clean,
-          execUser: username,
-        });
-        closeDb();
-
-        if (opts.json) {
-          outputJson(result, opts.jsonFormat);
-          return;
-        }
-
-        const s = result.manifest.stats;
-        logger.raw(
-          chalk.green(
-            `✓ 已导出 ${result.manifest.files.length - 1} 份 spec 到 ${result.outputDir}`,
-          ),
-        );
-        logger.raw(chalk.dim(`  user ${s.user} · project ${s.project} · global ${s.global}`));
-        logger.raw(
-          chalk.dim(
-            `  写入 ${result.written.length} · 跳过 ${result.skipped.length}（hash 未变更）`,
-          ),
-        );
-        if (result.warnings.length > 0) {
-          const head = opts.strict
-            ? chalk.red(`\n✗ 独立分发警告 ${result.warnings.length} 条（--strict，视为错误）：`)
-            : chalk.yellow(`\n⚠ 独立分发警告 ${result.warnings.length} 条：`);
-          logger.raw(head);
-          for (const w of result.warnings) {
-            logger.raw(`  • [${w.type}] ${w.file} — ${w.message}`);
-          }
-          if (opts.strict) process.exitCode = 1;
-        }
-        if (result.missingDescriptions.length > 0) {
-          logger.raw(
-            chalk.yellow(
-              `\n⚠ ${result.missingDescriptions.length} 个 spec 缺 description（目录选读依据缺失，建议 ltc spec suggest-description 补齐后重导）：`,
-            ),
-          );
-          for (const m of result.missingDescriptions) {
-            const idTag = m.specId ? chalk.dim(` id：${m.specId}`) : '';
-            logger.raw(chalk.dim(`  • ${m.path}${idTag}`));
-          }
-        }
-      } catch (err) {
-        logger.stderr(chalk.red('export 失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });

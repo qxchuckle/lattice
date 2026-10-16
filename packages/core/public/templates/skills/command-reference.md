@@ -46,6 +46,7 @@ machine 模式（`--json` / `-q`）**失败与空态**：失败 → 提示走 **
 | 上下文与检索 | `status` / `context` / `search` | [cli-context-search.md] |
 | 项目管理 | `project`（含 relation / profile）/ `link` / `unlink` / `scan` | [cli-project.md] |
 | 任务生命周期 | `task`（含 checkpoint / progress / associate / ref-spec）/ `fast-start` | [cli-task.md] |
-| 规范管理 | `spec`（含 list / show / set / lint / migrate / export）/ `spec template` | [cli-spec.md] |
+| 规范管理 | `spec`（含 list / show / set / lint / migrate）/ `spec template` | [cli-spec.md] |
+| 知识导出 | `export` | [cli-export.md] |
 | 同步与多用户 | `sync`（含 domain）/ `user` | [cli-sync-user.md] |
 | 安装与系统维护 | `init` / `uninject` / `config` / `doctor` / `rag` / `trash` / `web` | [cli-system.md] |

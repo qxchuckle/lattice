@@ -330,11 +330,6 @@ export {
   DESCRIPTION_MIN_LENGTH,
   DESCRIPTION_MAX_LENGTH,
   migrateSpecs,
-  exportSpecs,
-  verifySpecExport,
-  SPEC_EXPORT_TOOL,
-  SPEC_EXPORT_MANIFEST,
-  SPEC_EXPORT_DEFAULT_NAME,
 } from './spec';
 export type {
   SpecMatch,
@@ -348,17 +343,34 @@ export type {
   MigrateOptions,
   MigrateSpecRef,
   MigrateSpecLevel,
-  SpecExportOptions,
-  SpecExportScope,
-  SpecExportSource,
-  SpecExportFileEntry,
-  SpecExportManifest,
-  SpecExportWarning,
-  SpecExportWarningType,
-  SpecExportResult,
-  SpecExportVerifyIssue,
-  SpecExportVerifyResult,
 } from './spec';
+
+// 知识导出（ltc export）
+export {
+  exportSkill,
+  verifyExport,
+  EXPORT_TOOL,
+  LEGACY_EXPORT_TOOL,
+  EXPORT_MANIFEST,
+  DEFAULT_SKILL_NAME,
+} from './export';
+export type {
+  ExportKind,
+  ExportOptions,
+  ExportRunOptions,
+  SpecExportScope,
+  TaskExportDepth,
+  ExportFileSource,
+  ExportFileEntry,
+  ExportManifest,
+  ExportWarningType,
+  ExportWarning,
+  ExportProjectMatch,
+  ExportStats,
+  ExportResult,
+  ExportVerifyIssue,
+  ExportVerifyResult,
+} from './export';
 
 // 任务
 export {

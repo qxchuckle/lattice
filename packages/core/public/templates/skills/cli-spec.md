@@ -48,7 +48,7 @@
 
 ### `ltc spec suggest-description`
 
-列出缺少 `description` 的 spec 并展示上下文帮助补写。project 级覆盖**全部已注册项目**（与 `spec export` 视角一致，不限于 cwd 所在项目）。
+列出缺少 `description` 的 spec 并展示上下文帮助补写。project 级覆盖**全部已注册项目**（与 `ltc export` 视角一致，不限于 cwd 所在项目）。
 
 - `--scope <scope>`（`all` 默认 / `global` / `user` / `project`=全部项目）/ `--limit <n>`（只影响展示条数，`total` 始终给全量数）/ `--json`（`specs` 为列式表，列含 `id` / `level` / `projectName` / `contentSnippet`）/ `--json-full`（`specs` 为原始对象数组、不做列式；退化为 basename 的 `relativePath` 属重复表示，两种模式都已删）
 - 普通输出与 `--json` 均含 spec `id`，可直接用于 `task ref-spec` / `spec set`
@@ -65,19 +65,6 @@
 ### `ltc spec migrate [name]`
 
 批量迁移历史 spec：自动补 id / 刷新 updated / 补 title（不自动补 description）。编辑 spec 正文后必跑。project 级覆盖全部已注册项目（与 lint / suggest-description 一致，非仅 cwd）。写操作带确认闸：交互式将写入 cwd 之外项目的 spec 时先确认，`-f`/`--dry-run`/`--json`/非 TTY 跳过（不阻塞脚本）。`--scope`（默认 all）/ `--dry-run` / `--json` / `--json-format`；输出逐条带 `[project · 名]` / `[user]` / `[global]` 层级标签，`--json` 的 migrated/needsDescription/errors 条目含 `level`/`projectName`。
-
-### `ltc spec export`
-
-导出 spec 为标准 Agent Skills 目录结构（`SKILL.md` 入口 + `manifest.yaml` hash 清单 + `global/` + `user/` + `<项目名>/` 一层平铺）。文件名加 `<user>__` 前缀；SKILL.md 目录按层级分节，项目级逐项目小节并附包名/git 匹配信息，检测到环境依赖时生成"使用注意"段（引导使用方 AI 灵活处理 ltc/本机路径，不改写正文）；重复导出 hash 对比仅重写变更；警告四类（本机路径/ltc 引用/悬空引用/敏感信息）+ 缺 description 清单只报告不改写。
-
-- `--filter <kw>`（可多次）：tags/文件名/标题/description；项目级含所属项目元数据
-- `--tag <tag>`（可多次）/ `--project <id|name>`（可多次）/ `--scope <level>`（默认 all）
-- `--user <name>`（可多次；`all`=全部用户；默认当前用户）
-- `--name`（skill 名，默认 lattice-specs）/ `--description`（覆盖自动生成）
-- `-o, --output <dir>`（默认 `~/.lattice/.cache/export-spec/<skill名>/`，公共文件夹按名分子目录，同名覆盖）
-- `--clean`（仅限含本工具 manifest.yaml 的目录）/ `--strict`（警告升错误）/ `--json`
-- `--verify <dir>`：不导出，仅校验目录与 manifest 一致性
-- 输出含 spec `id`：`--json` 的 `manifest.files[].source.specId` 与 `missingDescriptions[].specId`；普通输出的缺 description 清单每项附 `id`（可直接 `task ref-spec` / `spec set`）
 
 ## `ltc spec template`
 

@@ -44,6 +44,7 @@ const SHARDS = [
   'cli-project.md',
   'cli-task.md',
   'cli-spec.md',
+  'cli-export.md',
   'cli-sync-user.md',
   'cli-system.md',
 ];
@@ -523,4 +524,4 @@ if (errors.length > 0) {
   console.log(`\n✖ ${errors.length} 处漂移`);
   process.exit(1);
 }
-console.log('✓ 三方一致（声明表 / 命令源码 / hub 与 6 个分片）');
+console.log(`✓ 三方一致（声明表 / 命令源码 / hub 与 ${SHARDS.length} 个分片）`);
