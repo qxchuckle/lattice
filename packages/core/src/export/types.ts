@@ -27,12 +27,12 @@ export interface ExportOptions {
   tags?: string[];
   /** 精确 tag 黑名单（命中即剔除，排除优先） */
   excludeTags?: string[];
-  /** 精确条目：spec id / 文件名（无通配 = 前缀匹配；`*` 通配） */
+  /** 精确条目：spec id / 文件名（无通配 = 前缀匹配；含通配符 = glob 整串匹配） */
   specs?: string[];
   excludeSpecs?: string[];
 
   // ── task 专属 ──
-  /** 任务 id 白名单（前缀 / `*` 通配） */
+  /** 任务 id 白名单（无通配 = 前缀匹配；含通配符 = glob 整串匹配） */
   tasks?: string[];
   excludeTasks?: string[];
   /** 任务状态；缺省 ['archived']；含 'all' 时视为不过滤 */
@@ -48,7 +48,7 @@ export interface ExportOptions {
   filters?: string[];
   /** 关键词黑名单（命中即剔除） */
   excludeFilters?: string[];
-  /** 项目白名单：id/name/文件夹名/包名（非通配=大小写不敏感子串；`*` 为 glob） */
+  /** 项目白名单：id/name/文件夹名/包名/git remote（非通配=大小写不敏感子串；含通配符 = glob 整串匹配、`*` 含 `/`） */
   projects?: string[];
   excludeProjects?: string[];
   /** 用户白名单（可多个；'all' = 全部用户）；缺省由 CLI 传当前用户 */

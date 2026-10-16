@@ -46,11 +46,21 @@ export function registerExportCommand(program: Command): void {
       multi,
       [],
     )
-    .option('--spec <v>', 'spec 精确条目：id / 文件名（前缀或 * 通配；可重复）', multi, [])
+    .option(
+      '--spec <v>',
+      'spec 精确条目：id / 文件名（无通配=前缀匹配；含通配符则 glob 整串匹配；可重复）',
+      multi,
+      [],
+    )
     .option('--exclude-spec <v>', 'spec 精确条目黑名单（可重复）', multi, [])
     .option('--tag <tag>', 'spec 标签白名单（可重复）', multi, [])
     .option('--exclude-tag <tag>', 'spec 标签黑名单（可重复）', multi, [])
-    .option('--task <v>', '任务 id 白名单（前缀或 * 通配；可重复）', multi, [])
+    .option(
+      '--task <v>',
+      '任务 id 白名单（无通配=前缀匹配；含通配符则 glob 整串匹配；可重复）',
+      multi,
+      [],
+    )
     .option('--exclude-task <v>', '任务 id 黑名单（可重复）', multi, [])
     .option(
       '--task-status <s>',
@@ -63,8 +73,18 @@ export function registerExportCommand(program: Command): void {
     .option('--task-depth <d>', '任务深度：digest（默认）/ prd / full')
     .option('--user <name>', '用户白名单（重复或逗号；all=全部用户），默认当前用户', multi, [])
     .option('--exclude-user <name>', '用户黑名单（重复或逗号）', multi, [])
-    .option('--project <v>', '项目白名单：id / 名称 / 包名（子串或 * 通配；可重复）', multi, [])
-    .option('--exclude-project <v>', '项目黑名单：涉及即剔除（子串或 * 通配；可重复）', multi, [])
+    .option(
+      '--project <v>',
+      '项目白名单：id / 名称 / 包名 / git remote（无通配=子串；含通配符则 glob 整串匹配、* 含 /；可重复）',
+      multi,
+      [],
+    )
+    .option(
+      '--exclude-project <v>',
+      '项目黑名单：涉及即剔除（id / 名称 / 包名 / git remote；无通配=子串；含通配符则 glob 整串匹配、* 含 /；可重复）',
+      multi,
+      [],
+    )
     .option(
       '--filter <kw>',
       '关键词白名单（可重复；spec 元数据 / task 标题+PRD+设计+过程记录）',

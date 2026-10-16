@@ -6,7 +6,7 @@
  * - digest = frontmatter + PRD 全文 + 关联项目 + 相关规范 + 设计档案 + 过程记录（progress 全量）
  */
 import { posix } from 'node:path';
-import { minimatch } from 'minimatch';
+import { globMatch, hasGlobMeta } from './glob';
 import { stringify as stringifyYaml } from 'yaml';
 import type { CheckpointEntry, TaskMeta, TaskStatus } from '../types';
 import { listTasks } from '../task';
@@ -82,7 +82,7 @@ function taskMatchesValue(meta: TaskMeta, value: string): boolean {
   const v = value.trim().toLowerCase();
   if (!v) return false;
   const id = meta.id.toLowerCase();
-  if (v.includes('*')) return minimatch(id, v, { nocase: true });
+  if (hasGlobMeta(v)) return globMatch(v, id);
   return id.startsWith(v);
 }
 

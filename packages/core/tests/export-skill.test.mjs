@@ -245,6 +245,28 @@ test('exclude-project：名称子串、id 变体归一化与连坐', async () =>
   assert.ok(!existsSync(join(OUT2, 'proj-beta')));
   assert.ok(!existsSync(join(OUT2, `tasks/${tb(T3)}.md`)));
   assert.equal(r2.stats.exportedTasks, 1); // 仅 T1 幸存
+
+  // git remote 子串匹配（个人/组织项目按 remote 整组排除）
+  const OUT3 = join(env.tmpRoot, 'out3');
+  const r3 = await exportSkill({
+    execUser: U,
+    outputDir: OUT3,
+    excludeProjects: ['github.com/test'],
+  });
+  assert.ok(!existsSync(join(OUT3, 'proj-alpha')));
+  assert.ok(!existsSync(join(OUT3, `tasks/${tb(T1)}.md`)));
+  assert.equal(r3.stats.exportedTasks, 1); // 仅 T3 幸存
+  assert.ok(r3.projectMatches[0].projects.includes('proj-alpha'));
+
+  // 跨 `/` 的 glob（`*` 含斜杠；旧 minimatch 路径语义会静默失配——回归锚点）
+  const OUT4 = join(env.tmpRoot, 'out4');
+  const r4 = await exportSkill({
+    execUser: U,
+    outputDir: OUT4,
+    excludeProjects: ['*github.com*'],
+  });
+  assert.ok(!existsSync(join(OUT4, 'proj-alpha')));
+  assert.equal(r4.stats.exportedTasks, 1); // 仅 T3 幸存
 });
 
 test('黑名单排除优先 + tag/filter/时间/精确条目', async () => {
@@ -290,6 +312,16 @@ test('黑名单排除优先 + tag/filter/时间/精确条目', async () => {
   });
   assert.equal(rTask.stats.exportedTasks, 1); // 精确任务 + all 状态
   assert.ok(existsSync(join(OUT6, `tasks/${tb(T2)}.md`)));
+
+  const OUT7 = join(env.tmpRoot, 'out7');
+  const rGlob = await exportSkill({
+    execUser: U,
+    outputDir: OUT7,
+    kinds: ['task'],
+    taskStatuses: ['all'],
+    tasks: ['????-09-*'],
+  });
+  assert.equal(rGlob.stats.exportedTasks, 2); // T1 + T2（`?` / `*` glob）
 });
 
 test('任务深度：prd（无附加节）与 full（原样目录 + README 交叉链接）', async () => {

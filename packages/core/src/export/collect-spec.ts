@@ -1,7 +1,7 @@
 /**
  * spec 收集与筛选（原 spec export 领域逻辑迁入，行为保持一致并扩展黑白名单）。
  */
-import { minimatch } from 'minimatch';
+import { globMatch, hasGlobMeta } from './glob';
 import type { ParsedSpec } from '../types';
 import { listProjects } from '../project';
 import { getGlobalSpecs, getUserSpecs, getProjectSpecs } from '../spec/cascade';
@@ -139,14 +139,14 @@ export function specMatchesKeyword(item: CollectedSpec, keyword: string): boolea
   return false;
 }
 
-/** 精确条目匹配：spec id / 文件名（无通配 = 前缀匹配；`*` 通配） */
+/** 精确条目匹配：spec id / 文件名（无通配 = 前缀匹配；含 `*` / `?` = glob 整串匹配） */
 export function specMatchesValue(item: CollectedSpec, value: string): boolean {
   const v = value.trim().toLowerCase();
   if (!v) return false;
   const id = (item.spec.frontmatter.id ?? '').toLowerCase();
   const base = item.spec.fileName.toLowerCase();
-  if (v.includes('*')) {
-    return minimatch(id, v, { nocase: true }) || minimatch(base, v, { nocase: true });
+  if (hasGlobMeta(v)) {
+    return globMatch(v, id) || globMatch(v, base);
   }
   return (id.length > 0 && id.startsWith(v)) || base.startsWith(v);
 }

@@ -1,14 +1,14 @@
 /**
  * 项目维度：项目索引构建（含 id 归一化与虚拟合并组）与过滤值匹配。
  *
- * 匹配口径（v2.3 场景模拟落定）：
- * - 非通配值 = 大小写不敏感子串，候选字段 = id / name / 规范化文件夹名 / 包名（**不含本机路径**）
- * - `*` 通配 = glob
+ * 匹配口径（v2.12 统一 glob）：
+ * - 含通配符（`*` `?` `[…]` `{a,b}`）= glob 整串匹配（`*` 匹配任意字符**含 `/`**、大小写不敏感；引擎为 minimatch + `/` 归一化，见 ./glob.ts）
+ * - 无通配符 = 大小写不敏感子串，候选字段 = id / name / 规范化文件夹名 / 包名 / git remote（**不含本机路径**）
  * - 任务项目归属匹配前先归一化：plain（f92c45e0d902f03b）与 legacy:/git:/remote: 前缀、
  *   虚拟合并组物理目录同视一个项目
  */
-import { minimatch } from 'minimatch';
 import { listProjects, listProjectMetas, getProjectDirNames, normalizeProjectId } from '../project';
+import { globMatch, hasGlobMeta } from './glob';
 import { resolveProjectFolder } from './naming';
 
 export interface ProjectEntry {
@@ -80,13 +80,20 @@ export async function buildProjectEntries(username: string): Promise<ProjectEntr
   return entries;
 }
 
-/** 过滤值 → 项目匹配（子串 / glob） */
+/** 过滤值 → 项目匹配（子串 / glob；候选字段含 id/name/文件夹名/包名/git remote） */
 export function projectMatchesValue(entry: ProjectEntry, value: string): boolean {
   const v = value.trim().toLowerCase();
   if (!v) return false;
-  const fields = [entry.id, entry.name, entry.folder, ...entry.packages, ...entry.idsLower];
-  if (v.includes('*')) {
-    return fields.some((f) => minimatch(f, v, { nocase: true }));
+  const fields = [
+    entry.id,
+    entry.name,
+    entry.folder,
+    ...entry.packages,
+    ...entry.gitRemotes,
+    ...entry.idsLower,
+  ];
+  if (hasGlobMeta(v)) {
+    return fields.some((f) => globMatch(v, f));
   }
   return fields.some((f) => f.toLowerCase().includes(v));
 }
