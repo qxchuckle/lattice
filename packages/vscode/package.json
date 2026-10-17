@@ -59,6 +59,7 @@
     "test:smoke": "vite build --config webview/vite.smoke.config.ts && node tests/smoke/run.mjs",
     "package": "node scripts/package.mjs",
     "release": "node scripts/release-vsix.mjs",
+    "release:publish": "node scripts/release-vsix.mjs --publish",
     "clean": "rm -rf dist media/webview dist-vsix"
   },
   "devDependencies": {

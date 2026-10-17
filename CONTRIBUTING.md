@@ -60,6 +60,16 @@ Press <kbd>F5</kbd> inside `packages/vscode` to launch an Extension Development 
 
 Small typo fixes and doc improvements are fine without opening an issue first; for larger changes please open an issue to discuss the design upfront.
 
+## Releasing (maintainers)
+
+No CI — releases run locally from a clean, verified worktree.
+
+- **VS Code extension**
+  1. Copy `.env.release.example` → `.env.release` and fill in `OVSX_PAT` (Open VSX) and `VSCE_PAT` (Azure DevOps PAT, scopes ≥ *Marketplace: Manage*). The file is **git-ignored** — never commit it (env vars override the file).
+  2. `pnpm --filter lattice run release` — CHANGELOG consistency check → build → VSIX → sha256.
+  3. `pnpm --filter lattice run release:publish` — the above **plus publishing to both marketplaces** (channels without credentials are skipped with a warning; tokens are masked in logs).
+- **npm packages** — credentials live in npm's own `~/.npmrc` (`npm login` or a granular access token with read+write on `@qcqx`). Publish changed packages from their directory: `pnpm publish --no-git-checks` (`prepublishOnly` rebuilds `dist`).
+
 ## Reporting issues
 
 Use the [issue templates](https://github.com/qxchuckle/lattice/issues/new/choose). For the VS Code extension the most useful attachment is `Lattice: Copy Diagnostics` output plus the extension version and editor build.

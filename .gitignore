@@ -32,6 +32,9 @@ playwright-report/
 
 .temp
 
+# 发布凭据（本地私有；模板 .env.release.example 入库）
+.env.release
+
 # vscode extension build artifacts
 packages/vscode/media/
 packages/vscode/dist-vsix/
