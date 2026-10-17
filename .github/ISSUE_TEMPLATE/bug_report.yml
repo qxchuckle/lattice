@@ -1,0 +1,53 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much as you can — for the VS Code extension, `Lattice: Copy Diagnostics` output is the most valuable attachment.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - VS Code extension
+        - CLI (lattice / ltc)
+        - Web workbench (ltc web)
+        - Core / services package
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Extension version, CLI version (`ltc --version`), or package version
+      placeholder: e.g. extension 0.1.0 / @qcqx/lattice-cli 1.28.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Editor + build (VS Code / Cursor / Qoder + version) or OS + Node version for CLI issues
+      placeholder: e.g. Qoder 1.32 (VS Code 1.109) on macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include the exact steps to reproduce and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics / logs
+      description: 'Output of `Lattice: Copy Diagnostics` (extension) or terminal output (CLI). Redact anything sensitive.'
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots / additional context

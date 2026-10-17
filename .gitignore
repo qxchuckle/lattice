@@ -31,3 +31,8 @@ test-results/
 playwright-report/
 
 .temp
+
+# vscode extension build artifacts
+packages/vscode/media/
+packages/vscode/dist-vsix/
+packages/vscode/.vscode-test/

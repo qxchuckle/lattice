@@ -65,3 +65,5 @@ export type {
 } from './types';
 
 export type { GitStatus } from './project/git-status';
+// Spec 校验报告（纯类型，供 web-ui 的 Spec 编辑器展示）
+export type { SpecLintReport } from './spec/lint';

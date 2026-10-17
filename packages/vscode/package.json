@@ -1,0 +1,1231 @@
+{
+  "name": "lattice",
+  "displayName": "%lattice.displayName%",
+  "description": "%lattice.description%",
+  "version": "0.1.0",
+  "publisher": "qcqx",
+  "license": "MIT",
+  "icon": "resources/lattice-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/vscode"
+  },
+  "homepage": "https://github.com/qxchuckle/lattice#readme",
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Machine Learning", "Data Science"],
+  "keywords": [
+    "lattice",
+    "context",
+    "tasks",
+    "specs",
+    "knowledge",
+    "rag",
+    "ai",
+    "notes"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "%lattice.capabilities.untrusted%"
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "%lattice.capabilities.virtual%"
+    }
+  },
+  "l10n": "./l10n",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:lattice.json",
+    "workspaceContains:**/lattice.json"
+  ],
+  "scripts": {
+    "build": "pnpm run build:webview && pnpm run build:extension",
+    "build:extension": "tsup",
+    "build:webview": "vite build --config webview/vite.config.ts",
+    "dev": "tsup --watch",
+    "check-types": "tsc --noEmit && tsc --noEmit -p webview/tsconfig.json",
+    "test": "TSX_TSCONFIG_PATH=./tests/tsconfig.test.json node --import tsx --test tests/unit/*.test.ts",
+    "test:integration": "vscode-test",
+    "test:smoke": "vite build --config webview/vite.smoke.config.ts && node tests/smoke/run.mjs",
+    "package": "node scripts/package.mjs",
+    "release": "node scripts/release-vsix.mjs",
+    "clean": "rm -rf dist media/webview dist-vsix"
+  },
+  "devDependencies": {
+    "@qcqx/lattice-core": "workspace:*",
+    "@qcqx/lattice-protocol": "workspace:*",
+    "@qcqx/lattice-services": "workspace:*",
+    "@tanstack/react-query": "^5.0.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/vscode": "^1.85.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.2.0",
+    "antd": "^6.0.0",
+    "jsdom": "^26.1.0",
+    "less": "^4.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^8.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3",
+    "valtio": "^2.0.0",
+    "vite": "^8.1.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lattice",
+          "title": "%lattice.container.title%",
+          "icon": "resources/lattice-activity-bar.svg"
+        }
+      ]
+    },
+    "views": {
+      "lattice": [
+        {
+          "id": "lattice.tasks",
+          "name": "%lattice.view.tasks.name%"
+        },
+        {
+          "id": "lattice.specs",
+          "name": "%lattice.view.specs.name%"
+        },
+        {
+          "id": "lattice.projects",
+          "name": "%lattice.view.projects.name%"
+        },
+        {
+          "id": "lattice.search",
+          "name": "%lattice.view.search.name%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "lattice.tasks",
+        "contents": "%lattice.welcome.noCli%",
+        "when": "!lattice.cliAvailable"
+      },
+      {
+        "view": "lattice.specs",
+        "contents": "%lattice.welcome.noCli%",
+        "when": "!lattice.cliAvailable"
+      },
+      {
+        "view": "lattice.projects",
+        "contents": "%lattice.welcome.noCli%",
+        "when": "!lattice.cliAvailable"
+      },
+      {
+        "view": "lattice.search",
+        "contents": "%lattice.welcome.searchNoCli%",
+        "when": "!lattice.cliAvailable"
+      },
+      {
+        "view": "lattice.tasks",
+        "contents": "%lattice.welcome.noProject%",
+        "when": "lattice.cliAvailable && !lattice.hasWorkspaceProject"
+      },
+      {
+        "view": "lattice.search",
+        "contents": "%lattice.welcome.search%",
+        "when": "lattice.cliAvailable"
+      }
+    ],
+    "commands": [
+      {
+        "command": "lattice.graph.open",
+        "title": "%lattice.command.graph.open.title%",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "lattice.search.open",
+        "title": "%lattice.command.search.open.title%",
+        "icon": "$(search)"
+      },
+      {
+        "command": "lattice.search.rerun",
+        "title": "%lattice.command.search.rerun.title%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lattice.search.clear",
+        "title": "%lattice.command.search.clear.title%",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "lattice.refresh",
+        "title": "%lattice.command.refresh.title%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lattice.tasks.toggleScope",
+        "title": "%lattice.command.tasks.toggleScope.title%",
+        "icon": "$(list-filter)"
+      },
+      {
+        "command": "lattice.task.create",
+        "title": "%lattice.command.task.create.title%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "lattice.task.start",
+        "title": "%lattice.command.task.start.title%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "lattice.task.complete",
+        "title": "%lattice.command.task.complete.title%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "lattice.task.archive",
+        "title": "%lattice.command.task.archive.title%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "lattice.task.reopen",
+        "title": "%lattice.command.task.reopen.title%",
+        "icon": "$(issue-reopened)"
+      },
+      {
+        "command": "lattice.task.delete",
+        "title": "%lattice.command.task.delete.title%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lattice.task.checkpoint.add",
+        "title": "%lattice.command.task.checkpoint.add.title%",
+        "icon": "$(milestone)"
+      },
+      {
+        "command": "lattice.task.checkpoint.draft",
+        "title": "%lattice.command.task.checkpoint.draft.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.task.summarize",
+        "title": "%lattice.command.task.summarize.title%",
+        "icon": "$(note)"
+      },
+      {
+        "command": "lattice.checkpoint.commit",
+        "title": "%lattice.command.checkpoint.commit.title%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "lattice.picker.copyId",
+        "title": "%lattice.command.picker.copyId.title%"
+      },
+      {
+        "command": "lattice.picker.openGraph",
+        "title": "%lattice.command.picker.openGraph.title%"
+      },
+      {
+        "command": "lattice.picker.reveal",
+        "title": "%lattice.command.picker.reveal.title%"
+      },
+      {
+        "command": "lattice.user.manager",
+        "title": "%lattice.command.user.manager.title%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "lattice.user.switch",
+        "title": "%lattice.command.user.switch.title%"
+      },
+      {
+        "command": "lattice.user.create",
+        "title": "%lattice.command.user.create.title%"
+      },
+      {
+        "command": "lattice.user.rename",
+        "title": "%lattice.command.user.rename.title%"
+      },
+      {
+        "command": "lattice.user.browse",
+        "title": "%lattice.command.user.browse.title%"
+      },
+      {
+        "command": "lattice.user.browse.exit",
+        "title": "%lattice.command.user.browse.exit.title%"
+      },
+      {
+        "command": "lattice.task.associate.project",
+        "title": "%lattice.command.task.associate.project.title%",
+        "icon": "$(link)"
+      },
+      {
+        "command": "lattice.task.associate.paths",
+        "title": "%lattice.command.task.associate.paths.title%",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "lattice.task.refSpec",
+        "title": "%lattice.command.task.refSpec.title%",
+        "icon": "$(references)"
+      },
+      {
+        "command": "lattice.task.unrefSpec",
+        "title": "%lattice.command.task.unrefSpec.title%",
+        "icon": "$(close)"
+      },
+      {
+        "command": "lattice.task.copyId",
+        "title": "%lattice.command.task.copyId.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.task.copyContext",
+        "title": "%lattice.command.task.copyContext.title%",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "lattice.task.update.title",
+        "title": "%lattice.command.task.update.title.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.revealInSidebar",
+        "title": "%lattice.command.revealInSidebar.title%",
+        "icon": "$(target)"
+      },
+      {
+        "command": "lattice.task.revealInGraph",
+        "title": "%lattice.command.revealInGraph.title%",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "lattice.task.openDoc",
+        "title": "%lattice.command.task.openDoc.title%",
+        "icon": "$(book)"
+      },
+      {
+        "command": "lattice.task.openProgress",
+        "title": "%lattice.command.task.openProgress.title%",
+        "icon": "$(history)"
+      },
+      {
+        "command": "lattice.task.openCheckpoint",
+        "title": "%lattice.command.task.openCheckpoint.title%",
+        "icon": "$(milestone)"
+      },
+      {
+        "command": "lattice.task.setActive",
+        "title": "%lattice.command.task.setActive.title%",
+        "icon": "$(target)"
+      },
+      {
+        "command": "lattice.task.clearActive",
+        "title": "%lattice.command.task.clearActive.title%",
+        "icon": "$(stop-circle)"
+      },
+      {
+        "command": "lattice.spec.open",
+        "title": "%lattice.command.spec.open.title%",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "lattice.spec.openById",
+        "title": "%lattice.command.spec.openById.title%",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "lattice.spec.create",
+        "title": "%lattice.command.spec.create.title%",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "lattice.spec.lint",
+        "title": "%lattice.command.spec.lint.title%",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "lattice.spec.conflicts",
+        "title": "%lattice.command.spec.conflicts.title%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "lattice.spec.copyId",
+        "title": "%lattice.command.spec.copyId.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.spec.copyPath",
+        "title": "%lattice.command.spec.copyPath.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.spec.refToTask",
+        "title": "%lattice.command.spec.refToTask.title%",
+        "icon": "$(references)"
+      },
+      {
+        "command": "lattice.spec.revealInGraph",
+        "title": "%lattice.command.revealInGraph.title%",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "lattice.spec.migrate",
+        "title": "%lattice.command.spec.migrate.title%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "lattice.spec.afterEdit",
+        "title": "%lattice.command.spec.afterEdit.title%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "lattice.project.open",
+        "title": "%lattice.command.project.open.title%",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lattice.project.openFolder",
+        "title": "%lattice.command.project.openFolder.title%",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lattice.project.copyId",
+        "title": "%lattice.command.project.copyId.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.project.copyPath",
+        "title": "%lattice.command.project.copyPath.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.project.revealInGraph",
+        "title": "%lattice.command.revealInGraph.title%",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "lattice.project.relation.add",
+        "title": "%lattice.command.project.relation.add.title%",
+        "icon": "$(link)"
+      },
+      {
+        "command": "lattice.project.relation.remove",
+        "title": "%lattice.command.project.relation.remove.title%",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "lattice.project.update",
+        "title": "%lattice.command.project.update.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.project.switchActive",
+        "title": "%lattice.command.project.switchActive.title%",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "lattice.displayLanguage",
+        "title": "%lattice.command.displayLanguage.title%",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "lattice.status.project",
+        "title": "%lattice.command.status.project.title%",
+        "icon": "$(project)"
+      },
+      {
+        "command": "lattice.rag.status",
+        "title": "%lattice.command.rag.status.title%",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "lattice.rag.update",
+        "title": "%lattice.command.rag.update.title%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "lattice.rag.rebuild",
+        "title": "%lattice.command.rag.rebuild.title%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lattice.doctor.run",
+        "title": "%lattice.command.doctor.run.title%",
+        "icon": "$(heart)"
+      },
+      {
+        "command": "lattice.doctor.fix",
+        "title": "%lattice.command.doctor.fix.title%",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "lattice.trash.browse",
+        "title": "%lattice.command.trash.browse.title%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lattice.web.open",
+        "title": "%lattice.command.web.open.title%",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "lattice.workspace.initialize",
+        "title": "%lattice.command.workspace.initialize.title%",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "lattice.workspace.scan",
+        "title": "%lattice.command.workspace.scan.title%",
+        "icon": "$(telescope)"
+      },
+      {
+        "command": "lattice.workspace.link",
+        "title": "%lattice.command.workspace.link.title%",
+        "icon": "$(link)"
+      },
+      {
+        "command": "lattice.cli.check",
+        "title": "%lattice.command.cli.check.title%",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "lattice.logs.show",
+        "title": "%lattice.command.logs.show.title%",
+        "icon": "$(output)"
+      },
+      {
+        "command": "lattice.utility.copyDiagnostics",
+        "title": "%lattice.command.utility.copyDiagnostics.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.openDataDir",
+        "title": "%lattice.command.openDataDir.title%",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lattice.doc.openSource",
+        "title": "%lattice.command.doc.openSource.title%",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "lattice.tasks.batchStart",
+        "title": "%lattice.command.tasks.batchStart.title%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "lattice.tasks.batchComplete",
+        "title": "%lattice.command.tasks.batchComplete.title%",
+        "icon": "$(check)"
+      },
+      {
+        "command": "lattice.tasks.batchArchive",
+        "title": "%lattice.command.tasks.batchArchive.title%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "lattice.tasks.copyIds",
+        "title": "%lattice.command.tasks.copyIds.title%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "lattice.tasks.filter",
+        "title": "%lattice.command.tasks.filter.title%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "lattice.tasks.search",
+        "title": "%lattice.command.tasks.search.title%",
+        "icon": "$(search)"
+      },
+      {
+        "command": "lattice.specs.search",
+        "title": "%lattice.command.specs.search.title%",
+        "icon": "$(search)"
+      },
+      {
+        "command": "lattice.projects.search",
+        "title": "%lattice.command.projects.search.title%",
+        "icon": "$(search)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "lattice.spec.openById",
+          "when": "false"
+        },
+        {
+          "command": "lattice.task.openCheckpoint",
+          "when": "false"
+        },
+        {
+          "command": "lattice.doc.openSource",
+          "when": "false"
+        },
+        {
+          "command": "lattice.status.project",
+          "when": "false"
+        },
+        {
+          "command": "lattice.search.rerun",
+          "when": "false"
+        },
+        {
+          "command": "lattice.search.clear",
+          "when": "false"
+        },
+        {
+          "command": "lattice.spec.afterEdit",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.toggleScope",
+          "when": "false"
+        },
+        {
+          "command": "lattice.task.clearActive",
+          "when": "false"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.batchStart",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.batchComplete",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.batchArchive",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.copyIds",
+          "when": "false"
+        },
+        {
+          "command": "lattice.checkpoint.commit",
+          "when": "lattice.checkpointDraft"
+        },
+        {
+          "command": "lattice.picker.copyId",
+          "when": "false"
+        },
+        {
+          "command": "lattice.picker.openGraph",
+          "when": "false"
+        },
+        {
+          "command": "lattice.picker.reveal",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "lattice.task.create",
+          "when": "view == lattice.tasks",
+          "group": "navigation@1",
+          "icon": "$(add)"
+        },
+        {
+          "command": "lattice.tasks.toggleScope",
+          "when": "view == lattice.tasks",
+          "group": "navigation@2",
+          "icon": "$(list-filter)"
+        },
+        {
+          "command": "lattice.tasks.filter",
+          "when": "view == lattice.tasks && !lattice.tasks.hasFilter",
+          "group": "navigation@3",
+          "icon": "$(filter)"
+        },
+        {
+          "command": "lattice.tasks.filter",
+          "when": "view == lattice.tasks && lattice.tasks.hasFilter",
+          "group": "navigation@3",
+          "icon": "$(filter-filled)"
+        },
+        {
+          "command": "lattice.tasks.search",
+          "when": "view == lattice.tasks && !lattice.tasks.hasSearch",
+          "group": "navigation@4",
+          "icon": "$(search)"
+        },
+        {
+          "command": "lattice.tasks.search",
+          "when": "view == lattice.tasks && lattice.tasks.hasSearch",
+          "group": "navigation@4",
+          "icon": "$(search-filled)"
+        },
+        {
+          "command": "lattice.refresh",
+          "when": "view == lattice.tasks || view == lattice.specs || view == lattice.projects",
+          "group": "navigation@9",
+          "icon": "$(refresh)"
+        },
+        {
+          "command": "lattice.logs.show",
+          "when": "lattice.hasErrors && (view == lattice.tasks || view == lattice.specs || view == lattice.projects)",
+          "group": "navigation@8",
+          "icon": "$(output)"
+        },
+        {
+          "command": "lattice.search.open",
+          "when": "view == lattice.search",
+          "group": "navigation@1",
+          "icon": "$(search)"
+        },
+        {
+          "command": "lattice.search.rerun",
+          "when": "view == lattice.search && lattice.searchHasResults",
+          "group": "navigation@2",
+          "icon": "$(refresh)"
+        },
+        {
+          "command": "lattice.search.clear",
+          "when": "view == lattice.search && lattice.searchHasResults",
+          "group": "navigation@3",
+          "icon": "$(clear-all)"
+        },
+        {
+          "command": "lattice.project.switchActive",
+          "when": "view == lattice.projects",
+          "group": "navigation@1",
+          "icon": "$(arrow-swap)"
+        },
+        {
+          "command": "lattice.projects.search",
+          "when": "view == lattice.projects && !lattice.projects.hasSearch",
+          "group": "navigation@2",
+          "icon": "$(search)"
+        },
+        {
+          "command": "lattice.projects.search",
+          "when": "view == lattice.projects && lattice.projects.hasSearch",
+          "group": "navigation@2",
+          "icon": "$(search-filled)"
+        },
+        {
+          "command": "lattice.spec.conflicts",
+          "when": "view == lattice.specs && lattice.specHasConflicts",
+          "group": "navigation@1",
+          "icon": "$(warning)"
+        },
+        {
+          "command": "lattice.web.open",
+          "when": "view == lattice.tasks || view == lattice.specs || view == lattice.projects || view == lattice.search",
+          "group": "navigation@10",
+          "icon": "$(globe)"
+        },
+        {
+          "command": "lattice.spec.create",
+          "when": "view == lattice.specs",
+          "group": "navigation@0",
+          "icon": "$(new-file)"
+        },
+        {
+          "command": "lattice.spec.lint",
+          "when": "view == lattice.specs",
+          "group": "navigation@2",
+          "icon": "$(checklist)"
+        },
+        {
+          "command": "lattice.specs.search",
+          "when": "view == lattice.specs && !lattice.specs.hasSearch",
+          "group": "navigation@3",
+          "icon": "$(search)"
+        },
+        {
+          "command": "lattice.specs.search",
+          "when": "view == lattice.specs && lattice.specs.hasSearch",
+          "group": "navigation@3",
+          "icon": "$(search-filled)"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "lattice.task.openDoc",
+          "when": "viewItem == taskDoc",
+          "group": "inline@1"
+        },
+        {
+          "command": "lattice.task.openDoc",
+          "when": "viewItem =~ /^task-/",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "lattice.task.start",
+          "when": "viewItem == task-planning && !listMultiSelection",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "lattice.task.complete",
+          "when": "viewItem == task-in_progress && !listMultiSelection",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "lattice.task.archive",
+          "when": "viewItem =~ /^task-/ && viewItem != task-archived && !listMultiSelection",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "lattice.task.reopen",
+          "when": "viewItem == task-completed || viewItem == task-archived && !listMultiSelection",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "lattice.task.checkpoint.add",
+          "when": "viewItem =~ /^task-/ && viewItem != task-archived && !listMultiSelection",
+          "group": "1_actions@4"
+        },
+        {
+          "command": "lattice.task.checkpoint.draft",
+          "when": "viewItem =~ /^task-/ && viewItem != task-archived && !listMultiSelection",
+          "group": "1_actions@5"
+        },
+        {
+          "command": "lattice.task.summarize",
+          "when": "viewItem =~ /^task-/ && viewItem != task-archived && !listMultiSelection",
+          "group": "1_actions@6"
+        },
+        {
+          "command": "lattice.task.associate.project",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@1"
+        },
+        {
+          "command": "lattice.task.associate.paths",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@2"
+        },
+        {
+          "command": "lattice.task.refSpec",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@3"
+        },
+        {
+          "command": "lattice.task.unrefSpec",
+          "when": "viewItem == taskRefSpec && !listMultiSelection",
+          "group": "2_associate@3"
+        },
+        {
+          "command": "lattice.task.setActive",
+          "when": "viewItem =~ /^task-/ && viewItem != task-archived && !listMultiSelection",
+          "group": "3_manage@1"
+        },
+        {
+          "command": "lattice.task.update.title",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "3_manage@2"
+        },
+        {
+          "command": "lattice.task.copyId",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.task.copyContext",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "lattice.task.revealInGraph",
+          "when": "viewItem =~ /^task-/",
+          "group": "5_view@1"
+        },
+        {
+          "command": "lattice.task.revealInGraph",
+          "when": "viewItem == project || viewItem == spec",
+          "group": "5_view@1"
+        },
+        {
+          "command": "lattice.task.delete",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "lattice.task.openProgress",
+          "when": "viewItem == taskProgressGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "lattice.spec.openById",
+          "when": "viewItem == spec || viewItem == searchResultSpec || viewItem == taskRefSpecLeaf",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "lattice.spec.copyId",
+          "when": "viewItem == spec || viewItem == taskRefSpecLeaf",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.spec.copyPath",
+          "when": "viewItem == spec || viewItem == taskRefSpecLeaf",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "lattice.spec.refToTask",
+          "when": "viewItem == spec",
+          "group": "2_associate@1"
+        },
+        {
+          "command": "lattice.spec.revealInGraph",
+          "when": "viewItem == spec",
+          "group": "5_view@1"
+        },
+        {
+          "command": "lattice.project.open",
+          "when": "viewItem == project",
+          "group": "inline@1"
+        },
+        {
+          "command": "lattice.project.openFolder",
+          "when": "viewItem == project",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "lattice.project.copyId",
+          "when": "viewItem == project",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.project.copyPath",
+          "when": "viewItem == project",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "lattice.project.relation.add",
+          "when": "viewItem == project",
+          "group": "2_associate@1"
+        },
+        {
+          "command": "lattice.project.relation.remove",
+          "when": "viewItem == relation",
+          "group": "9_danger@1"
+        },
+        {
+          "command": "lattice.project.update",
+          "when": "viewItem == project",
+          "group": "3_manage@1"
+        },
+        {
+          "command": "lattice.task.copyId",
+          "when": "viewItem =~ /^searchResult(Task|Checkpoint)$/ && !listMultiSelection",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.spec.copyId",
+          "when": "viewItem == searchResultSpec",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.project.copyId",
+          "when": "viewItem == searchResultProject",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.doc.openSource",
+          "when": "viewItem =~ /^searchResult/",
+          "group": "5_view@2"
+        },
+        {
+          "command": "lattice.task.revealInGraph",
+          "when": "viewItem =~ /^searchResult(Task|Project|Spec)$/",
+          "group": "5_view@1"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "viewItem =~ /^task-/",
+          "group": "5_view@2"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "viewItem == spec || viewItem == taskRefSpecLeaf",
+          "group": "5_view@2"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "viewItem == project || viewItem == relation",
+          "group": "5_view@2"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "viewItem =~ /^searchResult/",
+          "group": "5_view@3"
+        },
+        {
+          "command": "lattice.tasks.batchStart",
+          "when": "listMultiSelection && viewItem =~ /^task-/",
+          "group": "1_batch@1"
+        },
+        {
+          "command": "lattice.tasks.batchComplete",
+          "when": "listMultiSelection && viewItem =~ /^task-/",
+          "group": "1_batch@2"
+        },
+        {
+          "command": "lattice.tasks.batchArchive",
+          "when": "listMultiSelection && viewItem =~ /^task-/",
+          "group": "1_batch@3"
+        },
+        {
+          "command": "lattice.tasks.copyIds",
+          "when": "listMultiSelection && viewItem =~ /^task-/",
+          "group": "1_batch@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "lattice.task.associate.paths",
+          "when": "lattice.hasActiveTask",
+          "group": "lattice@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "lattice.project.open",
+          "when": "resourceFilename == lattice.json",
+          "group": "navigation",
+          "icon": "$(folder-opened)"
+        },
+        {
+          "command": "lattice.checkpoint.commit",
+          "when": "lattice.checkpointDraft",
+          "group": "navigation",
+          "icon": "$(check)"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "lattice.search.open",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l"
+      },
+      {
+        "command": "lattice.graph.open",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "!editorTextFocus && !inputFocus"
+      },
+      {
+        "command": "lattice.picker.copyId",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "inQuickOpen && lattice.pickerActive"
+      },
+      {
+        "command": "lattice.picker.openGraph",
+        "key": "alt+enter",
+        "mac": "alt+enter",
+        "when": "inQuickOpen && lattice.pickerActive"
+      },
+      {
+        "command": "lattice.picker.reveal",
+        "key": "ctrl+shift+enter",
+        "mac": "ctrl+enter",
+        "when": "inQuickOpen && lattice.pickerActive"
+      }
+    ],
+    "configuration": {
+      "title": "Lattice",
+      "properties": {
+        "lattice.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "%lattice.config.cliPath%"
+        },
+        "lattice.latticeHome": {
+          "type": "string",
+          "default": "",
+          "description": "%lattice.config.latticeHome%"
+        },
+        "lattice.minCliVersion": {
+          "type": "string",
+          "default": "1.28.0",
+          "description": "%lattice.config.minCliVersion%"
+        },
+        "lattice.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.autoRefresh%"
+        },
+        "lattice.refreshDebounce": {
+          "type": "number",
+          "default": 400,
+          "minimum": 0,
+          "description": "%lattice.config.refreshDebounce%"
+        },
+        "lattice.fallbackPollMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 0,
+          "description": "%lattice.config.fallbackPollMs%"
+        },
+        "lattice.cliTimeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 1000,
+          "description": "%lattice.config.cliTimeoutMs%"
+        },
+        "lattice.tasks.scope": {
+          "type": "string",
+          "enum": [
+            "all",
+            "project"
+          ],
+          "default": "all",
+          "description": "%lattice.config.tasks.scope%"
+        },
+        "lattice.tasks.showArchived": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.tasks.showArchived%"
+        },
+        "lattice.search.types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "spec",
+              "task",
+              "project",
+              "checkpoint",
+              "relation"
+            ]
+          },
+          "default": [],
+          "description": "%lattice.config.search.types%"
+        },
+        "lattice.search.limit": {
+          "type": "number",
+          "default": 0,
+          "description": "%lattice.config.search.limit%"
+        },
+        "lattice.graph.defaultLayout": {
+          "type": "string",
+          "enum": [
+            "force",
+            "sequential",
+            "radial"
+          ],
+          "default": "force",
+          "description": "%lattice.config.graph.defaultLayout%"
+        },
+        "lattice.graph.keepContext": {
+          "type": "boolean",
+          "default": false,
+          "description": "%lattice.config.graph.keepContext%"
+        },
+        "lattice.statusBar.project": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.statusBar.project%"
+        },
+        "lattice.statusBar.activeTasks": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.statusBar.activeTasks%"
+        },
+        "lattice.statusBar.user": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.statusBar.user%"
+        },
+        "lattice.editor.specLinks": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.editor.specLinks%"
+        },
+        "lattice.decorations.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.decorations.enabled%"
+        },
+        "lattice.documents.ragHintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.documents.ragHintOnSave%"
+        },
+        "lattice.trace": {
+          "type": "boolean",
+          "default": false,
+          "description": "%lattice.config.trace%"
+        },
+        "lattice.specDiagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%lattice.config.specDiagnostics.enabled%"
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "lattice.getStarted",
+        "title": "%lattice.walkthrough.title%",
+        "description": "%lattice.walkthrough.description%",
+        "steps": [
+          {
+            "id": "cli",
+            "title": "%lattice.walkthrough.cli.title%",
+            "description": "%lattice.walkthrough.cli.description%",
+            "completionEvents": [
+              "onCommand:lattice.cli.check"
+            ]
+          },
+          {
+            "id": "init",
+            "title": "%lattice.walkthrough.init.title%",
+            "description": "%lattice.walkthrough.init.description%",
+            "completionEvents": [
+              "onCommand:lattice.workspace.initialize"
+            ]
+          },
+          {
+            "id": "projects",
+            "title": "%lattice.walkthrough.projects.title%",
+            "description": "%lattice.walkthrough.projects.description%",
+            "completionEvents": [
+              "onCommand:lattice.workspace.scan",
+              "onCommand:lattice.workspace.link"
+            ]
+          },
+          {
+            "id": "browse",
+            "title": "%lattice.walkthrough.browse.title%",
+            "description": "%lattice.walkthrough.browse.description%",
+            "completionEvents": [
+              "onCommand:lattice.tasks.focus"
+            ]
+          },
+          {
+            "id": "search",
+            "title": "%lattice.walkthrough.search.title%",
+            "description": "%lattice.walkthrough.search.description%",
+            "completionEvents": [
+              "onCommand:lattice.search.open",
+              "onCommand:lattice.graph.open"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

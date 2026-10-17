@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/qxchuckle/lattice/blob/master/docs/README.md
+    about: Quick start, architecture, directory & configuration, template registry
+  - name: Security report
+    url: https://github.com/qxchuckle/lattice/security/advisories/new
+    about: Please report vulnerabilities privately, not in public issues

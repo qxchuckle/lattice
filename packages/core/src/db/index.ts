@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3';
 import { unlinkSync, existsSync } from 'node:fs';
+import { resolveDatabaseDriver, type DatabaseDriverPort, type DatabasePort } from './port';
 import type {
   ProjectRow,
   ProjectMeta,
@@ -20,7 +20,7 @@ import {
 } from '../paths';
 import { selectPrimaryId, resolveProjectIds, normalizeProjectMeta } from '../project/identity';
 
-let _db: Database.Database | null = null;
+let _db: DatabasePort | null = null;
 
 /**
  * DB schema 版本号。当 schema 发生不兼容变更（如主键变化）时递增。
@@ -143,7 +143,7 @@ CREATE INDEX IF NOT EXISTS idx_spec_search_meta_doc_kind ON spec_search_meta(doc
 export const FTS_INDEX_VERSION = 3;
 const FTS_INDEX_VERSION_KEY = 'fts_index_version';
 
-export function getDb(): Database.Database {
+export function getDb(): DatabasePort {
   if (!_db) {
     throw new Error('数据库未初始化，请先调用 initDb()');
   }
@@ -170,7 +170,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS specs_fts USING fts5(
  * 只能 DROP+CREATE；DROP 后会丢弃原有 FTS 索引数据，
  * 需要调用方（doctor / rag update）提示用户运行 rag rebuild 重新填充。
  */
-function ensureSpecsFtsSchema(db: Database.Database): void {
+function ensureSpecsFtsSchema(db: DatabasePort): void {
   try {
     const cols = db.prepare("PRAGMA table_info('specs_fts')").all() as { name: string }[];
     if (cols.length === 0) return; // 表尚不存在，后续 FTS_SCHEMA_SQL 会创建
@@ -195,7 +195,7 @@ function normalizeSearchUsers(usernames?: string[]): string[] {
   return Array.from(new Set((usernames ?? []).map((username) => username.trim()).filter(Boolean)));
 }
 
-function ensureEmbeddingsSchema(db: Database.Database): void {
+function ensureEmbeddingsSchema(db: DatabasePort): void {
   const columns = db.prepare("PRAGMA table_info('embeddings')").all() as { name: string }[];
   const columnNames = new Set(columns.map((column) => column.name));
 
@@ -225,7 +225,7 @@ function ensureEmbeddingsSchema(db: Database.Database): void {
   }
 }
 
-function ensureProjectsSchema(db: Database.Database): void {
+function ensureProjectsSchema(db: DatabasePort): void {
   const columns = db.prepare("PRAGMA table_info('projects')").all() as { name: string }[];
   const columnNames = new Set(columns.map((column) => column.name));
 
@@ -248,7 +248,7 @@ function ensureProjectsSchema(db: Database.Database): void {
  * 该表自 v?.? 起被废弃：项目关系完全以 relations.json 为真源，db 中不再缓存。
  * 旧版本数据库可能仍保留该表与索引，这里做一次性 DROP，无需保留数据（真源在 relations.json）。
  */
-function dropLegacyProjectRelations(db: Database.Database): void {
+function dropLegacyProjectRelations(db: DatabasePort): void {
   try {
     db.exec('DROP INDEX IF EXISTS uq_relations_triple');
     db.exec('DROP INDEX IF EXISTS idx_relations_a');
@@ -259,7 +259,7 @@ function dropLegacyProjectRelations(db: Database.Database): void {
   }
 }
 
-function ensureSpecSearchMetaSchema(db: Database.Database): void {
+function ensureSpecSearchMetaSchema(db: DatabasePort): void {
   const columns = db.prepare("PRAGMA table_info('spec_search_meta')").all() as { name: string }[];
   const columnNames = new Set(columns.map((column) => column.name));
 
@@ -293,14 +293,14 @@ type SchemaCheckResult = false | 'fresh' | 'upgraded';
  * 返回值：false=无需迁移；'fresh'=全新 DB（需回填，无历史索引）；
  * 'upgraded'=旧版本库被删除重建（历史索引丢失，需提示 rag rebuild）。
  */
-function checkAndMigrateDbSchema(): SchemaCheckResult {
+function checkAndMigrateDbSchema(driver: DatabaseDriverPort): SchemaCheckResult {
   const dbPath = getDbPath();
   // 全新 DB：需要回填数据
   if (!existsSync(dbPath)) return 'fresh';
 
-  let tempDb: Database.Database | null = null;
+  let tempDb: DatabasePort | null = null;
   try {
-    tempDb = new Database(dbPath);
+    tempDb = driver.open(dbPath);
 
     // 检查 lattice_meta 表是否存在
     const hasMetaTable = tempDb
@@ -439,15 +439,18 @@ export async function rebuildProjectsCache(): Promise<void> {
   }
 }
 
-export async function initDb(): Promise<Database.Database> {
+export async function initDb(): Promise<DatabasePort> {
   if (_db) return _db;
   await ensureDir(getCacheDir());
 
+  // 解析驱动（宿主绑定优先；否则 better-sqlite3 → node:sqlite 自动探测）
+  const driver = await resolveDatabaseDriver();
+
   // 检测旧 schema，如需重建则删除旧文件
   // schemaCheck: false=无需迁移；'fresh'=全新库；'upgraded'=旧库版本低被删除重建
-  const schemaCheck = checkAndMigrateDbSchema();
+  const schemaCheck = checkAndMigrateDbSchema(driver);
 
-  _db = new Database(getDbPath());
+  _db = driver.open(getDbPath());
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
   _db.exec(SCHEMA_SQL);
@@ -1139,7 +1142,7 @@ export function upsertEmbedding(entry: {
       parent_id: null,
       content: '',
       ...entry,
-      // better-sqlite3 把 undefined 绑定为 NULL：显式归一，防 NOT NULL 违约
+      // 驱动把 undefined 绑定为 NULL：显式归一，防 NOT NULL 违约
       source: entry.source ?? 'local',
     });
 }
@@ -1213,7 +1216,7 @@ export function updateEmbeddingMetadataByFilePath(
     .prepare(
       `UPDATE embeddings SET title = ?, username = ?, project_id = ?, source = ?, updated = datetime('now') WHERE file_path = ?`,
     )
-    // undefined 会被 better-sqlite3 绑定为 NULL，显式归一
+    // undefined 会被驱动绑定为 NULL，显式归一
     .run(title, username, projectId, source ?? 'local', filePath);
 }
 

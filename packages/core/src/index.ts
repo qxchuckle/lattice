@@ -46,9 +46,16 @@ export type {
   SyncDomainsConfig,
 } from './types';
 
+/**
+ * core 版本（与 packages/core/package.json 保持同步；core 测试校验防漂移）。
+ * 扩展宿主用它替代旧的 `ltc --version` 检查。
+ */
+export const CORE_VERSION = '1.28.0';
+
 // 路径与文件工具
 export {
   getLatticeRoot,
+  setLatticeRootOverride,
   getCacheDir,
   getDbPath,
   getConfigDir,
@@ -65,6 +72,8 @@ export {
   getRelationsFilePath,
   getProjectDir,
   getProjectMetaPath,
+  getProjectProfileDir,
+  getProjectProfileSummaryPath,
   getProjectSpecDir,
   getTaskDir,
   getTaskMetaPath,
@@ -180,6 +189,17 @@ export {
   getLatticeMeta,
   setLatticeMeta,
 } from './db';
+
+// 数据库驱动端口（宿主可绑定；扩展宿主用 node:sqlite，CLI/web 走 better-sqlite3 自动探测）
+export {
+  bindDatabaseDriver,
+  getBoundDatabaseDriver,
+  resolveDatabaseDriver,
+  useNodeSqliteDriver,
+  type DatabaseDriverPort,
+  type DatabasePort,
+  type PreparedStatementPort,
+} from './db/port';
 
 // 项目
 export {

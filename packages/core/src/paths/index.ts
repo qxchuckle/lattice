@@ -6,10 +6,22 @@ import { homeToTildeWith } from '../path-display';
 // ─── 根路径 ───
 
 export function getLatticeRoot(): string {
+  // 宿主覆盖优先（VSCode 扩展读取 workspace 配置后注入）
+  if (_rootOverride) return _rootOverride;
   // 支持 LATTICE_HOME 环境变量覆盖（测试/CI/多实例用）
   const envRoot = process.env.LATTICE_HOME;
   if (envRoot) return envRoot;
   return pathJoin(homedir(), '.lattice');
+}
+
+let _rootOverride: string | null = null;
+
+/**
+ * 宿主覆盖 lattice 根目录（进程内调用 core 的宿主用；传 null 恢复环境变量/默认）。
+ * VSCode 扩展在激活时将 `lattice.home` 配置注入这里，避免污染 process.env。
+ */
+export function setLatticeRootOverride(root: string | null): void {
+  _rootOverride = root && root.trim() ? root.trim() : null;
 }
 
 /**

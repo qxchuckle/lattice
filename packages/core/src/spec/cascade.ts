@@ -5,6 +5,7 @@ import { getGlobalSpecDir, getUserSpecDir, getProjectSpecDir, listDir } from '..
 import { parseSpec } from './io';
 import {
   findProjectDirName,
+  listProjectMetas,
   listProjects,
   getProjectDirNames,
   normalizeProjectId,
@@ -100,7 +101,7 @@ export async function getProjectSpecs(username: string, projectId: string): Prom
 
 /** 获取所有已注册项目的 spec（聚合，按 filePath 去重） */
 export async function getAllProjectSpecs(username: string): Promise<ParsedSpec[]> {
-  const projects = listProjects(username);
+  const projects = await listProjectsForSpecScan(username);
   const specMap = new Map<string, ParsedSpec>();
   for (const p of projects) {
     const specs = await getProjectSpecs(username, p.id);
@@ -109,6 +110,26 @@ export async function getAllProjectSpecs(username: string): Promise<ParsedSpec[]
     }
   }
   return [...specMap.values()];
+}
+
+/**
+ * 列举项目（id + name）：DB 可用时走 projects 表，未初始化 DB（进程内宿主未 initDb）时
+ * 回退磁盘 project.json 扫描，保证 spec 聚合在多宿主下都能工作。
+ */
+async function listProjectsForSpecScan(
+  username: string,
+): Promise<Array<{ id: string; name: string }>> {
+  try {
+    return listProjects(username).map((p) => ({ id: p.id, name: p.name }));
+  } catch {
+    const metas = await listProjectMetas(username);
+    return metas
+      .map((meta) => ({
+        id: meta.id ?? meta.ids?.[0] ?? '',
+        name: meta.name,
+      }))
+      .filter((p) => Boolean(p.id));
+  }
 }
 
 /** 全部项目 spec 的归组结果：spec 与所属项目的对应 */
@@ -126,7 +147,7 @@ export interface ProjectSpecGroup {
  * 跳过无 spec 的项目。
  */
 export async function getAllProjectSpecsGrouped(username: string): Promise<ProjectSpecGroup[]> {
-  const projects = listProjects(username);
+  const projects = await listProjectsForSpecScan(username);
   const groups: ProjectSpecGroup[] = [];
   for (const p of projects) {
     const specs = await getProjectSpecs(username, p.id);

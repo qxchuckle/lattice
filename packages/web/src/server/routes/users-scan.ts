@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
   getUsername,
-  listAllUsernames,
   renameUser,
   readLocalConfig,
   writeLocalConfig,
@@ -15,6 +14,7 @@ import {
   removeDir,
   type ScanProgress,
 } from '@qcqx/lattice-core';
+import * as lattice from '@qcqx/lattice-services';
 import { createSseStream } from '../sse';
 
 /** 校验用户名合法性（防止路径穿越） */
@@ -57,8 +57,8 @@ export function registerScanRoutes(app: FastifyInstance): void {
 
 export function registerUserRoutes(app: FastifyInstance): void {
   app.get('/api/users', async () => {
-    const currentUser = await getUsername();
-    const users = await listAllUsernames();
+    const currentUser = await lattice.currentUsername();
+    const users = await lattice.listUsers();
     return { users, currentUser };
   });
 

@@ -214,15 +214,28 @@ function unique<T>(arr: T[]): T[] {
  */
 export async function listVirtualProjectMetas(username: string): Promise<ProjectMeta[]> {
   const projects = listAllProjects(username);
-  const seenPrimaryIds = new Set<string>();
+  const seenIds = new Set<string>();
   const results: ProjectMeta[] = [];
 
   for (const p of projects) {
-    if (seenPrimaryIds.has(p.id)) continue;
-    seenPrimaryIds.add(p.id);
+    if (seenIds.has(p.id)) continue;
 
     const meta = await getVirtualProjectMeta(username, p.id);
-    if (meta) results.push(meta);
+    if (!meta) {
+      seenIds.add(p.id);
+      continue;
+    }
+
+    // 去重键 = 虚拟组 ID 全集：别名行（legacy:xxx 与 git:xxx 指向同一物理目录）会虚拟化出同一个 meta，
+    // 仅按 DB 行 id 去重会让同一项目列出多次 → 下游 spec 扫描/树节点 id 重复。
+    const groupIds = new Set<string>();
+    for (const id of [meta.id, ...(meta.ids ?? []), p.id]) {
+      if (id) groupIds.add(id);
+    }
+    if ([...groupIds].some((id) => seenIds.has(id))) continue;
+    for (const id of groupIds) seenIds.add(id);
+
+    results.push(meta);
   }
 
   return results;

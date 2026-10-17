@@ -7,11 +7,13 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/client/*"],
+      "@qcqx/lattice-web-ui": ["../web-ui/src/ui.ts"],
+      "@qcqx/lattice-web-ui/boot": ["../web-ui/src/main.tsx"],
       "@qcqx/lattice-core": ["../core/src/index.ts"],
-      "@qcqx/lattice-core/*": ["../core/src/*"]
+      "@qcqx/lattice-core/*": ["../core/src/*"],
+      "@qcqx/lattice-services": ["../services/src/index.ts"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../web-ui/src/types"],
   "exclude": ["dist", "node_modules"]
 }

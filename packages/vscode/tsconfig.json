@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@qcqx/lattice-core": ["../core/src/index.ts"],
+      "@qcqx/lattice-protocol": ["../protocol/src/index.ts"],
+      "@qcqx/lattice-services": ["../services/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests"]
+}

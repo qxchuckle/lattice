@@ -1,115 +1,156 @@
-# Lattice
+<p align="center">
+  <img src="./docs/assets/lattice-logo.png" width="88" alt="Lattice" />
+</p>
 
-**Lattice** 是一个跨项目的 AI 脚手架。它把分散在多个仓库中的规范、任务、项目关系和可复用经验统一管理在 `~/.lattice/` 中，并通过 CLI 提供给开发者和 AI 工具，帮助你在不同项目之间复用规则、延续上下文，并找到可参考的历史方案。
+<h1 align="center">Lattice</h1>
 
-## 核心能力
+<p align="center">
+  <b>Cross-project, cross-session context for developers and AI agents</b><br>
+  Specs, tasks and reusable experience — maintained once in <code>~/.lattice</code>, reused across every repo.
+</p>
 
-| 能力 | 说明 |
+<p align="center">
+  <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm cli" src="https://img.shields.io/npm/v/@qcqx/lattice-cli?label=cli"></a>
+  <a href="https://www.npmjs.com/package/@qcqx/lattice-core"><img alt="npm core" src="https://img.shields.io/npm/v/@qcqx/lattice-core?label=core"></a>
+  <a href="https://www.npmjs.com/package/@qcqx/lattice-web"><img alt="npm web" src="https://img.shields.io/npm/v/@qcqx/lattice-web?label=web"></a>
+  <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
+  <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
+  <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
+  <a href="https://open-vsx.org/extension/qcqx/lattice"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice?label=Open%20VSX"></a>
+  <!-- VS Marketplace badge — uncomment once published:
+  <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice?label=VS%20Marketplace"></a>
+  -->
+</p>
+
+<p align="center">
+  <b>English</b> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+Lattice is a local-first **AI context scaffold**. It keeps the knowledge that usually gets lost between repos and sessions — layered specs, task state with PRD / design / progress, project relations, and reusable domain experience — in one place, and serves it back to you (and to your AI agents) through a CLI, an in-editor extension and a web workbench.
+
+## Why Lattice
+
+- **Entering an unfamiliar repo?** Get its conventions and context before writing a line of code.
+- **Juggling several projects?** Track task state and relations across all of them.
+- **Solved something similar before?** Search past specs, decisions and reusable experience instead of starting from scratch.
+- **Using AI agents?** Inject the project's rules and context up front instead of starting every session from zero.
+
+## Screenshots
+
+| Web workbench | Task detail |
 |---|---|
-| **Spec 分层规范** | 全局 / 用户 / 项目三级 spec，高优先级自动覆盖低优先级 |
-| **任务管理** | 创建、启动、checkpoint 进展追踪、完成与归档的完整生命周期 |
-| **项目关系** | 注册项目、维护跨仓库关系和嵌套项目继承 |
-| **RAG 搜索** | 本地嵌入式向量 + 全文索引，搜索 spec、任务、checkpoint 等文档 |
-| **上下文聚合** | `ltc context` 一键拿到当前项目所有 spec、活跃任务与关联项目 |
-| **双轨同步** | origin 单仓多机全量同步；域（经验包）多用户协作——`sync domain join` 一行关联，routes 白名单推送，读时合并不落盘 |
-| **模板系统** | 内置 spec 模板和远程模板仓库，快速初始化项目规范 |
-| **AI 集成** | 通过 `ltc init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入工作流 |
-| **Web 可视化** | `ltc web` 启动本地可视化服务，浏览任务/项目/Spec 关系图 |
+| ![Workbench overview](docs/assets/screenshots/workbench-home.jpg) | ![Task detail](docs/assets/screenshots/workbench-task.jpg) |
+| ![Project graph](docs/assets/screenshots/workbench-project.jpg) | ![Spec detail](docs/assets/screenshots/workbench-spec.jpg) |
 
-## 适用场景
+*The web workbench — also embedded inside the VS Code extension ("Lattice: Open Web Workbench").*
 
-- 进入一个陌生仓库时，先拿到当前项目的规范和上下文
-- 多个项目并行推进时，持续维护任务状态和关联关系
-- 遇到相似需求时，搜索之前做过的方案、规则和决策
-- 希望让 AI / Agent 在编码前先对齐项目约定，而不是每次从零开始
+## Core capabilities
 
-## 快速开始
+| Capability | Description |
+|---|---|
+| **Layered specs** | Global / user / project specs with automatic cascade override (ancestors included) |
+| **Tasks & checkpoints** | Full lifecycle (planning → in progress → done → archived) with typed checkpoints (11 types) recording context, decisions, pivots, milestones |
+| **Project registry** | Fingerprint-based project identity, monorepo nesting, cross-repo relations, alias-aware virtual merge |
+| **RAG search** | Local embeddings + full-text index across specs, tasks, checkpoints and docs |
+| **Context aggregation** | `ltc context` assembles every spec, active task and related project for the current repo in one shot |
+| **Dual-track sync** | `origin` — single-repo multi-machine full sync; domains (experience packs) — multi-user collaboration over Git remotes, merged read-time |
+| **Spec templates** | Built-in + remote template registry for project conventions |
+| **AI integrations** | `ltc init` injects agent workflows into Cursor / Claude Code / Qoder / Trae, etc. |
+| **VS Code extension** | Native sidebar views, graph workbench webview, Problems diagnostics, multi-user, checkpoint drafting — running the core **in-process** |
+| **Web workbench** | `ltc web` (or the extension's built-in workbench) — task / project / spec explorer and Cytoscape knowledge graph |
 
-完整的上手指南请参阅 [快速开始](docs/quick-start.md)
+## Three ways to use it
+
+| | CLI | VS Code extension | Web workbench |
+|---|---|---|---|
+| **For** | Automation, scripts, AI agents | Day-to-day browsing and editing | Visual exploration |
+| **Install** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice) · VS Marketplace (soon) | `npm i -g @qcqx/lattice-web` |
+| **Run** | `ltc init` · `ltc scan` · `ltc context` | Activity bar → Lattice | `ltc web` → browser, or the extension's built-in webview |
+| **Docs** | [packages/cli](./packages/cli/README.md) | [packages/vscode](./packages/vscode/README.md) | [packages/web](./packages/web/README.md) |
+
+## Packages
+
+| Package | Role | Version |
+|---|---|---|
+| [`@qcqx/lattice-core`](./packages/core) | Domain core: storage, spec cascade, RAG, sync | [![core](https://img.shields.io/npm/v/@qcqx/lattice-core?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-core) |
+| [`@qcqx/lattice-protocol`](./packages/protocol) | Cross-host contracts (types-only DTOs & messages) | 0.1.0 (unpublished) |
+| [`@qcqx/lattice-services`](./packages/services) | Use-case layer shared by CLI / web / extension | 0.1.0 (unpublished) |
+| [`@qcqx/lattice-cli`](./packages/cli) | Command line (`lattice` / `ltc`) | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
+| [`@qcqx/lattice-web`](./packages/web) | Web server (HTTP API + static assets) | [![web](https://img.shields.io/npm/v/@qcqx/lattice-web?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web) |
+| [`@qcqx/lattice-web-ui`](./packages/web-ui) | Shared React UI (web client & extension webview) | 0.1.0 (unpublished) |
+| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | 0.1.0 (VSIX) |
+
+## Quick start
 
 ```bash
-# 全局安装，提供两个命令 lattice / ltc
+# CLI — installs `lattice` and `ltc`
 npm install -g @qcqx/lattice-cli
-# 初始化 AI 客户端集成
-ltc init
-# 扫描本地项目
-ltc scan
-# 在项目目录注册（用于非 git 项目）
-ltc link
+ltc init          # create ~/.lattice, pick a username, inject AI-client workflows
+ltc scan          # register local projects (or `ltc link` inside a non-git repo)
+ltc context       # every spec / active task / related project for the current repo
 ```
-
-web 可视化视图
 
 ```bash
-# 全局安装 web 包
-npm install -g @qcqx/lattice-web
-# 启动 web
-ltc web
+# Development + packaging of the VS Code extension
+pnpm install
+pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-<version>.vsix
 ```
 
-## 仓库结构
+```bash
+# Web workbench
+npm install -g @qcqx/lattice-web
+ltc web               # opens the local web UI
+```
+
+## Data & privacy
+
+- Everything lives in `~/.lattice` on your machine — projects, specs, tasks, checkpoints, the search index.
+- No telemetry, no network calls from the tooling itself. Sync (origin / domains) only touches the Git remotes **you** configure.
+- The VS Code extension reads and writes the same data root **in-process** (no CLI subprocess, no local HTTP server required).
+
+## Documentation
+
+- [Quick start](./docs/quick-start.md)
+- [Architecture](./docs/architecture.md)
+- [Directory & configuration](./docs/directory-and-config.md)
+- [Spec template registry](./docs/spec-template-registry.md)
+- [Docs index](./docs/README.md)
+
+Package docs: [cli](./packages/cli/README.md) · [core](./packages/core/README.md) · [web](./packages/web/README.md) · [vscode](./packages/vscode/README.md)
+
+### AI / agent workflow templates
+
+- [Skills overview](./packages/core/public/templates/skills/SKILL.md)
+- [Always-on rules (hard constraints)](./packages/core/public/templates/platforms/lattice-rules.md)
+- [CLI command reference](./packages/core/public/templates/skills/command-reference.md)
+- [Task workflows](./packages/core/public/templates/skills/task-workflows.md) · [Spec workflows](./packages/core/public/templates/skills/spec-workflows.md)
+- [Project context](./packages/core/public/templates/skills/project-context.md) · [Project discovery](./packages/core/public/templates/skills/project-discovery.md)
+- [Agent commands](./packages/core/public/templates/skills/agent-commands.md)
+
+## Repository structure
 
 ```
 packages/
-├── cli/   → @qcqx/lattice-cli  — 命令行入口
-├── core/  → @qcqx/lattice-core — 领域逻辑核心库
-└── web/   → @qcqx/lattice-web  — 可视化前端
+├── core/       → @qcqx/lattice-core       domain core (storage, cascade, RAG, sync)
+├── protocol/   → @qcqx/lattice-protocol   cross-host contracts (types-only)
+├── services/   → @qcqx/lattice-services   use cases shared by all hosts
+├── cli/        → @qcqx/lattice-cli        command line (lattice / ltc)
+├── web/        → @qcqx/lattice-web        web server + client bundle
+├── web-ui/     → @qcqx/lattice-web-ui     shared React UI components
+└── vscode/     → lattice (VS Code)        extension: views, webview, diagnostics
 ```
 
-## 文档入口
+## Contributing
 
-- [快速开始](docs/quick-start.md)
-- [技术架构详解](docs/architecture.md)
-- [Spec 模板仓库结构说明](docs/spec-template-registry.md)
-
-### 子包说明
-
-- CLI 命令行工具：[`packages/cli/README.md`](packages/cli/README.md)
-- Core 领域逻辑核心库：[`packages/core/README.md`](packages/core/README.md)
-- Web 可视化前端：[`packages/web/README.md`](packages/web/README.md)
-
-### AI / Agent 工作流
-
-- 技能入口与工作流总览：[`packages/core/public/templates/skills/SKILL.md`](packages/core/public/templates/skills/SKILL.md)
-- 系统级常驻规则（强制约束）：[`packages/core/public/templates/platforms/lattice-rules.md`](packages/core/public/templates/platforms/lattice-rules.md)
-- CLI 命令参数速查：[`packages/core/public/templates/skills/command-reference.md`](packages/core/public/templates/skills/command-reference.md)
-- 任务工作流详解：[`packages/core/public/templates/skills/task-workflows.md`](packages/core/public/templates/skills/task-workflows.md)
-- Spec 工作流详解：[`packages/core/public/templates/skills/spec-workflows.md`](packages/core/public/templates/skills/spec-workflows.md)
-- 项目上下文获取：[`packages/core/public/templates/skills/project-context.md`](packages/core/public/templates/skills/project-context.md)
-- 项目发现与识别：[`packages/core/public/templates/skills/project-discovery.md`](packages/core/public/templates/skills/project-discovery.md)
-- Agent Commands 用途与边界：[`packages/core/public/templates/skills/agent-commands.md`](packages/core/public/templates/skills/agent-commands.md)
-- Subagent 委派策略：[`packages/core/public/templates/skills/subagent-delegation.md`](packages/core/public/templates/skills/subagent-delegation.md)
-- 异常排查与诊断：[`packages/core/public/templates/skills/troubleshooting.md`](packages/core/public/templates/skills/troubleshooting.md)
-
-### 参考文档
-
-- 目录结构与配置详解：[`docs/directory-and-config.md`](docs/directory-and-config.md)
-- Spec 模板仓库组织与导入规则：[`docs/spec-template-registry.md`](docs/spec-template-registry.md)
-- 内置公共模板、命令文档和平台规则：[`packages/core/public/templates/`](packages/core/public/templates/)
-
-## 开发
-
-```bash
-# 安装依赖
-pnpm install
-
-# 构建全部
-pnpm build
-
-# 仅构建 core
-pnpm build:core
-
-# 仅构建 CLI
-pnpm build:cli
-
-# 类型检查
-pnpm check-types
-
-# Lint & Format
-pnpm lint
-pnpm format
-```
+Issues and PRs are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md). Please follow the [Code of Conduct](./CODE_OF_CONDUCT.md);
+for security reports use [SECURITY.md](./SECURITY.md).
 
 ## License
 
-MIT
+[MIT](./LICENSE)
+
+<!-- Star history — uncomment once the star count is meaningful:
+<p align="center">
+  <a href="https://star-history.com/#qxchuckle/lattice&Date"><img src="https://api.star-history.com/svg?repos=qxchuckle/lattice&type=Date" alt="Star History Chart" width="640"></a>
+</p>
+-->

@@ -1,0 +1,21 @@
+{
+  "name": "@qcqx/lattice-protocol",
+  "version": "0.1.0",
+  "description": "Lattice 跨端契约：宿主 ⇄ 客户端共用的 DTO 与消息类型（types-only，无运行时代码）",
+  "license": "MIT",
+  "publishConfig": { "access": "public" },
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@qcqx/lattice-core": "workspace:*",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  },
+  "files": [
+    "src"
+  ]
+}

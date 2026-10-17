@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- GitHub 社交预览图源（1280×640）：用 Chrome 无头渲染后上传到仓库 Settings → Social preview。
+     重新生成：
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+       --window-size=1280,640 --force-device-scale-factor=1 \
+       --screenshot=docs/assets/social-preview.png docs/assets/social-preview.html -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 78% 18%, #1b2740 0%, #0d1117 55%, #0a0d13 100%);
+    color: #e6edf3;
+    display: flex;
+    align-items: center;
+    padding: 0 84px;
+    gap: 64px;
+    position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(120, 150, 200, 0.14) 1px, transparent 1px);
+    background-size: 26px 26px;
+    pointer-events: none;
+  }
+  .logo { width: 148px; height: 148px; flex: none; filter: drop-shadow(0 12px 30px rgba(61, 132, 255, 0.35)); }
+  .content { position: relative; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 64px; letter-spacing: 1px; }
+  h1 span { color: #58a6ff; }
+  .tagline-en { font-size: 24px; color: #c9d4e3; }
+  .tagline-zh { font-size: 20px; color: #8b98ab; }
+  .chips { display: flex; gap: 12px; margin-top: 10px; }
+  .chip {
+    font-size: 16px; color: #a9c2e8; border: 1px solid rgba(88, 166, 255, 0.45);
+    background: rgba(88, 166, 255, 0.08); border-radius: 999px; padding: 7px 16px;
+  }
+  .surfaces { margin-top: 6px; font-size: 17px; color: #7d8ba1; letter-spacing: 0.4px; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <img class="logo" src="./lattice-logo.png" alt="Lattice" />
+  <div class="content">
+    <h1>Lattice<span>.</span></h1>
+    <div class="tagline-en">Cross-project, cross-session context for developers&nbsp;&&nbsp;AI&nbsp;agents</div>
+    <div class="tagline-zh">跨项目、跨会话的 AI 上下文脚手架 —— 规范 · 任务 · 经验，一处维护，处处复用</div>
+    <div class="chips">
+      <span class="chip">Layered Specs</span>
+      <span class="chip">Tasks &amp; Checkpoints</span>
+      <span class="chip">RAG Search</span>
+      <span class="chip">Knowledge Graph</span>
+    </div>
+    <div class="surfaces">CLI&nbsp;&nbsp;·&nbsp;&nbsp;VS Code Extension&nbsp;&nbsp;·&nbsp;&nbsp;Web Workbench</div>
+  </div>
+</body>
+</html>

@@ -3,8 +3,15 @@
   "compilerOptions": {
     "noEmit": true,
     "composite": true,
-    "lib": ["ESNext"],
-    "types": ["node"]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@webview-protocol": ["./packages/vscode/webview/src/protocol.ts"],
+      "@lattice-web-ui": ["./packages/web/src/client/ui.ts"],
+      "@qcqx/lattice-core": ["./packages/core/src/index.ts"],
+      "@qcqx/lattice-core/*": ["./packages/core/src/*"]
+    }
   },
   "include": ["**/*", "**/.*.*"],
   "exclude": [
@@ -13,11 +20,20 @@
     "**/out",
     "**/test",
     "**/coverage",
-    "**/*.d.ts",
     "**/dist/**",
     "**/node_modules/**",
     "**/out/**",
     ".cursor/**",
-    ".claude/**"
+    ".claude/**",
+    ".pnpm-store/**",
+    ".temp/**",
+    ".temp-docs/**",
+    ".tmp-home-ragtest/**",
+    ".tmp-projects-ragtest/**",
+    "**/.vscode-test/**",
+    "coverage/**",
+    "packages/vscode/media/**",
+    "packages/vscode/dist/**",
+    "packages/vscode/dist-vsix/**"
   ]
 }

@@ -20,10 +20,12 @@
     "dev:client": "vite",
     "dev:server": "LATTICE_WEB_NO_OPEN=1 tsx watch src/server/index.ts",
     "build": "vite build && tsup",
+    "prepublishOnly": "pnpm run build",
     "build:client": "vite build",
     "build:server": "tsup",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "TSX_TSCONFIG_PATH=./tests/tsconfig.test.json node --import tsx --test tests/*.test.ts"
   },
   "files": [
     "dist",
@@ -45,6 +47,8 @@
     "@fastify/type-provider-typebox": "^5.0.0",
     "@fastify/websocket": "^11.0.0",
     "@qcqx/lattice-core": "workspace:*",
+    "@qcqx/lattice-services": "workspace:*",
+    "@qcqx/lattice-web-ui": "workspace:*",
     "@sinclair/typebox": "^0.34.0",
     "@tanstack/react-query": "^5.0.0",
     "@tanstack/react-table": "^8.0.0",

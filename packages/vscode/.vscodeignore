@@ -1,0 +1,14 @@
+# 开发产物与源码不进 VSIX
+src/**
+webview/**
+tests/**
+scripts/**
+.vscode-test/**
+tsconfig.json
+tsup.config.ts
+.vscode-test.mjs
+dist-vsix
+**/*.map
+**/*.ts
+node_modules/**
+.pnpm-store/**

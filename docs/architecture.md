@@ -4,46 +4,61 @@
 
 ## 架构总览
 
-Lattice 是一个 monorepo 项目，由三个 npm 包组成，各自职责清晰、依赖单向：
+Lattice 是一个 monorepo 项目：**一份领域核心 + 一份跨端协议 + 一份应用服务 + 多个薄宿主（客户端）**。
 
 ```
 packages/
-├── core/  → @qcqx/lattice-core  — 领域逻辑核心库（纯 TypeScript，零 CLI 依赖）
-├── cli/   → @qcqx/lattice-cli  — 命令行入口（commander.js，依赖 core）
-└── web/   → @qcqx/lattice-web  — 可视化前端（Express + React，依赖 core）
+├── core/      → @qcqx/lattice-core      — 领域逻辑 + 存储（文件真源 + SQLite 索引）+ 平台端口
+├── protocol/  → @qcqx/lattice-protocol  — 跨端契约（DTO 与方法类型，types-only）
+├── services/  → @qcqx/lattice-services  — 应用服务层（用例实现，多宿主共享）
+├── web-ui/    → @qcqx/lattice-web-ui    — 共享 UI（React 组件 + 客户端状态 + LatticeDataAdapter 端口）
+├── cli/       → @qcqx/lattice-cli       — 命令行客户端（commander.js，依赖 core）
+├── web/       → @qcqx/lattice-web       — Web 工作台服务端（Fastify + HTTP 绑定 + 静态托管，UI 在 web-ui）
+└── vscode/    → qcqx.lattice            — VSCode 扩展（宿主 + Webview 应用，依赖 core/services/protocol/web-ui）
 ```
 
-三包之间的依赖关系：
+四层依赖关系（严格单向）：
 
 ```
-cli ──→ core
-web ──→ core
-core（无下游依赖，可独立发布）
+宿主绑定（HTTP / postMessage / 终端 UX）
+      │        cli ──→ core（终端绑定）
+      │        web/server ──→ services ──→ core（HTTP 绑定）
+      │        vscode（扩展宿主）──→ services ──→ core（postMessage 绑定）
+      ▼
+services（用例：快照/详情/搜索/上下文/写操作；多宿主唯一实现）
+      ▼
+core（领域 + 存储 + 端口；零宿主依赖）
+      ▲
+protocol（DTO/方法类型；被宿主与客户端共同引用）
 ```
 
-**为什么这样拆**：`core` 是所有领域逻辑的唯一载体，CLI 和 Web 都只是它的"壳"。这样设计的好处是：
+**为什么这样拆**：
 
-- 领域逻辑可被任意运行时复用（CLI 进程、Web 服务器、未来可能的 LSP / MCP 服务）
-- `core` 的 `browser.ts` 入口剔除了 Node.js 专有依赖（`crypto`、`fs`），使纯函数子集可在浏览器端直接引用
-- 发版时可以独立更新 CLI 和 Web，不需要同时发布
+- `core` 是所有领域逻辑与存储的唯一载体；`services` 是所有"用例组装与降级"的唯一实现（虚拟合并、文件回退、跨用户聚合、写操作前置校验）。
+- `protocol` 是宿主与客户端之间唯一的数据形状约定——**DTO 直接复用 core 领域类型，禁止各宿主自定义"精简形状"**（历史事故：桥自造 lite 形状导致图谱崩溃）。
+- 各宿主只是"绑定"：CLI 做终端 UX、Web server 做 HTTP 绑定、VSCode 扩展做 postMessage 绑定。新增客户端（未来桌面/移动/TUI）只需写一个薄适配器。
+- `core` 的 `browser.ts` 入口剔除了 Node.js 专有依赖（`crypto`、`fs`），使纯函数子集可在浏览器端直接引用。
+- 发版时可以独立更新各宿主，不需要同时发布。
 
 ### 数据流
 
 ```
-用户操作（终端 / 浏览器 / AI 客户端）
+用户操作（终端 / 浏览器 / IDE / 未来客户端）
         │
         ▼
-  CLI 命令 / Web API ──→ core 领域函数
-        │                      │
-        │                      ├──→ 文件系统（~/.lattice/ 数据真源）
-        │                      ├──→ SQLite（索引 + 缓存，可重建）
-        │                      └──→ Embedding 模型（RAG 向量）
-        │
+  宿主绑定（CLI 命令 / Web HTTP 路由 / VSCode 桥）──→ services 用例
+        │                                              │
+        │                                              ▼
+        │                                       core 领域函数
+        │                                              │
+        │                      ┌───────────────────────┼──────────────────────┐
+        │                      ▼                       ▼                      ▼
+        │               文件系统（~/.lattice/）   SQLite（索引+缓存）   Embedding 模型
         ▼
-  输出结果（终端文本 / JSON / HTTP 响应 / AI 上下文）
+  输出结果（终端文本 / JSON / HTTP 响应 / Webview 数据）
 ```
 
-Lattice 的数据真源是 `~/.lattice/` 下的文件系统（JSON + Markdown）。SQLite 数据库是加速查询的索引层，可通过 `ltc rag rebuild` 从文件系统全量重建。这种"文件优先、DB 辅助"的设计使得数据可读、可 git 管理、可手动恢复。
+Lattice 的数据真源是 `~/.lattice/` 下的文件系统（JSON + Markdown）。SQLite 数据库是加速查询的索引层，可通过 `ltc rag rebuild` 从文件系统全量重建。这种"文件优先、DB 辅助"的设计使得数据可读、可 git 管理、可手动恢复。**DB 不可用时（如旧版编辑器宿主），services 层自动回退文件真源，功能优雅降级。**
 
 ## Core 领域逻辑层
 
@@ -433,28 +448,25 @@ collectAllSearchDocuments()    — 收集所有可索引文档（spec / task / p
 
 ## Web 可视化层
 
-`packages/web/` 提供本地可视化服务，采用 Express + React 架构：
+拆分为两个包：`packages/web`（服务端 + 静态托管）+ `packages/web-ui`（共享 UI，web 与 VSCode Webview 共用）。
 
 ```
-web/src/
-├── server/              — Express 服务端
-│   ├── app.ts           — Express app 创建
+web/src/                 — Fastify 服务端（HTTP 绑定）+ vite 入口薄壳（src/main.tsx）
+├── server/
+│   ├── app.ts           — Fastify app 创建（initDb + 路由注册）
 │   ├── index.ts         — 服务启动 / 端口探测 / 浏览器打开
-│   ├── routes.ts        — REST API 路由
+│   ├── routes/          — REST API 路由（@qcqx/lattice-services 的 HTTP 绑定）
 │   └── schemas.ts       — 请求 / 响应 schema
-├── client/              — React 前端
-│   ├── App.tsx          — 应用入口
-│   ├── main.tsx         — Vite 入口
-│   ├── store.ts         — 全局状态管理
-│   ├── hooks.ts         — React hooks（数据获取 + 业务逻辑）
-│   ├── adapters/        — HTTP 适配层（调用 server API）
-│   ├── components/      — UI 组件
-│   │   ├── CytoscapeGraph.tsx     — 力导向图（项目关系可视化）
-│   │   ├── DetailPanel.tsx        — 详情面板
-│   │   ├── sidebar/               — 树形浏览器侧边栏
-│   │   └── graph/                 — 图布局算法
-│   └── styles/          — 全局样式
 └── shared/              — 前后端共享类型
+
+web-ui/src/              — @qcqx/lattice-web-ui（共享 UI 面）
+├── ui.ts                — 唯一出口（视图组件 / 状态 / 主题 / adapter 类型）
+├── main.tsx             — 浏览器 boot（web 宿主经 `@qcqx/lattice-web-ui/boot` 引用）
+├── store.ts             — 全局状态管理（valtio）
+├── hooks/               — React hooks（数据获取 + 业务逻辑）
+├── adapters/            — 数据适配层（HttpAdapter / 类型端口）
+├── components/          — UI 组件（图谱 / 详情 / 侧栏 / 编辑器…）
+└── styles/              — 全局样式
 ```
 
 ### Adapter 模式
@@ -473,6 +485,44 @@ React 组件 → hooks → adapters/http → Express API → core 函数
 - 关系类型筛选（fork / depends-on / shares-component / nested-in）
 - 重叠节点自动消解
 - 径向布局 / 顺序布局切换
+
+## 多端共享架构（protocol + services）
+
+> 2026-10 重构落地：VSCode 扩展不再经由 `ltc --json` 子进程取数，改为进程内直调 core/services（与 web server 同源）。
+
+### 分层与规则
+
+| 层 | 包 | 职责 | 硬性规则 |
+|---|---|---|---|
+| 领域 + 存储 | `core` | 文件真源、SQLite 索引、领域函数、平台端口（`DatabasePort`） | 零宿主依赖（不 import vscode/fastify/express） |
+| 契约 | `protocol` | DTO 与方法类型（types-only） | DTO 直接复用 core 类型；禁止"精简形状" |
+| 用例 | `services` | 快照/详情/搜索/上下文/写操作；组合与降级 | 唯一实现；DB 不可用自动回退文件真源 |
+| 宿主绑定 | `cli` / `web/server` / `vscode` | 传输绑定 + 参数归一 + 视图模型 | 只做绑定，不写业务组合 |
+
+### 平台能力端口（宿主 × 能力矩阵）
+
+| 能力 | CLI / web（Node） | VSCode 扩展（Electron） |
+|---|---|---|
+| 文件真源读写 | ✅ | ✅ |
+| 项目索引 / 虚拟合并 | ✅ better-sqlite3 | ✅ node:sqlite（Electron ≥35）/ 磁盘扫描降级 |
+| FTS 全文搜索 | ✅ | ✅（node:sqlite 自带 FTS5） |
+| 向量检索（sqlite-vec） | ✅ | ❌ 降级跳过 |
+| 语义 embedding | ✅（可选装模型） | ❌ 不打包（onnxruntime 体积原因） |
+
+### 新增一个客户端（Checklist）
+
+1. 数据面：实现 `LatticeDataAdapter`（web 客户端已是此模式）或直接调用 `services` + `protocol` 类型；
+2. 传输：HTTP（复用 web server）/ postMessage（复用 VSCode 桥）/ IPC/stdio —— 任选，形状不变；
+3. 平台能力：绑定 `DatabasePort`（或依赖宿主已有的 DB）与 `setLatticeRootOverride`；
+4. UI：优先复用 `@qcqx/lattice-web-ui`（React 组件 + adapter 端口 + 浏览器 boot）；原生客户端只需实现对应控件；
+5. 测试：接入 services 契约测试（同一 fixture 数据根）+ 自己的宿主冒烟。
+
+## 演进路线（2026-10）
+
+- **P1（已落地）**：`protocol`/`services` 独立成包；VSCode 扩展全量迁入（删除 `ltc` 数据面）；冒烟/集成/单测全绿。
+- **P2（已落地）**：web server 路由迁移为 services 的 HTTP 绑定（projects / tasks / specs / search / stats / trash / users / doctor / 内容与路径解析；sync-domains 域数据回退保留在 web 层）；**三路契约测试**落地——`pnpm test:contract`，同一 fixture 数据根分别跑 services 直调 / web HTTP（fastify inject）/ vscode bridge，任一绑定的形状漂移都会被断言捕获（含历史崩溃点守卫：spec 行必须带 frontmatter/fileName）。
+- **P3（已落地 2026-10-18）**：`web-ui` 包化——`packages/web/src/client` → `packages/web-ui`（`@qcqx/lattice-web-ui`：唯一出口 `ui.ts` + 浏览器 boot `./boot`；web 仅保留入口薄壳与 vite 装配，vscode webview 改引新包）；`packages/foundation`、`packages/e2e`、`packages/core/dist-types` 残骸清理；发布策略——三新包去掉 `private` 并补 `files`，新增 `publish:protocol/services/web-ui` 脚本，发布顺序约定：core → protocol/services → web-ui → web/cli（web 依赖 services + web-ui，需先发布）。
+- **待办（按需）**：CLI 写操作可选迁入 services；`@qcqx/lattice-web-ui` 若对外发布需补构建产物（当前为 TS 源码出口，仅 bundler/tsc 消费）。
 
 ## 关键设计决策
 

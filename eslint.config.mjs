@@ -8,7 +8,7 @@ import tsconfigEslint from './tsconfig.eslint.json' with { type: 'json' };
 export default defineConfig(
   pluginJs.configs.recommended,
   tseslint.configs.recommended,
-  globalIgnores([...tsconfigEslint.exclude, '.temp-docs/**']),
+  globalIgnores([...tsconfigEslint.exclude, '.temp-docs/**', '**/*.d.ts']),
   {
     languageOptions: {
       globals: {

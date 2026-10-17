@@ -1,6 +1,8 @@
 # @qcqx/lattice-web
 
-Lattice 可视化前端 — 基于 React Flow 的任务/项目/Spec 关系图浏览器。
+Lattice 可视化前端 —— 任务 / 项目 / Spec 关系图浏览器（Cytoscape 画布，与 VS Code 扩展 Webview 共用同一套 UI）。
+
+![Web 工作台](https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/assets/screenshots/workbench-home.jpg)
 
 ## 功能
 
