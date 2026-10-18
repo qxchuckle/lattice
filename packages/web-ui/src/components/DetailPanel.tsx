@@ -37,6 +37,8 @@ import {
   useEffect,
   useMemo,
   memo,
+  lazy,
+  Suspense,
   isValidElement,
   createElement,
   type ReactNode,
@@ -75,13 +77,12 @@ import type {
   SearchResult,
 } from '@qcqx/lattice-core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import ReactMarkdown from 'react-markdown';
-import { EditButton } from './editor/DocumentEditorModal';
+import { EditButton } from './editor/EditButton';
+
+/** 正文 Markdown 渲染按需加载（首屏图谱不携带 react-markdown/rehype 体积）。 */
+const MarkdownView = lazy(() => import('./markdown/MarkdownView'));
 import { CheckpointModal } from './modals/CheckpointModal';
 import './DetailPanel.less';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import rehypeHighlight from 'rehype-highlight';
 
 // ── Markdown 目录（TOC）组件 ──
 
@@ -175,12 +176,9 @@ const MarkdownWithToc = memo(function MarkdownWithToc({ content }: { content: st
   return (
     <div className='markdown-toc-container' ref={containerRef}>
       <div className='markdown-body detail-markdown'>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeRaw, rehypeHighlight]}
-          components={tocHeadingComponents}>
-          {content}
-        </ReactMarkdown>
+        <Suspense fallback={<Skeleton active paragraph={{ rows: 4 }} />}>
+          <MarkdownView content={content} components={tocHeadingComponents} />
+        </Suspense>
       </div>
       {headings.length >= 2 && (
         <div className='markdown-toc-float' ref={tocRef}>

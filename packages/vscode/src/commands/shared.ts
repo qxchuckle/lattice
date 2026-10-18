@@ -122,34 +122,6 @@ export function showDeduped(
 export async function handleCliError(error: unknown, contextMessage: string): Promise<void> {
   if (error instanceof CliError) {
     switch (error.code) {
-      case 'CLI_CANCELED':
-        return;
-      case 'CLI_NOT_FOUND': {
-        const check = t('Check CLI');
-        const settings = t('Open Settings');
-        void showDeduped(
-          'error',
-          t('The ltc CLI was not found. Install it with "npm i -g @qcqx/lattice-cli".'),
-          check,
-          settings,
-        ).then(async (action) => {
-          if (action === check) await vscode.commands.executeCommand('lattice.cli.check');
-          else if (action === settings) {
-            await vscode.commands.executeCommand(
-              'workbench.action.openSettings',
-              'lattice.cliPath',
-            );
-          }
-        });
-        return;
-      }
-      case 'CLI_TIMEOUT': {
-        await showDeduped(
-          'error',
-          t('ltc timed out. You can raise "lattice.cliTimeoutMs" or retry.'),
-        );
-        return;
-      }
       case 'NO_PROJECT': {
         await showDeduped('warn', t('The current directory is not a registered Lattice project.'));
         return;

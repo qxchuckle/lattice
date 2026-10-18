@@ -16,10 +16,8 @@
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
-  <a href="https://open-vsx.org/extension/qcqx/lattice"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice?label=Open%20VSX"></a>
-  <!-- VS Marketplace badge — uncomment once published:
-  <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice?label=VS%20Marketplace"></a>
-  -->
+  <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a>
 </p>
 
 <p align="center">
@@ -64,8 +62,8 @@ Lattice is a local-first **AI context scaffold**. It keeps the knowledge that us
 | | CLI | VS Code extension | Web workbench |
 |---|---|---|---|
 | **For** | Automation, scripts, AI agents | Day-to-day browsing and editing | Visual exploration |
-| **Install** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice) · VS Marketplace (soon) | `npm i -g @qcqx/lattice-web` |
-| **Run** | `ltc init` · `ltc scan` · `ltc context` | Activity bar → Lattice | `ltc web` → browser, or the extension's built-in webview |
+| **Install** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `npm i -g @qcqx/lattice-web` |
+| **Run** | `ltc init` · `ltc scan` · `ltc context` | Activity bar → Lattice (first run: **Quick Start** — no CLI needed) | `ltc web` → browser, or the extension's built-in webview |
 | **Docs** | [packages/cli](./packages/cli/README.md) | [packages/vscode](./packages/vscode/README.md) | [packages/web](./packages/web/README.md) |
 
 ## Packages
@@ -73,12 +71,12 @@ Lattice is a local-first **AI context scaffold**. It keeps the knowledge that us
 | Package | Role | Version |
 |---|---|---|
 | [`@qcqx/lattice-core`](./packages/core) | Domain core: storage, spec cascade, RAG, sync | [![core](https://img.shields.io/npm/v/@qcqx/lattice-core?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-core) |
-| [`@qcqx/lattice-protocol`](./packages/protocol) | Cross-host contracts (types-only DTOs & messages) | 0.1.0 (unpublished) |
-| [`@qcqx/lattice-services`](./packages/services) | Use-case layer shared by CLI / web / extension | 0.1.0 (unpublished) |
+| [`@qcqx/lattice-protocol`](./packages/protocol) | Cross-host contracts (types-only DTOs & messages) | [![protocol](https://img.shields.io/npm/v/@qcqx/lattice-protocol?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-protocol) |
+| [`@qcqx/lattice-services`](./packages/services) | Use-case layer shared by CLI / web / extension | [![services](https://img.shields.io/npm/v/@qcqx/lattice-services?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-services) |
 | [`@qcqx/lattice-cli`](./packages/cli) | Command line (`lattice` / `ltc`) | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
 | [`@qcqx/lattice-web`](./packages/web) | Web server (HTTP API + static assets) | [![web](https://img.shields.io/npm/v/@qcqx/lattice-web?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web) |
-| [`@qcqx/lattice-web-ui`](./packages/web-ui) | Shared React UI (web client & extension webview) | 0.1.0 (unpublished) |
-| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | 0.1.0 (VSIX) |
+| [`@qcqx/lattice-web-ui`](./packages/web-ui) | Shared React UI (web client & extension webview) | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
+| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | 0.1.1 (VSIX) |
 
 ## Quick start
 
@@ -93,7 +91,7 @@ ltc context       # every spec / active task / related project for the current r
 ```bash
 # Development + packaging of the VS Code extension
 pnpm install
-pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-<version>.vsix
+pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
 
 ```bash

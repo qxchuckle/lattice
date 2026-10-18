@@ -9,7 +9,7 @@
 - VS Code `^1.85.0`（同样适用于 VS Code 衍生编辑器：Cursor、Qoder、VSCodium，走 Open VSX）。
 - 一个 Lattice 数据根（`~/.lattice`）。若你用过 Lattice CLI 或 Web 客户端，则已具备，无需其他准备。
 - **数据面完全进程内**：扩展直接读写你的 Lattice 数据根（Electron 内置 SQLite + FTS5，降级时走文件真源）。无 HTTP、不打包任何原生二进制、每个视图不再起 CLI 子进程。
-- `ltc` CLI **仅是可选项**，只服务于少量终端助手：`ltc init` / `ltc scan` / `ltc link`（工作区引导，walkthrough 内提供一键入口）与 `ltc web`（Web 工作台的服务端）。安装：`npm i -g @qcqx/lattice-cli`，或用 `lattice.cliPath` 指定路径。
+- `ltc` CLI **仅是可选项**，只服务于少量终端助手：`ltc init` / `ltc scan` / `ltc link`（工作区引导，walkthrough 内提供一键入口）与 `ltc web`（Web 工作台的服务端）。安装：`npm i -g @qcqx/lattice-cli`。
 
 ## 功能
 
@@ -80,7 +80,6 @@ RAG 状态 / 增量更新 / 重建（可取消、带进度）、doctor 体检（
 | `lattice.editor.specLinks` | `true` | `spec-*` 可点击链接 |
 | `lattice.decorations.enabled` | `true` | 活动任务范围文件徽标 |
 | `lattice.documents.ragHintOnSave` | `true` | 保存 spec 后提示 migrate + RAG 更新 |
-| `lattice.cliPath` | `""` | `ltc` 路径（仅供上述终端助手使用） |
 
 ## 快速开始
 

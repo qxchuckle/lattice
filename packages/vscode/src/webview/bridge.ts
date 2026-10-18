@@ -18,6 +18,7 @@ import type { BridgeActionName, BridgeRequestMethod } from '@qcqx/lattice-protoc
 const WEBVIEW_ALLOWED_COMMANDS = new Set([
   'lattice.revealInSidebar',
   'lattice.task.start',
+  'lattice.task.setActive',
   'lattice.task.complete',
   'lattice.task.archive',
   'lattice.task.reopen',

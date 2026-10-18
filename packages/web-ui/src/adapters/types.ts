@@ -21,6 +21,8 @@ export interface LatticeDataAdapter {
    * 侧栏定位（可选能力）：VSCode Webview 宿主实现；浏览器宿主不提供（UI 自动隐藏入口）。
    */
   revealInSidebar?(kind: 'task' | 'spec' | 'project', id: string): Promise<boolean>;
+  /** 执行宿主命令（仅 Webview 宿主提供；命令经宿主白名单校验）。 */
+  executeCommand?(command: string, ...args: unknown[]): void;
 
   // 项目
   getProjects(username?: string): Promise<ProjectMeta[]>;

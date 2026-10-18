@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { SearchRow } from '../cli/types';
-import { CliError } from '../cli/errors';
 import { getConfig } from '../config';
 import { truncate } from '../cli/parsers';
 import { t } from '../t';
@@ -201,7 +200,6 @@ export async function openSearchQuickPick(
         at: Date.now(),
       });
     } catch (error) {
-      if (error instanceof CliError && error.code === 'CLI_CANCELED') return;
       const message = error instanceof Error ? error.message : String(error);
       services.searchState.set({ loading: false, error: message });
       quickPick.items = [];

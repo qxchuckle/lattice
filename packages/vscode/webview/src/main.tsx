@@ -15,13 +15,19 @@ import {
 } from '@lattice-web-ui';
 import { WebviewAdapter } from './adapter';
 import { initHostBridge } from './host';
+import { DetailRoot } from './detail-root';
 
 declare global {
   interface Window {
     __LATTICE_LANG__?: string;
     __LATTICE_THEME__?: string;
+    /** 渲染模式：'detail' = 侧栏详情视图（点哪看哪）；缺省 = 完整工作台（图谱面板） */
+    __LATTICE_VIEW__?: string;
   }
 }
+
+/** 侧栏「任务详情」视图模式（宿主在 bootstrap 注入）。 */
+const isDetailView = typeof window !== 'undefined' && window.__LATTICE_VIEW__ === 'detail';
 
 // 首次渲染前完成：adapter 注入（数据接缝）+ 宿主握手在 Root effect 中建立。
 const webviewAdapter = new WebviewAdapter();
@@ -92,12 +98,16 @@ function Root() {
     <ConfigProvider theme={getAntdThemeConfig(mode)} locale={zhCN}>
       <AntdApp>
         <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={['/']}>
-            <RouteBridge />
-            <ErrorBoundary>
-              <AppShell features={{ login: false, admin: false, terminal: false }} />
-            </ErrorBoundary>
-          </MemoryRouter>
+          {isDetailView ? (
+            <DetailRoot />
+          ) : (
+            <MemoryRouter initialEntries={['/']}>
+              <RouteBridge />
+              <ErrorBoundary>
+                <AppShell features={{ login: false, admin: false, terminal: false }} />
+              </ErrorBoundary>
+            </MemoryRouter>
+          )}
         </QueryClientProvider>
       </AntdApp>
     </ConfigProvider>

@@ -59,3 +59,5 @@ export type {
 
 // ── 宿主探测 ──
 export { isWebviewHost } from './host-mode';
+export type { SpecNodeData } from './types/graph';
+export { t as i18nT } from './i18n';

@@ -19,12 +19,19 @@ import { LatticeJsonCodeLensProvider } from './editor/code-lens';
 import { TaskScopeDecorationProvider } from './editor/decorations';
 import { SpecDiagnosticsService } from './editor/spec-diagnostics';
 import { syncCheckpointDraftContext } from './editor/checkpoint-draft';
+import { SpecRefCodeActionProvider } from './editor/spec-code-actions';
 import { UserScopeService } from './state/user-scope';
 import { TaskFilterService } from './state/task-filter';
 import { ViewSearchService } from './state/view-search';
 import { taskFilterSummary } from './commands/task-filter';
 import { StatusBarController } from './status-bar';
 import { GraphPanelManager } from './webview/panel';
+import {
+  DetailViewProvider,
+  DETAIL_VIEW_TYPE,
+  detailTargetFromPayload,
+} from './webview/detail-view';
+import type { LatticeTreeItem } from './views/items';
 import { BusyService } from './busy';
 import { RevealService } from './views/reveal';
 import { LatticeDragAndDropController } from './views/dnd';
@@ -121,6 +128,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ['projects', projectsView],
     ] as const) {
       void vscode.commands.executeCommand(
+        'setContext',
         `lattice.${target}.hasSearch`,
         viewSearch.isActive(target),
       );
@@ -175,6 +183,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   services.graph = graphPanel;
   registerAllCommands(services);
 
+  // ── 侧栏「详情」WebviewView（点哪看哪：任务/规范/项目；默认跟随活动任务） ──
+  const detailView = new DetailViewProvider(services);
+  context.subscriptions.push(
+    detailView,
+    vscode.window.registerWebviewViewProvider(DETAIL_VIEW_TYPE, detailView, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+  );
+  const trackDetailSelection = (view: vscode.TreeView<LatticeTreeItem>): void => {
+    context.subscriptions.push(
+      view.onDidChangeSelection((event) => {
+        // 群组等非实体节点忽略（保留上次显式选择或活动任务）
+        const target = detailTargetFromPayload(event.selection[0]?.lattice);
+        if (target) detailView.setTarget(target);
+      }),
+    );
+  };
+  trackDetailSelection(tasksView);
+  trackDetailSelection(specsView);
+  trackDetailSelection(projectsView);
+
   // ── 编辑器集成 ──
   const contentProvider = new LatticeContentProvider(data, reports);
   context.subscriptions.push(
@@ -192,6 +221,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         { language: 'javascript' },
       ],
       new SpecLinkProvider(),
+    ),
+  );
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: 'file' },
+      new SpecRefCodeActionProvider(snapshot, activeTask),
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
   );
   const codeLensProvider = new LatticeJsonCodeLensProvider(data, snapshot);
@@ -229,6 +265,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       'setContext',
       'lattice.specHasConflicts',
       snapshot.data.conflicts.length > 0,
+    );
+    // 数据根就绪态（用户名已解析）：视图 welcome 与外部扩展可据此判断初始化状态
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.initialized',
+      snapshot.data.username != null,
     );
     void vscode.commands.executeCommand(
       'setContext',
@@ -273,13 +315,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     snapshot.onDidChange((sections) => {
       if (sections.some((s) => s === 'specs' || s === 'conflicts')) {
         specDiagnostics.schedule();
-      }
-      if (
-        snapshot.data.loaded.user ||
-        snapshot.data.loaded.projects ||
-        snapshot.data.loaded.tasks
-      ) {
-        void vscode.commands.executeCommand('setContext', 'lattice.cliAvailable', true);
       }
       if (sections.includes('tasks') && snapshot.data.loaded.tasks) {
         const activeId = activeTask.id;
@@ -388,7 +423,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     { dispose: () => clearInterval(pollTimer) },
   );
 
-  void vscode.commands.executeCommand('setContext', 'lattice.cliAvailable', true);
   updateContextKeys();
   updateViewDecorations();
   void snapshot.ensure(['user', 'projects']);

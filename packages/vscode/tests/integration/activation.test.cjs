@@ -4,7 +4,7 @@ const vscode = require('vscode');
 const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 
-const EXTENSION_ID = 'qcqx.lattice';
+const EXTENSION_ID = 'qcqx.lattice-context';
 
 /**
  * 集成测试：扩展在「真实 fixture 数据根」上跑（进程内 core 直读文件，不再需要假 ltc）。
@@ -302,6 +302,37 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     assert.ok(!existsSync(path.join(latticeHome, 'users', 'evil.md')), 'no file escaped');
   });
 
+  test('spec id quick fix references the spec to the active task', async () => {
+    // 置活动任务（CodeAction 仅在有活动任务时提供）
+    await vscode.commands.executeCommand('lattice.task.setActive', { taskId: 'demo-task-1' });
+
+    mkdirSync(workspacePath, { recursive: true });
+    const file = path.join(workspacePath, 'tmp-spec-ref.md');
+    writeFileSync(file, '参考 spec-aaaaaaaa 的实现约定\n');
+    const doc = await vscode.workspace.openTextDocument(file);
+
+    // 快照首次未加载时提供器会触发 ensure 并返回空 → 轮询重试
+    let target;
+    for (let i = 0; i < 12 && !target; i += 1) {
+      const actions = await vscode.commands.executeCommand(
+        'vscode.executeCodeActionProvider',
+        doc.uri,
+        new vscode.Range(0, 0, 0, 30),
+      );
+      target = (actions ?? []).find((a) => a.command?.command === 'lattice.spec.refToTask');
+      if (!target) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    assert.ok(target, 'quick fix offered for a known spec id');
+
+    await vscode.commands.executeCommand(
+      target.command.command,
+      ...(target.command.arguments ?? []),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.match(readFileSync(taskJsonPath(), 'utf8'), /spec-aaaaaaaa/);
+    rmSync(file, { force: true });
+  });
+
   test('checkpoint long-text draft commits into progress.yaml and summarize seeds sections', async () => {
     const progressPath = path.join(
       latticeHome,
@@ -505,6 +536,40 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     // 项目：设置 / 清除不抛错（reveal 断言留给任务/规范）
     await vscode.commands.executeCommand('lattice.projects.search', { query: 'alpha' });
     await vscode.commands.executeCommand('lattice.projects.search', { query: '' });
+  });
+
+  test('workspace bootstrap initializes a fresh home in-process (no CLI)', async () => {
+    const freshHome = path.join(path.dirname(latticeHome), `lattice-boot-${Date.now()}`);
+    const config = vscode.workspace.getConfiguration('lattice');
+    const previous = config.get('latticeHome');
+    try {
+      await config.update('latticeHome', freshHome, vscode.ConfigurationTarget.Workspace);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      const result = await vscode.commands.executeCommand('lattice.workspace.bootstrap', {
+        username: 'boot',
+        scanDirs: [],
+      });
+      assert.equal(result?.username, 'boot');
+      assert.equal(result?.added, 0);
+
+      const raw = JSON.parse(
+        readFileSync(path.join(freshHome, 'config', 'config-local.json'), 'utf8'),
+      );
+      assert.equal(raw.username, 'boot');
+      assert.ok(existsSync(path.join(freshHome, 'users', 'boot', 'tasks')));
+      assert.ok(existsSync(path.join(freshHome, 'users', 'boot', 'spec')));
+      assert.ok(existsSync(path.join(freshHome, 'users', 'boot', 'projects')));
+    } finally {
+      await config.update(
+        'latticeHome',
+        previous || undefined,
+        vscode.ConfigurationTarget.Workspace,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await vscode.commands.executeCommand('lattice.refresh');
+      rmSync(freshHome, { recursive: true, force: true });
+    }
   });
 
   test('search quick pick command is invokable (smoke)', async () => {

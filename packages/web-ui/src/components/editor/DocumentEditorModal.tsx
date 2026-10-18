@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Modal, Button, Segmented, App, Spin, Switch } from 'antd';
-import { EditOutlined, SaveOutlined, EyeOutlined } from '@ant-design/icons';
+import { SaveOutlined } from '@ant-design/icons';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
@@ -289,51 +289,4 @@ function MarkdownPreview({ content, isYaml }: { content: string; isYaml?: boolea
   }
   const body = stripFrontmatter(content);
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>;
-}
-
-/** 文档编辑按钮 */
-export function EditButton({
-  contentType,
-  entityId,
-  title,
-  isYaml,
-  size = 'small',
-  readOnly = false,
-}: {
-  contentType: string;
-  entityId: string;
-  title: string;
-  isYaml?: boolean;
-  size?: 'small' | 'middle';
-  /** 域数据：按钮变「查看」，弹窗只读无保存 */
-  readOnly?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        size={size}
-        type='text'
-        icon={readOnly ? <EyeOutlined /> : <EditOutlined />}
-        onClick={() => {
-          // VSCode Webview：容器能力由 adapter 承担（打开原生编辑器即 openPath 的一种宿主实现）
-          if (isWebviewHost()) {
-            void getAdapter().openPath(contentType, entityId, 'vscode');
-            return;
-          }
-          setOpen(true);
-        }}>
-        {readOnly ? '查看详情' : '编辑'}
-      </Button>
-      <DocumentEditorModal
-        open={open}
-        onClose={() => setOpen(false)}
-        contentType={contentType}
-        entityId={entityId}
-        title={title}
-        isYaml={isYaml}
-        readOnly={readOnly}
-      />
-    </>
-  );
 }

@@ -8,7 +8,7 @@
  * - 画布用 SmokeGraph（真实 useGlobalGraph 管线 + DOM 占位）
  * - 暴露 window.__smoke 驱动 API 供 tests/smoke/run.mjs 操作与断言
  */
-import { StrictMode, useEffect } from 'react';
+import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, App as AntdApp } from 'antd';
@@ -29,6 +29,7 @@ import { LatticeDataService } from '../../../src/data/service';
 import { SnapshotStore } from '../../../src/state/snapshot';
 import { handleBridgeRequest } from '../../../src/webview/bridge-requests';
 import { WebviewAdapter } from '../adapter';
+import { DetailRoot } from '../detail-root';
 import { SmokeGraph } from './graph-stub';
 
 const data = new LatticeDataService();
@@ -51,26 +52,29 @@ const queryClient = new QueryClient({
 
 themeStore.mode = 'light';
 
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <ConfigProvider theme={getAntdThemeConfig(themeStore.mode)} locale={zhCN}>
+      <AntdApp>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </AntdApp>
+    </ConfigProvider>
+  );
+}
+
 function Root() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeStore.mode);
   }, []);
 
   return (
-    <ConfigProvider theme={getAntdThemeConfig(themeStore.mode)} locale={zhCN}>
-      <AntdApp>
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={['/']}>
-            <ErrorBoundary>
-              <AppShell
-                features={{ login: false, admin: false, terminal: false }}
-                Graph={SmokeGraph}
-              />
-            </ErrorBoundary>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>
-    </ConfigProvider>
+    <Providers>
+      <MemoryRouter initialEntries={['/']}>
+        <ErrorBoundary>
+          <AppShell features={{ login: false, admin: false, terminal: false }} Graph={SmokeGraph} />
+        </ErrorBoundary>
+      </MemoryRouter>
+    </Providers>
   );
 }
 
@@ -92,6 +96,10 @@ export interface SmokeApi {
   getProjects: () => ReturnType<WebviewAdapter['getProjects']>;
   getTasks: () => ReturnType<WebviewAdapter['getTasks']>;
   getSpecs: () => ReturnType<WebviewAdapter['getSpecs']>;
+  /** 挂载侧栏「详情」根组件（path 形如 /task/<id> · /spec/<id> · /project/<id>；缺省=空态）。 */
+  renderDetail: (path?: string) => Promise<void>;
+  /** 退出前显式关闭数据面（避免 better-sqlite3 终结器与 process.exit 竞争）。 */
+  shutdown: () => void;
   stores: {
     canvasStore: typeof canvasStore;
     detailStore: typeof detailStore;
@@ -120,10 +128,25 @@ window.__smoke = {
   getProjects: () => adapter.getProjects(),
   getTasks: () => adapter.getTasks(),
   getSpecs: () => adapter.getSpecs(),
+  renderDetail: async (path?: string) => {
+    // 复用同一 root 切换渲染树（避免 unmount + 二次 createRoot 在 jsdom/SSR 环境下的清理竞争）
+    activeRoot.render(
+      <StrictMode>
+        <Providers>
+          <DetailRoot initialPath={path ?? '/detail'} />
+        </Providers>
+      </StrictMode>,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  },
+  shutdown: () => {
+    data.dispose();
+  },
   stores: { canvasStore, detailStore, globalSearchStore, sidebarStore },
 };
 
-createRoot(document.getElementById('root')!).render(
+const activeRoot = createRoot(document.getElementById('root')!);
+activeRoot.render(
   <StrictMode>
     <Root />
   </StrictMode>,

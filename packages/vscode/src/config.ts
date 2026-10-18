@@ -4,13 +4,11 @@ import * as path from 'node:path';
 import { expandHome } from './util/paths';
 
 export interface LatticeConfig {
-  cliPath: string;
   latticeHome: string;
   minCliVersion: string;
   autoRefresh: boolean;
   refreshDebounce: number;
   fallbackPollMs: number;
-  cliTimeoutMs: number;
   tasksScope: 'all' | 'project';
   tasksShowArchived: boolean;
   searchTypes: string[];
@@ -30,13 +28,11 @@ export interface LatticeConfig {
 export function getConfig(): LatticeConfig {
   const c = vscode.workspace.getConfiguration('lattice');
   return {
-    cliPath: c.get<string>('cliPath', ''),
     latticeHome: c.get<string>('latticeHome', ''),
     minCliVersion: c.get<string>('minCliVersion', '1.28.0'),
     autoRefresh: c.get<boolean>('autoRefresh', true),
     refreshDebounce: c.get<number>('refreshDebounce', 400),
     fallbackPollMs: c.get<number>('fallbackPollMs', 30000),
-    cliTimeoutMs: c.get<number>('cliTimeoutMs', 20000),
     tasksScope: c.get<'all' | 'project'>('tasks.scope', 'all'),
     tasksShowArchived: c.get<boolean>('tasks.showArchived', true),
     searchTypes: c.get<string[]>('search.types', []),

@@ -1,11 +1,4 @@
-export type CliErrorCode =
-  | 'CLI_NOT_FOUND'
-  | 'CLI_SPAWN'
-  | 'CLI_TIMEOUT'
-  | 'CLI_CANCELED'
-  | 'CLI_EXIT'
-  | 'CLI_PARSE'
-  | 'NO_PROJECT';
+export type CliErrorCode = 'CLI_SPAWN' | 'CLI_EXIT' | 'CLI_PARSE' | 'NO_PROJECT';
 
 export interface CliErrorOptions {
   exitCode?: number;

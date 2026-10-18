@@ -17,7 +17,6 @@
   "Associating project…": "正在关联项目…",
   "Background / rule / constraint given by the user": "用户提供的背景 / 规则 / 约束",
   "Building task context…": "正在生成任务上下文…",
-  "Check CLI": "检查 CLI",
   "Checkpoint added to \"{0}\".": "已向「{0}」添加 Checkpoint。",
   "Checkpoint message (optional)": "Checkpoint 内容（可选）",
   "Checkpoint not found": "未找到 Checkpoint",
@@ -188,7 +187,6 @@
   "Task title": "任务标题",
   "Tasks": "任务",
   "The current directory is not a registered Lattice project.": "当前目录不是已注册的 Lattice 项目。",
-  "The ltc CLI was not found. Install it with \"npm i -g @qcqx/lattice-cli\".": "未找到 ltc CLI。请先安装：\"npm i -g @qcqx/lattice-cli\"。",
   "The recycle bin is empty.": "垃圾桶为空。",
   "The task is moved to the recycle bin and can be restored later.": "任务将移入垃圾桶，稍后可恢复。",
   "This cannot be undone from the extension.": "此操作在扩展中不可撤销。",
@@ -210,7 +208,6 @@
   "current project": "当前项目",
   "depends on": "依赖",
   "forked from": "派生自",
-  "ltc timed out. You can raise \"lattice.cliTimeoutMs\" or retry.": "ltc 调用超时：可调大 \"lattice.cliTimeoutMs\" 或重试。",
   "nested in": "嵌套于",
   "related": "相关",
   "shares component": "共享组件",
@@ -332,5 +329,7 @@
   "e.g. checkpoint / graph / spec-xxxx": "如：checkpoint / 图谱 / spec-xxxx",
   "Applied search \"{0}\".": "已应用搜索「{0}」。",
   "Applied search \"{0}\" ({1} full-text hit(s)).": "已应用搜索「{0}」（全文命中 {1} 条）。",
-  "Search: \"{0}\"": "搜索：「{0}」"
+  "Search: \"{0}\"": "搜索：「{0}」",
+  "Reference {0} from \"{1}\"": "把 {0} 引用到「{1}」",
+  "Reference to the active task": "引用到当前活动任务"
 }

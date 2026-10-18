@@ -53,6 +53,8 @@ async function setTaskStatus(
       services.data.taskSetStatus(task.id, action),
     );
     await services.snapshot.invalidate(['tasks']);
+    // 开始任务 = 聚焦到它：自动设为活动任务（任务详情视图 / 状态栏 / 范围装饰随之跟随）
+    if (action === 'start') await services.activeTask.set(task.id);
     void showDeduped('info', ACTION_LABELS[action].replace('{0}', task.title));
   } catch (error) {
     await handleCliError(error, t('Failed to update the task'));

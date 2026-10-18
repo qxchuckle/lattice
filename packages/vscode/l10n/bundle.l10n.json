@@ -17,7 +17,6 @@
   "Associating project…": "Associating project…",
   "Background / rule / constraint given by the user": "Background / rule / constraint given by the user",
   "Building task context…": "Building task context…",
-  "Check CLI": "Check CLI",
   "Checkpoint added to \"{0}\".": "Checkpoint added to \"{0}\".",
   "Checkpoint message (optional)": "Checkpoint message (optional)",
   "Checkpoint not found": "Checkpoint not found",
@@ -188,7 +187,6 @@
   "Task title": "Task title",
   "Tasks": "Tasks",
   "The current directory is not a registered Lattice project.": "The current directory is not a registered Lattice project.",
-  "The ltc CLI was not found. Install it with \"npm i -g @qcqx/lattice-cli\".": "The ltc CLI was not found. Install it with \"npm i -g @qcqx/lattice-cli\".",
   "The recycle bin is empty.": "The recycle bin is empty.",
   "The task is moved to the recycle bin and can be restored later.": "The task is moved to the recycle bin and can be restored later.",
   "This cannot be undone from the extension.": "This cannot be undone from the extension.",
@@ -210,7 +208,6 @@
   "current project": "current project",
   "depends on": "depends on",
   "forked from": "forked from",
-  "ltc timed out. You can raise \"lattice.cliTimeoutMs\" or retry.": "ltc timed out. You can raise \"lattice.cliTimeoutMs\" or retry.",
   "nested in": "nested in",
   "related": "related",
   "shares component": "shares component",
@@ -332,5 +329,7 @@
   "e.g. checkpoint / graph / spec-xxxx": "e.g. checkpoint / graph / spec-xxxx",
   "Applied search \"{0}\".": "Applied search \"{0}\".",
   "Applied search \"{0}\" ({1} full-text hit(s)).": "Applied search \"{0}\" ({1} full-text hit(s)).",
-  "Search: \"{0}\"": "Search: \"{0}\""
+  "Search: \"{0}\"": "Search: \"{0}\"",
+  "Reference {0} from \"{1}\"": "Reference {0} from \"{1}\"",
+  "Reference to the active task": "Reference to the active task"
 }

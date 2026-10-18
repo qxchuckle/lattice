@@ -16,10 +16,8 @@
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
-  <a href="https://open-vsx.org/extension/qcqx/lattice"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice?label=Open%20VSX"></a>
-  <!-- VS Marketplace 徽章 —— 上架后解除注释：
-  <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice?label=VS%20Marketplace"></a>
-  -->
+  <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a>
+    <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a>
 </p>
 
 <p align="center">
@@ -64,8 +62,8 @@ Lattice 是一个本地优先的 **AI 上下文脚手架**。它把散落在多�
 | | CLI | VS Code 扩展 | Web 工作台 |
 |---|---|---|---|
 | **适合** | 自动化、脚本、AI Agent | 日常浏览与编辑 | 可视化探索 |
-| **安装** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice) · VS Marketplace（即将上架） | `npm i -g @qcqx/lattice-web` |
-| **使用** | `ltc init` · `ltc scan` · `ltc context` | 活动栏 → Lattice | `ltc web` → 浏览器，或扩展内置 Webview |
+| **安装** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `npm i -g @qcqx/lattice-web` |
+| **使用** | `ltc init` · `ltc scan` · `ltc context` | 活动栏 → Lattice（首次运行：**快速开始**，无需 CLI） | `ltc web` → 浏览器，或扩展内置 Webview |
 | **文档** | [packages/cli](./packages/cli/README.md) | [packages/vscode](./packages/vscode/README.md) | [packages/web](./packages/web/README.md) |
 
 ## 包一览
@@ -73,12 +71,12 @@ Lattice 是一个本地优先的 **AI 上下文脚手架**。它把散落在多�
 | 包 | 角色 | 版本 |
 |---|---|---|
 | [`@qcqx/lattice-core`](./packages/core) | 领域核心：存储、spec 级联、RAG、同步 | [![core](https://img.shields.io/npm/v/@qcqx/lattice-core?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-core) |
-| [`@qcqx/lattice-protocol`](./packages/protocol) | 跨端契约（types-only DTO / 消息） | 0.1.0（未发布） |
-| [`@qcqx/lattice-services`](./packages/services) | 用例层：CLI / Web / 扩展共享 | 0.1.0（未发布） |
+| [`@qcqx/lattice-protocol`](./packages/protocol) | 跨端契约（types-only DTO / 消息） | [![protocol](https://img.shields.io/npm/v/@qcqx/lattice-protocol?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-protocol) |
+| [`@qcqx/lattice-services`](./packages/services) | 用例层：CLI / Web / 扩展共享 | [![services](https://img.shields.io/npm/v/@qcqx/lattice-services?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-services) |
 | [`@qcqx/lattice-cli`](./packages/cli) | 命令行（`lattice` / `ltc`） | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
 | [`@qcqx/lattice-web`](./packages/web) | Web 服务端（HTTP API + 静态资源） | [![web](https://img.shields.io/npm/v/@qcqx/lattice-web?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web) |
-| [`@qcqx/lattice-web-ui`](./packages/web-ui) | 共享 React UI（web 客户端与扩展 Webview 共用） | 0.1.0（未发布） |
-| [`lattice`（VS Code）](./packages/vscode) | VS Code 扩展（进程内 core + Webview） | 0.1.0（VSIX） |
+| [`@qcqx/lattice-web-ui`](./packages/web-ui) | 共享 React UI（web 客户端与扩展 Webview 共用） | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
+| [`lattice`（VS Code）](./packages/vscode) | VS Code 扩展（进程内 core + Webview） | 0.1.1（VSIX） |
 
 ## 快速开始
 
@@ -93,7 +91,7 @@ ltc context       # 当前仓库的全部规范 / 活跃任务 / 关联项目
 ```bash
 # 开发与打包 VS Code 扩展
 pnpm install
-pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-<version>.vsix
+pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
 
 ```bash

@@ -33,12 +33,12 @@ See [docs/architecture.md](./docs/architecture.md) for the layered design and [d
 pnpm build                 # build all packages
 pnpm lint                  # ESLint + Prettier checks (repo root)
 pnpm check-types           # tsc --noEmit per package
-pnpm --filter lattice test # extension unit tests (node --test)
+pnpm --filter lattice-context test # extension unit tests (node --test)
 
 # VS Code extension end-to-end
 pnpm verify:vscode             # lint → check-types → unit → build → VSIX
-pnpm --filter lattice run test:integration   # @vscode/test-cli, in-process core fixture
-pnpm package:vscode            # → packages/vscode/dist-vsix/lattice-<version>.vsix
+pnpm --filter lattice-context run test:integration   # @vscode/test-cli, in-process core fixture
+pnpm package:vscode            # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
 
 Press <kbd>F5</kbd> inside `packages/vscode` to launch an Extension Development Host.
@@ -66,8 +66,8 @@ No CI — releases run locally from a clean, verified worktree.
 
 - **VS Code extension**
   1. Copy `.env.release.example` → `.env.release` and fill in `OVSX_PAT` (Open VSX) and `VSCE_PAT` (Azure DevOps PAT, scopes ≥ *Marketplace: Manage*). The file is **git-ignored** — never commit it (env vars override the file).
-  2. `pnpm --filter lattice run release` — CHANGELOG consistency check → build → VSIX → sha256.
-  3. `pnpm --filter lattice run release:publish` — the above **plus publishing to both marketplaces** (channels without credentials are skipped with a warning; tokens are masked in logs).
+  2. `pnpm --filter lattice-context run release` — CHANGELOG consistency check → build → VSIX → sha256.
+  3. `pnpm --filter lattice-context run release:publish` — the above **plus publishing to both marketplaces** (channels without credentials are skipped with a warning; tokens are masked in logs).
 - **npm packages** — credentials live in npm's own `~/.npmrc` (`npm login` or a granular access token with read+write on `@qcqx`). Publish changed packages from their directory: `pnpm publish --no-git-checks` (`prepublishOnly` rebuilds `dist`).
 
 ## Reporting issues

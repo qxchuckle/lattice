@@ -5,6 +5,10 @@
  *
  * 用法：pnpm --filter lattice run test:smoke （先 vite build smoke 产物）
  */
+// 冒烟统一走 FTS 路径：禁用本地语义模型（跳过 transformers/onnxruntime 加载；
+// 同时规避 onnxruntime-node 在 macOS 进程退出时的上游 teardown 崩溃）。
+process.env.LATTICE_DISABLE_SEMANTIC = '1';
+
 import { JSDOM } from 'jsdom';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -282,8 +286,85 @@ if (gitProbe) {
   console.log('  （无项目数据，跳过）');
 }
 
+console.log('\n[8] 侧栏详情视图（点哪看哪）');
+try {
+  // 空态
+  await window.__smoke.renderDetail();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  if ((window.document.body.textContent ?? '').includes('暂无详情目标')) {
+    console.log('  ✓ 空态提示渲染');
+  } else {
+    fail('详情视图空态未渲染');
+  }
+
+  // 任务（真实数据首条任务）
+  const detailTasks = await window.__smoke.getTasks();
+  const detailTask =
+    (detailTasks ?? []).find((item) => item && item.title) ?? (detailTasks ?? [])[0];
+  if (detailTask) {
+    await window.__smoke.renderDetail(`/task/${encodeURIComponent(detailTask.id)}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const text = window.document.body.textContent ?? '';
+    if (text.includes(detailTask.title)) {
+      console.log(`  ✓ 任务详情渲染（${detailTask.title}）`);
+    } else {
+      fail(`任务详情未渲染标题：${detailTask.title}`);
+    }
+  } else {
+    console.log('  （无任务数据，跳过任务断言）');
+  }
+
+  // 规范
+  const detailSpecs = await window.__smoke.getSpecs();
+  const detailSpec = [
+    ...(detailSpecs?.project ?? []),
+    ...(detailSpecs?.user ?? []),
+    ...(detailSpecs?.global ?? []),
+  ].find((spec) => spec && (spec.title || spec.id));
+  if (detailSpec) {
+    await window.__smoke.renderDetail(`/spec/${encodeURIComponent(detailSpec.id)}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const text = window.document.body.textContent ?? '';
+    if (!detailSpec.title || text.includes(detailSpec.title)) {
+      console.log(`  ✓ 规范详情渲染（${detailSpec.title || detailSpec.id}）`);
+    } else {
+      fail(`规范详情未渲染标题：${detailSpec.title}`);
+    }
+  } else {
+    console.log('  （无规范数据，跳过规范断言）');
+  }
+
+  // 项目
+  const detailProjects = await window.__smoke.getProjects();
+  const detailProject = (detailProjects ?? []).find(
+    (project) => project && (project.name || project.id),
+  );
+  if (detailProject) {
+    await window.__smoke.renderDetail(`/project/${encodeURIComponent(detailProject.id)}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const text = window.document.body.textContent ?? '';
+    if (text.includes(detailProject.name || detailProject.id)) {
+      console.log(`  ✓ 项目详情渲染（${detailProject.name || detailProject.id}）`);
+    } else {
+      fail('项目详情未渲染项目名');
+    }
+  } else {
+    console.log('  （无项目数据，跳过项目断言）');
+  }
+} catch (error) {
+  fail(`详情视图渲染抛错: ${String(error)}`);
+}
+
 // ── 汇总 ──
 console.log('');
+
+// 显式关停数据面（better-sqlite3 关闭），并留出收尾时间——否则终结器与 process.exit 竞争会触发原生 abort
+try {
+  window.__smoke.shutdown?.();
+} catch {
+  /* ignore */
+}
+await new Promise((resolve) => setTimeout(resolve, 200));
 if (failures.length > 0) {
   console.error(`SMOKE FAILED：${failures.length} 项失败`);
   for (const failure of failures) console.error(`  - ${failure}`);

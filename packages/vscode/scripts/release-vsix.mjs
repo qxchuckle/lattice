@@ -113,7 +113,14 @@ console.log(`  sha256: ${sha256}`);
 
 // ── 发布（可选） ──
 
-const ALREADY_PUBLISHED = /already (published|exists)|is already published/i;
+// 已发布判定：同一行内必须同时出现「already published/exists」与**当前版本号**——
+// vsce 的「名称已存在」错误（无版本号）不得被吞掉（曾因此把真实的 name-conflict 静默跳过）。
+function isAlreadyPublished(text) {
+  for (const line of String(text).split('\n')) {
+    if (/already (published|exists)/i.test(line) && line.includes(version)) return true;
+  }
+  return false;
+}
 
 function publishOpenVsx(vsixPath) {
   const pat = getSecret('OVSX_PAT');
@@ -128,11 +135,13 @@ function publishOpenVsx(vsixPath) {
       encoding: 'utf8',
       stdio: 'pipe',
     });
-    console.log('  ✔ Open VSX 已发布 → https://open-vsx.org/extension/qcqx/lattice');
+    console.log(
+      `  ✔ Open VSX 已发布 → https://open-vsx.org/extension/${pkg.publisher}/${pkg.name}`,
+    );
     return true;
   } catch (error) {
     const text = `${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`;
-    if (ALREADY_PUBLISHED.test(text)) {
+    if (isAlreadyPublished(text)) {
       console.log('  ℹ Open VSX：该版本已发布，跳过');
       return true;
     }
@@ -158,7 +167,7 @@ function publishMarketplace(vsixPath) {
     return true;
   } catch (error) {
     const text = `${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`;
-    if (ALREADY_PUBLISHED.test(text)) {
+    if (isAlreadyPublished(text)) {
       console.log('  ℹ VS Marketplace：该版本已发布，跳过');
       return true;
     }

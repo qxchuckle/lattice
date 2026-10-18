@@ -16,9 +16,9 @@ Bring [Lattice](https://github.com/qxchuckle/lattice)'s cross-project context in
 ## Requirements
 
 - VS Code `^1.85.0` (also works in VS Code forks: Cursor, Qoder, VSCodium — via Open VSX).
-- A Lattice data home (`~/.lattice`). If you have used the Lattice CLI or web client before, you already have one — the extension needs nothing else.
+- A Lattice data home (`~/.lattice`). If you have used the Lattice CLI or web client before, you already have one — the extension needs nothing else. If you don't, run **Lattice: Quick Start** — it bootstraps one in-process (no CLI required).
 - **The data plane is in-process.** The extension reads and writes your Lattice home directly (Electron's built-in SQLite with FTS5, plus file sources as fallback). No HTTP, no bundled native binaries, no CLI process per view.
-- The `ltc` CLI is **optional** and only used by a few terminal helpers: `ltc init` / `ltc scan` / `ltc link` (workspace onboarding, also offered by the walkthrough) and `ltc web` (the web workbench server). Install with `npm i -g @qcqx/lattice-cli`, or point `lattice.cliPath` at it.
+- The `ltc` CLI is **optional** and only used by a few terminal helpers: `ltc init` / `ltc scan` / `ltc link` (workspace onboarding, also offered by the walkthrough) and `ltc web` (the web workbench server). Install with `npm i -g @qcqx/lattice-cli`.
 
 ## Features
 
@@ -27,6 +27,7 @@ Bring [Lattice](https://github.com/qxchuckle/lattice)'s cross-project context in
 - **Tasks** — status groups with pinned active tasks for the current project; expandable PRD / design / progress (recent checkpoints, full read-only log tab), referenced specs, subtasks, associated projects. Multi-select batch actions (start / complete / archive / copy IDs). Drag & drop: drop a task on a project to associate it, drop a spec on a task to reference it. Status × project quick filter and **keyword search** (matches names and full-text hits) with a visible filter line. "Reveal in Sidebar" from every task, spec, project, search result and detail panel.
 - **Specs** — project / user / global scopes, conflict groups, "referenced by" expansion. **New Spec wizard** (blank or template; scope picker; path traversal is rejected). **Spec health check**: lint issues and name conflicts are published to the Problems panel and refreshed on save. Keyword search matches titles, descriptions, tags and spec content.
 - **Projects** — pinned current project, relations with descriptions, project-level specs, profile. Keyword search across names, ids and paths.
+- **Detail view** — a sidebar panel that follows your selection (task / spec / project) and defaults to the active task: title, status, projects, docs, checkpoints and spec refs without opening the graph panel.
 - **Search** — results persist from the QuickPick; **search history** (focus the empty input to see recent queries, clearable); `#task` / `#spec` / `#project` / `#checkpoint` / `#relation` prefix filters; weak-match hints; inline *Show in Graph* / *Copy ID* buttons.
 
 ### QuickPick modifier keys (task / project / spec pickers)
@@ -89,11 +90,10 @@ Key settings (see *Settings → Lattice* for all):
 | `lattice.editor.specLinks` | `true` | Clickable `spec-*` links |
 | `lattice.decorations.enabled` | `true` | Active-task scope file badges |
 | `lattice.documents.ragHintOnSave` | `true` | Offer spec migrate + RAG update after saving a spec |
-| `lattice.cliPath` | `""` | Path to `ltc` (only for the terminal helpers above) |
 
 ## Getting started
 
-1. Make sure you have a Lattice home. The walkthrough (**Lattice: Get Started**) includes a one-click `ltc init` if you don't.
+1. Make sure you have a Lattice home: run **Lattice: Quick Start** (in-process — creates the home and registers your workspace; no CLI required), or use the walkthrough's full `ltc init` for AI-client injection and more.
 2. Open a repository Lattice knows about (a folder with `lattice.json`, or a Git repo registered via `ltc scan` / auto-registration).
 3. Click the **Lattice** icon in the Activity Bar.
 
@@ -108,9 +108,9 @@ See the monorepo root. Quick reference:
 
 ```bash
 pnpm build:vscode     # webview bundle (vite) + extension bundle (tsup)
-pnpm package:vscode   # produce dist-vsix/lattice-<version>.vsix
-pnpm --filter lattice test             # unit tests (node --test)
-pnpm --filter lattice test:integration # @vscode/test-cli (in-process core fixture)
+pnpm package:vscode   # produce dist-vsix/lattice-context-<version>.vsix
+pnpm --filter lattice-context test             # unit tests (node --test)
+pnpm --filter lattice-context test:integration # @vscode/test-cli (in-process core fixture)
 ```
 
 Press <kbd>F5</kbd> in VS Code (with this folder open) to launch the Extension Development Host.
@@ -120,9 +120,9 @@ Press <kbd>F5</kbd> in VS Code (with this folder open) to launch the Extension D
 Open VSX and the Microsoft Marketplace are both supported; tokens are provided by the maintainer at publish time:
 
 ```bash
-pnpm --filter lattice run release                                  # build + package + sha256
-pnpm dlx ovsx publish dist-vsix/lattice-<version>.vsix -p <TOKEN>  # Open VSX
-pnpm exec vsce publish --packagePath dist-vsix/lattice-<version>.vsix -p <PAT>  # Marketplace
+pnpm --filter lattice-context run release                                  # build + package + sha256
+pnpm dlx ovsx publish dist-vsix/lattice-context-<version>.vsix -p <TOKEN>  # Open VSX
+pnpm exec vsce publish --packagePath dist-vsix/lattice-context-<version>.vsix -p <PAT>  # Marketplace
 ```
 
 ## License

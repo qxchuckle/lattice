@@ -193,6 +193,11 @@ export class WebviewAdapter implements LatticeDataAdapter {
     }
   }
 
+  /** 执行宿主命令（宿主侧按白名单校验）。 */
+  executeCommand(command: string, ...args: unknown[]): void {
+    this.transport.action('executeCommand', { command, args });
+  }
+
   /** 侧栏定位（宿主能力）：转发到扩展命令。 */
   async revealInSidebar(kind: 'task' | 'spec' | 'project', id: string): Promise<boolean> {
     this.transport.action('executeCommand', {

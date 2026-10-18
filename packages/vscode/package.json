@@ -1,8 +1,8 @@
 {
-  "name": "lattice",
+  "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -18,7 +18,11 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other", "Machine Learning", "Data Science"],
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Data Science"
+  ],
   "keywords": [
     "lattice",
     "context",
@@ -45,8 +49,7 @@
   "l10n": "./l10n",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:lattice.json",
-    "workspaceContains:**/lattice.json"
+    "workspaceContains:lattice.json"
   ],
   "scripts": {
     "build": "pnpm run build:webview && pnpm run build:extension",
@@ -114,39 +117,46 @@
         {
           "id": "lattice.search",
           "name": "%lattice.view.search.name%"
+        },
+        {
+          "id": "lattice.detail",
+          "name": "%lattice.view.detail.name%",
+          "type": "webview",
+          "icon": "$(checklist)",
+          "visibility": "collapsed"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "lattice.tasks",
-        "contents": "%lattice.welcome.noCli%",
-        "when": "!lattice.cliAvailable"
+        "contents": "%lattice.welcome.noData%",
+        "when": "!lattice.initialized"
       },
       {
         "view": "lattice.specs",
-        "contents": "%lattice.welcome.noCli%",
-        "when": "!lattice.cliAvailable"
+        "contents": "%lattice.welcome.noData%",
+        "when": "!lattice.initialized"
       },
       {
         "view": "lattice.projects",
-        "contents": "%lattice.welcome.noCli%",
-        "when": "!lattice.cliAvailable"
+        "contents": "%lattice.welcome.noData%",
+        "when": "!lattice.initialized"
       },
       {
         "view": "lattice.search",
-        "contents": "%lattice.welcome.searchNoCli%",
-        "when": "!lattice.cliAvailable"
+        "contents": "%lattice.welcome.searchNoData%",
+        "when": "!lattice.initialized"
       },
       {
         "view": "lattice.tasks",
         "contents": "%lattice.welcome.noProject%",
-        "when": "lattice.cliAvailable && !lattice.hasWorkspaceProject"
+        "when": "lattice.initialized && !lattice.hasWorkspaceProject"
       },
       {
         "view": "lattice.search",
         "contents": "%lattice.welcome.search%",
-        "when": "lattice.cliAvailable"
+        "when": "lattice.initialized"
       }
     ],
     "commands": [
@@ -483,9 +493,14 @@
         "icon": "$(globe)"
       },
       {
+        "command": "lattice.workspace.bootstrap",
+        "title": "%lattice.command.workspace.bootstrap.title%",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "lattice.workspace.initialize",
         "title": "%lattice.command.workspace.initialize.title%",
-        "icon": "$(rocket)"
+        "icon": "$(globe)"
       },
       {
         "command": "lattice.workspace.scan",
@@ -599,7 +614,7 @@
         },
         {
           "command": "lattice.task.clearActive",
-          "when": "false"
+          "when": "lattice.hasActiveTask"
         },
         {
           "command": "lattice.revealInSidebar",
@@ -1048,11 +1063,6 @@
     "configuration": {
       "title": "Lattice",
       "properties": {
-        "lattice.cliPath": {
-          "type": "string",
-          "default": "",
-          "description": "%lattice.config.cliPath%"
-        },
         "lattice.latticeHome": {
           "type": "string",
           "default": "",
@@ -1079,12 +1089,6 @@
           "default": 30000,
           "minimum": 0,
           "description": "%lattice.config.fallbackPollMs%"
-        },
-        "lattice.cliTimeoutMs": {
-          "type": "number",
-          "default": 20000,
-          "minimum": 1000,
-          "description": "%lattice.config.cliTimeoutMs%"
         },
         "lattice.tasks.scope": {
           "type": "string",
@@ -1196,6 +1200,7 @@
             "title": "%lattice.walkthrough.init.title%",
             "description": "%lattice.walkthrough.init.description%",
             "completionEvents": [
+              "onCommand:lattice.workspace.bootstrap",
               "onCommand:lattice.workspace.initialize"
             ]
           },
@@ -1217,12 +1222,36 @@
             ]
           },
           {
+            "id": "workflows",
+            "title": "%lattice.walkthrough.workflows.title%",
+            "description": "%lattice.walkthrough.workflows.description%",
+            "completionEvents": [
+              "onCommand:lattice.task.checkpoint.draft",
+              "onCommand:lattice.task.summarize"
+            ]
+          },
+          {
+            "id": "graph",
+            "title": "%lattice.walkthrough.graph.title%",
+            "description": "%lattice.walkthrough.graph.description%",
+            "completionEvents": [
+              "onCommand:lattice.graph.open"
+            ]
+          },
+          {
             "id": "search",
             "title": "%lattice.walkthrough.search.title%",
             "description": "%lattice.walkthrough.search.description%",
             "completionEvents": [
-              "onCommand:lattice.search.open",
-              "onCommand:lattice.graph.open"
+              "onCommand:lattice.search.open"
+            ]
+          },
+          {
+            "id": "users",
+            "title": "%lattice.walkthrough.users.title%",
+            "description": "%lattice.walkthrough.users.description%",
+            "completionEvents": [
+              "onCommand:lattice.user.manager"
             ]
           }
         ]

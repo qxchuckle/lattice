@@ -1,4 +1,15 @@
 import * as vscode from 'vscode';
+import { userInfo } from 'node:os';
+import {
+  ensureDir,
+  getUserDir,
+  getUserProjectsDir,
+  getUserSpecDir,
+  getUserTasksDir,
+  readLocalConfig,
+  scanForProjects,
+  writeLocalConfig,
+} from '@qcqx/lattice-core';
 import { getChannel } from '../logging';
 import { TrashRow } from '../cli/types';
 import { getConfig, getLatticeRoot } from '../config';
@@ -6,6 +17,7 @@ import { t } from '../t';
 import {
   CommandServices,
   RegisterFn,
+  extractArgObject,
   handleCliError,
   showDeduped,
   withNotificationProgress,
@@ -289,9 +301,129 @@ export function registerSystemCommands(services: CommandServices, register: Regi
 
   register('lattice.web.open', () => openWebWorkbench(services));
 
+  /** 用户名合法字符（目录名安全）。 */
+  const BOOTSTRAP_USERNAME_PATTERN = /^[\w-]+$/;
+
+  interface BootstrapArgs {
+    username?: string;
+    scanDirs?: string[];
+  }
+
+  interface BootstrapResult {
+    username: string;
+    scanDirs: string[];
+    added: number;
+    updated: number;
+  }
+
+  /**
+   * 快速开始：进程内完成**最小可用初始化**（数据根 + 首个用户 + 项目扫描），全程无需 CLI。
+   * 完整初始化（AI 客户端注入 / git / 模板）仍引导运行 `ltc init`。
+   * 程序化参数：`{ username?, scanDirs? }`（测试/自动化可跳过全部交互）。
+   */
+  async function bootstrapWorkspace(
+    services: CommandServices,
+    arg: unknown,
+  ): Promise<BootstrapResult | undefined> {
+    const args = extractArgObject<BootstrapArgs>(arg) ?? {};
+    const existing = await readLocalConfig();
+
+    // 1) 用户名（已有配置则沿用）
+    let username = args.username?.trim() || existing?.username;
+    if (!username) {
+      const suggested = (userInfo().username || 'me').replace(/[^\w-]/g, '') || 'me';
+      const input = await vscode.window.showInputBox({
+        title: t('Quick Start (No CLI)'),
+        prompt: t('Your Lattice username (letters, digits, "-" or "_")'),
+        value: suggested,
+        validateInput: (value) =>
+          BOOTSTRAP_USERNAME_PATTERN.test(value.trim())
+            ? undefined
+            : t('Only letters, digits, "-" or "_" are allowed'),
+      });
+      if (input === undefined) return undefined;
+      username = input.trim();
+    }
+
+    // 2) 扫描目录（逗号分隔；缺省 = 当前工作区；留空跳过）
+    let scanDirs = args.scanDirs?.map((dir) => dir.trim()).filter(Boolean);
+    if (scanDirs === undefined) {
+      const workspaceDir = services.activeProject.currentFolder?.uri.fsPath;
+      const suggested = existing?.scanDirs?.join(', ') ?? workspaceDir ?? '';
+      const input = await vscode.window.showInputBox({
+        title: t('Quick Start (No CLI)'),
+        prompt: t('Directories to scan for projects (comma separated; leave empty to skip)'),
+        value: suggested,
+        placeHolder: '~/Projects, ~/workspace',
+      });
+      if (input === undefined) return undefined;
+      scanDirs = input
+        .split(',')
+        .map((dir) => dir.trim())
+        .filter(Boolean);
+    }
+    const finalScanDirs = scanDirs;
+
+    try {
+      // 3) 数据根骨架 + 配置（持久化 scanDirs，供后续 `ltc init --auto` 复用）
+      await ensureDir(getUserDir(username));
+      await ensureDir(getUserSpecDir(username));
+      await ensureDir(getUserProjectsDir(username));
+      await ensureDir(getUserTasksDir(username));
+      await writeLocalConfig({ ...(existing ?? {}), username, scanDirs: finalScanDirs });
+
+      // 4) DB + 项目扫描（进程内 core）
+      await services.data.warmDb();
+      let added = 0;
+      let updated = 0;
+      if (finalScanDirs.length > 0) {
+        const result = await withNotificationProgress(
+          t('Scanning projects…'),
+          async (update) =>
+            scanForProjects(username as string, finalScanDirs, (progress) => {
+              update(`${progress.added}+ ${progress.updated}~ · ${progress.currentDir}`);
+            }),
+          true,
+        );
+        // 可取消：取消（undefined）时按 0 计（数据根与用户仍已就绪）
+        if (result) {
+          added = result.added.length;
+          updated = result.updated.length;
+        }
+      }
+
+      // 5) 全量刷新
+      await services.snapshot.invalidate(['user', 'projects', 'tasks', 'specs', 'conflicts'], {
+        reload: true,
+      });
+      await services.activeProject.refresh();
+
+      const fullSetup = t('Run "ltc init" for the full setup (AI clients, git, templates).');
+      void showDeduped(
+        'info',
+        t(
+          'Lattice is ready. User "{0}" · {1} new / {2} updated project(s).',
+          username,
+          added,
+          updated,
+        ),
+        fullSetup,
+      ).then((action) => {
+        if (action === fullSetup)
+          void vscode.commands.executeCommand('lattice.workspace.initialize');
+      });
+      return { username, scanDirs: finalScanDirs, added, updated };
+    } catch (error) {
+      await handleCliError(error, t('Quick start failed'));
+      return undefined;
+    }
+  }
+
   register('lattice.workspace.initialize', () => {
     runInTerminal(services, 'Lattice Init', 'ltc init');
   });
+  register('lattice.workspace.bootstrap', (arg) => bootstrapWorkspace(services, arg));
+
   register('lattice.workspace.scan', () => {
     runInTerminal(services, 'Lattice Scan', 'ltc init scan');
   });
@@ -309,7 +441,6 @@ export function registerSystemCommands(services: CommandServices, register: Regi
         services.data.version(),
         services.data.executablePath(),
       ]);
-      await vscode.commands.executeCommand('setContext', 'lattice.cliAvailable', true);
       const minVersion = getConfig().minCliVersion;
       if (compareVersions(version, minVersion) >= 0) {
         void showDeduped('info', t('Lattice runtime v{0} ({1}).', version, executable));
@@ -332,7 +463,6 @@ export function registerSystemCommands(services: CommandServices, register: Regi
         });
       }
     } catch (error) {
-      await vscode.commands.executeCommand('setContext', 'lattice.cliAvailable', false);
       await handleCliError(error, t('Runtime check failed'));
     }
   });

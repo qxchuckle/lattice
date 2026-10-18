@@ -65,7 +65,7 @@ export function bridgeAction(action: BridgeActionName, params?: unknown): void {
 }
 
 export interface HostBridgeHandlers {
-  onSnapshotChanged?: () => void;
+  onSnapshotChanged?: (payload?: { sections?: string[] }) => void;
   onThemeChanged?: (mode: 'light' | 'dark') => void;
   onRouteTo?: (path: string) => void;
 }
@@ -99,7 +99,7 @@ export function initHostBridge(handlers: HostBridgeHandlers = {}): void {
           break;
         }
         case 'snapshotChanged':
-          handlers.onSnapshotChanged?.();
+          handlers.onSnapshotChanged?.(message.payload as { sections?: string[] } | undefined);
           break;
         case 'routeTo': {
           const path = (message.payload as { path?: string } | undefined)?.path;

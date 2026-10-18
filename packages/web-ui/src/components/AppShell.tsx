@@ -1,4 +1,4 @@
-import { useEffect, useCallback, memo, type ComponentType } from 'react';
+import { useEffect, useCallback, memo, lazy, Suspense, type ComponentType } from 'react';
 import { Button, Drawer } from 'antd';
 import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useSnapshot } from 'valtio';
@@ -22,7 +22,10 @@ import { TreeBrowserSidebar } from './sidebar/TreeBrowserSidebar';
 import { FloatingStatusBar } from './FloatingStatusBar';
 import { GlobalSearchPanel } from './GlobalSearchPanel';
 import { AdminDrawer } from './admin/AdminDrawer';
-import { TerminalPanel } from './terminal/TerminalPanel';
+/** 终端面板按需加载：xterm 仅在 terminal 特性启用且真正打开时进入产物。 */
+const TerminalPanel = lazy(() =>
+  import('./terminal/TerminalPanel').then((module) => ({ default: module.TerminalPanel })),
+);
 import { LoginPage } from './LoginPage';
 import './DetailPanel.less';
 
@@ -249,7 +252,11 @@ export function AppShell({
       <GlobalSearchPanel />
       {!isMobile && <DetailPanelContainer />}
       {showAdmin && <AdminDrawer />}
-      {showTerminal && <TerminalPanel />}
+      {showTerminal && (
+        <Suspense fallback={null}>
+          <TerminalPanel />
+        </Suspense>
+      )}
 
       {/* 移动端组件（桌面端不渲染）*/}
       {isMobile && (

@@ -149,6 +149,10 @@ export async function getEmbeddingConfig(): Promise<Required<RAGEmbeddingConfig>
 /** 加载 embedding 模型（懒加载，首次调用时加载） */
 async function ensureModel(): Promise<void> {
   if (pipeline) return;
+  // 运营开关：LATTICE_DISABLE_SEMANTIC=1 时不加载本地语义模型（transformers/onnxruntime 保持未加载），
+  // 上层自动按「语义不可用」降级到 FTS。用途：低配/离线环境；测试环境规避
+  // onnxruntime-node@1.21 在 macOS 进程退出时的上游 teardown 崩溃（microsoft/onnxruntime#24579）。
+  if (process.env.LATTICE_DISABLE_SEMANTIC === '1') return;
   if (loadingPromise) {
     await loadingPromise;
     return;
