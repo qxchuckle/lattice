@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-cli",
-  "version": "1.28.0",
+  "version": "1.28.1",
   "description": "Lattice 命令行工具",
   "type": "module",
   "bin": {
