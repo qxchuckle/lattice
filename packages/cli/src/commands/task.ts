@@ -446,8 +446,8 @@ export function registerTaskCommand(program: Command): void {
         if (typeof opts.title === 'string') {
           const title = opts.title.trim();
           if (!title) {
-            logger.raw(chalk.yellow('任务标题不能为空'));
             closeDb();
+            reportFailure('任务标题不能为空');
             return;
           }
           updates.title = title;
@@ -455,9 +455,9 @@ export function registerTaskCommand(program: Command): void {
 
         if (opts.status) {
           if (!TASK_STATUSES.includes(opts.status as TaskStatus)) {
-            logger.raw(chalk.yellow(`无效状态：${opts.status}`));
-            logger.raw(chalk.dim(`可选值：${TASK_STATUSES.join(' / ')}`));
             closeDb();
+            reportFailure(`无效状态：${opts.status}`);
+            reportFailureHint(`可选值：${TASK_STATUSES.join(' / ')}`);
             return;
           }
           updates.status = opts.status as TaskStatus;

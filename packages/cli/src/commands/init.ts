@@ -349,17 +349,24 @@ async function detectAndConfigureAITools(): Promise<void> {
     }
   }
 
-  const selectedToolIds = await checkbox({
-    message: '请选择要注入的 AI 工具（可多选）：',
-    choices: tools.map((tool) => {
-      const detected = detectedToolIds.has(tool.id);
-      return {
-        name: detected ? `${tool.name}（已检测）` : `${tool.name}（未检测）`,
-        value: tool.id,
-        checked: detected || tool.defaultChecked === true,
-      };
-    }),
-  });
+  // 非交互环境（CI / 脚本管道，stdin 非 TTY）不弹勾选：自动注入「已检测到」的工具，
+  // 未检测到则走下方空选集分支跳过——避免机器环境下 init 永久挂起在勾选交互上。
+  let selectedToolIds: string[];
+  if (process.stdin.isTTY) {
+    selectedToolIds = await checkbox({
+      message: '请选择要注入的 AI 工具（可多选）：',
+      choices: tools.map((tool) => {
+        const detected = detectedToolIds.has(tool.id);
+        return {
+          name: detected ? `${tool.name}（已检测）` : `${tool.name}（未检测）`,
+          value: tool.id,
+          checked: detected || tool.defaultChecked === true,
+        };
+      }),
+    });
+  } else {
+    selectedToolIds = [...detectedToolIds];
+  }
 
   if (selectedToolIds.length === 0) {
     logger.raw(chalk.yellow('  已跳过 AI 工具注入。'));
