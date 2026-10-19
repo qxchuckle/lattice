@@ -59,6 +59,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "pnpm build:core && pnpm build:cli && vitest run --project cli",
+    "e2e": "pnpm build:core && pnpm build:web && pnpm --filter @qcqx/lattice-e2e run test",
+    "e2e:headed": "pnpm --filter @qcqx/lattice-e2e run test:headed",
     "test:report": "open coverage/index.html",
     "clean": "pnpm -r run clean",
     "test:contract": "vitest run --project services --project web --project vscode",

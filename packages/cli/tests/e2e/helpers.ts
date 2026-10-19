@@ -80,6 +80,15 @@ export async function setupCliEnv(): Promise<CliEnv> {
   const projectsDir = join(home, 'projects');
   await mkdir(projectsDir, { recursive: true });
 
+  // 硬离线前置：init 在 -f 下会走「下载并预热 embedding 模型」路径，
+  // 先写入全局配置关闭远端模型 → 预热快速降级（不依赖外网，不产生长下载）
+  await mkdir(join(home, '.lattice', 'config'), { recursive: true });
+  await writeFile(
+    join(home, '.lattice', 'config', 'config.json'),
+    JSON.stringify({ rag: { embedding: { allowRemoteModels: false } } }),
+    'utf8',
+  );
+
   const run = (args: string[], opts?: { cwd?: string }) => runCli(home, args, opts);
 
   // master 命令面已无 --no-download-model：模型下载本就是 --download-model opt-in，默认关闭
