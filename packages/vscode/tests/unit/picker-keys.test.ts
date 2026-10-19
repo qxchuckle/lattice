@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { formatPickerHint, pickerActionKeys } from '../../src/pickers/keys';
 
 test('键映射：mac 用 ⌘/⌥/⌃+↵，其他平台 Ctrl/Alt（reveal 避开冲突）', () => {

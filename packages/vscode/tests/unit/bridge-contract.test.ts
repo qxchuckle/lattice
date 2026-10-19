@@ -2,10 +2,10 @@
  * vscode bridge 契约测试：postMessage 绑定 ≡ services 直调（同一 fixture 数据根）。
  * bridge-requests 是 vscode-free 的，可直接在 Node 测试环境跑。
  *
- * 注：vscode 包为 CJS，测试用 before() 动态加载（避免顶层 await 的转换限制）。
+ * 注：vscode 包为 CJS，测试用 beforeAll() 动态加载（避免顶层 await 的转换限制）。
  */
 import assert from 'node:assert/strict';
-import { after, before, test } from 'node:test';
+import { afterAll, beforeAll, test } from 'vitest';
 import { createFixtureHome } from '../../../services/tests/fixture';
 
 const fixture = createFixtureHome();
@@ -16,7 +16,7 @@ let snapshot: InstanceType<typeof import('../../src/state/snapshot').SnapshotSto
 let handleBridgeRequest: typeof import('../../src/webview/bridge-requests').handleBridgeRequest;
 let lattice: typeof import('@qcqx/lattice-services');
 
-before(async () => {
+beforeAll(async () => {
   const { LatticeDataService } = await import('../../src/data/service');
   const { SnapshotStore } = await import('../../src/state/snapshot');
   const { handleBridgeRequest: handler } = await import('../../src/webview/bridge-requests');
@@ -27,7 +27,7 @@ before(async () => {
   handleBridgeRequest = handler;
 });
 
-after(() => {
+afterAll(() => {
   data?.dispose();
   fixture.cleanup();
 });

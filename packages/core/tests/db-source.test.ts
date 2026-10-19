@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import {
@@ -9,8 +9,8 @@ import {
   updateEmbeddingMetadataByFilePath,
   getDocumentSourceByPath,
   getEmbeddingByPath,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // DB source 列回归：better-sqlite3 把 undefined 绑定为 NULL——
 // source 未提供时必须归一为 'local'，否则撞 NOT NULL 约束

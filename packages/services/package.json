@@ -26,8 +26,7 @@
     "build": "tsup",
     "prepublishOnly": "pnpm run build",
     "check-types": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@qcqx/lattice-core": "workspace:*"
@@ -35,7 +34,6 @@
   "devDependencies": {
     "@types/node": "^22.15.0",
     "tsup": "^8.5.1",
-    "tsx": "^4.19.0",
     "typescript": "^5.8.3"
   },
   "files": [

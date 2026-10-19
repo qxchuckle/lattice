@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { readdir, rm, readFile } from 'node:fs/promises';
@@ -16,13 +16,13 @@ import {
   unlinkDomain,
   listDomains,
   readBaseline,
-} from '../dist/index.mjs';
+} from '../src/index';
 import {
   createTempLatticeHome,
   assertIsolatedLatticeHome,
   putFile,
   createBareRemote,
-} from './helpers.mjs';
+} from './helpers';
 
 // S2：域同步核心（routes 语法 / 契约 ID / 贡献集白名单 / push 增量 /
 // 互删护栏 / 退出传播 / 指纹保守 / join-unlink / 冲突逃生）
@@ -290,7 +290,7 @@ test('指纹保守：指纹缺失 → 不删任何东西（no-changes）', async
   await pushDomain(USERNAME, { remote: bare.barePath, routes: ['*'] });
   const before = bareFiles();
   // 删除指纹 + 本地删任务（模拟指纹丢失后的退出传播风险）
-  const { getSyncBaselinePath } = await import('../dist/index.mjs');
+  const { getSyncBaselinePath } = await import('../src/index');
   await rm(getSyncBaselinePath(computeDomainHash(bare.barePath, 'main')), { force: true });
   await rm(join(env.latticeHome, 'users', USERNAME, 'tasks', TASK_T1), {
     recursive: true,
@@ -311,7 +311,7 @@ test('指纹保守：指纹缺失 → 不删任何东西（no-changes）', async
 });
 
 test('pull 冲突逃生：镜像有未推送 commit 且远端分叉 → abort + 冲突清单 + 无 rebase 残留', async () => {
-  const { mirrorDirOf, isRebaseInProgress } = await import('../dist/index.mjs');
+  const { mirrorDirOf, isRebaseInProgress } = await import('../src/index');
   const domain = { remote: bare.barePath, routes: ['*'] };
   await pushDomain(USERNAME, domain);
   const mirrorDir = mirrorDirOf(domain);
@@ -407,7 +407,7 @@ test('join 摘要提示：同名用户 + 全局 spec 生效警告', async () => 
   // 先以 A 身份推送内容，再用同 username join → sameNameUserPresent
   await pushDomain(USERNAME, { remote: bare.barePath, routes: ['*'] });
   // 模拟新机器视角：清空本机域配置与镜像（bare 已有数据）
-  const { readSyncDomains, ensureMirror } = await import('../dist/index.mjs');
+  const { readSyncDomains, ensureMirror } = await import('../src/index');
   void readSyncDomains;
   void ensureMirror;
   const jr = await joinDomain({ remote: bare.barePath }, USERNAME);

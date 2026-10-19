@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { expandHome, isPathInside, normalizeLegacyId, stripIdPrefix } from '../../src/util/paths';

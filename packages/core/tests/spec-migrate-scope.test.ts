@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -9,8 +9,8 @@ import {
   findProjectDirName,
   getProjectSpecDir,
   migrateSpecs,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // spec migrate 全项目视角（对齐 lint --all / suggest-description，修 cli-command-surface §跨项目全量视角盲区）：
 // 1. scope=project / all 的 project 级覆盖全部已注册项目，不止 cwd 项目（修复前只扫 cwd 项目）
@@ -42,7 +42,7 @@ beforeEach(async () => {
     join(env.latticeHome, 'config', 'config-local.json'),
     JSON.stringify({ username: U }),
   );
-  initDb();
+  await initDb();
   await registerProject([ID_A], join(env.tmpRoot, 'projA'));
   await registerProject([ID_B], join(env.tmpRoot, 'projB'));
 });

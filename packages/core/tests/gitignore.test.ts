@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,7 +8,7 @@ import {
   renderGitignoreSections,
   computeMissingGitignoreSections,
   ensureGitignore,
-} from '../dist/index.mjs';
+} from '../src/index';
 
 // S1：gitignore 段单一来源（core/maintenance/gitignore.ts）
 // 纯路径函数测试，不涉及 LATTICE_HOME；用独立 tmp 目录。

@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import {
@@ -16,8 +16,8 @@ import {
   incrementalIndex,
   ensureVecStoreDimension,
   getRAGStatus,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // 方案 X 回归：incrementalIndex 分离「FTS/meta 刷新」与「embedding 重算」。
 // spec 正文未变但 frontmatter 派生字段（title/tags/specId/...）变时，只刷新

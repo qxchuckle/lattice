@@ -3,7 +3,7 @@
  * 用 fastify 的 inject 在进程内请求，不需要真实端口。
  */
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
+import { afterAll, test } from 'vitest';
 import { createFixtureHome } from '../../services/tests/fixture';
 
 const fixture = createFixtureHome();
@@ -15,7 +15,7 @@ const { createServer } = await import('../src/server/app');
 
 const app = await createServer();
 
-after(async () => {
+afterAll(async () => {
   await app.close();
   core.closeDb();
   fixture.cleanup();

@@ -4,7 +4,7 @@
  * - db mode：initDb 就绪（CLI/web/扩展宿主正常路径）→ 虚拟合并/FTS 路径
  */
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
+import { afterAll, test } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createFixtureHome } from './fixture';
@@ -15,7 +15,7 @@ process.env.LATTICE_HOME = fixture.home;
 const lattice = await import('../src/index');
 const core = await import('@qcqx/lattice-core');
 
-after(() => fixture.cleanup());
+afterAll(() => fixture.cleanup());
 
 test('file mode：文件真源（未初始化 DB）', async () => {
   const projects = await lattice.listProjects('tester');

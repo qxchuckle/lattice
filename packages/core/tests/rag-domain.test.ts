@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -12,13 +12,13 @@ import {
   readSyncDomains,
   initDb,
   closeDb,
-} from '../dist/index.mjs';
+} from '../src/index';
 import {
   createTempLatticeHome,
   assertIsolatedLatticeHome,
   putFile,
   createBareRemote,
-} from './helpers.mjs';
+} from './helpers';
 
 // S4：RAG collector 域文档 —— 胜者才索引、被遮蔽副本永不索引、
 // off 域不索引、域任务 PRD/design 文档、来源标注 source=hash。

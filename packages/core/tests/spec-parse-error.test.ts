@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
@@ -12,8 +12,8 @@ import {
   getUserSpecs,
   addSpecRefs,
   formatSpecParseError,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // 坏 YAML 隔离：单个 spec frontmatter 语法错误不阻塞同目录其他 spec 的加载，
 // 且 parseError 携带 js-yaml 定位（line = 文件内绝对行号）；写回类操作

@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { rm, mkdir } from 'node:fs/promises';
@@ -8,13 +8,13 @@ import {
   computeDomainHash,
   encodeContractDirName,
   sourceLabel,
-} from '../dist/index.mjs';
+} from '../src/index';
 import {
   createTempLatticeHome,
   assertIsolatedLatticeHome,
   putFile,
   createBareRemote,
-} from './helpers.mjs';
+} from './helpers';
 
 // S3：Provider 读时合并 —— 遮蔽（本地>域序）、use 三档双视图、来源标注、
 // G1 降级、G2 rebase 跳过、契约 ID 项目对齐。
@@ -143,9 +143,9 @@ test('遮蔽与并集：本地同路径遮蔽域版，域独有并集可见，�
 
 test('use 三档：trusted 全并 / reference 检索可见但约束视图不含 / off 全不可见', async () => {
   await seedDomainContent();
-  const { writeSyncDomains, domainHashOf: h } = await import('../dist/index.mjs');
+  const { writeSyncDomains, domainHashOf: h } = await import('../src/index');
   const hash = h({ remote: bare.barePath });
-  const { readSyncDomains } = await import('../dist/index.mjs');
+  const { readSyncDomains } = await import('../src/index');
 
   // trusted
   await joinDomain({ remote: bare.barePath }, U);
@@ -197,7 +197,7 @@ test('G1 降级：镜像缺失的域被跳过，本地与其余结果正常返�
   const jr = await joinDomain({ remote: bare.barePath }, U);
   // 制造镜像缺失（手删目录，G4 场景）→ G1 降级路径
   const { rm } = await import('node:fs/promises');
-  const { mirrorDirOf } = await import('../dist/index.mjs');
+  const { mirrorDirOf } = await import('../src/index');
   await rm(mirrorDirOf({ remote: bare.barePath }), { recursive: true, force: true });
   const c = await createComposite(U);
   const view = await c.knowledgeView(); // 不得抛错
@@ -215,7 +215,7 @@ test('G2 脏读防护：镜像 rebase 中间态 → 该域跳过', async () => {
   await seedDomainContent();
   await joinDomain({ remote: bare.barePath }, U);
   const { execFileSync } = await import('node:child_process');
-  const { mirrorDirOf } = await import('../dist/index.mjs');
+  const { mirrorDirOf } = await import('../src/index');
   const mirrorDir = mirrorDirOf({ remote: bare.barePath });
   // 手造 rebase 中间态目录
   await mkdir(join(mirrorDir, '.git', 'rebase-merge'), { recursive: true });

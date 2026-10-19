@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { isValidEntityRef, planDrop } from '../../src/views/dnd-logic';
 
 const task = (id: string) => ({ kind: 'task' as const, id });

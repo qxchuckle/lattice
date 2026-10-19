@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { uniqueSuffixId } from '../../src/views/specs-logic';
 
 test('首见保持原样，重复追加 ~N（不丢数据）', () => {

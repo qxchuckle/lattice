@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -12,8 +12,8 @@ import {
   getProjectSpecDir,
   exportSkill,
   verifyExport,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // ltc export 领域行为：
 // 1. 默认导出（spec+tasks、archived、用户前缀、项目文件夹、SKILL.md 自描述与条件「使用注意」）
@@ -81,7 +81,7 @@ beforeEach(async () => {
     join(env.latticeHome, 'config', 'config-local.json'),
     JSON.stringify({ username: U }),
   );
-  initDb();
+  await initDb();
   OUT = join(env.tmpRoot, 'export-out');
 
   await registerProjectWithIds(U, [ID_A], join(env.tmpRoot, 'proj-alpha'), DERIVED_A);

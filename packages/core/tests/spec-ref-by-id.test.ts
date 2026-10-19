@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import {
@@ -10,8 +10,8 @@ import {
   findSpecById,
   addSpecRefs,
   getTaskMeta,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile } from './helpers';
 
 // ref-spec 按 spec ID 关联能力：
 // 1. findSpecById 跨 global/user/全部项目按 frontmatter.id 精确查找（含跨项目的项目级 spec）
@@ -44,7 +44,7 @@ beforeEach(async () => {
     join(env.latticeHome, 'config', 'config-local.json'),
     JSON.stringify({ username: U }),
   );
-  initDb();
+  await initDb();
 
   await registerProject([ID_A], join(env.tmpRoot, 'projA'));
   await registerProject([ID_B], join(env.tmpRoot, 'projB'));
