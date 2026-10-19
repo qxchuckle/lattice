@@ -75,5 +75,42 @@ test('GET /api/projects/:id ≡ services.getProject', async () => {
   assert.equal(body.name, expected?.name);
 });
 
+/** JSON 往返归一：HTTP 序列化会抹掉 undefined 字段，对比前先同构化 */
+function jsonRoundTrip<T>(value: T): unknown {
+  return JSON.parse(JSON.stringify(value ?? null));
+}
+
+test('GET /api/project-groups ≡ services.getProjectGroupTree（分组树同构）', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/project-groups' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), jsonRoundTrip(await lattice.getProjectGroupTree('tester')));
+});
+
+test('GET /api/relations ≡ services.listRelations', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/relations' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), jsonRoundTrip(await lattice.listRelations('tester')));
+});
+
+test('GET /api/checkpoints/active ≡ services.listActiveCheckpoints', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/checkpoints/active' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), jsonRoundTrip(await lattice.listActiveCheckpoints('tester')));
+});
+
+test('GET /api/users ≡ services.listUsers + currentUsername', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/users' });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { users: string[]; currentUser: string };
+  assert.deepEqual(body.users, await lattice.listUsers());
+  assert.equal(body.currentUser, await lattice.currentUsername());
+});
+
+test('GET /api/global-status ≡ services.getGlobalStatus', async () => {
+  const res = await app.inject({ method: 'GET', url: '/api/global-status' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), jsonRoundTrip(await lattice.getGlobalStatus()));
+});
+
 // 注：/api/search 依赖 RAG 索引与 embedding 模型（首次调用可能触发模型加载），
 // 不适合在离线契约测试中做断言；其数据面（services.search）由类型与集成测试覆盖。
