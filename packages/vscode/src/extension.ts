@@ -22,6 +22,8 @@ import { syncCheckpointDraftContext } from './editor/checkpoint-draft';
 import { SpecRefCodeActionProvider } from './editor/spec-code-actions';
 import { UserScopeService } from './state/user-scope';
 import { TasksScopeService } from './state/tasks-scope';
+import { TaskGroupService } from './state/task-group';
+import { ProjectsGroupingService } from './state/projects-grouping';
 import { ViewSearchService } from './state/view-search';
 import { ViewFilterService } from './state/view-filter';
 import { taskFilterSummary } from './commands/task-filter';
@@ -76,6 +78,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const reports = new ReportStore();
   const viewFilter = new ViewFilterService(context);
   const tasksScope = new TasksScopeService(context);
+  const taskGroup = new TaskGroupService(context);
+  const projectsGrouping = new ProjectsGroupingService(context);
   const viewSearch = new ViewSearchService(context);
 
   const tasksProvider = new TasksProvider(
@@ -85,6 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     activeTask,
     viewFilter,
     tasksScope,
+    taskGroup,
     viewSearch,
   );
   const specsProvider = new SpecsProvider(snapshot, viewSearch, viewFilter);
@@ -94,6 +99,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     activeTask,
     viewSearch,
     viewFilter,
+    data,
+    projectsGrouping,
   );
   const searchProvider = new SearchProvider(searchState, snapshot, viewFilter);
   // 跨视图拖拽：任务 → 项目（associate）、Spec → 任务（refSpec）
@@ -206,7 +213,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   viewSearch.onDidChange(() => composeViewMessages());
   snapshot.onDidChange(() => composeViewMessages());
   composeViewMessages();
-  context.subscriptions.push(viewFilter, tasksScope, viewSearch);
+  context.subscriptions.push(viewFilter, tasksScope, taskGroup, projectsGrouping, viewSearch);
 
   const createWatcher = (): LatticeWatcher => {
     const instance = new LatticeWatcher({
@@ -241,6 +248,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     userScope,
     viewFilter,
     tasksScope,
+    taskGroup,
+    projectsGrouping,
     viewSearch,
     viewSearchPreview,
     watcher: watcherRef.current,

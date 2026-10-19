@@ -21,6 +21,7 @@ import { getTaskMeta } from '../task';
 import { getProjectSpecs } from '../spec';
 import { getRelationsByProject } from './relation';
 import { listProjects, getProjectMeta, updateProjectMeta } from './index';
+import { readGroupRegistry, resolveGroupPathsForIds } from './group-registry';
 import { nowISO } from '../utils/time';
 
 // ─── 类型 ───
@@ -592,7 +593,10 @@ export async function getProfileBrief(
       gitRemotes: meta.gitRemotes,
       packageNames: meta.packageNames,
       monorepoPackages: meta.monorepoPackages,
-      groups: meta.groups,
+      groups:
+        meta.groupIds && meta.groupIds.length > 0
+          ? resolveGroupPathsForIds(await readGroupRegistry(username), meta.groupIds)
+          : undefined,
     },
     profileDir: getProjectProfileDir(username, projectDirName),
     summary,

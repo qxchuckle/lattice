@@ -19,6 +19,11 @@ import {
   readJSON,
 } from '../paths';
 import { selectPrimaryId, resolveProjectIds, normalizeProjectMeta } from '../project/identity';
+import {
+  emptyGroupRegistry,
+  readGroupRegistry,
+  resolveGroupPathsForIds,
+} from '../project/group-registry';
 
 let _db: DatabasePort | null = null;
 
@@ -30,8 +35,10 @@ let _db: DatabasePort | null = null;
  *     旧版评分指纹不再使用，项目识别改为精确 ID 匹配
  * v4: 新增 project_dirs 表 — 记录每个 primaryId 下的物理目录实例，
  *     解决多个物理目录 primaryId 相同导致 DB 只有一行、虚拟合并无法发现关联目录的问题
+ * v6: projects.groups 列语义变更 — 存「解析后的分组完整路径」JSON（由项目的 groupIds
+ *     + 分组注册表 project-groups.json 推导）；版本升级触发重建回填
  */
-export const DB_SCHEMA_VERSION = 5;
+export const DB_SCHEMA_VERSION = 6;
 const DB_SCHEMA_VERSION_KEY = 'db_schema_version';
 
 const SCHEMA_SQL = `
@@ -385,6 +392,8 @@ export async function rebuildProjectsCache(): Promise<void> {
     } catch {
       continue;
     }
+    // 分组注册表：解析 groupIds → 完整路径（缓存列）
+    const groupRegistry = await readGroupRegistry(username).catch(() => emptyGroupRegistry());
 
     for (const dirName of projectDirs) {
       if (dirName.startsWith('.')) continue;
@@ -413,7 +422,10 @@ export async function rebuildProjectsCache(): Promise<void> {
             meta.monorepoPackages && meta.monorepoPackages.length > 0
               ? JSON.stringify(meta.monorepoPackages)
               : null,
-          groups: meta.groups ? JSON.stringify(meta.groups) : null,
+          groups: (() => {
+            const paths = resolveGroupPathsForIds(groupRegistry, meta.groupIds);
+            return paths.length > 0 ? JSON.stringify(paths) : null;
+          })(),
           tags: meta.tags ? JSON.stringify(meta.tags) : null,
           username,
           created: meta.created,

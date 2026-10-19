@@ -10,7 +10,7 @@ export const ProjectEditModal = memo(function ProjectEditModal({
 }: {
   open: boolean;
   onClose: () => void;
-  project: ProjectMeta | null;
+  project: (ProjectMeta & { groupPaths?: string[] }) | null;
 }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -22,7 +22,7 @@ export const ProjectEditModal = memo(function ProjectEditModal({
       form.setFieldsValue({
         name: project.name,
         description: project.description ?? '',
-        groups: project.groups?.join(', ') ?? '',
+        groupPaths: project.groupPaths?.join(', ') ?? '',
         tags: project.tags?.join(', ') ?? '',
       });
     }
@@ -39,7 +39,12 @@ export const ProjectEditModal = memo(function ProjectEditModal({
         body: JSON.stringify({
           name: values.name,
           description: values.description || undefined,
-          groups: values.groups ? values.groups.split(',').map((s: string) => s.trim()) : [],
+          groupPaths: values.groupPaths
+            ? values.groupPaths
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : [],
           tags: values.tags ? values.tags.split(',').map((s: string) => s.trim()) : [],
         }),
       });
@@ -73,7 +78,7 @@ export const ProjectEditModal = memo(function ProjectEditModal({
         <Form.Item name='description' label='描述'>
           <Input.TextArea rows={2} />
         </Form.Item>
-        <Form.Item name='groups' label='分组（逗号分隔）'>
+        <Form.Item name='groupPaths' label='分组（逗号分隔路径）'>
           <Input placeholder='frontend, backend' />
         </Form.Item>
         <Form.Item name='tags' label='标签（逗号分隔）'>

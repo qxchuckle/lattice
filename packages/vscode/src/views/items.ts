@@ -4,6 +4,8 @@ import { t } from '../t';
 
 export type LatticeItemPayload =
   | { kind: 'group'; groupId: string }
+  | { kind: 'timeGroup'; level: 'year' | 'month' | 'day'; key: string }
+  | { kind: 'timeUnknown' }
   | { kind: 'task'; taskId: string }
   | { kind: 'taskDoc'; taskId: string; doc: 'prd' | 'design' }
   | { kind: 'taskProgressGroup'; taskId: string }
@@ -14,6 +16,8 @@ export type LatticeItemPayload =
   | { kind: 'progressAll'; taskId: string }
   | { kind: 'refSpecLeaf'; taskId: string; specId: string; title: string; filePath?: string }
   | { kind: 'project'; projectId: string }
+  | { kind: 'projectGroup'; groupId: string; path: string }
+  | { kind: 'projectGroupUngrouped' }
   | { kind: 'specProjectGroup'; projectId: string }
   | { kind: 'relation'; relationId: string; projectId: string }
   | { kind: 'spec'; specId: string; filePath: string; scope: string }

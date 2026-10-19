@@ -11,12 +11,14 @@
  * 一切"组合与降级"（虚拟合并、文件回退、跨用户、写操作校验）都在 @qcqx/lattice-services。
  */
 import * as lattice from '@qcqx/lattice-services';
-import type { SpecWithScope, TaskDetail } from '@qcqx/lattice-services';
+import type { ProjectGroupTree, SpecWithScope, TaskDetail } from '@qcqx/lattice-services';
 import {
   CORE_VERSION,
   closeDb,
   getBoundDatabaseDriver,
   initDb,
+  readGroupRegistrySync,
+  resolveGroupPathsForIds,
   resolveDatabaseDriver,
   useNodeSqliteDriver,
 } from '@qcqx/lattice-core';
@@ -44,7 +46,7 @@ import {
 
 // ── core 对象 → 扩展行模型 ──
 
-function toProjectRow(meta: ProjectMeta): ProjectRow {
+function toProjectRow(meta: ProjectMeta, groupPaths?: string[]): ProjectRow {
   return {
     id: meta.id ?? meta.ids?.[0] ?? '',
     ids: meta.ids ?? [],
@@ -55,9 +57,16 @@ function toProjectRow(meta: ProjectMeta): ProjectRow {
     packageNames: meta.packageNames ?? [],
     created: meta.created,
     updated: meta.updated ?? null,
-    groups: meta.groups?.join(',') ?? null,
+    groups: groupPaths && groupPaths.length > 0 ? groupPaths.join(',') : null,
+    groupIds: meta.groupIds ?? [],
     tags: meta.tags?.join(',') ?? null,
   };
+}
+
+/** meta 列表 → 行模型（分组 groupIds 经注册表解析为完整路径；同步读，文件很小） */
+function toProjectRows(username: string, metas: ProjectMeta[]): ProjectRow[] {
+  const registry = readGroupRegistrySync(username);
+  return metas.map((meta) => toProjectRow(meta, resolveGroupPathsForIds(registry, meta.groupIds)));
 }
 
 function toRelationRow(relation: {
@@ -277,28 +286,129 @@ export class LatticeDataService {
       lattice.listProjects(username),
       lattice.listRelations(username),
     ]);
-    return { projects: metas.map(toProjectRow), relations: relations.map(toRelationRow) };
+    return { projects: toProjectRows(username, metas), relations: relations.map(toRelationRow) };
   }
 
   async projectWhere(dir: string): Promise<ProjectWhereResult> {
     await this.ensureDb();
     const username = await this.username();
     const { exact, prefixMatches } = await lattice.findProjectsByPath(username, dir);
+    const registry = readGroupRegistrySync(username);
     return {
-      exact: exact ? toProjectRow(exact) : null,
-      prefixMatches: prefixMatches.map(toProjectRow),
+      exact: exact ? toProjectRow(exact, resolveGroupPathsForIds(registry, exact.groupIds)) : null,
+      prefixMatches: prefixMatches.map((meta) =>
+        toProjectRow(meta, resolveGroupPathsForIds(registry, meta.groupIds)),
+      ),
     };
   }
 
   async projectUpdate(
     id: string,
-    updates: { name?: string; description?: string; tags?: string[]; groups?: string[] },
+    updates: { name?: string; description?: string; tags?: string[] },
   ): Promise<void> {
     this.assertWritable();
     await this.ensureDb();
     const username = await this.username();
     const updated = await lattice.updateProject(username, id, updates);
     if (!updated) throw new Error(`未找到项目: ${id}`);
+  }
+
+  // ── 项目分组（注册表 project-groups.json） ──
+
+  /** 更新项目分组引用（set/add 路径缺失自动创建；remove 接受路径或 grp- id）。 */
+  async projectGroupsUpdate(
+    id: string,
+    options: { set?: string[]; add?: string[]; remove?: string[] },
+  ): Promise<{ createdPaths: string[]; unknownRemovals: string[] }> {
+    this.assertWritable();
+    await this.ensureDb();
+    const username = await this.username();
+    const result = await lattice.setProjectGroups(username, id, options);
+    if (result.error) throw new Error(result.error);
+    return { createdPaths: result.createdPaths, unknownRemovals: result.unknownRemovals };
+  }
+
+  /** 分组树 + 计数 + 未分组项目数。 */
+  async projectGroupTree(): Promise<ProjectGroupTree> {
+    await this.ensureDb();
+    const username = await this.username();
+    return lattice.getProjectGroupTree(username);
+  }
+
+  /** 全部分组路径（先序，供选择器 / 过滤器）。 */
+  async projectGroupPaths(): Promise<string[]> {
+    await this.ensureDb();
+    const username = await this.username();
+    return lattice.listProjectGroupPaths(username);
+  }
+
+  /** 新建分组（parentRef 为路径或 grp- id；null = 根级）。 */
+  async projectGroupCreate(parentRef: string | null, name: string): Promise<{ path: string }> {
+    this.assertWritable();
+    await this.ensureDb();
+    const username = await this.username();
+    const result = await lattice.createProjectGroup(username, parentRef, name);
+    if (result.error) throw new Error(result.error);
+    return { path: result.path ?? name };
+  }
+
+  /** 重命名分组（单节点写；返回受影响项目数）。 */
+  async projectGroupRename(
+    ref: string,
+    newName: string,
+  ): Promise<{ path: string; affectedProjects: number }> {
+    this.assertWritable();
+    await this.ensureDb();
+    const username = await this.username();
+    const result = await lattice.renameProjectGroup(username, ref, newName);
+    if (result.error) throw new Error(result.error);
+    return {
+      path: result.path ?? newName,
+      affectedProjects: result.affectedProjectIds?.length ?? 0,
+    };
+  }
+
+  /** 移动分组（newParentRef 为路径或 grp- id；null = 移到根级）。 */
+  async projectGroupMove(
+    ref: string,
+    newParentRef: string | null,
+  ): Promise<{ path: string; affectedProjects: number }> {
+    this.assertWritable();
+    await this.ensureDb();
+    const username = await this.username();
+    const result = await lattice.moveProjectGroup(username, ref, newParentRef);
+    if (result.error) throw new Error(result.error);
+    return { path: result.path ?? ref, affectedProjects: result.affectedProjectIds?.length ?? 0 };
+  }
+
+  /** 删除影响面预览（确认框展示）。 */
+  async projectGroupImpact(
+    ref: string,
+  ): Promise<{ path: string; subgroupCount: number; projectCount: number }> {
+    await this.ensureDb();
+    const username = await this.username();
+    const preview = await lattice.previewProjectGroupImpact(username, ref);
+    if (preview.error) throw new Error(preview.error);
+    return {
+      path: preview.path,
+      subgroupCount: preview.subgroupCount,
+      projectCount: preview.affectedProjectIds.length,
+    };
+  }
+
+  /** 删除分组子树 + 从引用项目剥离。 */
+  async projectGroupRemove(
+    ref: string,
+  ): Promise<{ removedCount: number; affectedProjects: number }> {
+    this.assertWritable();
+    await this.ensureDb();
+    const username = await this.username();
+    const result = await lattice.removeProjectGroup(username, ref);
+    if (result.error) throw new Error(result.error);
+    return {
+      removedCount: result.removedCount ?? 0,
+      affectedProjects: result.affectedProjectIds?.length ?? 0,
+    };
   }
 
   /** 项目元数据文件路径（project.json；只读）。 */

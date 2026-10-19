@@ -28,7 +28,8 @@
 列出所有已注册项目（关键词匹配 + RAG 语义回退）。
 
 - `--group` / `--tag` / `--has-git` / `--orphaned` / `--with-relations` / `--json` / `--json-format`
-- `--json-full`：关闭瘦身层——保留完整时间戳与空值字段、**保留完整 `git_first_commit`（40 位 sha；`id` 只含前 16 位，余下 24 位属瘦身层省略项）**、`--with-relations` 的行内关系明细，且不转列式表（两层模型见 [command-reference.md#通用约定]）。**重复表示在两种模式下都已去除**：与解析后 camelCase 字段（`localPaths`/`gitRemotes`/`packageNames`/`monorepoPackages`）同值的 snake_case 原始 DB 列、与 `id` 同值的 `ids`
+- `--group <path>`：按分组**子树**过滤（选「工作」覆盖 `工作/**` 全部后代）
+- `--json-full`：关闭瘦身层——保留完整时间戳与空值字段、**保留完整 `git_first_commit`（40 位 sha；`id` 只含前 16 位，余下 24 位属瘦身层省略项）**、`--with-relations` 的行内关系明细，且不转列式表（两层模型见 [command-reference.md#通用约定]）。**重复表示在两种模式下都已去除**：与解析后 camelCase 字段（`localPaths`/`gitRemotes`/`packageNames`/`monorepoPackages`/`groupPaths`）同值的 snake_case 原始 DB 列、与 `id` 同值的 `ids`
 - `--with-relations`：`--json` 下关系明细整份只在**顶层 `relations` 表**出现一次（同一条关系不在两端项目行各存一份），行内 `relations` 列降为关系 id 数组；`--json-full` 保持行内嵌套明细
 - `--search <keyword>`：大小写不敏感匹配（名称/ID/路径/Git/包名/分组/标签）+ RAG 语义回退
 - `--keyword-only`：跳过语义搜索
@@ -51,7 +52,29 @@
 
 更新项目元数据。
 
-`--name` / `--description` / `--groups` / `--tags`
+`--name` / `--description` / `--tags`（逗号分隔）；分组：`--groups <paths>`（逗号分隔**路径**，如 `工作/前端`；整组替换，缺失路径自动创建）/ `--add-groups <paths>` / `--remove-groups <paths|grp-id>`；`--json`
+
+### `ltc project group list`
+
+列出项目分组树（多层级注册表 `project-groups.json`；注册表为分组唯一真源，项目以 `groupId` 引用）。输出含每个分组的路径、后代项目计数与 `grp-` id。
+
+- `--json`：`{total, ungrouped, tree:[{id, path, count, children}]}`
+
+### `ltc project group create <paths...>`
+
+创建分组（支持 `a/b/c` 路径；自动补父级，重复创建幂等）。
+
+### `ltc project group rename <ref> <newName>`
+
+重命名分组末级（`ref` 为路径或 `grp-` id；单节点写，随后刷新受影响项目的展示路径）。`--force`
+
+### `ltc project group move <ref> [newParent]`
+
+移动分组到新父级（防环 + 同级重名校验）；`--root` 移到根级。`--force`
+
+### `ltc project group remove <ref>`
+
+删除分组及其子分组，并从所有引用项目中剥离这些分组（默认确认；`--force` 跳过）。
 
 ### `ltc project remove <id>`
 

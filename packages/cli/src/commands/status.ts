@@ -10,6 +10,8 @@ import {
   listTasks,
   getProjectMeta,
   getProjectSpecs,
+  readGroupRegistry,
+  resolveGroupPathsForIds,
   getDbPath,
   getLatticeRoot,
   getTasksForProject,
@@ -134,6 +136,12 @@ async function showProjectStatus(username: string, opts: StatusJsonOptions): Pro
     return;
   }
 
+  // 分组解析路径（meta.groupIds → 注册表完整路径）
+  const groupPaths =
+    meta.groupIds && meta.groupIds.length > 0
+      ? resolveGroupPathsForIds(await readGroupRegistry(username), meta.groupIds)
+      : [];
+
   const specs = await getProjectSpecs(username, project.id);
 
   type TaskMetaOrNil = Awaited<ReturnType<typeof getTaskMeta>>;
@@ -175,6 +183,7 @@ async function showProjectStatus(username: string, opts: StatusJsonOptions): Pro
     specs: specs.map((s) => s.fileName),
     activeTasks,
     binding: { current: project.root, pathStatus },
+    ...(groupPaths.length > 0 ? { groupPaths } : {}),
     ...(ancestorInfo.length > 0 ? { ancestors: ancestorInfo } : {}),
   };
 
@@ -206,7 +215,7 @@ async function showProjectStatus(username: string, opts: StatusJsonOptions): Pro
   if (meta.description) logger.raw(`  ${meta.description}`);
   if (meta.gitRemotes?.length) logger.raw(chalk.dim(`  git: ${meta.gitRemotes.join(', ')}`));
   if (meta.packageNames?.length) logger.raw(chalk.dim(`  pkg: ${meta.packageNames.join(', ')}`));
-  if (meta.groups?.length) logger.raw(chalk.dim(`  组: ${meta.groups.join(', ')}`));
+  if (groupPaths.length > 0) logger.raw(chalk.dim(`  组: ${groupPaths.join(', ')}`));
   if (meta.tags?.length) logger.raw(chalk.dim(`  [${meta.tags.join(', ')}]`));
 
   if (specs.length > 0) {

@@ -12,13 +12,16 @@ export function buildTaskItem(
   task: TaskRow,
   snapshot: SnapshotStore,
   activeTaskId: string | undefined,
-  options: { mode?: 'full' | 'leaf'; idPrefix?: string } = {},
+  options: { mode?: 'full' | 'leaf'; idPrefix?: string; dateBasis?: 'created' | 'updated' } = {},
 ): LatticeTreeItem {
   const project = task.projects.map((p) => snapshot.findProject(p)).find((p) => p !== undefined);
   const isActive = task.id === activeTaskId;
-  const descriptionParts = [project?.name, formatDate(task.updated ?? task.created)].filter(
-    Boolean,
-  );
+  // 时间分组模式下描述时间跟随分组基准（与组标签一致，避免错位）
+  const basisDate =
+    options.dateBasis === 'created'
+      ? (task.created ?? task.updated)
+      : (task.updated ?? task.created);
+  const descriptionParts = [project?.name, formatDate(basisDate)].filter(Boolean);
   const leaf = options.mode === 'leaf';
   const item = makeItem({
     label: task.title,

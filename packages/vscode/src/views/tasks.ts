@@ -8,6 +8,7 @@ import { ActiveTaskService } from '../state/active-task';
 import { ViewFilterService } from '../state/view-filter';
 import { taskMatchesFilter } from '../state/task-filter-logic';
 import { TasksScopeService } from '../state/tasks-scope';
+import { TaskGroupService } from '../state/task-group';
 import { ViewSearchService } from '../state/view-search';
 import {
   isViewSearchActive,
@@ -28,7 +29,15 @@ import {
   openFileCommand,
   tooltipMarkdown,
 } from './items';
+import { projectIconColor } from './project-icon';
 import { buildTaskItem } from './task-item';
+import {
+  TIME_LEVEL_BY_SEGMENT,
+  TIME_LEVEL_SEGMENT,
+  buildTimeGroups,
+  taskTimeKeys,
+  type TimeGroupNode,
+} from './task-time-groups';
 import { truncate } from '../cli/parsers';
 import { uniqueNodeId } from './node-id';
 
@@ -71,6 +80,7 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     private readonly activeTask: ActiveTaskService,
     private readonly viewFilter: ViewFilterService,
     private readonly tasksScope: TasksScopeService,
+    private readonly taskGroup: TaskGroupService,
     private readonly viewSearch: ViewSearchService,
   ) {
     this.disposables.push(
@@ -87,6 +97,7 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
         if (target === 'tasks') this.refresh();
       }),
       tasksScope.onDidChange(() => this.refresh()),
+      taskGroup.onDidChange(() => this.refresh()),
       viewSearch.onDidChange((target) => {
         if (target === 'tasks') this.refresh();
       }),
@@ -120,7 +131,14 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     const base = element.id ?? '';
     switch (payload.kind) {
       case 'group':
+        if (this.taskGroup.mode !== 'status' && payload.groupId === 'active') {
+          return this.getActiveTimeChildren(base);
+        }
         return this.getGroupChildren(payload.groupId, base);
+      case 'timeGroup':
+        return this.getTimeNodeChildren(base);
+      case 'timeUnknown':
+        return this.getTimeUnknownChildren(base);
       case 'task':
         return this.getTaskChildren(payload.taskId, base);
       case 'taskProgressGroup':
@@ -140,6 +158,7 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
 
   private async getRootChildren(): Promise<LatticeTreeItem[]> {
     await this.snapshot.ensure(['tasks', 'projects', 'user']);
+    if (this.taskGroup.mode !== 'status') return this.getTimeRootChildren();
     const groups = this.computeGroups();
     return groups.map((group) =>
       makeItem({
@@ -155,10 +174,141 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     );
   }
 
-  private computeGroups(state: ViewSearchState = this.viewSearch.get('tasks')): GroupDef[] {
-    const config = getConfig();
-    const activeProjectId = this.activeProject.currentProjectId;
-    const canonical = this.snapshot.canonicalProjectId(activeProjectId);
+  /** 时间分组根层：活动任务置顶组（内部同层级）+ 层级树 + 未知时间。 */
+  private getTimeRootChildren(): LatticeTreeItem[] {
+    const view = this.timeView();
+    const items: LatticeTreeItem[] = [];
+    if (view.active) {
+      items.push(
+        makeItem({
+          label: `${t('Active Tasks')} (${view.active.tasks.length})`,
+          id: 'g/active',
+          payload: { kind: 'group', groupId: 'active' },
+          contextValue: 'group',
+          collapsible: vscode.TreeItemCollapsibleState.Expanded,
+        }),
+      );
+    }
+    items.push(...this.timeNodeItems(view.roots, 'g', true));
+    if (view.unknown.length > 0) items.push(this.timeUnknownItem('g', view.unknown.length));
+    return items;
+  }
+
+  // ── 时间分组（基准 × 层级，见 views/task-time-groups.ts） ──
+
+  private timeView(state: ViewSearchState = this.viewSearch.get('tasks')): {
+    active?: { tasks: TaskRow[]; roots: TimeGroupNode[]; unknown: TaskRow[] };
+    roots: TimeGroupNode[];
+    unknown: TaskRow[];
+    flat: TaskRow[];
+  } {
+    const { tasks, canonical } = this.visibleTasks(state);
+    const basis = this.taskGroup.basis ?? 'created';
+    const levels = this.taskGroup.levels;
+    const activeTasks = canonical
+      ? tasks.filter(
+          (task) =>
+            task.status === 'in_progress' &&
+            task.projects.some((p) => this.snapshot.canonicalProjectId(p) === canonical),
+        )
+      : [];
+    const activeIds = new Set(activeTasks.map((task) => task.id));
+    const rest = buildTimeGroups(
+      tasks.filter((task) => !activeIds.has(task.id)),
+      basis,
+      levels,
+    );
+    const activeGroups =
+      activeTasks.length > 0 ? buildTimeGroups(activeTasks, basis, levels) : undefined;
+    return {
+      active: activeGroups
+        ? { tasks: activeTasks, roots: activeGroups.roots, unknown: activeGroups.unknown }
+        : undefined,
+      roots: rest.roots,
+      unknown: rest.unknown,
+      flat: rest.flat,
+    };
+  }
+
+  /** 一级时间节点 → 组条目；expandFirst 标记「最新路径」为默认展开（首渲染生效）。 */
+  private timeNodeItems(
+    nodes: TimeGroupNode[],
+    base: string,
+    expandFirst: boolean,
+  ): LatticeTreeItem[] {
+    return nodes.map((node, index) =>
+      makeItem({
+        label: `${node.key} (${node.count})`,
+        id: `${base}/tg:${TIME_LEVEL_SEGMENT[node.level]}:${node.key}`,
+        payload: { kind: 'timeGroup', level: node.level, key: node.key },
+        contextValue: 'group',
+        collapsible:
+          expandFirst && index === 0
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.Collapsed,
+      }),
+    );
+  }
+
+  private timeUnknownItem(base: string, count: number): LatticeTreeItem {
+    return makeItem({
+      label: `${t('Unknown Time')} (${count})`,
+      id: `${base}/tg:x`,
+      payload: { kind: 'timeUnknown' },
+      contextValue: 'group',
+      collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+    });
+  }
+
+  private timeTaskItems(tasks: TaskRow[], base: string): LatticeTreeItem[] {
+    return tasks.map((task) =>
+      buildTaskItem(task, this.snapshot, this.activeTask.id, {
+        idPrefix: base,
+        dateBasis: this.taskGroup.basis ?? 'created',
+      }),
+    );
+  }
+
+  private getActiveTimeChildren(base: string): LatticeTreeItem[] {
+    const view = this.timeView();
+    if (!view.active) return [];
+    const items = this.timeNodeItems(view.active.roots, base, true);
+    if (view.active.unknown.length > 0) {
+      items.push(this.timeUnknownItem(base, view.active.unknown.length));
+    }
+    return items;
+  }
+
+  private getTimeNodeChildren(base: string): LatticeTreeItem[] {
+    const view = this.timeView();
+    const segments = base.split('/');
+    const isActive = segments[1] === 'active';
+    const keys = segments
+      .slice(isActive ? 2 : 1)
+      .map((seg) => /^tg:[ymd]:(.+)$/.exec(seg)?.[1])
+      .filter((key): key is string => Boolean(key));
+    let nodes = isActive ? (view.active?.roots ?? []) : view.roots;
+    let node: TimeGroupNode | undefined;
+    for (const key of keys) {
+      node = nodes.find((child) => child.key === key);
+      if (!node) return [];
+      nodes = node.children;
+    }
+    if (!node) return [];
+    if (node.children.length > 0) return this.timeNodeItems(node.children, base, true);
+    return this.timeTaskItems(node.tasks, base);
+  }
+
+  private getTimeUnknownChildren(base: string): LatticeTreeItem[] {
+    const view = this.timeView();
+    const isActive = base.split('/')[1] === 'active';
+    const tasks = isActive ? (view.active?.unknown ?? []) : view.unknown;
+    return this.timeTaskItems(tasks, base);
+  }
+
+  /** 应用「任务范围 → 过滤 → 搜索」后的可见任务集（状态/时间两种分组模式共用上游管线）。 */
+  private visibleTasks(state: ViewSearchState): { tasks: TaskRow[]; canonical?: string } {
+    const canonical = this.snapshot.canonicalProjectId(this.activeProject.currentProjectId);
     let tasks = this.snapshot.data.tasks;
     if (this.tasksScope.effective === 'project' && canonical) {
       tasks = tasks.filter((task) =>
@@ -175,6 +325,12 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
         matchesViewSearch({ fields: [task.title, task.id], ids: [task.id], state }),
       );
     }
+    return { tasks, canonical };
+  }
+
+  private computeGroups(state: ViewSearchState = this.viewSearch.get('tasks')): GroupDef[] {
+    const config = getConfig();
+    const { tasks, canonical } = this.visibleTasks(state);
 
     const groups: GroupDef[] = [];
     const pinnedIds = new Set<string>();
@@ -396,7 +552,10 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
           id: uniqueNodeId(`${base}/p:${project.id}`, seen),
           payload: { kind: 'project', projectId: project.id },
           contextValue: 'project',
-          icon: new vscode.ThemeIcon('project'),
+          icon: new vscode.ThemeIcon(
+            'project',
+            new vscode.ThemeColor(projectIconColor(project.id)),
+          ),
           description: project.id,
           command: {
             command: 'lattice.project.open',
@@ -413,24 +572,32 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
   preview(state: ViewSearchState): ViewSearchPreviewRow[] {
     const seen = new Set<string>();
     const rows: ViewSearchPreviewRow[] = [];
-    for (const group of this.computeGroups(state)) {
-      for (const task of group.tasks) {
-        if (seen.has(task.id)) continue;
-        seen.add(task.id);
-        const project = task.projects.map((p) => this.snapshot.findProject(p)).find(Boolean);
-        const { nameMatched } = viewSearchMatchFlags({
-          fields: [task.title, task.id],
-          ids: [task.id],
-          state,
-        });
-        rows.push({
-          kind: 'task',
-          id: task.id,
-          label: task.title,
-          description: [task.status, project?.name].filter(Boolean).join(' · '),
-          contentOnly: !nameMatched,
-        });
+    const pushTask = (task: TaskRow): void => {
+      if (seen.has(task.id)) return;
+      seen.add(task.id);
+      const project = task.projects.map((p) => this.snapshot.findProject(p)).find(Boolean);
+      const { nameMatched } = viewSearchMatchFlags({
+        fields: [task.title, task.id],
+        ids: [task.id],
+        state,
+      });
+      rows.push({
+        kind: 'task',
+        id: task.id,
+        label: task.title,
+        description: [task.status, project?.name].filter(Boolean).join(' · '),
+        contentOnly: !nameMatched,
+      });
+    };
+    if (this.taskGroup.mode === 'status') {
+      for (const group of this.computeGroups(state)) {
+        for (const task of group.tasks) pushTask(task);
       }
+    } else {
+      const view = this.timeView(state);
+      for (const task of view.active?.tasks ?? []) pushTask(task);
+      for (const task of view.flat) pushTask(task);
+      for (const task of view.unknown) pushTask(task);
     }
     return rows;
   }
@@ -438,24 +605,81 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
   /** 解析可 reveal 的元素（当前视图内的任务节点；不在范围内返回 null）。 */
   async resolveRevealElement(taskId: string): Promise<LatticeTreeItem | null> {
     await this.snapshot.ensure(['tasks', 'projects', 'user']);
-    const group = this.computeGroups().find((g) => g.tasks.some((task) => task.id === taskId));
-    if (!group) return null;
-    return this.itemFromId(`g/${group.id}/t:${taskId}`);
+    if (this.taskGroup.mode === 'status') {
+      const group = this.computeGroups().find((g) => g.tasks.some((task) => task.id === taskId));
+      if (!group) return null;
+      return this.itemFromId(`g/${group.id}/t:${taskId}`);
+    }
+    const view = this.timeView();
+    const task = this.snapshot.taskById(taskId);
+    if (!task) return null;
+    const basis = this.taskGroup.basis ?? 'created';
+    const levels = this.taskGroup.levels;
+    const segmentPath = (keys: string[]): string =>
+      keys.map((key, index) => `/tg:${TIME_LEVEL_SEGMENT[levels[index]]}:${key}`).join('');
+    if (view.active?.tasks.some((entry) => entry.id === taskId)) {
+      const keys = taskTimeKeys(task, basis, levels);
+      return this.itemFromId(
+        keys ? `g/active${segmentPath(keys)}/t:${taskId}` : `g/active/tg:x/t:${taskId}`,
+      );
+    }
+    if (view.flat.some((entry) => entry.id === taskId)) {
+      const keys = taskTimeKeys(task, basis, levels);
+      if (!keys) return null;
+      return this.itemFromId(`g${segmentPath(keys)}/t:${taskId}`);
+    }
+    if (view.unknown.some((entry) => entry.id === taskId)) {
+      return this.itemFromId(`g/tg:x/t:${taskId}`);
+    }
+    return null;
   }
 
   /** 由路径式 id 重建节点（仅用于 reveal 的父链/目标解析；label 无需与树中一致）。 */
   private itemFromId(id: string): LatticeTreeItem | null {
     const segments = id.split('/');
     if (segments[0] !== 'g' || !segments[1]) return null;
-    const groupId = segments[1];
-    let payload: LatticeItemPayload = { kind: 'group', groupId };
-    let label = groupId;
+    const parseTimeSegment = (
+      seg: string,
+    ): { level: 'year' | 'month' | 'day'; key: string } | undefined => {
+      const match = /^tg:([ymd]):(.+)$/.exec(seg);
+      if (!match) return undefined;
+      return { level: TIME_LEVEL_BY_SEGMENT[match[1]], key: match[2] };
+    };
+
+    let payload: LatticeItemPayload = { kind: 'group', groupId: segments[1] };
+    let label = segments[1];
     let contextValue = 'group';
     let collapsible = vscode.TreeItemCollapsibleState.Collapsed;
     let currentTaskId = '';
 
+    if (segments[1] !== 'active') {
+      if (segments[1] === 'tg:x') {
+        payload = { kind: 'timeUnknown' };
+        label = 'unknown';
+      } else {
+        const parsed = parseTimeSegment(segments[1]);
+        if (parsed) {
+          payload = { kind: 'timeGroup', level: parsed.level, key: parsed.key };
+          label = parsed.key;
+        }
+      }
+    }
+
     for (let i = 2; i < segments.length; i += 1) {
       const seg = segments[i].replace(/~\d+$/, '');
+      if (seg === 'tg:x') {
+        payload = { kind: 'timeUnknown' };
+        label = 'unknown';
+        contextValue = 'group';
+        continue;
+      }
+      const parsedTime = parseTimeSegment(seg);
+      if (parsedTime) {
+        payload = { kind: 'timeGroup', level: parsedTime.level, key: parsedTime.key };
+        label = parsedTime.key;
+        contextValue = 'group';
+        continue;
+      }
       if (seg.startsWith('t:')) {
         currentTaskId = seg.slice(2);
         payload = { kind: 'task', taskId: currentTaskId };

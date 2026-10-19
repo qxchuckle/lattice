@@ -16,6 +16,7 @@ import {
   registerProjectWithIds,
   updateProjectPaths,
   updateProjectMeta,
+  updateProjectGroups,
   findProjectByAnyId,
   getProjectMeta,
   getProjectMetaById,
@@ -27,6 +28,8 @@ import {
   fileExists,
   readJSON,
   writeJSON,
+  readGroupRegistry,
+  groupPathOf,
   type ProjectMeta,
   type FingerprintDerived,
   detectAndLinkNestedIn,
@@ -56,7 +59,7 @@ export function registerLinkCommand(program: Command): void {
     .description('将当前项目注册到 Lattice（基于 git 指纹 + lattice.json）')
     .option('--name <name>', '手动指定项目名称')
     .option('--description <desc>', '项目描述')
-    .option('--groups <groups>', '项目分组（逗号分隔）')
+    .option('--groups <groups>', '项目分组路径（逗号分隔，如 a/b；缺失自动创建）')
     .option('--tags <tags>', '标签（逗号分隔）')
     .option('--template <templates>', '应用 spec 模板（逗号分隔，或使用 all）')
     .option('--restore <id>', '绑定到已有项目 ID（用于 git 历史不同但确认为同一项目的场景）')
@@ -68,7 +71,10 @@ export function registerLinkCommand(program: Command): void {
       try {
         const cwd = process.cwd();
         const groups = opts.groups
-          ? (opts.groups as string).split(',').map((s: string) => s.trim())
+          ? (opts.groups as string)
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean)
           : undefined;
         const tags = opts.tags
           ? (opts.tags as string).split(',').map((s: string) => s.trim())
@@ -132,14 +138,14 @@ export function registerLinkCommand(program: Command): void {
               await ensureLatticeJson(cwd, legacyId);
             }
 
-            if (opts.name || opts.description || groups || tags) {
+            if (opts.name || opts.description || tags) {
               await updateProjectMeta(username, existing.id, {
                 ...(opts.name ? { name: opts.name } : {}),
                 ...(opts.description ? { description: opts.description } : {}),
-                ...(groups ? { groups } : {}),
                 ...(tags ? { tags } : {}),
               });
             }
+            await applyProjectGroups(username, existing.id, groups);
 
             await applyTemplatesIfRequested(username, existing.id, opts.template);
             const parentRelations = await detectAndLinkNestedIn(username, existing.id, cwd);
@@ -173,16 +179,20 @@ export function registerLinkCommand(program: Command): void {
 
           // 应用元数据更新
           let finalMeta = newMeta;
-          if (opts.name || opts.description || groups || tags) {
+          if (opts.name || opts.description || tags) {
             const primaryId = selectPrimaryId(newMeta.ids) ?? newMeta.ids[0];
             finalMeta =
               (await updateProjectMeta(username, primaryId, {
                 ...(opts.name ? { name: opts.name } : {}),
                 ...(opts.description ? { description: opts.description } : {}),
-                ...(groups ? { groups } : {}),
                 ...(tags ? { tags } : {}),
               })) ?? newMeta;
           }
+          await applyProjectGroups(
+            username,
+            selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0],
+            groups,
+          );
 
           await applyTemplatesIfRequested(
             username,
@@ -218,16 +228,20 @@ export function registerLinkCommand(program: Command): void {
 
         // 应用元数据更新
         let finalMeta = newMeta;
-        if (opts.name || opts.description || groups || tags) {
+        if (opts.name || opts.description || tags) {
           const primaryId = selectPrimaryId(newMeta.ids) ?? newMeta.ids[0];
           finalMeta =
             (await updateProjectMeta(username, primaryId, {
               ...(opts.name ? { name: opts.name } : {}),
               ...(opts.description ? { description: opts.description } : {}),
-              ...(groups ? { groups } : {}),
               ...(tags ? { tags } : {}),
             })) ?? newMeta;
         }
+        await applyProjectGroups(
+          username,
+          selectPrimaryId(finalMeta.ids) ?? finalMeta.ids[0],
+          groups,
+        );
 
         await applyTemplatesIfRequested(
           username,
@@ -253,6 +267,23 @@ export function registerLinkCommand(program: Command): void {
 }
 
 // ── --restore 分支 ──
+
+/** `--groups` 走注册表路径语义（缺失自动创建；与 `project update --groups` 一致）。 */
+async function applyProjectGroups(
+  username: string,
+  projectId: string,
+  groups: string[] | undefined,
+): Promise<void> {
+  if (!groups) return;
+  const result = await updateProjectGroups(username, projectId, { set: groups });
+  if (result.error) {
+    logger.raw(chalk.yellow(`分组设置失败：${result.error}`));
+  } else if (result.created.length > 0) {
+    const registry = await readGroupRegistry(username);
+    const paths = result.created.map((node) => groupPathOf(registry.groups, node.id) ?? node.name);
+    logger.raw(chalk.dim(`  已创建分组：${paths.join(', ')}`));
+  }
+}
 
 async function handleRestore(
   restoreId: string,
@@ -296,14 +327,14 @@ async function handleRestore(
   }
 
   // 应用元数据更新
-  if (opts.name || opts.description || groups || tags) {
+  if (opts.name || opts.description || tags) {
     await updateProjectMeta(username, target.id, {
       ...(opts.name ? { name: opts.name } : {}),
       ...(opts.description ? { description: opts.description } : {}),
-      ...(groups ? { groups } : {}),
       ...(tags ? { tags } : {}),
     });
   }
+  await applyProjectGroups(username, target.id, groups);
 
   await applyTemplatesIfRequested(username, target.id, opts.template);
   const parentRelations = await detectAndLinkNestedIn(username, target.id, cwd);

@@ -53,13 +53,22 @@ export function parseListValue(value: string | null | undefined): string[] {
   ];
 }
 
+/** 分组过滤为子树语义：选「工作」覆盖 工作/** 全部后代（与 core/CLI 一致）。 */
+export function groupSubtreeMatch(target: string, candidate: string): boolean {
+  return candidate === target || candidate.startsWith(`${target}/`);
+}
+
 export function projectMatchesFilter(
   project: Pick<ProjectRow, 'groups' | 'tags'>,
   filter: ProjectFilterState,
 ): boolean {
   if (filter.groups.length > 0) {
     const groups = parseListValue(project.groups);
-    if (!groups.some((group) => filter.groups.includes(group))) return false;
+    if (
+      !groups.some((group) => filter.groups.some((selected) => groupSubtreeMatch(selected, group)))
+    ) {
+      return false;
+    }
   }
   if (filter.tags.length > 0) {
     const tags = parseListValue(project.tags);

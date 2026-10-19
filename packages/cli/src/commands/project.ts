@@ -11,6 +11,23 @@ import {
   parseProjectRow,
   getProjectMeta,
   updateProjectMeta,
+  updateProjectGroups,
+  readGroupRegistry,
+  writeGroupRegistry,
+  ensureGroupPathInRegistry,
+  findGroupByRef,
+  groupPathOf,
+  buildGroupTree,
+  ancestorOrSelfIds,
+  collectSubtreeIds,
+  resolveGroupPathsForIds,
+  listProjectMetas,
+  renameGroupNode,
+  moveGroupNode,
+  removeProjectGroupTree,
+  listProjectsReferencingGroupSubtree,
+  refreshProjectGroupPaths,
+  parseGroupPathListInput,
   unregisterProject,
   initDb,
   closeDb,
@@ -93,6 +110,8 @@ function projectRowForJson(
     gitRemotes: rowGitRemotes(row),
     packageNames: parseJsonArray(row.package_names),
     monorepoPackages: parseJsonArray(row.monorepo_packages),
+    // 分组解析路径（row.groups 为 JSON 数组字符串；L1 去重层同值时只留 groupPaths）
+    ...(row.groups ? { groupPaths: parseJsonArray(row.groups) } : {}),
     ...extra,
   };
 }
@@ -307,12 +326,17 @@ export function registerProjectCommand(program: Command): void {
         const meta = await getProjectMeta(username, id);
         const relations = await getRelationsByProject(username, id);
         const taskIds = getTasksForProject(id);
+        // 分组解析路径（meta.groupIds → 注册表完整路径）
+        const groupPaths =
+          meta?.groupIds && meta.groupIds.length > 0
+            ? resolveGroupPathsForIds(await readGroupRegistry(username), meta.groupIds)
+            : [];
 
         closeDb();
 
         if (opts.json) {
           // detail 命令：只做 L1 去重复表示（如 `meta.ids` 与 `meta.id` 同值时删），保留完整精度
-          outputJson(dedupeItem({ meta, relations, taskIds }), opts.jsonFormat);
+          outputJson(dedupeItem({ meta, relations, taskIds, groupPaths }), opts.jsonFormat);
           return;
         }
 
@@ -353,7 +377,9 @@ export function registerProjectCommand(program: Command): void {
         if (meta.monorepoPackages?.length) {
           logger.raw(`  Monorepo 包：${meta.monorepoPackages.length} 个`);
         }
-        if (meta.groups?.length) logger.raw(`  分组：${meta.groups.join(', ')}`);
+        if (meta.groupIds?.length && groupPaths.length > 0) {
+          logger.raw(`  分组：${groupPaths.join(', ')}`);
+        }
         if (meta.tags?.length) logger.raw(`  标签：${meta.tags.join(', ')}`);
         logger.raw(`  创建：${meta.created}`);
         if (meta.updated) logger.raw(`  更新：${meta.updated}`);
@@ -375,7 +401,12 @@ export function registerProjectCommand(program: Command): void {
     .description('更新项目元数据')
     .option('--name <name>', '项目名称')
     .option('--description <desc>', '项目描述')
-    .option('--groups <groups>', '项目分组（逗号分隔）')
+    .option(
+      '--groups <groups>',
+      '项目分组（逗号分隔路径，如 工作/前端；整组替换，缺失路径自动创建）',
+    )
+    .option('--add-groups <groups>', '增量添加分组（逗号分隔路径，缺失路径自动创建）')
+    .option('--remove-groups <groups>', '移除分组（逗号分隔路径或 grp- id）')
     .option('--tags <tags>', '标签（逗号分隔）')
     .action(async (id: string, opts) => {
       try {
@@ -392,18 +423,320 @@ export function registerProjectCommand(program: Command): void {
         const updates: Record<string, unknown> = {};
         if (opts.name) updates.name = opts.name;
         if (opts.description) updates.description = opts.description;
-        if (opts.groups)
-          updates.groups = (opts.groups as string).split(',').map((s: string) => s.trim());
         if (opts.tags) updates.tags = (opts.tags as string).split(',').map((s: string) => s.trim());
 
-        const updated = await updateProjectMeta(username, match.id, updates);
+        const groupOptions: { set?: string[]; add?: string[]; remove?: string[] } = {};
+        if (opts.groups !== undefined) groupOptions.set = parseGroupPathListInput(opts.groups);
+        if (opts.addGroups !== undefined)
+          groupOptions.add = parseGroupPathListInput(opts.addGroups);
+        if (opts.removeGroups !== undefined) {
+          groupOptions.remove = (opts.removeGroups as string)
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
+
+        let updated = await updateProjectMeta(username, match.id, updates);
+        let groupResult: Awaited<ReturnType<typeof updateProjectGroups>> | null = null;
+        if (
+          groupOptions.set !== undefined ||
+          groupOptions.add !== undefined ||
+          groupOptions.remove !== undefined
+        ) {
+          groupResult = await updateProjectGroups(username, match.id, groupOptions);
+          if (groupResult.meta) updated = groupResult.meta;
+        }
+
+        const createdPaths =
+          groupResult && groupResult.created.length > 0
+            ? resolveGroupPathsForIds(
+                await readGroupRegistry(username),
+                groupResult.created.map((node) => node.id),
+              )
+            : [];
         closeDb();
 
         if (updated) {
           logger.raw(chalk.green(`✓ 项目 ${updated.name} 已更新`));
+          if (createdPaths.length > 0) {
+            logger.raw(chalk.dim(`＋ 已新建分组：${createdPaths.join('、')}`));
+          }
+          if (groupResult?.unknownRemovals.length) {
+            logger.raw(chalk.yellow(`⚠ 未找到分组：${groupResult.unknownRemovals.join('、')}`));
+          }
         } else {
           logger.raw(chalk.yellow('更新失败'));
         }
+      } catch (err) {
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  // ─── group（项目分组注册表） ───
+  const groupCmd = cmd
+    .command('group')
+    .description('管理项目分组（多层级注册表 project-groups.json）');
+
+  groupCmd
+    .command('list')
+    .description('列出分组树（含每个分组的项目数）')
+    .action(async (opts) => {
+      try {
+        const username = await getUsername();
+        const registry = await readGroupRegistry(username);
+        const metas = await listProjectMetas(username);
+        const known = new Set(registry.groups.map((n) => n.id));
+        const counts = new Map<string, number>();
+        let ungrouped = 0;
+        for (const meta of metas) {
+          const ids = (meta.groupIds ?? []).filter((id) => known.has(id));
+          if (ids.length === 0) {
+            ungrouped++;
+            continue;
+          }
+          const touched = new Set<string>();
+          for (const id of ids) {
+            for (const ancestorId of ancestorOrSelfIds(registry.groups, id)) {
+              touched.add(ancestorId);
+            }
+          }
+          for (const nodeId of touched) counts.set(nodeId, (counts.get(nodeId) ?? 0) + 1);
+        }
+
+        const tree = buildGroupTree(registry.groups);
+        if (opts.json) {
+          const toJson = (items: typeof tree): unknown[] =>
+            items.map((item) => ({
+              id: item.node.id,
+              path: item.path,
+              count: counts.get(item.node.id) ?? 0,
+              children: item.children.length > 0 ? toJson(item.children) : [],
+            }));
+          outputJson(
+            { total: registry.groups.length, ungrouped, tree: toJson(tree) },
+            opts.jsonFormat,
+          );
+          return;
+        }
+
+        if (registry.groups.length === 0) {
+          logger.raw(
+            chalk.dim(
+              '（暂无分组；用 ltc project group create <路径> 或 update --add-groups 创建）',
+            ),
+          );
+        } else {
+          const render = (items: typeof tree, depth: number): void => {
+            for (const item of items) {
+              logger.raw(
+                `${'  '.repeat(depth)}${chalk.bold(item.node.name)} ${chalk.dim(
+                  `(${counts.get(item.node.id) ?? 0})`,
+                )} ${chalk.dim(item.node.id)}`,
+              );
+              render(item.children, depth + 1);
+            }
+          };
+          render(tree, 0);
+        }
+        logger.raw(chalk.dim(`共 ${registry.groups.length} 个分组；未分组项目 ${ungrouped} 个`));
+      } catch (err) {
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  groupCmd
+    .command('create <paths...>')
+    .description('创建分组（支持 a/b/c 路径；自动补父级，重复创建幂等）')
+    .action(async (paths: string[]) => {
+      try {
+        const username = await getUsername();
+        const registry = await readGroupRegistry(username);
+        const createdIds: string[] = [];
+        const existed: string[] = [];
+        for (const pathInput of paths) {
+          const result = ensureGroupPathInRegistry(registry, pathInput);
+          if (!result.ok) {
+            logger.raw(chalk.yellow(`忽略空路径：${pathInput}`));
+            continue;
+          }
+          if (result.created.length > 0) createdIds.push(...result.created.map((n) => n.id));
+          else existed.push(pathInput);
+        }
+        if (createdIds.length > 0) {
+          await writeGroupRegistry(username, registry);
+          const createdPaths = createdIds.map((id) => groupPathOf(registry.groups, id) ?? id);
+          logger.raw(chalk.green(`✓ 已创建分组：${createdPaths.join('、')}`));
+        }
+        if (existed.length > 0) {
+          logger.raw(chalk.dim(`已存在：${existed.join('、')}`));
+        }
+        if (createdIds.length === 0 && existed.length === 0) {
+          logger.raw(chalk.yellow('未创建任何分组'));
+        }
+      } catch (err) {
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  groupCmd
+    .command('rename <ref> <newName>')
+    .description('重命名分组（ref 为路径或 grp- id；仅改末级名称）')
+    .action(async (ref: string, newName: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const registry = await readGroupRegistry(username);
+        const node = findGroupByRef(registry, ref);
+        if (!node) {
+          logger.raw(chalk.yellow(`未找到分组：${ref}`));
+          closeDb();
+          return;
+        }
+        const oldPath = groupPathOf(registry.groups, node.id) ?? node.name;
+        const affected = await listProjectsReferencingGroupSubtree(username, node.id);
+        if (!shouldSkipConfirm(opts)) {
+          const ok = await confirm({
+            message: `重命名分组「${oldPath}」→「${newName.trim()}」？将更新 ${affected.length} 个项目的展示路径`,
+            default: true,
+          });
+          if (!ok) {
+            logger.raw(chalk.yellow('已取消'));
+            closeDb();
+            return;
+          }
+        }
+        const result = await renameGroupNode(username, node.id, newName);
+        if ('error' in result) {
+          logger.raw(chalk.yellow(result.error));
+          closeDb();
+          return;
+        }
+        await refreshProjectGroupPaths(username, affected);
+        const after = await readGroupRegistry(username);
+        closeDb();
+        logger.raw(
+          chalk.green(
+            `✓ 已重命名：${groupPathOf(after.groups, node.id) ?? newName.trim()}（影响 ${affected.length} 个项目）`,
+          ),
+        );
+      } catch (err) {
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  groupCmd
+    .command('move <ref> [newParent]')
+    .description('移动分组（newParent 为路径或 grp- id；--root 移到根级）')
+    .option('--root', '移动到根级')
+    .action(async (ref: string, newParent: string | undefined, opts) => {
+      try {
+        if (opts.root && newParent) {
+          logger.raw(chalk.yellow('--root 与 newParent 不能同时指定'));
+          return;
+        }
+        if (!opts.root && !newParent) {
+          logger.raw(chalk.yellow('请指定目标父分组，或使用 --root 移动到根级'));
+          return;
+        }
+        const username = await getUsername();
+        await initDb();
+        const registry = await readGroupRegistry(username);
+        const node = findGroupByRef(registry, ref);
+        if (!node) {
+          logger.raw(chalk.yellow(`未找到分组：${ref}`));
+          closeDb();
+          return;
+        }
+        let parentId: string | null = null;
+        if (!opts.root && newParent) {
+          const parent = findGroupByRef(registry, newParent);
+          if (!parent) {
+            logger.raw(chalk.yellow(`未找到目标父分组：${newParent}`));
+            closeDb();
+            return;
+          }
+          parentId = parent.id;
+        }
+        const oldPath = groupPathOf(registry.groups, node.id) ?? node.name;
+        const affected = await listProjectsReferencingGroupSubtree(username, node.id);
+        const targetPath = parentId
+          ? (groupPathOf(registry.groups, parentId) ?? newParent)
+          : '(根级)';
+        if (!shouldSkipConfirm(opts)) {
+          const ok = await confirm({
+            message: `移动分组「${oldPath}」→「${targetPath}」？将更新 ${affected.length} 个项目的展示路径`,
+            default: true,
+          });
+          if (!ok) {
+            logger.raw(chalk.yellow('已取消'));
+            closeDb();
+            return;
+          }
+        }
+        const result = await moveGroupNode(username, node.id, parentId);
+        if ('error' in result) {
+          logger.raw(chalk.yellow(result.error));
+          closeDb();
+          return;
+        }
+        await refreshProjectGroupPaths(username, affected);
+        const after = await readGroupRegistry(username);
+        closeDb();
+        logger.raw(
+          chalk.green(
+            `✓ 已移动：${groupPathOf(after.groups, node.id) ?? ref}（影响 ${affected.length} 个项目）`,
+          ),
+        );
+      } catch (err) {
+        logger.stderr(chalk.red('错误：'), (err as Error).message);
+        process.exitCode = 1;
+      }
+    });
+
+  groupCmd
+    .command('remove <ref>')
+    .alias('rm')
+    .description('删除分组及其子分组，并从引用项目中剥离（ref 为路径或 grp- id）')
+    .action(async (ref: string, opts) => {
+      try {
+        const username = await getUsername();
+        await initDb();
+        const registry = await readGroupRegistry(username);
+        const node = findGroupByRef(registry, ref);
+        if (!node) {
+          logger.raw(chalk.yellow(`未找到分组：${ref}`));
+          closeDb();
+          return;
+        }
+        const path = groupPathOf(registry.groups, node.id) ?? node.name;
+        const subtree = collectSubtreeIds(registry.groups, node.id);
+        const affected = await listProjectsReferencingGroupSubtree(username, node.id);
+        if (!shouldSkipConfirm(opts)) {
+          const ok = await confirm({
+            message: `删除分组「${path}」及其 ${subtree.size - 1} 个子分组？将从 ${affected.length} 个项目移除这些分组引用`,
+            default: false,
+          });
+          if (!ok) {
+            logger.raw(chalk.yellow('已取消'));
+            closeDb();
+            return;
+          }
+        }
+        const result = await removeProjectGroupTree(username, ref);
+        closeDb();
+        if (result.error) {
+          logger.raw(chalk.yellow(result.error));
+          return;
+        }
+        logger.raw(
+          chalk.green(
+            `✓ 已删除 ${result.removed.length} 个分组节点；从 ${result.affectedProjectIds.length} 个项目剥离引用`,
+          ),
+        );
       } catch (err) {
         logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;

@@ -5,6 +5,47 @@ All notable changes to the Lattice VS Code extension are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-10-19
+
+### Changed
+
+- **Colored project icons**: every project node now gets a stable color from the theme chart palette (blue / green / orange / purple / red / yellow, hashed from the project id — the same project keeps the same color across sessions and across views). Applies to the Projects view (flat and grouped), the "related projects" rows in the Tasks view and the project groups in the Specs view, so project rows are easy to tell apart at a glance. Colors follow the active theme (light / dark); the "unknown project" group keeps its neutral icon.
+
+## [0.4.1] - 2026-10-19
+
+### Added
+
+- **New Spec wizard — project scope for any project**: the scope picker now always offers **Project** and, when picked, opens a **searchable project picker** (type to filter by name / package / path; the active project is pinned on top and marked as current). Creating a project-level spec no longer requires an active project.
+- **New Spec from the specs tree**: right-click a project group (project-level section), the **User** section, the **Global** section — or the Project section root (which then asks for the target project) — and choose **New Spec…** to create the spec directly in that scope.
+
+### Changed
+
+- The specs tree scope section nodes (Project / User / Global) now carry dedicated context values (`specScopeProject` / `specScopeUser` / `specScopeGlobal`) so the context menu can target them.
+
+## [0.4.0] - 2026-10-19
+
+### Added
+
+- **Project grouping (multi-level)**: projects can belong to nested groups (`工作/前端/组件库`) stored in a registry (`~/.lattice/users/<user>/project-groups.json`). The projects view title gets a **Grouping** button to switch between **flat** (default) and the **group tree**: group nodes show their project count, hold sub-groups first and their own projects after them, and an **Ungrouped** node collects projects without a group; empty sub-trees are pruned. The mode persists per workspace.
+- Group nodes carry their own actions: **New Group…** (sub-groups included), **Rename Group…**, **Move Group…**, **Remove Group…** (removes the whole sub-tree and detaches the references from every project, with an impact confirmation showing the project / sub-group counts) and **Copy Group Path**. Project nodes get **Add to Groups…** — a multi-select of the group tree plus an "add new path" entry where missing paths (and ancestors) are created automatically. The project metadata wizard edits groups with the same multi-select.
+- The project **group filter** is now **sub-tree aware**: selecting `工作` matches every project under `工作/**`.
+
+### Changed
+
+- Groups moved from the flat `groups: string[]` on projects to registry nodes referenced as `groupIds`; `ltc doctor --migrate` converts legacy data and removes the old key (idempotent, no runtime fallback). CLI gained `ltc project group list|create|rename|move|remove` plus `ltc project update --groups/--add-groups/--remove-groups` (path based, missing paths auto-created).
+
+## [0.3.1] - 2026-10-19
+
+### Changed
+
+- Project tree nodes now show the **project description** as the grey subtitle whenever the project has one (previously the package name was always shown first, which duplicated the title for package-named projects like `@qcqx/lattice-monorepo`). When there is no description the previous fallbacks still apply (package name → relative path). The project rows of the view-search live preview follow the same rule.
+
+## [0.3.0] - 2026-10-19
+
+### Added
+
+- **Task grouping by time**: the task view title now has a **Grouping** button (also `lattice.tasks.groupBy` in the Command Palette) to switch between **Status** (default), **By Creation Time** and **By Last Updated** — the two time modes then let you pick the time levels **year / month / day** in any combination (year → month → day, month → day, flat by day, …). Absolute date labels (`2026-10-19`), newest first, the latest path expands by default, and tasks without the grouping date fall into an **Unknown Time** group. The pinned **Active Tasks** group is kept and uses the same hierarchy inside. The choice persists per workspace.
+
 ## [0.2.5] - 2026-10-19
 
 ### Fixed

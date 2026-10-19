@@ -127,6 +127,14 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
       'lattice.specs.filter',
       'lattice.projects.filter',
       'lattice.search.filter',
+      'lattice.tasks.groupBy',
+      'lattice.projects.toggleGrouping',
+      'lattice.project.assignGroup',
+      'lattice.project.group.create',
+      'lattice.project.group.rename',
+      'lattice.project.group.move',
+      'lattice.project.group.remove',
+      'lattice.project.group.copyPath',
       'lattice.tasks.clearSearch',
       'lattice.specs.clearFilter',
     ]) {
@@ -298,6 +306,25 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     assert.match(raw, /title: Wizard Created/);
     assert.match(raw, /tags:/);
     assert.match(raw, /# Wizard Created/);
+
+    // 项目级：指定 projectId（无需活动项目；交互路径为可搜索的项目选择器）
+    const projectSpec = await vscode.commands.executeCommand('lattice.spec.create', {
+      scope: 'project',
+      projectId: 'fixture-project',
+      relativePath: 'project-scoped.md',
+      title: 'Project Scoped',
+      description: 'Project scoped by the integration test.',
+      tags: '',
+      open: false,
+    });
+    // 目录名按规范 id 解析（fixture 的 lattice.json id 与 meta 目录名存在人造差异，故按形态断言）
+    assert.match(
+      String(projectSpec),
+      /[/\\]projects[/\\][^/\\]+[/\\]spec[/\\]project-scoped\.md$/,
+      `project-scoped spec path: ${projectSpec}`,
+    );
+    assert.ok(existsSync(projectSpec), 'project-scoped spec written under a project dir');
+    assert.match(readFileSync(projectSpec, 'utf8'), /title: Project Scoped/);
 
     // 非法相对路径（路径穿越）→ 拒绝且不落盘
     const rejected = await vscode.commands.executeCommand('lattice.spec.create', {
@@ -825,6 +852,93 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     assert.ok(toggled === 'project' || toggled === 'all', `toggle result: ${toggled}`);
     const back = await vscode.commands.executeCommand('lattice.tasks.toggleScope');
     assert.notEqual(back, toggled);
+  });
+
+  test('task grouping switches to time groups and keeps reveal working (programmatic)', async () => {
+    const revealTask = () =>
+      vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'task',
+        id: 'demo-task-1',
+      });
+
+    // 月→日（创建时间基准）
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.tasks.groupBy', {
+        mode: 'created',
+        levels: ['month', 'day'],
+      }),
+      { mode: 'created', levels: ['month', 'day'] },
+    );
+    assert.equal(await revealTask(), true, 'task revealable under month/day grouping');
+
+    // 年/月/日三级 + 更新时间基准
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.tasks.groupBy', {
+        mode: 'updated',
+        levels: ['year', 'month', 'day'],
+      }),
+      { mode: 'updated', levels: ['year', 'month', 'day'] },
+    );
+    assert.equal(await revealTask(), true, 'task revealable under year/month/day grouping');
+
+    // 空层级回退默认（月+日）
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.tasks.groupBy', {
+        mode: 'created',
+        levels: [],
+      }),
+      { mode: 'created', levels: ['month', 'day'] },
+    );
+
+    // 恢复状态模式（避免污染后续用例）
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.tasks.groupBy', {
+        mode: 'status',
+        levels: ['month', 'day'],
+      }),
+      { mode: 'status', levels: ['month', 'day'] },
+    );
+    assert.equal(await revealTask(), true, 'task revealable back in status grouping');
+  });
+
+  test('project grouping: assign groups, toggle grouped mode and keep reveal working', async () => {
+    const revealProject = () =>
+      vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'project',
+        id: 'fixture-project',
+      });
+
+    // 赋组（程序化分支；缺失路径自动创建，含祖先）
+    const assigned = await vscode.commands.executeCommand('lattice.project.assignGroup', {
+      projectId: 'fixture-project',
+      set: ['工作/前端'],
+    });
+    assert.ok(assigned, 'assignGroup returns a result');
+    assert.deepEqual(
+      [...assigned.createdPaths].sort(),
+      ['工作', '工作/前端'],
+      'ancestors auto-created',
+    );
+
+    // 平铺 → 分组 → 平铺：模式值可程序化设置 + reveal 链路可用
+    assert.equal(
+      await vscode.commands.executeCommand('lattice.projects.toggleGrouping', {
+        mode: 'groups',
+      }),
+      'groups',
+    );
+    assert.equal(await revealProject(), true, 'project revealable under grouped tree');
+    assert.equal(
+      await vscode.commands.executeCommand('lattice.projects.toggleGrouping', { mode: 'flat' }),
+      'flat',
+    );
+    assert.equal(await revealProject(), true, 'project revealable back in flat mode');
+
+    // 清理：清空分组引用（分组节点保留，空分组在视图中被剪枝）
+    await vscode.commands.executeCommand('lattice.project.assignGroup', {
+      projectId: 'fixture-project',
+      set: [],
+    });
   });
 
   test('workspace bootstrap initializes a fresh home in-process (no CLI)', async () => {

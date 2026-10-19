@@ -23,6 +23,8 @@ import { getRelationsByProject } from '../project/relation';
 import { findSameProjectInOtherUsers } from '../project/cross-user';
 import { getRelatedProjectIds } from '../project/virtual-merge';
 import { selectPrimaryId } from '../project/identity';
+import { readGroupRegistry, resolveGroupPathsForIds } from '../project/group-registry';
+import { nearestSharedAncestorPath } from '../project/group-tree';
 import { getTasksForProject } from '../db';
 import { semanticSearch } from '../rag';
 import { readProfileSummary, readProfileTags } from '../project/profile';
@@ -260,16 +262,19 @@ export async function getContextForProject(
     // relations.json 未初始化
   }
 
-  // 同组项目
+  // 同组项目（分组路径共享任一祖先）
   const projectMeta = await getVirtualProjectMeta(username, normalizedProjectId);
-  if (projectMeta?.groups?.length) {
+  const myGroupIds = projectMeta?.groupIds ?? [];
+  if (myGroupIds.length > 0) {
+    const registry = await readGroupRegistry(username);
+    const myPaths = resolveGroupPathsForIds(registry, myGroupIds);
     const allProjects = listProjects(username);
     for (const p of allProjects) {
       if (p.id === normalizedProjectId) continue;
       if (relatedMap.has(p.id)) continue;
-      const groups = p.groups ? JSON.parse(p.groups) : [];
-      const shared = projectMeta.groups.filter((g) => groups.includes(g));
-      if (shared.length > 0) {
+      const otherPaths: string[] = p.groups ? JSON.parse(p.groups) : [];
+      const shared = nearestSharedAncestorPath(myPaths, otherPaths);
+      if (shared) {
         relatedProjects.push({
           id: p.id,
           name: p.name,
@@ -277,7 +282,7 @@ export async function getContextForProject(
             {
               relId: '',
               type: 'same-group',
-              description: `同组：${shared.join(', ')}`,
+              description: `同组：${shared}`,
             },
           ],
         });
@@ -348,22 +353,24 @@ export async function getSmartContext(
 
     for (const pid of task.projects) {
       const meta = await getVirtualProjectMeta(username, pid);
-      if (meta?.groups) {
-        for (const g of meta.groups) groupSet.add(g);
+      if (meta?.groupIds) {
+        for (const groupId of meta.groupIds) groupSet.add(groupId);
       }
     }
   }
 
-  // 收集同组项目的 spec
+  // 收集同组项目的 spec（分组路径共享任一祖先）
   const relatedSpecs: ParsedSpec[] = [];
   if (groupSet.size > 0) {
+    const registry = await readGroupRegistry(username);
+    const myPaths = resolveGroupPathsForIds(registry, [...groupSet]);
     const directIds = new Set(task.projects ?? []);
     const allProjects = listProjects(username);
     const relatedIds = allProjects
       .filter((p) => {
         if (directIds.has(p.id)) return false;
-        const groups = p.groups ? JSON.parse(p.groups) : [];
-        return groups.some((g: string) => groupSet.has(g));
+        const otherPaths: string[] = p.groups ? JSON.parse(p.groups) : [];
+        return nearestSharedAncestorPath(myPaths, otherPaths) !== null;
       })
       .map((p) => p.id);
 

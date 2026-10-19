@@ -2,7 +2,10 @@ import * as vscode from 'vscode';
 import { homedir } from 'node:os';
 import { ProjectRow } from '../cli/types';
 import { getLatticeRoot } from '../config';
+import type { ProjectGroupTree } from '@qcqx/lattice-services';
+import type { LatticeDataService } from '../data/service';
 import { ActiveProjectService } from '../state/active-project';
+import { ProjectsGroupingService } from '../state/projects-grouping';
 import { SnapshotStore } from '../state/snapshot';
 import { projectProfilePath } from '../util/lattice-files';
 import { fileExists } from '../util/paths';
@@ -16,6 +19,7 @@ import {
   tooltipMarkdown,
   RELATION_TYPE_LABELS,
 } from './items';
+import { projectIconColor } from './project-icon';
 import { buildTaskItem } from './task-item';
 import { ActiveTaskService } from '../state/active-task';
 import { ViewSearchService } from '../state/view-search';
@@ -28,11 +32,19 @@ import {
   type ViewSearchState,
 } from './view-search-logic';
 import { projectMatchesFilter, type ProjectFilterState } from './filter-logic';
+import {
+  findProjectGroupChain,
+  placeProjectsInGroupTree,
+  type GroupTreeNodeLike,
+  type PlacedGroupNode,
+} from './project-group-logic';
 
 /**
  * 节点 id 约定（路径式，每段一个节点；父 id = 去掉最后一段）：
  *   g/project-single:<id> · g/projects-all          根分组
  *   <group>/p:<projectId>                           项目节点
+ *   g/projects-all/pg:<groupId>[/pg:…]…/p:<projectId>  分组模式：分组节点链 + 项目节点
+ *   g/projects-all/pa/p:<projectId>                 分组模式：未分组
  *   <project>/project-specs:<id> | …-tasks: | …-relations:   项目子分组
  *   <子分组>/s:<specId> · /t:<taskId> · /r:<relationId>      叶子
  */
@@ -49,6 +61,7 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
   readonly onDidChangeTreeData = this.emitter.event;
   private disposables: vscode.Disposable[] = [];
   private profileCache = new Map<string, boolean>();
+  private groupTreeCache: ProjectGroupTree | null = null;
 
   constructor(
     private readonly snapshot: SnapshotStore,
@@ -56,6 +69,8 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     private readonly activeTask: ActiveTaskService,
     private readonly viewSearch: ViewSearchService,
     private readonly viewFilter: ViewFilterService,
+    private readonly data: LatticeDataService,
+    private readonly grouping: ProjectsGroupingService,
   ) {
     this.disposables.push(
       snapshot.onDidChange((sections) => {
@@ -63,6 +78,7 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
           sections.some((s) => s === 'projects' || s === 'tasks' || s === 'specs' || s === 'user')
         ) {
           this.profileCache.clear();
+          this.groupTreeCache = null;
           this.refresh();
         }
       }),
@@ -73,6 +89,7 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
       viewFilter.onDidChange((target) => {
         if (target === 'projects') this.refresh();
       }),
+      grouping.onDidChange(() => this.refresh()),
     );
   }
 
@@ -100,6 +117,10 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     const base = element.id ?? '';
     if (payload.kind === 'group') return this.getGroupChildren(payload.groupId, base);
     if (payload.kind === 'project') return this.getProjectChildren(payload.projectId, base);
+    if (payload.kind === 'projectGroup') {
+      return this.getGroupChildren(`project-group:${payload.groupId}`, base);
+    }
+    if (payload.kind === 'projectGroupUngrouped') return this.getUngroupedChildren(base);
     return [];
   }
 
@@ -168,9 +189,13 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
       return [await this.buildProjectItem(project, base)];
     }
     if (groupId === 'projects-all') {
+      if (this.grouping.current === 'groups') return this.getGroupedAllChildren(base);
       return Promise.all(
         this.filteredProjects().map((project) => this.buildProjectItem(project, base)),
       );
+    }
+    if (groupId.startsWith('project-group:')) {
+      return this.getProjectGroupNodeChildren(groupId.slice('project-group:'.length), base);
     }
     if (groupId.startsWith('project-specs:')) {
       const projectId = groupId.slice('project-specs:'.length);
@@ -218,6 +243,113 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     return [];
   }
 
+  // ── 分组模式（注册表树 + 项目摆放） ──
+
+  private async getGroupTree(): Promise<ProjectGroupTree> {
+    if (!this.groupTreeCache) this.groupTreeCache = await this.data.projectGroupTree();
+    return this.groupTreeCache;
+  }
+
+  /** services 树（{node, path, children}）→ 摆放纯逻辑的节点形状。 */
+  private toGroupTreeNodes(items: ProjectGroupTree['roots']): GroupTreeNodeLike[] {
+    return items.map((item) => ({
+      id: item.node.id,
+      path: item.path,
+      children: this.toGroupTreeNodes(item.children),
+    }));
+  }
+
+  /** 分组模式：「全部项目」下 = 分组树根 + 末置「未分组」。 */
+  private async getGroupedAllChildren(base: string): Promise<LatticeTreeItem[]> {
+    const tree = await this.getGroupTree();
+    const placed = placeProjectsInGroupTree(
+      this.toGroupTreeNodes(tree.roots),
+      this.filteredProjects(),
+    );
+    const items: LatticeTreeItem[] = placed.roots.map((node) =>
+      this.buildGroupNodeItem(node, base),
+    );
+    if (placed.ungrouped.length > 0) {
+      items.push(this.buildUngroupedNodeItem(placed.ungrouped.length, `${base}/pa`));
+    }
+    return items;
+  }
+
+  /** 分组节点子级：子分组节点（先）+ 直接挂载项目（后）。 */
+  private async getProjectGroupNodeChildren(
+    nodeId: string,
+    base: string,
+  ): Promise<LatticeTreeItem[]> {
+    const tree = await this.getGroupTree();
+    const placed = placeProjectsInGroupTree(
+      this.toGroupTreeNodes(tree.roots),
+      this.filteredProjects(),
+    );
+    const find = (
+      nodes: PlacedGroupNode<ProjectRow>[],
+    ): PlacedGroupNode<ProjectRow> | undefined => {
+      for (const node of nodes) {
+        if (node.id === nodeId) return node;
+        const found = find(node.children);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const node = find(placed.roots);
+    if (!node) return [];
+    const childGroups = node.children.map((child) => this.buildGroupNodeItem(child, base));
+    const projects = await Promise.all(
+      node.projects.map((project) => this.buildProjectItem(project, base)),
+    );
+    return [...childGroups, ...projects];
+  }
+
+  /** 未分组节点子级（分组模式下）。 */
+  private async getUngroupedChildren(base: string): Promise<LatticeTreeItem[]> {
+    const tree = await this.getGroupTree();
+    const placed = placeProjectsInGroupTree(
+      this.toGroupTreeNodes(tree.roots),
+      this.filteredProjects(),
+    );
+    return Promise.all(placed.ungrouped.map((project) => this.buildProjectItem(project, base)));
+  }
+
+  private buildGroupNodeItem(node: PlacedGroupNode<ProjectRow>, base: string): LatticeTreeItem {
+    const name = node.path.split('/').pop() ?? node.path;
+    const depth = Math.max(0, node.path.split('/').length - 1);
+    const hasChildren = node.children.length > 0 || node.projects.length > 0;
+    return makeItem({
+      label: name,
+      id: `${base}/pg:${node.id}`,
+      payload: { kind: 'projectGroup', groupId: node.id, path: node.path },
+      contextValue: 'projectGroup',
+      icon: new vscode.ThemeIcon('folder'),
+      description: `(${node.count})`,
+      collapsible: hasChildren
+        ? depth === 0
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+      tooltip: tooltipMarkdown([
+        `**${node.path}**`,
+        `id: ${node.id}`,
+        t('{0} project(s)', node.count),
+      ]),
+    });
+  }
+
+  private buildUngroupedNodeItem(count: number, id: string): LatticeTreeItem {
+    return makeItem({
+      label: t('Ungrouped'),
+      id,
+      payload: { kind: 'projectGroupUngrouped' },
+      contextValue: 'projectGroupUngrouped',
+      icon: new vscode.ThemeIcon('circle-outline'),
+      description: `(${count})`,
+      collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+    });
+  }
+
   private async buildProjectItem(project: ProjectRow, base: string): Promise<LatticeTreeItem> {
     const specs = this.snapshot.projectSpecs(project.id);
     const tasks = this.snapshot.tasksForProject(project.id);
@@ -228,8 +360,9 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
       id: `${base}/p:${project.id}`,
       payload: { kind: 'project', projectId: project.id },
       contextValue: 'project',
-      icon: new vscode.ThemeIcon('project'),
-      description: project.packageNames[0] ?? tilde(project.localPaths[0]) ?? '',
+      icon: new vscode.ThemeIcon('project', new vscode.ThemeColor(projectIconColor(project.id))),
+      description:
+        project.description ?? project.packageNames[0] ?? tilde(project.localPaths[0]) ?? '',
       collapsible:
         childrenCount > 0
           ? vscode.TreeItemCollapsibleState.Collapsed
@@ -314,13 +447,14 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
         kind: 'project',
         id: project.id,
         label: project.name || project.id,
-        description: project.packageNames[0] ?? tilde(project.localPaths[0]) ?? '',
+        description:
+          project.description ?? project.packageNames[0] ?? tilde(project.localPaths[0]) ?? '',
         contentOnly: !nameMatched,
       };
     });
   }
 
-  /** 解析可 reveal 的项目节点（优先「当前项目」分组）。 */
+  /** 解析可 reveal 的项目节点（优先「当前项目」分组；分组模式按摆放链）。 */
   async resolveRevealElement(projectId: string): Promise<LatticeTreeItem | null> {
     await this.snapshot.ensure(['projects', 'tasks', 'specs', 'user']);
     const row = this.snapshot.findProject(projectId);
@@ -328,8 +462,23 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     // 搜索 / 过滤期间：被隐藏的节点不可 reveal（与树内容一致）
     if (!this.filteredProjects().some((project) => project.id === row.id)) return null;
     const current = this.snapshot.findProject(this.activeProject.currentProjectId);
-    const base = current && current.id === row.id ? `g/project-single:${row.id}` : 'g/projects-all';
-    return this.itemFromId(`${base}/p:${row.id}`);
+    if (current && current.id === row.id) {
+      return this.itemFromId(`g/project-single:${row.id}/p:${row.id}`);
+    }
+    if (this.grouping.current === 'groups') {
+      const tree = await this.getGroupTree();
+      const placed = placeProjectsInGroupTree(
+        this.toGroupTreeNodes(tree.roots),
+        this.filteredProjects(),
+      );
+      const chain = findProjectGroupChain(placed.roots, row.id);
+      if (!chain) {
+        return this.itemFromId(`g/projects-all/pa/p:${row.id}`);
+      }
+      const segments = chain.map((groupId) => `pg:${groupId}`).join('/');
+      return this.itemFromId(`g/projects-all/${segments}/p:${row.id}`);
+    }
+    return this.itemFromId(`g/projects-all/p:${row.id}`);
   }
 
   /** 由路径式 id 重建节点（仅用于 reveal；label 无需与树中一致）。 */
@@ -359,6 +508,17 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
         payload = { kind: 'group', groupId: seg };
         label = seg;
         contextValue = 'group';
+      } else if (seg.startsWith('pg:')) {
+        const groupId = seg.slice('pg:'.length);
+        payload = { kind: 'projectGroup', groupId, path: groupId };
+        label = groupId;
+        contextValue = 'projectGroup';
+        collapsible = vscode.TreeItemCollapsibleState.Collapsed;
+      } else if (seg === 'pa') {
+        payload = { kind: 'projectGroupUngrouped' };
+        label = t('Ungrouped');
+        contextValue = 'projectGroupUngrouped';
+        collapsible = vscode.TreeItemCollapsibleState.Collapsed;
       } else if (seg.startsWith('s:')) {
         const specId = seg.slice(2);
         const row = this.snapshot.specById(specId);

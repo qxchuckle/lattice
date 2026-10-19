@@ -18,11 +18,17 @@ import {
   getProjectMeta,
   getRelatedProjectIds,
   listProjects,
+  listProjectMetas,
   normalizeProjectMeta,
   selectPrimaryId,
   syncProjectMetaToDb,
 } from '../project';
 import { deleteRelationsByProject, listRelations } from '../project/relation';
+import {
+  ensureGroupPathInRegistry,
+  readGroupRegistry,
+  writeGroupRegistry,
+} from '../project/group-registry';
 import { getTaskMeta, listTasks, updateTask } from '../task';
 import {
   dirExists,
@@ -240,6 +246,10 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
   const latticeJsonEntries = await checkLatticeJsonConsistency(projects);
   entries.push(...latticeJsonEntries);
 
+  // 5.3.1 项目分组注册表完整性（groupIds ↔ project-groups.json）
+  const groupRegistryEntries = await checkProjectGroups(username);
+  entries.push(...groupRegistryEntries);
+
   // 5.4 数据库字段漂移检测（db 记录 vs project.json 真源）
   const driftResult = await checkDbFieldDrift(username, projects, opts.fix);
   entries.push(...driftResult.entries);
@@ -319,7 +329,10 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
       status: 'repaired',
       message:
         `扫描 ${migrated.scannedDirs} 个项目目录；升级 ${migrated.upgradedMeta} 个 legacy 元数据；` +
-        `回填 ${migrated.backfilledDb} 个 db 缺失项目`,
+        `回填 ${migrated.backfilledDb} 个 db 缺失项目` +
+        (migrated.convertedGroupProjects > 0
+          ? `；转换 ${migrated.convertedGroupProjects} 个项目的旧分组为注册表引用`
+          : ''),
     });
   }
 
@@ -387,10 +400,16 @@ async function runMigrate(username: string): Promise<{
   scannedDirs: number;
   upgradedMeta: number;
   backfilledDb: number;
+  convertedGroupProjects: number;
 }> {
   let scanned = 0;
   let upgraded = 0;
   let backfilled = 0;
+
+  // 分组注册表：legacy groups（平铺名称数组）→ 注册表节点 + groupIds
+  const groupRegistry = await readGroupRegistry(username);
+  let registryChanged = false;
+  let convertedGroupProjects = 0;
 
   const projectsRoot = getUserProjectsDir(username);
   const dirEntries: string[] = await listDir(projectsRoot).catch(() => []);
@@ -425,6 +444,28 @@ async function runMigrate(username: string): Promise<{
         delete legacy.gitRemote;
         changed = true;
       }
+
+      // legacy groups（平铺名称数组）→ 注册表节点 + groupIds（幂等）
+      const legacyGroups = (meta as unknown as { groups?: unknown }).groups;
+      if (legacyGroups !== undefined) {
+        const ids = new Set(meta.groupIds ?? []);
+        let converted = false;
+        if (Array.isArray(legacyGroups)) {
+          for (const value of legacyGroups) {
+            if (typeof value !== 'string') continue;
+            const ensured = ensureGroupPathInRegistry(groupRegistry, value);
+            if (ensured.created.length > 0) registryChanged = true;
+            if (ensured.node) ids.add(ensured.node.id);
+            converted = true;
+          }
+        }
+        delete (meta as unknown as { groups?: unknown }).groups;
+        if (converted) {
+          meta.groupIds = [...ids];
+          convertedGroupProjects++;
+        }
+        changed = true;
+      }
       if (changed) {
         await writeJSON(metaPath, meta);
         upgraded++;
@@ -438,7 +479,14 @@ async function runMigrate(username: string): Promise<{
     }
   }
 
-  return { scannedDirs: scanned, upgradedMeta: upgraded, backfilledDb: backfilled };
+  if (registryChanged) await writeGroupRegistry(username, groupRegistry);
+
+  return {
+    scannedDirs: scanned,
+    upgradedMeta: upgraded,
+    backfilledDb: backfilled,
+    convertedGroupProjects,
+  };
 }
 
 // ─── scopePaths 复核 ───
@@ -565,6 +613,63 @@ async function checkDiskDbConsistency(
 }
 
 // ─── 5.2 重复项目检测 ───
+
+/** 项目分组注册表完整性：同级重名 / 孤儿父级 / 父级环 / 项目引用悬空 */
+async function checkProjectGroups(username: string): Promise<DoctorEntry[]> {
+  const registry = await readGroupRegistry(username);
+  const nodes = registry.groups;
+  const issues: string[] = [];
+
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const siblingCount = new Map<string, number>();
+  for (const n of nodes) {
+    const key = `${n.parentId ?? ''}\u0000${n.name}`;
+    siblingCount.set(key, (siblingCount.get(key) ?? 0) + 1);
+  }
+  const duplicateSiblings = [...siblingCount.values()].filter((count) => count > 1).length;
+  if (duplicateSiblings > 0) issues.push(`${duplicateSiblings} 组同级重名`);
+
+  const orphanParents = nodes.filter((n) => n.parentId && !byId.has(n.parentId)).length;
+  if (orphanParents > 0) issues.push(`${orphanParents} 个节点父级引用缺失`);
+
+  const inCycle = new Set<string>();
+  for (const node of nodes) {
+    const seen = new Set<string>();
+    let current: (typeof nodes)[number] | undefined = node;
+    while (current && current.parentId) {
+      if (seen.has(current.id)) {
+        inCycle.add(current.id);
+        break;
+      }
+      seen.add(current.id);
+      current = byId.get(current.parentId);
+    }
+  }
+  if (inCycle.size > 0) issues.push(`${inCycle.size} 个节点处于父级环`);
+
+  const metas = await listProjectMetas(username);
+  let danglingRefs = 0;
+  for (const meta of metas) {
+    for (const id of meta.groupIds ?? []) {
+      if (!byId.has(id)) danglingRefs++;
+    }
+  }
+  if (danglingRefs > 0) issues.push(`${danglingRefs} 处项目分组引用悬空`);
+
+  const healthy = issues.length === 0;
+  return [
+    {
+      item: '项目分组注册表',
+      status: healthy ? 'healthy' : 'stale',
+      message: healthy
+        ? nodes.length > 0
+          ? `${nodes.length} 个分组节点完整`
+          : '未创建分组'
+        : issues.join('；'),
+      fix: healthy ? undefined : '手动修正 project-groups.json（doctor 不自动增删分组数据）',
+    },
+  ];
+}
 
 function checkDuplicateProjects(projects: ProjectRow[]): DoctorEntry[] {
   const entries: DoctorEntry[] = [];

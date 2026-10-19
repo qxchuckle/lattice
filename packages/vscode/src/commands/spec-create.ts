@@ -12,6 +12,8 @@ import {
 } from '@qcqx/lattice-core';
 import { resolveProjectDirName } from '@qcqx/lattice-services';
 import { CommandServices, RegisterFn, showDeduped } from './shared';
+import { showEnhancedPicker } from '../pickers/enhanced';
+import { sortProjectsForSpecPick, specCreateArgsFromTreeArg } from './spec-create-logic';
 import { t } from '../t';
 
 /** 程序化参数（测试/自动化可全量传入以跳过所有交互）。 */
@@ -19,6 +21,8 @@ export interface CreateSpecArgs {
   /** 模板名；缺省或空 = 空白创建（交互模式下会询问） */
   template?: string;
   scope?: 'global' | 'user' | 'project';
+  /** 目标项目（scope = project；缺省时弹出可搜索的项目选择器） */
+  projectId?: string;
   relativePath?: string;
   title?: string;
   description?: string;
@@ -76,26 +80,18 @@ async function pickTemplate(templates: SpecTemplate[]): Promise<SpecTemplate | n
   return picked === undefined ? undefined : picked.template;
 }
 
-async function pickScope(
-  services: CommandServices,
-): Promise<'global' | 'user' | 'project' | undefined> {
-  const projectId = services.activeProject.currentProjectId;
-  const project = projectId ? services.snapshot.findProject(projectId) : undefined;
+async function pickScope(): Promise<'global' | 'user' | 'project' | undefined> {
   const items: ScopePick[] = [
     {
       scope: 'user',
       label: `$(account) ${t('User (all my projects)')}`,
       description: t('Shared across projects'),
     },
-    ...(project
-      ? [
-          {
-            scope: 'project' as const,
-            label: `$(project) ${t('Project ({0})', project.name || project.id)}`,
-            description: t('Only for the current project'),
-          },
-        ]
-      : []),
+    {
+      scope: 'project',
+      label: `$(project) ${t('Project (pick one)')}`,
+      description: t('Pick the target project (type to search)'),
+    },
     {
       scope: 'global',
       label: `$(globe) ${t('Global (all users)')}`,
@@ -106,6 +102,35 @@ async function pickScope(
     title: t('Pick a scope for the new spec'),
   });
   return picked?.scope;
+}
+
+/** 目标项目选择：输入即过滤（名称 / 包名 / 路径），当前项目置顶并标注。 */
+async function pickProjectForSpec(
+  services: CommandServices,
+  preset?: string,
+): Promise<string | undefined> {
+  await services.snapshot.ensure(['projects']);
+  const all = services.snapshot.data.projects;
+  if (all.length === 0) {
+    void showDeduped('warn', t('No projects registered yet.'));
+    return undefined;
+  }
+  const currentId = services.snapshot.canonicalProjectId(preset);
+  const items = sortProjectsForSpecPick(all, currentId).map((project) => ({
+    label: `$(project) ${project.name || project.id}`,
+    description:
+      project.id === currentId
+        ? `${project.packageNames[0] ?? project.id} · ${t('Current project')}`
+        : (project.packageNames[0] ?? project.id),
+    detail: project.localPaths[0],
+    projectId: project.id,
+  }));
+  const picked = await showEnhancedPicker(items, {
+    title: t('Pick the target project (type to search)'),
+    matchOnDescription: true,
+    matchOnDetail: true,
+  });
+  return picked?.projectId;
 }
 
 async function applyTemplate(
@@ -142,20 +167,19 @@ async function createBlankSpec(
     return undefined;
   }
 
-  // 1) scope
+  // 1) scope（项目级 → 可搜索选择目标项目，当前项目置顶）
   let scope = args.scope;
-  if (!scope) scope = await pickScope(services);
+  if (!scope) scope = await pickScope();
   if (!scope) return undefined;
 
   let dir: string;
   if (scope === 'global') {
     dir = getGlobalSpecDir();
   } else if (scope === 'project') {
-    const projectId = services.activeProject.currentProjectId;
-    if (!projectId) {
-      void showDeduped('warn', t('Project scope requires an active project.'));
-      return undefined;
-    }
+    const projectId =
+      args.projectId ??
+      (await pickProjectForSpec(services, services.activeProject.currentProjectId));
+    if (!projectId) return undefined;
     const dirName = await resolveProjectDirName(username, projectId);
     if (!dirName) {
       void showDeduped('warn', t('Project scope requires an active project.'));
@@ -253,7 +277,10 @@ async function createBlankSpec(
   return filePath;
 }
 
-/** Spec 创建向导：模板（可选）→ scope → 文件名/标题/描述/标签 → 落盘并打开。 */
+/**
+ * Spec 创建向导：模板（可选）→ scope（项目级 → 可搜索选择项目）→ 文件名/标题/描述/标签 → 落盘并打开。
+ * 规范树节点右键入口会预置 scope（及 projectId），跳过模板/作用域交互。
+ */
 export function registerSpecCreateCommands(services: CommandServices, register: RegisterFn): void {
   register('lattice.spec.create', async (arg?: unknown) => {
     const browsing = services.userScope?.browseUser;
@@ -267,7 +294,8 @@ export function registerSpecCreateCommands(services: CommandServices, register: 
       );
       return undefined;
     }
-    const args = (arg && typeof arg === 'object' ? arg : {}) as CreateSpecArgs;
+    const fromTree = specCreateArgsFromTreeArg(arg);
+    const args = (fromTree ?? (arg && typeof arg === 'object' ? arg : {})) as CreateSpecArgs;
 
     // 指定模板：直接套用（对齐 web `/api/spec-templates/apply` 语义）
     if (args.template) {
@@ -285,7 +313,7 @@ export function registerSpecCreateCommands(services: CommandServices, register: 
       return applyTemplate(services, username, template, args.open !== false);
     }
 
-    // 交互模式：先询问模板（有模板时）
+    // 交互模式：先询问模板（有模板时；树节点右键入口已预置 scope，直接进入创建）
     if (args.scope === undefined && args.relativePath === undefined) {
       const templates = await listSpecTemplates().catch(() => []);
       if (templates.length > 0) {

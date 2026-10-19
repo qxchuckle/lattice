@@ -14,6 +14,8 @@ export interface ProjectRow {
   created?: string;
   updated?: string | null;
   groups: string | null;
+  /** 分组节点 ID 列表（注册表引用；core ProjectMeta.groupIds 透传） */
+  groupIds?: string[];
   tags: string | null;
 }
 
@@ -28,6 +30,7 @@ export function mapProjectRow(r: Row): ProjectRow {
     created: str(r.created),
     updated: str(r.updated) ?? null,
     groups: str(r.groups) ?? null,
+    groupIds: strArray(r.groupIds),
     tags: str(r.tags) ?? null,
   };
 }

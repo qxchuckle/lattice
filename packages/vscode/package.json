@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.2.5",
+  "version": "0.4.2",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -503,6 +503,36 @@
         "icon": "$(edit)"
       },
       {
+        "command": "lattice.project.assignGroup",
+        "title": "%lattice.command.project.assignGroup.title%",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "lattice.project.group.create",
+        "title": "%lattice.command.project.group.create.title%",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "lattice.project.group.rename",
+        "title": "%lattice.command.project.group.rename.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.project.group.move",
+        "title": "%lattice.command.project.group.move.title%",
+        "icon": "$(move)"
+      },
+      {
+        "command": "lattice.project.group.remove",
+        "title": "%lattice.command.project.group.remove.title%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lattice.project.group.copyPath",
+        "title": "%lattice.command.project.group.copyPath.title%",
+        "icon": "$(copy)"
+      },
+      {
         "command": "lattice.project.switchActive",
         "title": "%lattice.command.project.switchActive.title%",
         "icon": "$(arrow-swap)"
@@ -628,6 +658,11 @@
         "icon": "$(search)"
       },
       {
+        "command": "lattice.tasks.groupBy",
+        "title": "%lattice.command.tasks.groupBy.title%",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "lattice.specs.search",
         "title": "%lattice.command.specs.search.title%",
         "icon": "$(search)"
@@ -681,6 +716,11 @@
         "command": "lattice.projects.clearFilter",
         "title": "%lattice.command.projects.clearFilter.title%",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "lattice.projects.toggleGrouping",
+        "title": "%lattice.command.projects.toggleGrouping.title%",
+        "icon": "$(list-tree)"
       },
       {
         "command": "lattice.search.clearFilter",
@@ -801,43 +841,49 @@
         {
           "command": "lattice.tasks.toggleScope",
           "when": "view == lattice.tasks",
-          "group": "navigation@2",
+          "group": "navigation@3",
           "icon": "$(list-filter)"
+        },
+        {
+          "command": "lattice.tasks.groupBy",
+          "when": "view == lattice.tasks",
+          "group": "navigation@2",
+          "icon": "$(list-tree)"
         },
         {
           "command": "lattice.tasks.filter",
           "when": "view == lattice.tasks && !lattice.tasks.hasFilter",
-          "group": "navigation@3",
+          "group": "navigation@4",
           "icon": "$(filter)"
         },
         {
           "command": "lattice.tasks.filter",
           "when": "view == lattice.tasks && lattice.tasks.hasFilter",
-          "group": "navigation@3",
+          "group": "navigation@4",
           "icon": "$(filter-filled)"
         },
         {
           "command": "lattice.tasks.search",
           "when": "view == lattice.tasks && !lattice.tasks.hasSearch",
-          "group": "navigation@4",
+          "group": "navigation@5",
           "icon": "$(search)"
         },
         {
           "command": "lattice.tasks.search",
           "when": "view == lattice.tasks && lattice.tasks.hasSearch",
-          "group": "navigation@4",
+          "group": "navigation@5",
           "icon": "$(search-filled)"
         },
         {
           "command": "lattice.tasks.clearSearch",
           "when": "view == lattice.tasks && lattice.tasks.hasSearch",
-          "group": "navigation@5",
+          "group": "navigation@6",
           "icon": "$(close)"
         },
         {
           "command": "lattice.tasks.clearFilter",
           "when": "view == lattice.tasks && lattice.tasks.hasFilter",
-          "group": "navigation@6",
+          "group": "navigation@7",
           "icon": "$(clear-all)"
         },
         {
@@ -929,6 +975,18 @@
           "when": "view == lattice.projects && lattice.projects.hasFilter",
           "group": "navigation@5",
           "icon": "$(clear-all)"
+        },
+        {
+          "command": "lattice.projects.toggleGrouping",
+          "when": "view == lattice.projects && !lattice.projectsGrouped",
+          "group": "navigation@6",
+          "icon": "$(list-tree)"
+        },
+        {
+          "command": "lattice.projects.toggleGrouping",
+          "when": "view == lattice.projects && lattice.projectsGrouped",
+          "group": "navigation@6",
+          "icon": "$(list-flat)"
         },
         {
           "command": "lattice.spec.conflicts",
@@ -1206,6 +1264,56 @@
           "command": "lattice.project.editMeta",
           "when": "viewItem == project",
           "group": "3_manage@4"
+        },
+        {
+          "command": "lattice.project.assignGroup",
+          "when": "viewItem == project",
+          "group": "3_manage@5"
+        },
+        {
+          "command": "lattice.project.group.create",
+          "when": "viewItem == projectGroup",
+          "group": "1_group@1"
+        },
+        {
+          "command": "lattice.project.group.rename",
+          "when": "viewItem == projectGroup",
+          "group": "1_group@2"
+        },
+        {
+          "command": "lattice.project.group.move",
+          "when": "viewItem == projectGroup",
+          "group": "1_group@3"
+        },
+        {
+          "command": "lattice.project.group.copyPath",
+          "when": "viewItem == projectGroup",
+          "group": "1_group@4"
+        },
+        {
+          "command": "lattice.project.group.remove",
+          "when": "viewItem == projectGroup",
+          "group": "9_remove@1"
+        },
+        {
+          "command": "lattice.spec.create",
+          "when": "viewItem == specScopeProject",
+          "group": "1_create@1"
+        },
+        {
+          "command": "lattice.spec.create",
+          "when": "viewItem == specScopeUser",
+          "group": "1_create@1"
+        },
+        {
+          "command": "lattice.spec.create",
+          "when": "viewItem == specScopeGlobal",
+          "group": "1_create@1"
+        },
+        {
+          "command": "lattice.spec.create",
+          "when": "viewItem == specProjectGroup",
+          "group": "1_create@1"
         },
         {
           "command": "lattice.project.open",

@@ -24,6 +24,7 @@ const RAW_PARSED_PAIRS: readonly (readonly [string, string])[] = [
   ['git_remote', 'gitRemotes'],
   ['package_names', 'packageNames'],
   ['monorepo_packages', 'monorepoPackages'],
+  ['groups', 'groupPaths'],
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

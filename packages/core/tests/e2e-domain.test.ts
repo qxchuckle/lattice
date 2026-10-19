@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -15,8 +15,8 @@ import {
   collectAllSearchDocuments,
   initDb,
   closeDb,
-} from '../dist/index.mjs';
-import { createTempLatticeHome, putFile, createBareRemote } from './helpers.mjs';
+} from '../src/index';
+import { createTempLatticeHome, putFile, createBareRemote } from './helpers';
 
 /**
  * 端到端全生命周期（最终验证）：双机真实 git 流程。
@@ -201,7 +201,7 @@ test('双机全生命周期：发布 → 消费 → 互推 → 退出传播 → 
   );
 
   // ── 阶段 6：RAG 文档收集（B 视角含 A 的域文档；已退出的任务不在）──
-  initDb();
+  await initDb();
   const docs = await collectAllSearchDocuments();
   closeDb();
   assert.ok(

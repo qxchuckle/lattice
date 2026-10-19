@@ -4,11 +4,23 @@ import {
   createComposite,
   getProjectGitStatus,
   openWithEditor,
+  readGroupRegistry,
+  resolveGroupPathsForIds,
   type EditorApp,
   type ProjectMeta,
 } from '@qcqx/lattice-core';
 import * as lattice from '@qcqx/lattice-services';
 import { isPathSafe, readDomainTaskDoc, readDomainMirrorFile } from './shared';
+
+/** groupIds → 分组完整路径（注册表解析；注册表缺失时静默回退空数组）。 */
+async function resolveGroupPaths(username: string, groupIds?: string[]): Promise<string[]> {
+  if (!groupIds || groupIds.length === 0) return [];
+  try {
+    return resolveGroupPathsForIds(await readGroupRegistry(username), groupIds);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * 项目路由 = @qcqx/lattice-services 的 HTTP 绑定。
@@ -23,15 +35,15 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (req) => {
     const username = await lattice.currentUsername();
     const meta = await lattice.getProject(username, req.params.id);
-    if (meta) return meta;
+    if (meta) return { ...meta, groupPaths: await resolveGroupPaths(username, meta.groupIds) };
     // 跨用户回退：ID 带 username: 前缀或属其他用户时，按全用户索引定位属主再查
     const bareId = req.params.id.replace(/^[\w.-]+:(?=legacy:|git:|remote:)/, '');
     if (bareId !== req.params.id) {
-      const owner = await lattice.getProject(
-        req.params.id.slice(0, req.params.id.length - bareId.length - 1),
-        bareId,
-      );
-      if (owner) return owner;
+      const ownerUsername = req.params.id.slice(0, req.params.id.length - bareId.length - 1);
+      const owner = await lattice.getProject(ownerUsername, bareId);
+      if (owner) {
+        return { ...owner, groupPaths: await resolveGroupPaths(ownerUsername, owner.groupIds) };
+      }
     }
     try {
       const all = (await lattice.listProjects(username)) as Array<
@@ -42,7 +54,12 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       );
       if (hit?.username) {
         const ownerMeta = await lattice.getProject(hit.username, hit.id ?? hit.ids?.[0] ?? '');
-        if (ownerMeta) return ownerMeta;
+        if (ownerMeta) {
+          return {
+            ...ownerMeta,
+            groupPaths: await resolveGroupPaths(hit.username, ownerMeta.groupIds),
+          };
+        }
       }
     } catch {
       // 全用户索引不可用时走下方域回退

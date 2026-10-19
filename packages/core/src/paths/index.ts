@@ -134,6 +134,11 @@ export function getRelationsFilePath(username: string): string {
   return pathJoin(getUserDir(username), 'relations.json');
 }
 
+/** 项目分组注册表真源文件 */
+export function getProjectGroupsFilePath(username: string): string {
+  return pathJoin(getUserDir(username), 'project-groups.json');
+}
+
 // ─── 项目 ───
 
 export function getProjectDir(username: string, projectDirName: string): string {

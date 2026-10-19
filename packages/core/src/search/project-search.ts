@@ -1,5 +1,6 @@
 import type { ProjectRow, SearchDocumentType, SearchResult } from '../types';
 import { listProjects, findProjectById } from '../project';
+import { isSubtreePathMatch, normalizeGroupPath } from '../project/group-tree';
 import { isModelLoaded } from '../rag/embeddings';
 import { hybridSearch } from './search';
 
@@ -112,10 +113,11 @@ export async function searchProjects(
         const row = findProjectById(pid);
         if (!row) continue;
 
-        // 应用 group/tag 过滤（hybridSearch 不支持这些过滤）
+        // 应用 group/tag 过滤（hybridSearch 不支持这些过滤；group 按子树匹配）
         if (opts?.group) {
+          const target = normalizeGroupPath(opts.group);
           const groups: string[] = row.groups ? JSON.parse(row.groups) : [];
-          if (!groups.includes(opts.group)) continue;
+          if (!groups.some((g) => isSubtreePathMatch(target, g))) continue;
         }
         if (opts?.tag) {
           const tags: string[] = row.tags ? JSON.parse(row.tags) : [];

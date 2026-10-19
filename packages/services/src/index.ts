@@ -26,6 +26,21 @@ export {
   type ProjectPathMatch,
 } from './projects';
 export {
+  createProjectGroup,
+  getProjectGroupTree,
+  listProjectGroupPaths,
+  moveProjectGroup,
+  previewProjectGroupImpact,
+  removeProjectGroup,
+  renameProjectGroup,
+  setProjectGroups,
+  type ProjectGroupImpactPreview,
+  type ProjectGroupMutationResult,
+  type ProjectGroupsSetResult,
+  type ProjectGroupTree,
+  type ProjectGroupTreeItem,
+} from './project-groups';
+export {
   addTaskCheckpoint,
   addTaskSpecRefs,
   associateTask,

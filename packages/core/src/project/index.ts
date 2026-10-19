@@ -41,6 +41,16 @@ import {
   normalizeProjectMeta,
 } from './identity';
 import { computeProjectIds, generateProjectId } from './identity-generate';
+import {
+  ensureGroupPathInRegistry,
+  findGroupByRef,
+  readGroupRegistry,
+  removeGroupTreeInRegistry,
+  resolveGroupPathsSync,
+  writeGroupRegistry,
+} from './group-registry';
+import { collectSubtreeIds, isSubtreePathMatch, normalizeGroupPath } from './group-tree';
+import type { GroupNode } from '../types';
 
 // ─── 项目信息自动检测（轻量）───
 
@@ -84,7 +94,7 @@ export async function registerProject(
   username: string,
   id: string,
   localPath: string,
-  opts?: Partial<Pick<ProjectMeta, 'name' | 'description' | 'groups' | 'tags'>> & {
+  opts?: Partial<Pick<ProjectMeta, 'name' | 'description' | 'groupIds' | 'tags'>> & {
     gitRemotes?: string[];
   },
 ): Promise<ProjectMeta> {
@@ -133,7 +143,7 @@ export async function registerProject(
         ? fingerprint.derived.monorepoPackages
         : existingMeta?.monorepoPackages,
     fingerprintsUpdated: now,
-    groups: opts?.groups ?? existingMeta?.groups,
+    groupIds: opts?.groupIds ?? existingMeta?.groupIds,
     tags: opts?.tags ?? existingMeta?.tags,
     created: existingMeta?.created ?? now,
     updated: existingMeta ? now : undefined,
@@ -231,9 +241,10 @@ export function listProjects(
 ): ProjectRow[] {
   let projects = dbListAllProjects(username);
   if (filter?.group) {
+    const target = normalizeGroupPath(filter.group);
     projects = projects.filter((p) => {
       const groups: string[] = p.groups ? JSON.parse(p.groups) : [];
-      return groups.includes(filter.group!);
+      return groups.some((g) => isSubtreePathMatch(target, g));
     });
   }
   if (filter?.tag) {
@@ -433,7 +444,12 @@ function syncProjectToDb(username: string, meta: ProjectMeta, dirName?: string):
         meta.monorepoPackages && meta.monorepoPackages.length > 0
           ? JSON.stringify(meta.monorepoPackages)
           : null,
-      groups: meta.groups ? JSON.stringify(meta.groups) : null,
+      groups: (() => {
+        const ids = meta.groupIds ?? [];
+        if (ids.length === 0) return null;
+        const paths = resolveGroupPathsSync(username, ids);
+        return paths.length > 0 ? JSON.stringify(paths) : null;
+      })(),
       tags: meta.tags ? JSON.stringify(meta.tags) : null,
       username,
       created: meta.created,
@@ -464,6 +480,161 @@ function syncProjectToDb(username: string, meta: ProjectMeta, dirName?: string):
   } catch {
     // 数据库可能未初始化（scan 时），静默跳过
   }
+}
+
+// ─── 项目分组操作（注册表 + 项目引用编排） ───
+
+export interface ProjectGroupUpdateOptions {
+  /** 全量替换（完整路径数组；缺失节点自动创建） */
+  set?: string[];
+  /** 增量添加（完整路径数组；缺失节点自动创建） */
+  add?: string[];
+  /** 移除（完整路径或 grp- id） */
+  remove?: string[];
+}
+
+export interface ProjectGroupUpdateResult {
+  meta: ProjectMeta | null;
+  /** 本次自动创建的分组节点（调用方负责提示） */
+  created: GroupNode[];
+  /** 未能解析的移除引用（原样回显） */
+  unknownRemovals: string[];
+  error?: string;
+}
+
+/**
+ * 更新项目的分组引用（路径/ID 入口）：
+ * - set/add 的路径缺失节点会自动创建（返回 created 供调用方提示）；
+ * - remove 接受完整路径或 grp- id，未命中回显 unknownRemovals；
+ * - 结果为空时物理删除 groupIds 字段（不残留空数组）。
+ */
+export async function updateProjectGroups(
+  username: string,
+  id: string,
+  options: ProjectGroupUpdateOptions,
+): Promise<ProjectGroupUpdateResult> {
+  const registry = await readGroupRegistry(username);
+  const created: GroupNode[] = [];
+  const unknownRemovals: string[] = [];
+
+  const existing = await getProjectMeta(username, id);
+  if (!existing) return { meta: null, created, unknownRemovals, error: `未找到项目：${id}` };
+
+  const nextIds = new Set(existing.groupIds ?? []);
+  const applyPaths = (paths: string[], replace: boolean) => {
+    if (replace) nextIds.clear();
+    for (const path of paths) {
+      const ensured = ensureGroupPathInRegistry(registry, path);
+      if (ensured.created.length > 0) created.push(...ensured.created);
+      if (ensured.node) nextIds.add(ensured.node.id);
+    }
+  };
+  if (options.set) applyPaths(options.set, true);
+  if (options.add) applyPaths(options.add, false);
+  if (options.remove) {
+    for (const ref of options.remove) {
+      const node = findGroupByRef(registry, ref);
+      if (node) nextIds.delete(node.id);
+      else unknownRemovals.push(ref);
+    }
+  }
+
+  if (created.length > 0) await writeGroupRegistry(username, registry);
+
+  const before = new Set(existing.groupIds ?? []);
+  const unchanged =
+    before.size === nextIds.size && [...before].every((value) => nextIds.has(value));
+  if (unchanged) return { meta: existing, created, unknownRemovals };
+
+  const next = [...nextIds];
+  const updated = await updateProjectMeta(username, id, {
+    groupIds: next.length > 0 ? next : undefined,
+  });
+  return { meta: updated, created, unknownRemovals };
+}
+
+export interface RemoveProjectGroupTreeResult {
+  /** 被删除的节点（含全部后代） */
+  removed: GroupNode[];
+  /** 被剥离引用的项目主 ID 列表 */
+  affectedProjectIds: string[];
+  error?: string;
+}
+
+/**
+ * 删除分组节点及其整棵子树，并从所有引用项目剥离对应 groupIds。
+ * 调用方负责确认（建议提示影响的项目/子组数量）。
+ */
+export async function removeProjectGroupTree(
+  username: string,
+  groupRef: string,
+): Promise<RemoveProjectGroupTreeResult> {
+  const registry = await readGroupRegistry(username);
+  const node = findGroupByRef(registry, groupRef);
+  if (!node) return { removed: [], affectedProjectIds: [], error: `未找到分组：${groupRef}` };
+
+  const removed = removeGroupTreeInRegistry(registry, node.id).removed;
+  const removedIds = new Set(removed.map((n) => n.id));
+  await writeGroupRegistry(username, registry);
+
+  const affectedProjectIds: string[] = [];
+  const metas = await listProjectMetas(username);
+  for (const meta of metas) {
+    const ids = meta.groupIds ?? [];
+    if (!ids.some((groupId) => removedIds.has(groupId))) continue;
+    const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+    if (!primaryId) continue;
+    const next = ids.filter((groupId) => !removedIds.has(groupId));
+    await updateProjectMeta(username, primaryId, {
+      groupIds: next.length > 0 ? next : undefined,
+    });
+    affectedProjectIds.push(primaryId);
+  }
+  return { removed, affectedProjectIds };
+}
+
+/**
+ * 列出引用了指定分组（含子树）的项目主 ID。
+ * 用于注册表重命名/移动后的影响面提示与 DB 刷新。
+ */
+export async function listProjectsReferencingGroupSubtree(
+  username: string,
+  groupId: string,
+): Promise<string[]> {
+  const registry = await readGroupRegistry(username);
+  const ids = collectSubtreeIds(registry.groups, groupId);
+  const metas = await listProjectMetas(username);
+  const result: string[] = [];
+  for (const meta of metas) {
+    if ((meta.groupIds ?? []).some((value) => ids.has(value))) {
+      const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+      if (primaryId) result.push(primaryId);
+    }
+  }
+  return result;
+}
+
+/**
+ * 刷新项目 DB 缓存行中的分组解析路径（注册表 rename/move 后调用）。
+ * @param projectIds 限定项目主 ID；不传则刷新当前用户全部项目
+ * @returns 刷新的项目数
+ */
+export async function refreshProjectGroupPaths(
+  username: string,
+  projectIds?: string[],
+): Promise<number> {
+  const metas = await listProjectMetas(username);
+  const filterSet = projectIds && projectIds.length > 0 ? new Set(projectIds) : null;
+  let count = 0;
+  for (const meta of metas) {
+    const primaryId = selectPrimaryId(meta.ids) ?? meta.id;
+    if (!primaryId || (filterSet && !filterSet.has(primaryId))) continue;
+    const dirName = await findProjectDirName(username, primaryId);
+    if (!dirName) continue;
+    syncProjectToDb(username, meta, dirName);
+    count++;
+  }
+  return count;
 }
 
 // 指针导出：路径阅读辅助

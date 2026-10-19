@@ -23,12 +23,45 @@ export interface ProjectMeta {
   monorepoPackages?: string[];
   /** 指纹最近一次采集时间 */
   fingerprintsUpdated?: string;
-  groups?: string[];
+  /**
+   * 项目所属分组节点 ID 列表（注册表真源：~/.lattice/users/<u>/project-groups.json，
+   * 见 GroupRegistry）。路径展示由注册表解析（「工作/前端/组件库」）。
+   *
+   * 注意：legacy 字段 `groups`（平铺分组名称数组）已废弃，由 `doctor --migrate`
+   * 转换为注册表节点 + 本字段后物理删除，运行时不做 fallback 读取。
+   */
+  groupIds?: string[];
   tags?: string[];
   /** 项目画像最后更新时间 */
   profileUpdated?: string;
   created: string;
   updated?: string;
+}
+
+/** 项目分组注册表节点（真源：~/.lattice/users/<u>/project-groups.json） */
+export interface GroupNode {
+  /** 分组 ID（grp-{8 位 base36}） */
+  id: string;
+  /** 显示名称（同一父级下唯一，大小写敏感；不允许包含 “/”） */
+  name: string;
+  /** 父分组 ID；根分组为 null */
+  parentId: string | null;
+  /** 同级排序权重（创建时追加；预留手动排序） */
+  order: number;
+  /** 分组描述（预留字段，暂不提供编辑入口） */
+  description: string | null;
+  /** 创建时间（ISO 8601） */
+  created: string;
+  /** 最近更新时间（ISO 8601） */
+  updated: string | null;
+}
+
+/** 项目分组注册表文件结构 */
+export interface GroupRegistry {
+  /** 注册表版本（当前 1） */
+  version: number;
+  /** 分组节点（扁平列表 + parentId，树由 group-tree 派生） */
+  groups: GroupNode[];
 }
 
 /** 任务状态 */
@@ -524,6 +557,7 @@ export interface ProjectRow {
   git_default_branch: string | null;
   package_names: string | null;
   monorepo_packages: string | null;
+  /** 解析后的分组完整路径 JSON 数组字符串（缓存列：由 groupIds + 分组注册表推导） */
   groups: string | null;
   tags: string | null;
   username: string;

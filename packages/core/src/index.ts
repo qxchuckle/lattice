@@ -1,6 +1,8 @@
 // 类型定义
 export type {
   ProjectMeta,
+  GroupNode,
+  GroupRegistry,
   TaskMeta,
   ReferencedSpec,
   TaskTreeNode,
@@ -70,6 +72,7 @@ export {
   getUserProjectsDir,
   getUserTasksDir,
   getRelationsFilePath,
+  getProjectGroupsFilePath,
   getProjectDir,
   getProjectMetaPath,
   getProjectProfileDir,
@@ -220,6 +223,14 @@ export {
   getAllUniqueRelations,
   parseProjectRow,
   isPathPrefixOf,
+  // 项目分组操作（注册表 + 项目引用编排）
+  updateProjectGroups,
+  removeProjectGroupTree,
+  listProjectsReferencingGroupSubtree,
+  refreshProjectGroupPaths,
+  type ProjectGroupUpdateOptions,
+  type ProjectGroupUpdateResult,
+  type RemoveProjectGroupTreeResult,
   // 新模块 re-export（通过 project/index.ts 间接导出）
   computeProjectIds,
   resolveProjectIds,
@@ -262,6 +273,51 @@ export {
 
 // 项目 git 状态
 export { getProjectGitStatus, type GitStatus } from './project/git-status';
+
+// 项目分组（注册表 project-groups.json + 树/路径纯函数）
+export {
+  GROUP_ID_PREFIX,
+  GROUP_ID_PATTERN,
+  generateGroupId,
+  isValidGroupId,
+  emptyGroupRegistry,
+  readGroupRegistry,
+  readGroupRegistrySync,
+  writeGroupRegistry,
+  ensureGroupPath,
+  ensureGroupPathInRegistry,
+  createGroupNode,
+  createGroupNodeInRegistry,
+  renameGroupNode,
+  renameGroupNodeInRegistry,
+  moveGroupNode,
+  moveGroupNodeInRegistry,
+  removeGroupTree,
+  removeGroupTreeInRegistry,
+  findGroupByRef,
+  resolveGroupPathsForIds,
+  resolveGroupPathsSync,
+  type EnsureGroupPathResult,
+  type GroupMutationError,
+} from './project/group-registry';
+export {
+  GROUP_NAME_MAX_LENGTH,
+  normalizeGroupPathSegments,
+  normalizeGroupPath,
+  parseGroupPathListInput,
+  groupNodeMap,
+  groupPathMap,
+  groupPathOf,
+  resolveGroupPath,
+  compareGroupSiblings,
+  buildGroupTree,
+  ancestorOrSelfIds,
+  collectSubtreeIds,
+  isSubtreePathMatch,
+  nearestSharedAncestorPath,
+  validateGroupName,
+  type GroupTreeNode,
+} from './project/group-tree';
 
 // 项目关系（relations.json 真源 CRUD）
 export {

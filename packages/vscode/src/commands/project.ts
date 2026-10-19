@@ -327,22 +327,62 @@ export function registerProjectCommands(services: CommandServices, register: Reg
       value: project.tags ?? '',
     });
     if (tagsRaw === undefined) return;
-    const groupsRaw = await vscode.window.showInputBox({
-      title: t('Groups (comma separated)'),
-      value: project.groups ?? '',
+    // 分组多选：注册表路径（缩进展示，勾选 = 归属）+「新建路径…」（缺失自动创建）
+    const groupPaths = await services.data.projectGroupPaths();
+    const currentGroups = new Set(splitList(project.groups ?? ''));
+    interface GroupPickItem extends vscode.QuickPickItem {
+      value?: string;
+    }
+    const CREATE_SENTINEL = '__lattice_new_group__';
+    const groupItems: GroupPickItem[] = [
+      { label: `$(plus) ${t('Add new path…')}`, value: CREATE_SENTINEL },
+      ...groupPaths.map((path) => ({
+        label: `${'  '.repeat(Math.max(0, path.split('/').length - 1))}${path}`,
+        picked: currentGroups.has(path),
+        value: path,
+      })),
+    ];
+    const picked = await vscode.window.showQuickPick(groupItems, {
+      title: t('Groups (multi-select; new paths are created)'),
+      canPickMany: true,
     });
-    if (groupsRaw === undefined) return;
+    if (picked === undefined) return;
+    let extraGroups: string[] = [];
+    if (picked.some((item) => item.value === CREATE_SENTINEL)) {
+      const raw = await vscode.window.showInputBox({
+        title: t('New group path(s), comma separated'),
+        placeHolder: t('e.g. Work/Frontend'),
+      });
+      if (raw === undefined) return;
+      extraGroups = splitList(raw);
+    }
+    const selectedGroups = [
+      ...picked
+        .filter((item) => item.value && item.value !== CREATE_SENTINEL)
+        .map((item) => item.value as string),
+      ...extraGroups,
+    ];
     try {
-      await withNotificationProgress(t('Updating project…'), () =>
-        services.data.projectUpdate(project.id, {
+      const groupResult = await withNotificationProgress(t('Updating project…'), async () => {
+        await services.data.projectUpdate(project.id, {
           name: name.trim(),
           description: description.trim(),
           tags: splitList(tagsRaw),
-          groups: splitList(groupsRaw),
-        }),
-      );
+        });
+        return services.data.projectGroupsUpdate(project.id, { set: selectedGroups });
+      });
       await services.snapshot.invalidate(['projects']);
-      void showDeduped('info', t('Project updated: {0}', name.trim() || project.id));
+      const created = groupResult?.createdPaths ?? [];
+      // 显式点击反馈（每次都有）
+      void vscode.window.showInformationMessage(
+        created.length > 0
+          ? t(
+              'Project updated: {0} (created groups: {1})',
+              name.trim() || project.id,
+              created.join(', '),
+            )
+          : t('Project updated: {0}', name.trim() || project.id),
+      );
     } catch (error) {
       await handleCliError(error, t('Failed to update the project'));
     }

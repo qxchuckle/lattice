@@ -11,6 +11,7 @@ import {
   openFileCommand,
   tooltipMarkdown,
 } from './items';
+import { projectIconColor } from './project-icon';
 import { buildTaskItem } from './task-item';
 import { uniqueSuffixId } from './specs-logic';
 import { ViewSearchService } from '../state/view-search';
@@ -36,6 +37,13 @@ const SCOPE_LABELS: Record<string, string> = {
   project: t('Project Specs'),
   user: t('User Specs'),
   global: t('Global Specs'),
+};
+
+/** 作用域分区节点上下文值（右键「新建 Spec」菜单按此匹配）。 */
+const SPEC_SCOPE_CONTEXT: Record<string, string> = {
+  project: 'specScopeProject',
+  user: 'specScopeUser',
+  global: 'specScopeGlobal',
 };
 
 /** 「未知项目」子分组 key（projectId 无法解析时）。 */
@@ -176,7 +184,7 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
             label: `${SCOPE_LABELS[scope]} (${rows.length})`,
             id: `g/spec-${scope}`,
             payload: { kind: 'group', groupId: `spec-${scope}` },
-            contextValue: 'group',
+            contextValue: SPEC_SCOPE_CONTEXT[scope],
             collapsible: vscode.TreeItemCollapsibleState.Expanded,
           }),
         );
@@ -217,7 +225,12 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
             ? { kind: 'specProjectGroup', projectId: group.key }
             : { kind: 'group', groupId: `spec-project-pj:${group.key}` },
           contextValue: known ? 'specProjectGroup' : 'group',
-          icon: new vscode.ThemeIcon(group.key === UNKNOWN_PROJECT_KEY ? 'question' : 'project'),
+          icon: new vscode.ThemeIcon(
+            group.key === UNKNOWN_PROJECT_KEY ? 'question' : 'project',
+            group.key === UNKNOWN_PROJECT_KEY
+              ? undefined
+              : new vscode.ThemeColor(projectIconColor(group.key)),
+          ),
           collapsible: vscode.TreeItemCollapsibleState.Collapsed,
         });
       });
@@ -319,7 +332,8 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     const groupId = segments[1];
     let payload: LatticeItemPayload = { kind: 'group', groupId };
     let label = groupId;
-    let contextValue = 'group';
+    // 作用域分区根（g/spec-user 等）需还原与树中一致的上下文值（菜单 / 定位依赖）
+    let contextValue = SPEC_SCOPE_CONTEXT[groupId.replace(/^spec-/, '')] ?? 'group';
     let collapsible = vscode.TreeItemCollapsibleState.Collapsed;
 
     for (let i = 2; i < segments.length; i += 1) {

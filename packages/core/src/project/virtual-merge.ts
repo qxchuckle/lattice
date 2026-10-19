@@ -174,7 +174,7 @@ function mergeProjectMetas(metas: ProjectMeta[]): ProjectMeta {
 
   // 合并数组字段（去重）
   const localPaths = unique(metas.flatMap((m) => m.localPaths ?? []));
-  const groups = unique(metas.flatMap((m) => m.groups ?? []));
+  const groupIds = unique(metas.flatMap((m) => m.groupIds ?? []));
   const tags = unique(metas.flatMap((m) => m.tags ?? []));
   const gitRemotes = unique(metas.flatMap((m) => m.gitRemotes ?? []));
   const packageNames = unique(metas.flatMap((m) => m.packageNames ?? []));
@@ -192,7 +192,7 @@ function mergeProjectMetas(metas: ProjectMeta[]): ProjectMeta {
     ...base,
     ids: [...allIds],
     localPaths,
-    groups: groups.length > 0 ? groups : undefined,
+    groupIds: groupIds.length > 0 ? groupIds : undefined,
     tags: tags.length > 0 ? tags : undefined,
     gitRemotes: gitRemotes.length > 0 ? gitRemotes : undefined,
     packageNames: packageNames.length > 0 ? packageNames : undefined,

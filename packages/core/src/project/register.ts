@@ -28,6 +28,7 @@ import {
   normalizeProjectMeta,
   type FingerprintDerived,
 } from './identity';
+import { resolveGroupPathsSync } from './group-registry';
 import { computeProjectIds } from './identity-generate';
 import {
   findProjectByAnyId,
@@ -107,7 +108,12 @@ export function syncProjectMetaToDb(username: string, meta: ProjectMeta, dirName
         meta.monorepoPackages && meta.monorepoPackages.length > 0
           ? JSON.stringify(meta.monorepoPackages)
           : null,
-      groups: meta.groups ? JSON.stringify(meta.groups) : null,
+      groups: (() => {
+        const ids = meta.groupIds ?? [];
+        if (ids.length === 0) return null;
+        const paths = resolveGroupPathsSync(username, ids);
+        return paths.length > 0 ? JSON.stringify(paths) : null;
+      })(),
       tags: meta.tags ? JSON.stringify(meta.tags) : null,
       username,
       created: meta.created,

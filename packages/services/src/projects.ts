@@ -156,11 +156,11 @@ export async function getProjectGitStatus(username: string, id: string): Promise
   return coreGetProjectGitStatus(project).catch(() => null);
 }
 
-/** 更新项目元数据（名称/描述/标签）。 */
+/** 更新项目元数据（名称/描述/标签/分组引用）。 */
 export async function updateProject(
   username: string,
   id: string,
-  updates: Partial<Pick<ProjectMeta, 'name' | 'description' | 'tags' | 'groups'>>,
+  updates: Partial<Pick<ProjectMeta, 'name' | 'description' | 'tags' | 'groupIds'>>,
 ): Promise<ProjectMeta | null> {
   const projectId = (await resolveProjectId(username, id)) ?? id;
   return updateProjectMeta(username, projectId, updates);

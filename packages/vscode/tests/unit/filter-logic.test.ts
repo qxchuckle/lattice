@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import {
   parseListValue,
   projectMatchesFilter,
@@ -58,6 +58,17 @@ test('项目过滤：分组/标签维度内 OR、维度间 AND；空过滤全通
   assert.equal(projectMatchesFilter({ groups: 'g2', tags: 't1' }, filter), false);
   assert.equal(projectMatchesFilter({ groups: 'g1', tags: 't2' }, filter), false);
   assert.equal(projectMatchesFilter({ groups: null, tags: null }, filter), false);
+});
+
+test('项目过滤：分组维度为子树语义（选「工作」覆盖 工作/** 后代）', () => {
+  const filter = { groups: ['工作'], tags: [] };
+  assert.equal(projectMatchesFilter({ groups: '工作/前端/组件库', tags: null }, filter), true);
+  assert.equal(projectMatchesFilter({ groups: '工作', tags: null }, filter), true);
+  assert.equal(projectMatchesFilter({ groups: '工作台/前端', tags: null }, filter), false);
+  assert.equal(projectMatchesFilter({ groups: '工具', tags: null }, filter), false);
+  // 选中子路径不向上覆盖父级
+  const leafFilter = { groups: ['工作/前端'], tags: [] };
+  assert.equal(projectMatchesFilter({ groups: '工作', tags: null }, leafFilter), false);
 });
 
 test('搜索结果过滤：类型维度；项目维度 canonical 归一、无归属行隐藏', () => {

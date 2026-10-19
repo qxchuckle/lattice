@@ -26,6 +26,8 @@ import type { UserScopeService } from '../state/user-scope';
 import type { ViewSearchService } from '../state/view-search';
 import type { ViewFilterService } from '../state/view-filter';
 import type { TasksScopeService } from '../state/tasks-scope';
+import type { TaskGroupService } from '../state/task-group';
+import type { ProjectsGroupingService } from '../state/projects-grouping';
 import type { ViewSearchPreviewService } from '../views/view-search-preview';
 
 export interface CommandServices {
@@ -40,6 +42,8 @@ export interface CommandServices {
   userScope?: UserScopeService;
   viewFilter?: ViewFilterService;
   tasksScope?: TasksScopeService;
+  taskGroup?: TaskGroupService;
+  projectsGrouping?: ProjectsGroupingService;
   viewSearch?: ViewSearchService;
   viewSearchPreview?: ViewSearchPreviewService;
   graph?: GraphController;

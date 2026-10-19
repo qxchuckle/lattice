@@ -850,7 +850,7 @@ function ProjectDetail({
   tasks,
   relations,
 }: {
-  project: ProjectMeta | null;
+  project: (ProjectMeta & { groupPaths?: string[] }) | null;
   gitStatus: GitStatus | null;
   specs: ParsedSpec[];
   tasks: TaskMeta[];
@@ -895,9 +895,9 @@ function ProjectDetail({
         <div>
           {i18nT('创建', 'Created')}: {formatDate(project.created)}
         </div>
-        {project.groups && project.groups.length > 0 && (
+        {project.groupPaths && project.groupPaths.length > 0 && (
           <div>
-            {i18nT('分组', 'Groups')}: {project.groups.join(', ')}
+            {i18nT('分组', 'Groups')}: {project.groupPaths.join(', ')}
           </div>
         )}
         {project.tags && project.tags.length > 0 && (

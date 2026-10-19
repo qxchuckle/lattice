@@ -20,6 +20,7 @@ import type { ProjectMeta } from '../types';
 import { readJSON, fileExists, listUserDirs } from '../paths';
 import { getProjectMetaPath, getUserProjectsDir } from '../paths';
 import { listDir } from '../paths';
+import { resolveGroupPathsSync } from './group-registry';
 
 // ─── 进程内缓存 ───
 
@@ -187,7 +188,12 @@ export async function findProjectsOnDisk(username: string, ids: string[]): Promi
         meta.monorepoPackages && meta.monorepoPackages.length > 0
           ? JSON.stringify(meta.monorepoPackages)
           : null,
-      groups: meta.groups ? JSON.stringify(meta.groups) : null,
+      groups: (() => {
+        const ids = meta.groupIds ?? [];
+        if (ids.length === 0) return null;
+        const paths = resolveGroupPathsSync(username, ids);
+        return paths.length > 0 ? JSON.stringify(paths) : null;
+      })(),
       tags: meta.tags ? JSON.stringify(meta.tags) : null,
       username,
       created: meta.created,

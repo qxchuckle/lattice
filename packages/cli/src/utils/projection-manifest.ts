@@ -136,6 +136,12 @@ export const PROJECTION_MANIFEST: readonly ProjectionEntry[] = [
     doc: 'cli-project.md',
     note: '输出极小（tags 数组 + tags.json 路径）',
   },
+  {
+    command: 'project group list',
+    kind: 'raw',
+    doc: 'cli-project.md',
+    note: '分组树 + 每节点项目数属结构化原始数据（含 id/path/count/children），无列式投影收益；AI 读树先于写',
+  },
 
   /* ─── 任务生命周期（cli-task.md） ─── */
   {

@@ -10,6 +10,7 @@
 import type { ProjectMeta } from '../types';
 import { resolveProjectIds, mergeIds, selectPrimaryId, normalizeLegacyId } from './identity';
 import { getProjectMetaById, findUsernameAndDirName } from './lookup';
+import { resolveGroupPathsSync } from './group-registry';
 import {
   getProjectDir,
   getProjectMetaPath,
@@ -115,6 +116,7 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
       ...(toMeta.gitRemotes ?? []),
       ...(fromMeta.gitRemotes ?? []),
     ]);
+    const mergedGroupIds = [...new Set([...(toMeta.groupIds ?? []), ...(fromMeta.groupIds ?? [])])];
 
     const mergedMeta: ProjectMeta = {
       ids: mergedIds,
@@ -126,7 +128,7 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
       gitDefaultBranch: toMeta.gitDefaultBranch ?? fromMeta.gitDefaultBranch,
       packageNames: toMeta.packageNames ?? fromMeta.packageNames,
       monorepoPackages: toMeta.monorepoPackages ?? fromMeta.monorepoPackages,
-      groups: toMeta.groups ?? fromMeta.groups,
+      groupIds: mergedGroupIds.length > 0 ? mergedGroupIds : undefined,
       tags: toMeta.tags ?? fromMeta.tags,
       created: toMeta.created,
       updated: nowISO(),
@@ -151,7 +153,12 @@ export async function mergeProjects(fromId: string, toId: string): Promise<Merge
       monorepo_packages: mergedMeta.monorepoPackages
         ? JSON.stringify(mergedMeta.monorepoPackages)
         : null,
-      groups: mergedMeta.groups ? JSON.stringify(mergedMeta.groups) : null,
+      groups: (() => {
+        const ids = mergedMeta.groupIds ?? [];
+        if (ids.length === 0) return null;
+        const paths = resolveGroupPathsSync(toFound.username, ids);
+        return paths.length > 0 ? JSON.stringify(paths) : null;
+      })(),
       tags: mergedMeta.tags ? JSON.stringify(mergedMeta.tags) : null,
       username: toFound.username,
       created: mergedMeta.created,
