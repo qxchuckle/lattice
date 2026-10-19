@@ -223,7 +223,9 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
     if (totalDbOnly > 0) parts.push(`${totalDbOnly} 个数据库记录在磁盘无对应`);
     entries.push({
       item: '磁盘/数据库一致性',
-      status: opts.fix && totalDiskOnly === 0 && totalDbOnly === 0 ? 'repaired' : 'stale',
+      // 修复动作已在上方执行：有 fix 即视为 repaired（原条件 totalDiskOnly===0 && totalDbOnly===0
+      // 在 else 分支恒为 false，属死代码——补测驱动修复）
+      status: opts.fix ? 'repaired' : 'stale',
       message: opts.fix
         ? `已修复：回填 ${totalBackfilled} 个项目到数据库（全用户）`
         : parts.join('，'),

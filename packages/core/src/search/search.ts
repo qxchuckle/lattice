@@ -537,13 +537,16 @@ export async function hybridSearch(
   const queryVariants = buildLexicalQueries(query);
   const lexicalLimit = limit * 4;
 
+  // task 域包含 design（design.md 是任务设计文档）：词法/语义层不在 SQL 过滤类型，
+  // 统一由下方 JS 类型过滤裁决；否则 design 在 SQL 层即被排除，与语义不符。
+  const lexicalType = opts?.type === 'task' ? undefined : opts?.type;
   // ─── 精确短语命中检测 ───
   // 用原始查询作为 FTS 短语 + AND 查询，收集命中的 filePath。
   // 这些文档包含了查询的核心标识符/术语原文，是极强的精确信号，
   // 在后续打分中获得 EXACT_PHRASE_BOOST 并豁免 MIN_FINAL_SCORE。
   const exactPhraseMatchPaths = new Set<string>();
   {
-    const ftsOpts = { type: opts?.type, projectId: opts?.projectId, usernames: opts?.usernames };
+    const ftsOpts = { type: lexicalType, projectId: opts?.projectId, usernames: opts?.usernames };
     // 短语查询：原始 query 作为完整短语
     try {
       const phraseRows = searchFts(wrapFtsColumnQuery(query), lexicalLimit, ftsOpts);
@@ -570,7 +573,7 @@ export async function hybridSearch(
     queryVariants,
     (variant) =>
       searchFts(wrapFtsColumnQuery(variant), lexicalLimit, {
-        type: opts?.type,
+        type: lexicalType,
         projectId: opts?.projectId,
         usernames: opts?.usernames,
       }),
@@ -580,7 +583,7 @@ export async function hybridSearch(
     queryVariants,
     (variant) =>
       searchSpecsFallback(variant, lexicalLimit, {
-        type: opts?.type,
+        type: lexicalType,
         projectId: opts?.projectId,
         usernames: opts?.usernames,
       }),
@@ -633,7 +636,7 @@ export async function hybridSearch(
     const config = await getEmbeddingConfig();
     const distanceThreshold = config.distanceThreshold;
     const vecResults = await semanticSearch(query, lexicalLimit, {
-      type: opts?.type,
+      type: lexicalType,
       projectId: opts?.projectId,
       usernames: opts?.usernames,
       distanceThreshold,
