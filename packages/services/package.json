@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-services",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lattice 应用服务层：跨宿主共用的用例实现（web server / VSCode 扩展 / 未来客户端）",
   "license": "MIT",
   "publishConfig": {
