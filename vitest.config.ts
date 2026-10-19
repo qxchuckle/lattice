@@ -9,7 +9,13 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    projects: ['packages/core', 'packages/services', 'packages/web', 'packages/vscode'],
+    projects: [
+      'packages/core',
+      'packages/services',
+      'packages/web',
+      'packages/vscode',
+      'packages/cli',
+    ],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**'],
@@ -25,13 +31,13 @@ export default defineConfig({
       ],
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
-      // 覆盖率门槛（防回退水位）：2026-10-19 基线 Stmts 15.27 / Br 12.55 / Funcs 17.02 / Lines 15.33
-      // 策略：基线-1pt 起步，随补测（P2-P4）逐步上调，长期目标 lines≥85 / branches≥75
+      // 覆盖率门槛（防回退水位）：2026-10-19 首测基线 Stmts 15.27 / Br 12.55 / Funcs 17.02 / Lines 15.33，
+      // P2 后升至 15.7 / 12.78 / 17.49 / 15.79。策略：水位 = 当前基线-1pt，只升不降（长期目标 lines≥85 / branches≥75）
       thresholds: {
-        statements: 14.2,
-        branches: 11.5,
-        functions: 16,
-        lines: 14.3,
+        statements: 14.7,
+        branches: 11.7,
+        functions: 16.4,
+        lines: 14.7,
       },
     },
   },

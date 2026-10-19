@@ -58,6 +58,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "pnpm build:core && pnpm build:cli && vitest run --project cli",
     "test:report": "open coverage/index.html",
     "clean": "pnpm -r run clean",
     "test:contract": "vitest run --project services --project web --project vscode",
