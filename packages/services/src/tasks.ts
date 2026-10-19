@@ -234,6 +234,47 @@ export async function associateTask(
   return updateTask(username, meta.id, { projects: [...projects], scopePaths });
 }
 
+/**
+ * 解除任务关联（项目 / 路径）：
+ * - `projectId`：按 canonical id 从 projects 移除（未知 id 原样比较）；
+ * - `path`：从 scopePaths 移除（normalize 后比较）；
+ * - `clearPaths`：清空全部 scopePaths（与 removePath 互斥，优先）。
+ * 与 CLI `task associate --remove-project / --remove-path / --clear-paths` 语义一致。
+ */
+export async function unassociateTask(
+  username: string,
+  id: string,
+  opts: { projectId?: string; path?: string; clearPaths?: boolean } = {},
+): Promise<TaskMeta | null> {
+  const meta = await requireTask(username, id);
+  const projects = new Set(meta.projects ?? []);
+  if (opts.projectId) {
+    const resolved = (await resolveProjectId(username, opts.projectId)) ?? undefined;
+    if (resolved) projects.delete(resolved);
+    projects.delete(opts.projectId);
+  }
+  let scopePaths = [...(meta.scopePaths ?? [])];
+  if (opts.clearPaths) {
+    scopePaths = [];
+  } else if (opts.path) {
+    const normalized = normalizeLocalPath(resolvePath(opts.path));
+    scopePaths = scopePaths.filter(
+      (entry) => entry.path !== normalized && entry.path !== opts.path,
+    );
+  }
+  return updateTask(username, meta.id, { projects: [...projects], scopePaths });
+}
+
+/** 变更父任务（undefined = 清空；环检测/合法性由 core updateTask 完成）。 */
+export async function updateTaskParent(
+  username: string,
+  id: string,
+  parentTaskId: string | undefined,
+): Promise<TaskMeta | null> {
+  const match = await requireTask(username, id);
+  return updateTask(username, match.id, { parentTaskId });
+}
+
 export async function addTaskSpecRefs(
   username: string,
   id: string,

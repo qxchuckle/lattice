@@ -16,6 +16,19 @@
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+      /* 详情视图（侧栏 WebviewView，普通文档流内容）：恢复文档级滚动，
+         否则内容超出被 overflow:hidden 裁掉且无滚动条（工作台模式由 AppShell 内部控制滚动）。 */
+      html[data-lattice-view='detail'],
+      html[data-lattice-view='detail'] body,
+      html[data-lattice-view='detail'] #root {
+        height: auto;
+        overflow: visible;
+      }
+      html[data-lattice-view='detail'] {
+        overflow-x: hidden;
+        overflow-y: auto;
+        background: var(--bg);
+      }
       body {
         background: var(--bg);
         color: var(--text);

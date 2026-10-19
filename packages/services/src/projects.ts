@@ -2,6 +2,7 @@
 import { resolve as resolvePath } from 'node:path';
 import {
   getProjectGitStatus as coreGetProjectGitStatus,
+  getProjectMetaPath as coreGetProjectMetaPath,
   getVirtualProjectMeta,
   isPathPrefixOf,
   listProjectMetas,
@@ -175,4 +176,11 @@ export async function resolveProjectDirName(username: string, id: string): Promi
   }
   const project = await getProject(username, id);
   return project?.id ?? id;
+}
+
+/** 项目元数据文件路径（project.json；目录名经 resolveProjectDirName 安全解析）。 */
+export async function getProjectMetaPath(username: string, id: string): Promise<string | null> {
+  const dirName = await resolveProjectDirName(username, id);
+  if (!dirName) return null;
+  return coreGetProjectMetaPath(username, dirName);
 }

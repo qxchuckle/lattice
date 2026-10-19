@@ -14,7 +14,15 @@ import {
 import { buildTaskItem } from './task-item';
 import { uniqueSuffixId } from './specs-logic';
 import { ViewSearchService } from '../state/view-search';
-import { isViewSearchActive, matchesViewSearch } from './view-search-logic';
+import { ViewFilterService } from '../state/view-filter';
+import {
+  isViewSearchActive,
+  matchesViewSearch,
+  viewSearchMatchFlags,
+  type ViewSearchPreviewRow,
+  type ViewSearchState,
+} from './view-search-logic';
+import { specMatchesFilter, type SpecFilterState } from './filter-logic';
 
 /**
  * 节点 id 约定（路径式，每段一个节点；父 id = 去掉最后一段）：
@@ -30,7 +38,16 @@ const SCOPE_LABELS: Record<string, string> = {
   global: t('Global Specs'),
 };
 
-/** 规范视图：冲突组 + 三个层级分组；spec 可展开「引用了它的任务」。 */
+/** 「未知项目」子分组 key（projectId 无法解析时）。 */
+const UNKNOWN_PROJECT_KEY = '__unknown__';
+
+interface SpecProjectGroup {
+  key: string;
+  label: string;
+  specs: SpecRow[];
+}
+
+/** 规范视图：冲突组 + 三个层级分组；项目级按项目二级分类；spec 可展开「引用了它的任务」。 */
 export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
   private readonly emitter = new vscode.EventEmitter<LatticeTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -39,6 +56,7 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
   constructor(
     private readonly snapshot: SnapshotStore,
     private readonly viewSearch: ViewSearchService,
+    private readonly viewFilter: ViewFilterService,
   ) {
     this.disposables.push(
       snapshot.onDidChange((sections) => {
@@ -48,21 +66,60 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
       viewSearch.onDidChange((target) => {
         if (target === 'specs') this.refresh();
       }),
+      viewFilter.onDidChange((target) => {
+        if (target === 'specs') this.refresh();
+      }),
     );
   }
 
-  /** 应用搜索过滤后的层级 spec 列表（根分组计数与子节点共用）。 */
-  private filteredSpecs(scope: 'project' | 'user' | 'global'): SpecRow[] {
-    const rows = this.snapshot.data.specs[scope];
-    const search = this.viewSearch.get('specs');
-    if (!isViewSearchActive(search)) return rows;
+  /** 应用搜索 + 过滤后的层级 spec 列表（根分组计数与子节点共用）。 */
+  private filteredSpecs(
+    scope: 'project' | 'user' | 'global',
+    state: ViewSearchState = this.viewSearch.get('specs'),
+    filter: SpecFilterState = this.viewFilter.get('specs'),
+  ): SpecRow[] {
+    const canonical = (id: string): string => this.snapshot.canonicalProjectId(id) ?? id;
+    let rows = this.snapshot.data.specs[scope];
+    rows = rows.filter((spec) => specMatchesFilter(spec, filter, canonical));
+    if (!isViewSearchActive(state)) return rows;
     return rows.filter((spec) =>
       matchesViewSearch({
         fields: [spec.title, spec.description, spec.id, spec.filePath, spec.tags.join(' ')],
         ids: [spec.id],
-        state: search,
+        state,
       }),
     );
+  }
+
+  /** 项目级 spec 的二级分组 key（canonical 项目 id；无法解析 → 未知项目）。 */
+  private specGroupKey(spec: SpecRow): string {
+    if (!spec.projectId) return UNKNOWN_PROJECT_KEY;
+    return this.snapshot.canonicalProjectId(spec.projectId) ?? UNKNOWN_PROJECT_KEY;
+  }
+
+  /** 项目级 spec 二级分组（按项目名排序，「未知项目」殿后；空组不产出）。 */
+  private projectSpecGroups(filter?: SpecFilterState, state?: ViewSearchState): SpecProjectGroup[] {
+    const specs = this.filteredSpecs('project', state, filter);
+    const groups = new Map<string, SpecProjectGroup>();
+    for (const spec of specs) {
+      const key = this.specGroupKey(spec);
+      let group = groups.get(key);
+      if (!group) {
+        const project = key === UNKNOWN_PROJECT_KEY ? undefined : this.snapshot.findProject(key);
+        group = {
+          key,
+          label: project?.name || project?.id || t('Unknown Project'),
+          specs: [],
+        };
+        groups.set(key, group);
+      }
+      group.specs.push(spec);
+    }
+    return [...groups.values()].sort((a, b) => {
+      if (a.key === UNKNOWN_PROJECT_KEY) return 1;
+      if (b.key === UNKNOWN_PROJECT_KEY) return -1;
+      return a.label.localeCompare(b.label);
+    });
   }
 
   refresh(): void {
@@ -88,6 +145,9 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     if (!payload) return [];
     const base = element.id ?? '';
     if (payload.kind === 'group') return this.getGroupChildren(payload.groupId, base);
+    if (payload.kind === 'specProjectGroup') {
+      return this.getGroupChildren(`spec-project-pj:${payload.projectId}`, base);
+    }
     if (payload.kind === 'spec') return this.getSpecChildren(payload.specId, base);
     return [];
   }
@@ -145,6 +205,30 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
         }),
       );
     }
+    // 项目级：二级分类「项目级规范 → 项目 → spec」（已知项目节点具备完整项目操作）
+    if (groupId === 'spec-project') {
+      return this.projectSpecGroups().map((group) => {
+        const known =
+          group.key !== UNKNOWN_PROJECT_KEY && Boolean(this.snapshot.findProject(group.key));
+        return makeItem({
+          label: `${group.label} (${group.specs.length})`,
+          id: `${base}/pj:${group.key}`,
+          payload: known
+            ? { kind: 'specProjectGroup', projectId: group.key }
+            : { kind: 'group', groupId: `spec-project-pj:${group.key}` },
+          contextValue: known ? 'specProjectGroup' : 'group',
+          icon: new vscode.ThemeIcon(group.key === UNKNOWN_PROJECT_KEY ? 'question' : 'project'),
+          collapsible: vscode.TreeItemCollapsibleState.Collapsed,
+        });
+      });
+    }
+    if (groupId.startsWith('spec-project-pj:')) {
+      const key = groupId.slice('spec-project-pj:'.length);
+      const seen = new Set<string>();
+      return this.filteredSpecs('project')
+        .filter((spec) => this.specGroupKey(spec) === key)
+        .map((spec) => this.buildSpecItem(spec, base, seen));
+    }
     const scope = groupId.replace('spec-', '') as 'project' | 'user' | 'global';
     const seen = new Set<string>();
     return this.filteredSpecs(scope).map((spec) => this.buildSpecItem(spec, base, seen));
@@ -188,16 +272,42 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
 
   // ── reveal 支持 ──
 
+  /** 实时预览：指定搜索状态下三个层级组中可见的 spec 行（与树同源）。 */
+  preview(state: ViewSearchState): ViewSearchPreviewRow[] {
+    const rows: ViewSearchPreviewRow[] = [];
+    for (const scope of ['project', 'user', 'global'] as const) {
+      for (const spec of this.filteredSpecs(scope, state)) {
+        const project = spec.projectId ? this.snapshot.findProject(spec.projectId) : undefined;
+        const { nameMatched } = viewSearchMatchFlags({
+          fields: [spec.title, spec.description, spec.id, spec.filePath, spec.tags.join(' ')],
+          ids: [spec.id],
+          state,
+        });
+        rows.push({
+          kind: 'spec',
+          id: spec.id,
+          label: spec.title || spec.id,
+          description: [SCOPE_LABELS[scope], project?.name].filter(Boolean).join(' · '),
+          contentOnly: !nameMatched,
+        });
+      }
+    }
+    return rows;
+  }
+
   /** 解析可 reveal 的 spec 节点（不在当前视图返回 null）。 */
   async resolveRevealElement(specId: string): Promise<LatticeTreeItem | null> {
-    await this.snapshot.ensure(['specs', 'conflicts', 'tasks']);
+    await this.snapshot.ensure(['specs', 'conflicts', 'tasks', 'projects']);
     const row = this.snapshot.specById(specId);
     if (!row) return null;
-    // 搜索过滤期间：被过滤掉的节点不可 reveal（与树内容一致）
+    // 搜索 / 过滤期间：被隐藏的节点不可 reveal（与树内容一致）
     if (
       !this.filteredSpecs(row.scope as 'project' | 'user' | 'global').some((s) => s.id === row.id)
     ) {
       return null;
+    }
+    if (row.scope === 'project') {
+      return this.itemFromId(`g/spec-project/pj:${this.specGroupKey(row)}/s:${specId}`);
     }
     return this.itemFromId(`g/spec-${row.scope}/s:${specId}`);
   }
@@ -232,6 +342,14 @@ export class SpecsProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
         label = conflict?.fileName ?? seg;
         contextValue = 'conflict';
         collapsible = vscode.TreeItemCollapsibleState.None;
+      } else if (seg.startsWith('pj:')) {
+        const key = seg.slice(3);
+        const known = key !== UNKNOWN_PROJECT_KEY && Boolean(this.snapshot.findProject(key));
+        payload = known
+          ? { kind: 'specProjectGroup', projectId: key }
+          : { kind: 'group', groupId: `spec-project-pj:${key}` };
+        label = key;
+        contextValue = known ? 'specProjectGroup' : 'group';
       } else if (seg.startsWith('t:')) {
         const taskId = seg.slice(2);
         payload = { kind: 'task', taskId };

@@ -19,7 +19,15 @@ import {
 import { buildTaskItem } from './task-item';
 import { ActiveTaskService } from '../state/active-task';
 import { ViewSearchService } from '../state/view-search';
-import { isViewSearchActive, matchesViewSearch } from './view-search-logic';
+import { ViewFilterService } from '../state/view-filter';
+import {
+  isViewSearchActive,
+  matchesViewSearch,
+  viewSearchMatchFlags,
+  type ViewSearchPreviewRow,
+  type ViewSearchState,
+} from './view-search-logic';
+import { projectMatchesFilter, type ProjectFilterState } from './filter-logic';
 
 /**
  * 节点 id 约定（路径式，每段一个节点；父 id = 去掉最后一段）：
@@ -47,6 +55,7 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     private readonly activeProject: ActiveProjectService,
     private readonly activeTask: ActiveTaskService,
     private readonly viewSearch: ViewSearchService,
+    private readonly viewFilter: ViewFilterService,
   ) {
     this.disposables.push(
       snapshot.onDidChange((sections) => {
@@ -59,6 +68,9 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
       }),
       activeProject.onDidChange(() => this.refresh()),
       viewSearch.onDidChange((target) => {
+        if (target === 'projects') this.refresh();
+      }),
+      viewFilter.onDidChange((target) => {
         if (target === 'projects') this.refresh();
       }),
     );
@@ -91,13 +103,15 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
     return [];
   }
 
-  /** 应用搜索过滤后的项目列表（根分组计数与子节点共用；按名称排序）。 */
-  private filteredProjects(): ProjectRow[] {
-    const rows = [...this.snapshot.data.projects].sort((a, b) =>
-      (a.name || a.id).localeCompare(b.name || b.id),
-    );
-    const search = this.viewSearch.get('projects');
-    if (!isViewSearchActive(search)) return rows;
+  /** 应用搜索 + 过滤后的项目列表（根分组计数与子节点共用；按名称排序）。 */
+  private filteredProjects(
+    state: ViewSearchState = this.viewSearch.get('projects'),
+    filter: ProjectFilterState = this.viewFilter.get('projects'),
+  ): ProjectRow[] {
+    const rows = [...this.snapshot.data.projects]
+      .filter((project) => projectMatchesFilter(project, filter))
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    if (!isViewSearchActive(state)) return rows;
     return rows.filter((project) =>
       matchesViewSearch({
         fields: [
@@ -106,9 +120,11 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
           project.id,
           project.packageNames.join(' '),
           project.localPaths.join(' '),
+          project.groups,
+          project.tags,
         ],
         ids: [project.id],
-        state: search,
+        state,
       }),
     );
   }
@@ -226,6 +242,8 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
           ? `paths: ${project.localPaths.map((p) => tilde(p)).join(', ')}`
           : undefined,
         project.gitRemotes.length ? `git: ${project.gitRemotes.join(', ')}` : undefined,
+        project.groups ? `${t('Groups')}: ${project.groups}` : undefined,
+        project.tags ? `${t('Tags')}: ${project.tags}` : undefined,
         project.created ? `created: ${formatDate(project.created)}` : undefined,
       ]),
     });
@@ -276,11 +294,39 @@ export class ProjectsProvider implements vscode.TreeDataProvider<LatticeTreeItem
 
   // ── reveal 支持 ──
 
+  /** 实时预览：指定搜索状态下可见的项目行（与树同源）。 */
+  preview(state: ViewSearchState): ViewSearchPreviewRow[] {
+    return this.filteredProjects(state).map((project) => {
+      const { nameMatched } = viewSearchMatchFlags({
+        fields: [
+          project.name,
+          project.description,
+          project.id,
+          project.packageNames.join(' '),
+          project.localPaths.join(' '),
+          project.groups,
+          project.tags,
+        ],
+        ids: [project.id],
+        state,
+      });
+      return {
+        kind: 'project',
+        id: project.id,
+        label: project.name || project.id,
+        description: project.packageNames[0] ?? tilde(project.localPaths[0]) ?? '',
+        contentOnly: !nameMatched,
+      };
+    });
+  }
+
   /** 解析可 reveal 的项目节点（优先「当前项目」分组）。 */
   async resolveRevealElement(projectId: string): Promise<LatticeTreeItem | null> {
     await this.snapshot.ensure(['projects', 'tasks', 'specs', 'user']);
     const row = this.snapshot.findProject(projectId);
     if (!row) return null;
+    // 搜索 / 过滤期间：被隐藏的节点不可 reveal（与树内容一致）
+    if (!this.filteredProjects().some((project) => project.id === row.id)) return null;
     const current = this.snapshot.findProject(this.activeProject.currentProjectId);
     const base = current && current.id === row.id ? `g/project-single:${row.id}` : 'g/projects-all';
     return this.itemFromId(`${base}/p:${row.id}`);

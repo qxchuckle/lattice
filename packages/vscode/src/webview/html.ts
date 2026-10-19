@@ -54,7 +54,7 @@ export function buildWebviewHtml(
   ].join('; ');
   const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
   const viewInit = options.view
-    ? ` window.__LATTICE_VIEW__ = ${JSON.stringify(options.view)};`
+    ? ` window.__LATTICE_VIEW__ = ${JSON.stringify(options.view)}; document.documentElement.setAttribute('data-lattice-view', ${JSON.stringify(options.view)});`
     : '';
   const bootstrap = `<script nonce="${nonce}">window.__LATTICE_LANG__ = ${JSON.stringify(
     webviewLanguage(),

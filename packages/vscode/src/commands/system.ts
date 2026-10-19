@@ -108,10 +108,7 @@ export function registerSystemCommands(services: CommandServices, register: Regi
   });
 
   register('lattice.tasks.toggleScope', async () => {
-    const configuration = vscode.workspace.getConfiguration('lattice');
-    const current = configuration.get<'all' | 'project'>('tasks.scope', 'all');
-    const next = current === 'all' ? 'project' : 'all';
-    await configuration.update('tasks.scope', next, vscode.ConfigurationTarget.Global);
+    return services.tasksScope?.toggle();
   });
 
   register('lattice.graph.open', async (arg?: unknown) => {

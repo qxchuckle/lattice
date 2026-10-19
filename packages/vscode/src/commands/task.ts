@@ -10,6 +10,7 @@ import {
   collectUris,
   confirmDanger,
   cwdForCli,
+  extractArgObject,
   extractPayload,
   handleCliError,
   pickTask,
@@ -307,6 +308,158 @@ async function renameTask(services: CommandServices, arg: unknown): Promise<void
   }
 }
 
+/** 取消关联项目（程序化 `{ taskId, projectId }`）。 */
+async function unassociateProject(services: CommandServices, arg: unknown): Promise<void> {
+  const args = extractArgObject<{ taskId?: string; projectId?: string }>(arg);
+  const task = await resolveTask(services, arg);
+  if (!task) return;
+  let projectId = args?.projectId;
+  if (!projectId) {
+    await services.snapshot.ensure(['projects']);
+    if (task.projects.length === 0) {
+      void vscode.window.showWarningMessage(t('The task has no associated projects.'));
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(
+      task.projects.map((id) => {
+        const project = services.snapshot.findProject(id);
+        return {
+          label: project?.name || id,
+          description: project?.packageNames[0] ?? id,
+          projectId: id,
+        };
+      }),
+      { title: t('Unassociate Project'), matchOnDetail: true },
+    );
+    if (!picked) return;
+    projectId = picked.projectId;
+  }
+  try {
+    await withNotificationProgress(t('Updating task…'), () =>
+      services.data.taskUnassociate(task.id, { projectId }),
+    );
+    await services.snapshot.invalidate(['tasks']);
+    void showDeduped('info', t('Project unassociated from "{0}".', task.title));
+  } catch (error) {
+    await handleCliError(error, t('Failed to unassociate the project'));
+  }
+}
+
+/** 移除单个关联路径（程序化 `{ taskId, path }`）。 */
+async function removeScopePath(services: CommandServices, arg: unknown): Promise<void> {
+  const args = extractArgObject<{ taskId?: string; path?: string }>(arg);
+  const task = await resolveTask(services, arg);
+  if (!task) return;
+  let path = args?.path;
+  if (!path) {
+    if (task.scopePaths.length === 0) {
+      void vscode.window.showWarningMessage(t('The task has no associated paths.'));
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(
+      task.scopePaths.map((entry) => ({
+        label: entry.path,
+        description: entry.note,
+        path: entry.path,
+      })),
+      { title: t('Remove Scope Path'), matchOnDetail: true },
+    );
+    if (!picked) return;
+    path = picked.path;
+  }
+  try {
+    await withNotificationProgress(t('Updating task…'), () =>
+      services.data.taskUnassociate(task.id, { path }),
+    );
+    await services.snapshot.invalidate(['tasks']);
+    void showDeduped('info', t('Removed path from "{0}".', task.title));
+  } catch (error) {
+    await handleCliError(error, t('Failed to remove the path'));
+  }
+}
+
+/** 清空全部关联路径（程序化 `{ taskId, clearPaths: true }`；需确认）。 */
+async function clearScopePaths(services: CommandServices, arg: unknown): Promise<void> {
+  const args = extractArgObject<{ taskId?: string; clearPaths?: boolean }>(arg);
+  const task = await resolveTask(services, arg);
+  if (!task) return;
+  if (task.scopePaths.length === 0) {
+    void vscode.window.showWarningMessage(t('The task has no associated paths.'));
+    return;
+  }
+  if (!args?.clearPaths) {
+    const confirmed = await confirmDanger(
+      t('Clear all scope paths of "{0}"?', task.title),
+      t('{0} path(s) will be removed from the task scope.', task.scopePaths.length),
+      t('Clear Paths'),
+    );
+    if (!confirmed) return;
+  }
+  try {
+    await withNotificationProgress(t('Updating task…'), () =>
+      services.data.taskUnassociate(task.id, { clearPaths: true }),
+    );
+    await services.snapshot.invalidate(['tasks']);
+    void showDeduped(
+      'info',
+      t('Cleared {0} scope path(s) of "{1}".', task.scopePaths.length, task.title),
+    );
+  } catch (error) {
+    await handleCliError(error, t('Failed to clear the paths'));
+  }
+}
+
+/** 变更父任务（程序化 `{ taskId, parentId }`；`{ taskId, clearParent: true }` = 清空）。 */
+async function updateParentTask(services: CommandServices, arg: unknown): Promise<void> {
+  const args = extractArgObject<{ taskId?: string; parentId?: string; clearParent?: boolean }>(arg);
+  const task = await resolveTask(services, arg);
+  if (!task) return;
+  let parentId: string | undefined;
+  if (args && ('parentId' in args || 'clearParent' in args)) {
+    parentId = args.clearParent ? undefined : args.parentId;
+  } else {
+    await services.snapshot.ensure(['tasks']);
+    interface ParentPickItem extends vscode.QuickPickItem {
+      parentId?: string;
+      clear?: boolean;
+    }
+    const items: ParentPickItem[] = [
+      { label: t('(None)'), description: t('Clear parent task'), clear: true },
+    ];
+    for (const candidate of [...services.snapshot.data.tasks]
+      .filter((entry) => entry.id !== task.id)
+      .sort((a, b) =>
+        String(b.updated ?? b.created ?? '').localeCompare(String(a.updated ?? a.created ?? '')),
+      )) {
+      items.push({
+        label: candidate.title,
+        description: [candidate.status, candidate.id].filter(Boolean).join(' · '),
+        parentId: candidate.id,
+        picked: candidate.id === task.parentTaskId,
+      });
+    }
+    const picked = await vscode.window.showQuickPick(items, {
+      title: t('Change Parent Task'),
+      matchOnDescription: true,
+    });
+    if (!picked) return;
+    parentId = picked.clear ? undefined : picked.parentId;
+  }
+  if (parentId === task.parentTaskId) return;
+  try {
+    await services.data.taskUpdateParent(task.id, parentId);
+    await services.snapshot.invalidate(['tasks']);
+    void showDeduped(
+      'info',
+      parentId
+        ? t('Parent task updated: {0}', task.title)
+        : t('Parent task cleared: {0}', task.title),
+    );
+  } catch (error) {
+    await handleCliError(error, t('Failed to update the parent task'));
+  }
+}
+
 async function deleteTask(services: CommandServices, arg: unknown): Promise<void> {
   const task = await resolveTask(services, arg);
   if (!task) return;
@@ -360,9 +513,13 @@ export function registerTaskCommands(services: CommandServices, register: Regist
   register('lattice.task.checkpoint.add', (arg) => addCheckpoint(services, arg));
   register('lattice.task.associate.project', (arg) => associateProject(services, arg));
   register('lattice.task.associate.paths', (...args) => associatePaths(services, ...args));
+  register('lattice.task.unassociate.project', (arg) => unassociateProject(services, arg));
+  register('lattice.task.unassociate.path', (arg) => removeScopePath(services, arg));
+  register('lattice.task.clearPaths', (arg) => clearScopePaths(services, arg));
   register('lattice.task.refSpec', (arg) => refSpecs(services, arg));
   register('lattice.task.unrefSpec', (arg) => unrefSpec(services, arg));
   register('lattice.task.update.title', (arg) => renameTask(services, arg));
+  register('lattice.task.update.parent', (arg) => updateParentTask(services, arg));
   register('lattice.task.delete', (arg) => deleteTask(services, arg));
   register('lattice.task.setActive', (arg) => setActiveTask(services, arg));
   register('lattice.task.clearActive', async () => {
@@ -387,6 +544,10 @@ export function registerTaskCommands(services: CommandServices, register: Regist
       return;
     }
     if (payload?.kind === 'project') {
+      await services.graph?.open({ view: 'project', anchorId: payload.projectId });
+      return;
+    }
+    if (payload?.kind === 'specProjectGroup') {
       await services.graph?.open({ view: 'project', anchorId: payload.projectId });
       return;
     }

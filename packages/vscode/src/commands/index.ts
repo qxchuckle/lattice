@@ -15,6 +15,8 @@ import { registerPickerShortcutCommands } from './picker-shortcuts';
 import { registerUserCommands } from './user';
 import { registerTaskFilterCommands } from './task-filter';
 import { registerViewSearchCommands } from './view-search';
+import { registerViewFilterCommands } from './view-filter';
+import { registerViewClearCommands } from './view-clear';
 
 export function registerAllCommands(services: CommandServices): void {
   const register: RegisterFn = (id, handler) => {
@@ -37,6 +39,8 @@ export function registerAllCommands(services: CommandServices): void {
   registerUserCommands(services, register);
   registerTaskFilterCommands(services, register);
   registerViewSearchCommands(services, register);
+  registerViewFilterCommands(services, register);
+  registerViewClearCommands(services, register);
   registerProjectCommands(services, register);
   registerSearchCommands(services, register);
   registerRevealCommands(services, register);

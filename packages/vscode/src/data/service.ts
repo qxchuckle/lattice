@@ -292,13 +292,20 @@ export class LatticeDataService {
 
   async projectUpdate(
     id: string,
-    updates: { name?: string; description?: string; tags?: string[] },
+    updates: { name?: string; description?: string; tags?: string[]; groups?: string[] },
   ): Promise<void> {
     this.assertWritable();
     await this.ensureDb();
     const username = await this.username();
     const updated = await lattice.updateProject(username, id, updates);
     if (!updated) throw new Error(`未找到项目: ${id}`);
+  }
+
+  /** 项目元数据文件路径（project.json；只读）。 */
+  async projectMetaPath(id: string): Promise<string | null> {
+    await this.ensureDb();
+    const username = await this.username();
+    return lattice.getProjectMetaPath(username, id);
   }
 
   // ── 任务 ──
@@ -365,6 +372,14 @@ export class LatticeDataService {
     await lattice.updateTaskTitle(username, id, title);
   }
 
+  /** 变更父任务（undefined = 清空；core 侧环检测）。 */
+  async taskUpdateParent(id: string, parentTaskId: string | undefined): Promise<void> {
+    this.assertWritable();
+    const username = await this.username();
+    const updated = await lattice.updateTaskParent(username, id, parentTaskId);
+    if (!updated) throw new Error(`未找到任务: ${id}`);
+  }
+
   async taskDelete(id: string): Promise<void> {
     this.assertWritable();
     const username = await this.username();
@@ -385,6 +400,17 @@ export class LatticeDataService {
     await this.ensureDb();
     const username = await this.username();
     await lattice.associateTask(username, id, opts);
+  }
+
+  /** 解除关联（项目 / 路径 / 清空路径）。 */
+  async taskUnassociate(
+    id: string,
+    opts: { projectId?: string; path?: string; clearPaths?: boolean } = {},
+  ): Promise<void> {
+    this.assertWritable();
+    const username = await this.username();
+    const updated = await lattice.unassociateTask(username, id, opts);
+    if (!updated) throw new Error(`未找到任务: ${id}`);
   }
 
   async taskRefSpec(
@@ -465,6 +491,18 @@ export class LatticeDataService {
     const username = await this.username();
     const found = await lattice.findSpec(username, idOrName);
     return found ? toSpecRow(found) : null;
+  }
+
+  /** 更新 spec frontmatter（title / description / tags；正文不动）。 */
+  async specUpdate(
+    id: string,
+    updates: { title?: string; description?: string; tags?: string[] },
+  ): Promise<{ specId: string; filePath: string }> {
+    this.assertWritable();
+    const username = await this.username();
+    const result = await lattice.updateSpecFrontmatter(username, id, updates);
+    if (!result) throw new Error(`未找到 spec: ${id}`);
+    return result;
   }
 
   async specMigrate(_cwd?: string, _signal?: AbortSignal): Promise<unknown> {

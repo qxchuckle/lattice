@@ -14,6 +14,7 @@ export {
   getProject,
   getProjectDetail,
   getProjectGitStatus,
+  getProjectMetaPath,
   getProjectRelations,
   getProjectSpecsFor,
   getProjectTasks,
@@ -44,6 +45,8 @@ export {
   removeTaskSpecRefs,
   requireTask,
   setTaskStatus,
+  unassociateTask,
+  updateTaskParent,
   updateTaskTitle,
   type ListTasksOptions,
 } from './tasks';
@@ -53,7 +56,9 @@ export {
   findSpec,
   listSpecs,
   migrateSpecs,
+  updateSpecFrontmatter,
   type ListSpecsOptions,
+  type SpecFrontmatterUpdates,
 } from './specs';
 export { addRelation, listRelations, removeRelation } from './relations';
 export { readContent, resolveContentPath, type ContentPathType } from './content';

@@ -7,6 +7,8 @@
  * - `contentIds`（全文检索 FTS 命中的实体 id）并集命中。
  */
 
+import type { SearchRow } from '../cli/types';
+
 export interface ViewSearchState {
   query: string;
   /** 全文检索命中的实体 id（spec id / task id / project id）。 */
@@ -42,3 +44,44 @@ export function matchesViewSearch(opts: {
   }
   return false;
 }
+
+/** 命中标记：区分「名称类字段命中」与「仅全文命中」（预览列表展示/排序用）。 */
+export function viewSearchMatchFlags(opts: {
+  fields: Array<string | null | undefined>;
+  ids?: Array<string | null | undefined>;
+  state: ViewSearchState;
+}): { matched: boolean; nameMatched: boolean } {
+  const nameMatched = matchesViewSearch({
+    fields: opts.fields,
+    ids: opts.ids,
+    state: { query: opts.state.query, contentIds: [] },
+  });
+  if (nameMatched) return { matched: true, nameMatched: true };
+  return {
+    matched: matchesViewSearch(opts),
+    nameMatched: false,
+  };
+}
+
+/** 实时预览行（由各 provider 的过滤管道产出；与树内容严格同源）。 */
+export type ViewSearchPreviewKind = 'task' | 'spec' | 'project';
+
+export interface ViewSearchPreviewRow {
+  kind: ViewSearchPreviewKind;
+  id: string;
+  label: string;
+  description?: string;
+  /** true = 仅经全文检索命中（名称字段不匹配）。 */
+  contentOnly: boolean;
+}
+
+/** 预览服务与命令侧共用的目标配置（FTS 类型 / id 收集 / 标题）。 */
+export interface ViewSearchTargetConfig {
+  inputTitle: string;
+  /** 全文检索（FTS）纳入的文档类型。 */
+  ftsTypes: string[];
+  /** 从搜索结果行收集本视图的实体 id。 */
+  collectIds: (row: SearchRow) => string[];
+}
+
+export type ViewSearchPreviewTarget = 'tasks' | 'specs' | 'projects';

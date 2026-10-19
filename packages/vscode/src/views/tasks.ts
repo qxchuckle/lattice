@@ -5,10 +5,17 @@ import { getConfig, getLatticeRoot, onConfigChanged } from '../config';
 import { warnLog } from '../logging';
 import { ActiveProjectService } from '../state/active-project';
 import { ActiveTaskService } from '../state/active-task';
-import { TaskFilterService } from '../state/task-filter';
+import { ViewFilterService } from '../state/view-filter';
 import { taskMatchesFilter } from '../state/task-filter-logic';
+import { TasksScopeService } from '../state/tasks-scope';
 import { ViewSearchService } from '../state/view-search';
-import { isViewSearchActive, matchesViewSearch } from './view-search-logic';
+import {
+  isViewSearchActive,
+  matchesViewSearch,
+  viewSearchMatchFlags,
+  type ViewSearchPreviewRow,
+  type ViewSearchState,
+} from './view-search-logic';
 import { SnapshotStore } from '../state/snapshot';
 import { taskDocPath } from '../util/lattice-files';
 import { fileExists } from '../util/paths';
@@ -62,7 +69,8 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     private readonly snapshot: SnapshotStore,
     private readonly activeProject: ActiveProjectService,
     private readonly activeTask: ActiveTaskService,
-    private readonly taskFilter: TaskFilterService,
+    private readonly viewFilter: ViewFilterService,
+    private readonly tasksScope: TasksScopeService,
     private readonly viewSearch: ViewSearchService,
   ) {
     this.disposables.push(
@@ -75,7 +83,10 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
       }),
       activeProject.onDidChange(() => this.refresh()),
       activeTask.onDidChange(() => this.refresh()),
-      taskFilter.onDidChange(() => this.refresh()),
+      viewFilter.onDidChange((target) => {
+        if (target === 'tasks') this.refresh();
+      }),
+      tasksScope.onDidChange(() => this.refresh()),
       viewSearch.onDidChange((target) => {
         if (target === 'tasks') this.refresh();
       }),
@@ -144,25 +155,24 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
     );
   }
 
-  private computeGroups(): GroupDef[] {
+  private computeGroups(state: ViewSearchState = this.viewSearch.get('tasks')): GroupDef[] {
     const config = getConfig();
     const activeProjectId = this.activeProject.currentProjectId;
     const canonical = this.snapshot.canonicalProjectId(activeProjectId);
     let tasks = this.snapshot.data.tasks;
-    if (config.tasksScope === 'project' && canonical) {
+    if (this.tasksScope.effective === 'project' && canonical) {
       tasks = tasks.filter((task) =>
         task.projects.some((p) => this.snapshot.canonicalProjectId(p) === canonical),
       );
     }
-    if (this.taskFilter.active) {
-      const filter = this.taskFilter.current;
+    if (this.viewFilter.isActive('tasks')) {
+      const filter = this.viewFilter.get('tasks');
       const canonicalId = (id: string): string => this.snapshot.canonicalProjectId(id) ?? id;
       tasks = tasks.filter((task) => taskMatchesFilter(task, filter, canonicalId));
     }
-    const search = this.viewSearch.get('tasks');
-    if (isViewSearchActive(search)) {
+    if (isViewSearchActive(state)) {
       tasks = tasks.filter((task) =>
-        matchesViewSearch({ fields: [task.title, task.id], ids: [task.id], state: search }),
+        matchesViewSearch({ fields: [task.title, task.id], ids: [task.id], state }),
       );
     }
 
@@ -398,6 +408,32 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
   }
 
   // ── reveal 支持 ──
+
+  /** 实时预览：指定搜索状态下树中可见的任务行（与树同源：scope / 过滤 / 分组去重均一致）。 */
+  preview(state: ViewSearchState): ViewSearchPreviewRow[] {
+    const seen = new Set<string>();
+    const rows: ViewSearchPreviewRow[] = [];
+    for (const group of this.computeGroups(state)) {
+      for (const task of group.tasks) {
+        if (seen.has(task.id)) continue;
+        seen.add(task.id);
+        const project = task.projects.map((p) => this.snapshot.findProject(p)).find(Boolean);
+        const { nameMatched } = viewSearchMatchFlags({
+          fields: [task.title, task.id],
+          ids: [task.id],
+          state,
+        });
+        rows.push({
+          kind: 'task',
+          id: task.id,
+          label: task.title,
+          description: [task.status, project?.name].filter(Boolean).join(' · '),
+          contentOnly: !nameMatched,
+        });
+      }
+    }
+    return rows;
+  }
 
   /** 解析可 reveal 的元素（当前视图内的任务节点；不在范围内返回 null）。 */
   async resolveRevealElement(taskId: string): Promise<LatticeTreeItem | null> {

@@ -23,8 +23,10 @@ import type { BusyService } from '../busy';
 import type { RevealService } from '../views/reveal';
 import type { SpecDiagnosticsService } from '../editor/spec-diagnostics';
 import type { UserScopeService } from '../state/user-scope';
-import type { TaskFilterService } from '../state/task-filter';
 import type { ViewSearchService } from '../state/view-search';
+import type { ViewFilterService } from '../state/view-filter';
+import type { TasksScopeService } from '../state/tasks-scope';
+import type { ViewSearchPreviewService } from '../views/view-search-preview';
 
 export interface CommandServices {
   context: vscode.ExtensionContext;
@@ -36,8 +38,10 @@ export interface CommandServices {
   reports: ReportStore;
   busy?: BusyService;
   userScope?: UserScopeService;
-  taskFilter?: TaskFilterService;
+  viewFilter?: ViewFilterService;
+  tasksScope?: TasksScopeService;
   viewSearch?: ViewSearchService;
+  viewSearchPreview?: ViewSearchPreviewService;
   graph?: GraphController;
   watcher?: { start(): void; healthy: boolean };
   reveal?: RevealService;

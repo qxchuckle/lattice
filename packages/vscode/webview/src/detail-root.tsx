@@ -119,9 +119,7 @@ export function DetailRoot({ initialPath }: { initialPath?: string } = {}) {
   return (
     <MemoryRouter initialEntries={['/']}>
       <ErrorBoundary>
-        <div style={{ minHeight: '100vh' }}>
-          <DetailPanel />
-        </div>
+        <DetailPanel />
       </ErrorBoundary>
     </MemoryRouter>
   );

@@ -76,6 +76,8 @@ export function targetFromPayload(payload: LatticeItemPayload): RevealEntity | n
       return payload.specId ? { kind: 'spec', id: payload.specId } : null;
     case 'project':
       return { kind: 'project', id: payload.projectId };
+    case 'specProjectGroup':
+      return { kind: 'project', id: payload.projectId };
     case 'relation':
       return payload.projectId ? { kind: 'project', id: payload.projectId } : null;
     case 'searchResult':

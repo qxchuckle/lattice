@@ -3,13 +3,16 @@ import {
   detectSpecConflicts,
   findSpecById,
   findSpecByName,
+  formatSpecParseError,
   getGlobalSpecs,
   getAllProjectSpecsGrouped,
   getProjectSpecs,
   getUserSpecs,
   migrateSpecs as coreMigrateSpecs,
+  parseSpec,
+  writeSpec,
 } from '@qcqx/lattice-core';
-import type { ParsedSpec, SpecConflict } from '@qcqx/lattice-core';
+import type { ParsedSpec, SpecConflict, SpecFrontmatter } from '@qcqx/lattice-core';
 import { inferSpecScope, type SpecScopeWire, type SpecWithScope } from './shared';
 
 export interface ListSpecsOptions {
@@ -150,4 +153,42 @@ export async function migrateSpecs(
     dryRun: opts.dryRun ?? false,
     filter: opts.filter,
   });
+}
+
+export interface SpecFrontmatterUpdates {
+  title?: string;
+  description?: string;
+  tags?: string[];
+}
+
+/**
+ * 更新 spec frontmatter（title / description / tags；正文不动）。
+ * 与 CLI `spec set` 同口径：YAML 解析失败时拒绝写入，避免丢字段。
+ */
+export async function updateSpecFrontmatter(
+  username: string,
+  specId: string,
+  updates: SpecFrontmatterUpdates,
+): Promise<{ specId: string; filePath: string } | null> {
+  const found = await findSpec(username, specId);
+  if (!found) return null;
+  const parsed = await parseSpec(found.spec.filePath);
+  if (!parsed) return null;
+  if (parsed.parseError) {
+    throw new Error(
+      `spec frontmatter YAML 解析失败，已拒绝写入：${formatSpecParseError(parsed.parseError)}`,
+    );
+  }
+  const frontmatter: SpecFrontmatter = { ...parsed.frontmatter };
+  if (updates.title !== undefined) frontmatter.title = updates.title.trim();
+  if (updates.description !== undefined) frontmatter.description = updates.description.trim();
+  if (updates.tags !== undefined) {
+    frontmatter.tags = [...new Set(updates.tags.map((tag) => tag.trim()).filter(Boolean))];
+  }
+  await writeSpec(found.spec.filePath, frontmatter, parsed.content);
+  const reread = await parseSpec(found.spec.filePath);
+  return {
+    specId: reread?.frontmatter.id ?? frontmatter.id ?? found.spec.fileName,
+    filePath: found.spec.filePath,
+  };
 }

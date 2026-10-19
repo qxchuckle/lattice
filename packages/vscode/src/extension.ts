@@ -21,9 +21,15 @@ import { SpecDiagnosticsService } from './editor/spec-diagnostics';
 import { syncCheckpointDraftContext } from './editor/checkpoint-draft';
 import { SpecRefCodeActionProvider } from './editor/spec-code-actions';
 import { UserScopeService } from './state/user-scope';
-import { TaskFilterService } from './state/task-filter';
+import { TasksScopeService } from './state/tasks-scope';
 import { ViewSearchService } from './state/view-search';
+import { ViewFilterService } from './state/view-filter';
 import { taskFilterSummary } from './commands/task-filter';
+import {
+  projectFilterSummary,
+  searchFilterSummary,
+  specFilterSummary,
+} from './commands/view-filter';
 import { StatusBarController } from './status-bar';
 import { GraphPanelManager } from './webview/panel';
 import {
@@ -39,6 +45,7 @@ import { SearchProvider } from './views/search';
 import { SpecsProvider } from './views/specs';
 import { TasksProvider } from './views/tasks';
 import { ProjectsProvider } from './views/projects';
+import { ViewSearchPreviewService } from './views/view-search-preview';
 import { t } from './t';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -65,9 +72,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const activeTask = new ActiveTaskService(context);
   const activeProject = new ActiveProjectService(context, data, snapshot);
   activeProjectRef.current = activeProject;
-  const searchState = new SearchStateService();
+  const searchState = new SearchStateService(context);
   const reports = new ReportStore();
-  const taskFilter = new TaskFilterService(context);
+  const viewFilter = new ViewFilterService(context);
+  const tasksScope = new TasksScopeService(context);
   const viewSearch = new ViewSearchService(context);
 
   const tasksProvider = new TasksProvider(
@@ -75,12 +83,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     snapshot,
     activeProject,
     activeTask,
-    taskFilter,
+    viewFilter,
+    tasksScope,
     viewSearch,
   );
-  const specsProvider = new SpecsProvider(snapshot, viewSearch);
-  const projectsProvider = new ProjectsProvider(snapshot, activeProject, activeTask, viewSearch);
-  const searchProvider = new SearchProvider(searchState, snapshot);
+  const specsProvider = new SpecsProvider(snapshot, viewSearch, viewFilter);
+  const projectsProvider = new ProjectsProvider(
+    snapshot,
+    activeProject,
+    activeTask,
+    viewSearch,
+    viewFilter,
+  );
+  const searchProvider = new SearchProvider(searchState, snapshot, viewFilter);
   // 跨视图拖拽：任务 → 项目（associate）、Spec → 任务（refSpec）
   const dnd = new LatticeDragAndDropController(data, snapshot);
 
@@ -104,25 +119,49 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     treeDataProvider: searchProvider,
   });
 
-  // ── 视图过滤 / 搜索：view/title 图标态 + 视图消息行 ──
-  const updateViewFilterUi = (): void => {
-    // 任务：状态 × 项目过滤 + 关键词搜索
-    void vscode.commands.executeCommand('setContext', 'lattice.tasks.hasFilter', taskFilter.active);
+  // ── 视图过滤 / 搜索：view/title 图标态 + 视图消息行（单一组合函数，错误 > 过滤 > 搜索） ──
+  const composeViewMessages = (): void => {
+    const errors = snapshot.data.errors;
+    const projectName = (id: string): string | undefined => snapshot.findProject(id)?.name;
+
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.tasks.hasFilter',
+      viewFilter.isActive('tasks'),
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.tasks.hasSearch',
+      viewSearch.isActive('tasks'),
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.specs.hasFilter',
+      viewFilter.isActive('specs'),
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.projects.hasFilter',
+      viewFilter.isActive('projects'),
+    );
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.search.hasFilter',
+      viewFilter.isActive('search'),
+    );
+
+    // 任务：错误 + 过滤 + 搜索
     const taskParts: string[] = [];
-    if (taskFilter.active) {
-      taskParts.push(
-        t(
-          'Filter: {0}',
-          taskFilterSummary(taskFilter.current, (id) => snapshot.findProject(id)?.name),
-        ),
-      );
+    if (errors.tasks) taskParts.push(t('Failed to load tasks: {0}', errors.tasks));
+    if (viewFilter.isActive('tasks')) {
+      taskParts.push(t('Filter: {0}', taskFilterSummary(viewFilter.get('tasks'), projectName)));
     }
     if (viewSearch.isActive('tasks')) {
       taskParts.push(t('Search: "{0}"', viewSearch.get('tasks').query));
     }
     tasksView.message = taskParts.length > 0 ? taskParts.join(' · ') : undefined;
 
-    // 规范 / 项目：关键词搜索
+    // 规范 / 项目：错误 + 过滤 + 搜索
     for (const [target, view] of [
       ['specs', specsView],
       ['projects', projectsView],
@@ -132,16 +171,42 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         `lattice.${target}.hasSearch`,
         viewSearch.isActive(target),
       );
-      view.message = viewSearch.isActive(target)
-        ? t('Search: "{0}"', viewSearch.get(target).query)
-        : undefined;
+      const parts: string[] = [];
+      const error = errors[target];
+      if (error) {
+        parts.push(
+          t(
+            target === 'specs' ? 'Failed to load specs: {0}' : 'Failed to load projects: {0}',
+            error,
+          ),
+        );
+      }
+      if (viewFilter.isActive(target)) {
+        parts.push(
+          t(
+            'Filter: {0}',
+            target === 'specs'
+              ? specFilterSummary(viewFilter.get('specs'), projectName)
+              : projectFilterSummary(viewFilter.get('projects')),
+          ),
+        );
+      }
+      if (viewSearch.isActive(target)) {
+        parts.push(t('Search: "{0}"', viewSearch.get(target).query));
+      }
+      view.message = parts.length > 0 ? parts.join(' · ') : undefined;
     }
+
+    // 搜索结果视图：过滤摘要（错误态由 SearchProvider 的占位行呈现）
+    searchView.message = viewFilter.isActive('search')
+      ? t('Filter: {0}', searchFilterSummary(viewFilter.get('search'), projectName))
+      : undefined;
   };
-  taskFilter.onDidChange(() => updateViewFilterUi());
-  viewSearch.onDidChange(() => updateViewFilterUi());
-  snapshot.onDidChange(() => updateViewFilterUi());
-  updateViewFilterUi();
-  context.subscriptions.push(taskFilter, viewSearch);
+  viewFilter.onDidChange(() => composeViewMessages());
+  viewSearch.onDidChange(() => composeViewMessages());
+  snapshot.onDidChange(() => composeViewMessages());
+  composeViewMessages();
+  context.subscriptions.push(viewFilter, tasksScope, viewSearch);
 
   const createWatcher = (): LatticeWatcher => {
     const instance = new LatticeWatcher({
@@ -159,6 +224,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const busy = new BusyService();
   const specDiagnostics = new SpecDiagnosticsService();
+  const viewSearchPreview = new ViewSearchPreviewService(data, snapshot, {
+    tasks: tasksProvider,
+    specs: specsProvider,
+    projects: projectsProvider,
+  });
   const services: CommandServices = {
     context,
     data,
@@ -169,8 +239,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     reports,
     busy,
     userScope,
-    taskFilter,
+    viewFilter,
+    tasksScope,
     viewSearch,
+    viewSearchPreview,
     watcher: watcherRef.current,
     specDiagnostics,
   };
@@ -280,9 +352,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const updateViewDecorations = () => {
-    const config = getConfig();
     tasksView.description =
-      config.tasksScope === 'project' ? t('current project') : t('all projects');
+      tasksScope.effective === 'project' ? t('current project') : t('all projects');
     const activeCount = activeProject.currentProjectId
       ? snapshot.activeTasksForProject(activeProject.currentProjectId).length
       : 0;
@@ -295,15 +366,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         ? { value: snapshot.data.conflicts.length, tooltip: t('Spec conflicts') }
         : undefined;
     searchView.description = searchState.current.query || undefined;
-    tasksView.message = snapshot.data.errors.tasks
-      ? t('Failed to load tasks: {0}', snapshot.data.errors.tasks)
-      : undefined;
-    specsView.message = snapshot.data.errors.specs
-      ? t('Failed to load specs: {0}', snapshot.data.errors.specs)
-      : undefined;
-    projectsView.message = snapshot.data.errors.projects
-      ? t('Failed to load projects: {0}', snapshot.data.errors.projects)
-      : undefined;
     void vscode.commands.executeCommand(
       'setContext',
       'lattice.hasErrors',
@@ -335,6 +397,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     activeTask.onDidChange(() => updateContextKeys()),
   );
+  // 任务范围（workspaceState 覆盖）变化：刷新视图描述
+  context.subscriptions.push(tasksScope.onDidChange(() => updateViewDecorations()));
 
   // ── autoRefresh / 轮询兜底 ──
   let pollTimer: ReturnType<typeof setInterval> | undefined;
@@ -364,6 +428,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         services.watcher = watcherRef.current;
         void snapshot.invalidate(['user', 'projects', 'tasks', 'specs', 'conflicts']);
         void activeProject.refresh();
+      }
+      if (event.affectsConfiguration('lattice.tasks.scope')) {
+        // 用户显式修改设置：丢弃 workspaceState 覆盖，令设置重新生效
+        void tasksScope.clearOverride();
       }
       if (
         event.affectsConfiguration('lattice.autoRefresh') ||

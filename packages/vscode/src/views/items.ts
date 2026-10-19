@@ -14,6 +14,7 @@ export type LatticeItemPayload =
   | { kind: 'progressAll'; taskId: string }
   | { kind: 'refSpecLeaf'; taskId: string; specId: string; title: string; filePath?: string }
   | { kind: 'project'; projectId: string }
+  | { kind: 'specProjectGroup'; projectId: string }
   | { kind: 'relation'; relationId: string; projectId: string }
   | { kind: 'spec'; specId: string; filePath: string; scope: string }
   | { kind: 'conflict'; specId: string; filePath: string }

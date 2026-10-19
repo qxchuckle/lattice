@@ -5,6 +5,63 @@ All notable changes to the Lattice VS Code extension are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-10-19
+
+### Fixed
+
+- Explicit-action messages now appear every time: the "Filter Projects" no-data hint (and the "no local path" / "no associated projects or paths" warnings) were suppressed by the 30-second notification de-duplication when clicked again, which looked like the button stopped working. Event-driven notifications keep their de-duplication.
+
+## [0.2.4] - 2026-10-19
+
+### Changed
+
+- "Filter Projects" no longer dead-ends when no project defines groups or tags: the message now explains the situation and offers an **Edit Project Metadata** button (the wizard edits groups and tags). Project tooltips also show groups / tags when present, so the filter dimensions are discoverable.
+
+## [0.2.3] - 2026-10-19
+
+### Fixed
+
+- The sidebar **Detail** view now scrolls when its content is taller than the view. The shared webview stylesheet clipped overflow (`overflow: hidden` on `html/body/#root`, meant for the graph workbench which scrolls internally); detail mode now gets its own document-level scrolling styles.
+
+## [0.2.2] - 2026-10-19
+
+### Fixed
+
+- Spec nodes no longer show "Open in Graph" twice — the generic and spec-specific graph menu entries both matched `viewItem == spec`.
+
+## [0.2.1] - 2026-10-19
+
+### Fixed
+
+- Task search now shows its active state and the clear (✕) button in the view title — the `hasSearch` context key for the tasks view was never set, so the button and the filled icon never appeared.
+- Project-level spec sub-groups now offer the full project menu: reveal in file manager, open in current / new window, open in terminal, add relation, rename, edit description, edit metadata, edit in config, copy id / path, open in graph and reveal in sidebar.
+- "Unreference Spec" now appears when right-clicking a spec reference under a task (the menu condition referenced a context value that no node produced).
+- Spec metadata editing is now also available for spec references in the task tree, and "Reveal in Sidebar" for spec conflicts.
+
+## [0.2.0] - 2026-10-19
+
+### Added
+
+- **Live search preview** — searching the tasks / specs / projects trees now opens a QuickPick with real-time results: name matches render instantly, full-text hits merge in after a short debounce. The first row applies the keyword to the sidebar (Enter); picking a result applies the query and reveals the node; submitting an empty query clears the search.
+- **View clear buttons** — view-title buttons clear the active search (`$(close)`) or filter (`$(clear-all)`) per view (tasks / specs / projects / search results), complementing the existing filter/search icons.
+- **Specs / projects / search filters** — specs by layer × project, projects by group × tag, search results by type × project. All persisted per workspace, with programmatic parameters for automation.
+- **Specs sub-grouping** — project-level specs are grouped under their project (with counts); unresolvable specs fall into an "Unknown Project" group. Locating still works under search / filters.
+- **Project menu completion** — reveal in file manager (now actually reveals), open in current window / new window / terminal, rename, edit description, edit in config (`project.json`). Multi-path projects ask which path to use; the metadata wizard also edits groups.
+- **Task relationship edits** — unassociate project, remove one scope path, clear all scope paths (with confirmation), and change / clear the parent task.
+- **Spec metadata quick edit** — edit title / description / tags without opening the file (body untouched; YAML parse failures are refused).
+- **Task scope persistence** — the "all projects / current project" toggle is remembered per workspace (it no longer writes to your global settings.json); the Search view restores its last query and results.
+
+### Changed
+
+- Task filter state moved into the shared view-filter store; existing state migrates automatically on first run.
+- View message lines are composed from a single source (error > filter > search), so clearing one dimension no longer wipes the others.
+- The Specs and Projects views gained the same "no project registered" welcome state as Tasks.
+
+### Fixed
+
+- `lattice.project.openFolder` is now labelled "Open in New Window" and opens a new window as expected (the previous title said "Reveal Folder in OS").
+- Task-scope toggling now refreshes the view description immediately.
+
 ## [0.1.1] - 2026-10-18
 
 ### Added

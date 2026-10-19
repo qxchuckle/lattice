@@ -37,19 +37,19 @@ async function setOrPickFilter(
   services: CommandServices,
   arg: unknown,
 ): Promise<TaskFilterState | undefined> {
-  const filter = services.taskFilter;
+  const filter = services.viewFilter;
   if (!filter) return undefined;
 
   const args = extractArgObject<FilterArgs>(arg);
   if (args && (Array.isArray(args.statuses) || Array.isArray(args.projectIds))) {
-    return filter.set({
+    return filter.set('tasks', {
       statuses: (args.statuses ?? []).filter((item) => typeof item === 'string'),
       projectIds: (args.projectIds ?? []).filter((item) => typeof item === 'string'),
     });
   }
 
   await services.snapshot.ensure(['tasks', 'projects']);
-  const current = filter.current;
+  const current = filter.get('tasks');
   interface FilterItem extends vscode.QuickPickItem {
     kind2?: 'status' | 'project';
     value?: string;
@@ -88,7 +88,7 @@ async function setOrPickFilter(
   const projectIds = picked
     .filter((item) => item.kind2 === 'project' && item.value)
     .map((item) => item.value as string);
-  const next = await filter.set({ statuses, projectIds });
+  const next = await filter.set('tasks', { statuses, projectIds });
   void showDeduped(
     'info',
     next.statuses.length + next.projectIds.length > 0

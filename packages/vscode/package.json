@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.1.1",
+  "version": "0.2.5",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -154,6 +154,16 @@
         "when": "lattice.initialized && !lattice.hasWorkspaceProject"
       },
       {
+        "view": "lattice.specs",
+        "contents": "%lattice.welcome.noProject%",
+        "when": "lattice.initialized && !lattice.hasWorkspaceProject"
+      },
+      {
+        "view": "lattice.projects",
+        "contents": "%lattice.welcome.noProject%",
+        "when": "lattice.initialized && !lattice.hasWorkspaceProject"
+      },
+      {
         "view": "lattice.search",
         "contents": "%lattice.welcome.search%",
         "when": "lattice.initialized"
@@ -288,6 +298,21 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "lattice.task.unassociate.project",
+        "title": "%lattice.command.task.unassociate.project.title%",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "lattice.task.unassociate.path",
+        "title": "%lattice.command.task.unassociate.path.title%",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "lattice.task.clearPaths",
+        "title": "%lattice.command.task.clearPaths.title%",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "lattice.task.refSpec",
         "title": "%lattice.command.task.refSpec.title%",
         "icon": "$(references)"
@@ -311,6 +336,11 @@
         "command": "lattice.task.update.title",
         "title": "%lattice.command.task.update.title.title%",
         "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.task.update.parent",
+        "title": "%lattice.command.task.update.parent.title%",
+        "icon": "$(git-branch)"
       },
       {
         "command": "lattice.revealInSidebar",
@@ -373,6 +403,11 @@
         "icon": "$(warning)"
       },
       {
+        "command": "lattice.spec.update",
+        "title": "%lattice.command.spec.update.title%",
+        "icon": "$(edit)"
+      },
+      {
         "command": "lattice.spec.copyId",
         "title": "%lattice.command.spec.copyId.title%",
         "icon": "$(copy)"
@@ -411,6 +446,31 @@
         "command": "lattice.project.openFolder",
         "title": "%lattice.command.project.openFolder.title%",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "lattice.project.openInCurrentWindow",
+        "title": "%lattice.command.project.openInCurrentWindow.title%",
+        "icon": "$(window)"
+      },
+      {
+        "command": "lattice.project.openInTerminal",
+        "title": "%lattice.command.project.openInTerminal.title%",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "lattice.project.rename",
+        "title": "%lattice.command.project.rename.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.project.editDescription",
+        "title": "%lattice.command.project.editDescription.title%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lattice.project.editMeta",
+        "title": "%lattice.command.project.editMeta.title%",
+        "icon": "$(json)"
       },
       {
         "command": "lattice.project.copyId",
@@ -576,6 +636,56 @@
         "command": "lattice.projects.search",
         "title": "%lattice.command.projects.search.title%",
         "icon": "$(search)"
+      },
+      {
+        "command": "lattice.specs.filter",
+        "title": "%lattice.command.specs.filter.title%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "lattice.projects.filter",
+        "title": "%lattice.command.projects.filter.title%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "lattice.search.filter",
+        "title": "%lattice.command.search.filter.title%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "lattice.tasks.clearSearch",
+        "title": "%lattice.command.tasks.clearSearch.title%",
+        "icon": "$(close)"
+      },
+      {
+        "command": "lattice.tasks.clearFilter",
+        "title": "%lattice.command.tasks.clearFilter.title%",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "lattice.specs.clearSearch",
+        "title": "%lattice.command.specs.clearSearch.title%",
+        "icon": "$(close)"
+      },
+      {
+        "command": "lattice.specs.clearFilter",
+        "title": "%lattice.command.specs.clearFilter.title%",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "lattice.projects.clearSearch",
+        "title": "%lattice.command.projects.clearSearch.title%",
+        "icon": "$(close)"
+      },
+      {
+        "command": "lattice.projects.clearFilter",
+        "title": "%lattice.command.projects.clearFilter.title%",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "lattice.search.clearFilter",
+        "title": "%lattice.command.search.clearFilter.title%",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
@@ -610,6 +720,34 @@
         },
         {
           "command": "lattice.tasks.toggleScope",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.clearSearch",
+          "when": "false"
+        },
+        {
+          "command": "lattice.tasks.clearFilter",
+          "when": "false"
+        },
+        {
+          "command": "lattice.specs.clearSearch",
+          "when": "false"
+        },
+        {
+          "command": "lattice.specs.clearFilter",
+          "when": "false"
+        },
+        {
+          "command": "lattice.projects.clearSearch",
+          "when": "false"
+        },
+        {
+          "command": "lattice.projects.clearFilter",
+          "when": "false"
+        },
+        {
+          "command": "lattice.search.clearFilter",
           "when": "false"
         },
         {
@@ -691,6 +829,18 @@
           "icon": "$(search-filled)"
         },
         {
+          "command": "lattice.tasks.clearSearch",
+          "when": "view == lattice.tasks && lattice.tasks.hasSearch",
+          "group": "navigation@5",
+          "icon": "$(close)"
+        },
+        {
+          "command": "lattice.tasks.clearFilter",
+          "when": "view == lattice.tasks && lattice.tasks.hasFilter",
+          "group": "navigation@6",
+          "icon": "$(clear-all)"
+        },
+        {
           "command": "lattice.refresh",
           "when": "view == lattice.tasks || view == lattice.specs || view == lattice.projects",
           "group": "navigation@9",
@@ -721,6 +871,24 @@
           "icon": "$(clear-all)"
         },
         {
+          "command": "lattice.search.filter",
+          "when": "view == lattice.search && !lattice.search.hasFilter",
+          "group": "navigation@4",
+          "icon": "$(filter)"
+        },
+        {
+          "command": "lattice.search.filter",
+          "when": "view == lattice.search && lattice.search.hasFilter",
+          "group": "navigation@4",
+          "icon": "$(filter-filled)"
+        },
+        {
+          "command": "lattice.search.clearFilter",
+          "when": "view == lattice.search && lattice.search.hasFilter",
+          "group": "navigation@5",
+          "icon": "$(close)"
+        },
+        {
           "command": "lattice.project.switchActive",
           "when": "view == lattice.projects",
           "group": "navigation@1",
@@ -737,6 +905,30 @@
           "when": "view == lattice.projects && lattice.projects.hasSearch",
           "group": "navigation@2",
           "icon": "$(search-filled)"
+        },
+        {
+          "command": "lattice.projects.filter",
+          "when": "view == lattice.projects && !lattice.projects.hasFilter",
+          "group": "navigation@3",
+          "icon": "$(filter)"
+        },
+        {
+          "command": "lattice.projects.filter",
+          "when": "view == lattice.projects && lattice.projects.hasFilter",
+          "group": "navigation@3",
+          "icon": "$(filter-filled)"
+        },
+        {
+          "command": "lattice.projects.clearSearch",
+          "when": "view == lattice.projects && lattice.projects.hasSearch",
+          "group": "navigation@4",
+          "icon": "$(close)"
+        },
+        {
+          "command": "lattice.projects.clearFilter",
+          "when": "view == lattice.projects && lattice.projects.hasFilter",
+          "group": "navigation@5",
+          "icon": "$(clear-all)"
         },
         {
           "command": "lattice.spec.conflicts",
@@ -773,6 +965,30 @@
           "when": "view == lattice.specs && lattice.specs.hasSearch",
           "group": "navigation@3",
           "icon": "$(search-filled)"
+        },
+        {
+          "command": "lattice.specs.filter",
+          "when": "view == lattice.specs && !lattice.specs.hasFilter",
+          "group": "navigation@4",
+          "icon": "$(filter)"
+        },
+        {
+          "command": "lattice.specs.filter",
+          "when": "view == lattice.specs && lattice.specs.hasFilter",
+          "group": "navigation@4",
+          "icon": "$(filter-filled)"
+        },
+        {
+          "command": "lattice.specs.clearSearch",
+          "when": "view == lattice.specs && lattice.specs.hasSearch",
+          "group": "navigation@5",
+          "icon": "$(close)"
+        },
+        {
+          "command": "lattice.specs.clearFilter",
+          "when": "view == lattice.specs && lattice.specs.hasFilter",
+          "group": "navigation@6",
+          "icon": "$(clear-all)"
         }
       ],
       "view/item/context": [
@@ -838,8 +1054,23 @@
         },
         {
           "command": "lattice.task.unrefSpec",
-          "when": "viewItem == taskRefSpec && !listMultiSelection",
+          "when": "viewItem == taskRefSpecLeaf && !listMultiSelection",
           "group": "2_associate@3"
+        },
+        {
+          "command": "lattice.task.unassociate.project",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@4"
+        },
+        {
+          "command": "lattice.task.unassociate.path",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@5"
+        },
+        {
+          "command": "lattice.task.clearPaths",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "2_associate@6"
         },
         {
           "command": "lattice.task.setActive",
@@ -850,6 +1081,11 @@
           "command": "lattice.task.update.title",
           "when": "viewItem =~ /^task-/ && !listMultiSelection",
           "group": "3_manage@2"
+        },
+        {
+          "command": "lattice.task.update.parent",
+          "when": "viewItem =~ /^task-/ && !listMultiSelection",
+          "group": "3_manage@3"
         },
         {
           "command": "lattice.task.copyId",
@@ -868,7 +1104,7 @@
         },
         {
           "command": "lattice.task.revealInGraph",
-          "when": "viewItem == project || viewItem == spec",
+          "when": "viewItem == project",
           "group": "5_view@1"
         },
         {
@@ -902,6 +1138,11 @@
           "group": "2_associate@1"
         },
         {
+          "command": "lattice.spec.update",
+          "when": "viewItem == spec || viewItem == taskRefSpecLeaf",
+          "group": "3_manage@1"
+        },
+        {
           "command": "lattice.spec.revealInGraph",
           "when": "viewItem == spec",
           "group": "5_view@1"
@@ -912,9 +1153,19 @@
           "group": "inline@1"
         },
         {
+          "command": "lattice.project.openInCurrentWindow",
+          "when": "viewItem == project",
+          "group": "1_open@1"
+        },
+        {
           "command": "lattice.project.openFolder",
           "when": "viewItem == project",
-          "group": "1_actions@1"
+          "group": "1_open@2"
+        },
+        {
+          "command": "lattice.project.openInTerminal",
+          "when": "viewItem == project",
+          "group": "1_open@3"
         },
         {
           "command": "lattice.project.copyId",
@@ -937,9 +1188,89 @@
           "group": "9_danger@1"
         },
         {
-          "command": "lattice.project.update",
+          "command": "lattice.project.rename",
           "when": "viewItem == project",
           "group": "3_manage@1"
+        },
+        {
+          "command": "lattice.project.editDescription",
+          "when": "viewItem == project",
+          "group": "3_manage@2"
+        },
+        {
+          "command": "lattice.project.update",
+          "when": "viewItem == project",
+          "group": "3_manage@3"
+        },
+        {
+          "command": "lattice.project.editMeta",
+          "when": "viewItem == project",
+          "group": "3_manage@4"
+        },
+        {
+          "command": "lattice.project.open",
+          "when": "viewItem == specProjectGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "lattice.project.openInCurrentWindow",
+          "when": "viewItem == specProjectGroup",
+          "group": "1_open@1"
+        },
+        {
+          "command": "lattice.project.openFolder",
+          "when": "viewItem == specProjectGroup",
+          "group": "1_open@2"
+        },
+        {
+          "command": "lattice.project.openInTerminal",
+          "when": "viewItem == specProjectGroup",
+          "group": "1_open@3"
+        },
+        {
+          "command": "lattice.project.relation.add",
+          "when": "viewItem == specProjectGroup",
+          "group": "2_associate@1"
+        },
+        {
+          "command": "lattice.project.rename",
+          "when": "viewItem == specProjectGroup",
+          "group": "3_manage@1"
+        },
+        {
+          "command": "lattice.project.editDescription",
+          "when": "viewItem == specProjectGroup",
+          "group": "3_manage@2"
+        },
+        {
+          "command": "lattice.project.update",
+          "when": "viewItem == specProjectGroup",
+          "group": "3_manage@3"
+        },
+        {
+          "command": "lattice.project.editMeta",
+          "when": "viewItem == specProjectGroup",
+          "group": "3_manage@4"
+        },
+        {
+          "command": "lattice.project.copyId",
+          "when": "viewItem == specProjectGroup",
+          "group": "4_copy@1"
+        },
+        {
+          "command": "lattice.project.copyPath",
+          "when": "viewItem == specProjectGroup",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "lattice.task.revealInGraph",
+          "when": "viewItem == specProjectGroup",
+          "group": "5_view@1"
+        },
+        {
+          "command": "lattice.revealInSidebar",
+          "when": "viewItem == specProjectGroup",
+          "group": "5_view@2"
         },
         {
           "command": "lattice.task.copyId",
@@ -973,7 +1304,7 @@
         },
         {
           "command": "lattice.revealInSidebar",
-          "when": "viewItem == spec || viewItem == taskRefSpecLeaf",
+          "when": "viewItem == spec || viewItem == taskRefSpecLeaf || viewItem == conflict",
           "group": "5_view@2"
         },
         {

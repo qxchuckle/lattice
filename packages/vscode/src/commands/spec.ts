@@ -39,6 +39,94 @@ async function openSpecById(services: CommandServices, specId: string | undefine
   }
 }
 
+function splitList(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+/**
+ * 规范元数据快捷编辑（title / description / tags；正文与层级不动）。
+ * 程序化参数 `{ specId, title?, description?, tags? }`：任一字段存在即直接写入（供集成测试）。
+ * 返回更新结果（程序化路径），供集成测试断言。
+ */
+async function updateSpecMeta(
+  services: CommandServices,
+  arg: unknown,
+): Promise<{ specId: string; filePath: string } | undefined> {
+  const args = extractArgObject<{
+    specId?: string;
+    title?: string;
+    description?: string;
+    tags?: string[];
+  }>(arg);
+  let specId = specIdFrom(arg);
+  if (!specId) {
+    const picked = await pickSpecId(services, { title: t('Edit Spec Metadata') });
+    if (!picked) return;
+    specId = picked.specId;
+  }
+  await services.snapshot.ensure(['specs']);
+  const row = services.snapshot.specById(specId) ?? (await services.data.specShow(specId));
+  if (!row) {
+    void showDeduped('warn', t('Spec not found: {0}', specId));
+    return;
+  }
+  const programmatic =
+    args !== undefined &&
+    (args.title !== undefined || args.description !== undefined || Array.isArray(args.tags));
+
+  const updates: { title?: string; description?: string; tags?: string[] } = {};
+  if (programmatic) {
+    if (args?.title !== undefined) updates.title = args.title;
+    if (args?.description !== undefined) updates.description = args.description;
+    if (Array.isArray(args?.tags)) updates.tags = args.tags;
+  } else {
+    const title = await vscode.window.showInputBox({
+      title: t('Spec title'),
+      value: row.title,
+    });
+    if (title === undefined) return;
+    const description = await vscode.window.showInputBox({
+      title: t('Spec description'),
+      value: row.description ?? '',
+    });
+    if (description === undefined) return;
+    const tagsRaw = await vscode.window.showInputBox({
+      title: t('Tags (comma separated)'),
+      value: row.tags.join(', '),
+    });
+    if (tagsRaw === undefined) return;
+    updates.title = title.trim();
+    updates.description = description.trim();
+    updates.tags = splitList(tagsRaw);
+  }
+  try {
+    const result = await withNotificationProgress(t('Updating spec…'), () =>
+      services.data.specUpdate(row.id, updates),
+    );
+    if (!result) return undefined;
+    await services.snapshot.invalidate(['specs', 'conflicts']);
+    if (!programmatic) {
+      const openLabel = t('Open Spec');
+      void showDeduped('info', t('Spec updated: {0}', result.specId), openLabel).then(
+        async (action) => {
+          if (action === openLabel) await openSpecById(services, result.specId);
+        },
+      );
+    }
+    return result;
+  } catch (error) {
+    await handleCliError(error, t('Failed to update the spec'));
+    return undefined;
+  }
+}
+
 async function showConflicts(services: CommandServices): Promise<void> {
   await services.snapshot.ensure(['conflicts']);
   const conflicts = services.snapshot.data.conflicts;
@@ -190,6 +278,7 @@ export function registerSpecCommands(services: CommandServices, register: Regist
     await vscode.env.clipboard.writeText(filePath);
     void showDeduped('info', t('Copied: {0}', filePath));
   });
+  register('lattice.spec.update', (arg) => updateSpecMeta(services, arg));
   register('lattice.spec.refToTask', async (arg?: unknown) => {
     const specId = specIdFrom(arg) ?? (await pickSpecId(services))?.specId;
     if (!specId) return;

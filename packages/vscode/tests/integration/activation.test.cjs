@@ -119,6 +119,16 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
       'lattice.cli.check',
       'lattice.rag.status',
       'lattice.trash.browse',
+      'lattice.spec.update',
+      'lattice.task.unassociate.project',
+      'lattice.task.unassociate.path',
+      'lattice.task.clearPaths',
+      'lattice.task.update.parent',
+      'lattice.specs.filter',
+      'lattice.projects.filter',
+      'lattice.search.filter',
+      'lattice.tasks.clearSearch',
+      'lattice.specs.clearFilter',
     ]) {
       assert.ok(commands.includes(id), `command should be registered: ${id}`);
     }
@@ -536,6 +546,285 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     // 项目：设置 / 清除不抛错（reveal 断言留给任务/规范）
     await vscode.commands.executeCommand('lattice.projects.search', { query: 'alpha' });
     await vscode.commands.executeCommand('lattice.projects.search', { query: '' });
+  });
+
+  test('view clear commands reset search / filter dimensions', async () => {
+    const revealTask = () =>
+      vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'task',
+        id: 'demo-task-1',
+      });
+    const revealUserSpec = () =>
+      vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'spec',
+        id: 'spec-aaaaaaaa',
+      });
+
+    // 任务搜索：应用 → 清除 → 恢复可见
+    await vscode.commands.executeCommand('lattice.tasks.search', { query: 'zzz-无命中' });
+    assert.equal(await revealTask(), false);
+    assert.deepEqual(await vscode.commands.executeCommand('lattice.tasks.clearSearch'), {
+      query: '',
+      contentIds: [],
+    });
+    assert.equal(await revealTask(), true, 'clearSearch restores the task');
+
+    // 任务过滤：应用 → 清除 → 恢复可见
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.tasks.filter', {
+        statuses: ['archived'],
+        projectIds: [],
+      }),
+      { statuses: ['archived'], projectIds: [] },
+    );
+    await vscode.commands.executeCommand('lattice.tasks.clearFilter');
+    assert.equal(await revealTask(), true, 'clearFilter restores the task');
+
+    // 规范搜索清除
+    await vscode.commands.executeCommand('lattice.specs.search', { query: 'zzz-无命中' });
+    assert.equal(await revealUserSpec(), false);
+    await vscode.commands.executeCommand('lattice.specs.clearSearch');
+    assert.equal(await revealUserSpec(), true, 'clearSearch restores the spec');
+
+    // 规范层级过滤：仅 global → 用户级不可见；清除恢复
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.specs.filter', {
+        scopes: ['global'],
+        projectIds: [],
+      }),
+      { scopes: ['global'], projectIds: [] },
+    );
+    assert.equal(await revealUserSpec(), false, 'user spec hidden by layer filter');
+    await vscode.commands.executeCommand('lattice.specs.clearFilter');
+    assert.equal(await revealUserSpec(), true, 'clearFilter restores the spec');
+
+    // 规范项目过滤：仅 fixture-project → 用户级（无项目归属）隐藏
+    await vscode.commands.executeCommand('lattice.specs.filter', {
+      scopes: [],
+      projectIds: ['fixture-project'],
+    });
+    assert.equal(await revealUserSpec(), false, 'user spec hidden by project filter');
+    await vscode.commands.executeCommand('lattice.specs.clearFilter');
+
+    // 项目过滤：分组 zzz 无命中 → 不可见；清除恢复
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.projects.filter', {
+        groups: ['zzz'],
+        tags: [],
+      }),
+      { groups: ['zzz'], tags: [] },
+    );
+    assert.equal(
+      await vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'project',
+        id: 'fixture-project',
+      }),
+      false,
+      'project hidden by group filter',
+    );
+    await vscode.commands.executeCommand('lattice.projects.clearFilter');
+    assert.equal(
+      await vscode.commands.executeCommand('lattice.revealInSidebar', {
+        kind: 'project',
+        id: 'fixture-project',
+      }),
+      true,
+      'clearFilter restores the project',
+    );
+
+    // 搜索结果过滤：设置 / 清除不抛错
+    assert.deepEqual(
+      await vscode.commands.executeCommand('lattice.search.filter', {
+        types: ['spec'],
+        projectIds: [],
+      }),
+      { types: ['spec'], projectIds: [] },
+    );
+    await vscode.commands.executeCommand('lattice.search.clearFilter');
+  });
+
+  test('project-level spec reveal works under per-project sub-grouping', async () => {
+    const projectSpecDir = path.join(
+      latticeHome,
+      'users',
+      't',
+      'projects',
+      'fixture-project',
+      'spec',
+    );
+    mkdirSync(projectSpecDir, { recursive: true });
+    writeFileSync(
+      path.join(projectSpecDir, 'project-fixture.md'),
+      '---\nid: spec-bbbbbbbb\ntitle: Project fixture spec\n---\n\nbody\n',
+    );
+    await vscode.commands.executeCommand('lattice.refresh');
+    try {
+      assert.equal(
+        await vscode.commands.executeCommand('lattice.revealInSidebar', {
+          kind: 'spec',
+          id: 'spec-bbbbbbbb',
+        }),
+        true,
+        'project-level spec is revealable via g/spec-project/pj:<id>/s:<id>',
+      );
+      // 项目维度过滤下：项目 spec 可见、用户 spec 隐藏（同一过滤管道）
+      await vscode.commands.executeCommand('lattice.specs.filter', {
+        scopes: ['project'],
+        projectIds: ['fixture-project'],
+      });
+      assert.equal(
+        await vscode.commands.executeCommand('lattice.revealInSidebar', {
+          kind: 'spec',
+          id: 'spec-bbbbbbbb',
+        }),
+        true,
+        'project spec visible under project filter',
+      );
+      assert.equal(
+        await vscode.commands.executeCommand('lattice.revealInSidebar', {
+          kind: 'spec',
+          id: 'spec-aaaaaaaa',
+        }),
+        false,
+        'user spec hidden under project filter',
+      );
+      await vscode.commands.executeCommand('lattice.specs.clearFilter');
+    } finally {
+      rmSync(projectSpecDir, { recursive: true, force: true });
+      await vscode.commands.executeCommand('lattice.refresh');
+    }
+  });
+
+  test('task unassociate removes project / path (file truth updated)', async () => {
+    // 取消关联项目
+    await vscode.commands.executeCommand('lattice.task.unassociate.project', {
+      taskId: 'demo-task-1',
+      projectId: 'fixture-project',
+    });
+    let meta = JSON.parse(readFileSync(taskJsonPath(), 'utf8'));
+    assert.deepEqual(meta.projects ?? [], [], 'project link removed');
+
+    // 移除单个 scopePath（fixture 关联 workspacePath）
+    await vscode.commands.executeCommand('lattice.task.unassociate.path', {
+      taskId: 'demo-task-1',
+      path: workspacePath,
+    });
+    meta = JSON.parse(readFileSync(taskJsonPath(), 'utf8'));
+    assert.deepEqual(meta.scopePaths ?? [], [], 'scope path removed');
+
+    // 还原 fixture（后续用例前提：任务关联项目与路径）
+    writeFileSync(
+      taskJsonPath(),
+      JSON.stringify({
+        id: 'demo-task-1',
+        title: 'Demo task',
+        status: 'in_progress',
+        projects: ['fixture-project'],
+        scopePaths: [{ path: workspacePath, addedAt: '2026-01-01T00:00:00.000Z' }],
+        referencedSpecs: [],
+        created: '2026-01-01T00:00:00.000Z',
+        updated: '2026-01-02T00:00:00.000Z',
+      }),
+    );
+    await vscode.commands.executeCommand('lattice.refresh');
+  });
+
+  test('task parent change sets and clears parentTaskId', async () => {
+    const secondTaskDir = path.join(latticeHome, 'users', 't', 'tasks', 'demo-task-2');
+    mkdirSync(secondTaskDir, { recursive: true });
+    writeFileSync(
+      path.join(secondTaskDir, 'task.json'),
+      JSON.stringify({
+        id: 'demo-task-2',
+        title: 'Demo task 2',
+        status: 'planning',
+        projects: [],
+        scopePaths: [],
+        referencedSpecs: [],
+        created: '2026-01-03T00:00:00.000Z',
+        updated: '2026-01-03T00:00:00.000Z',
+      }),
+    );
+    await vscode.commands.executeCommand('lattice.refresh');
+    try {
+      await vscode.commands.executeCommand('lattice.task.update.parent', {
+        taskId: 'demo-task-1',
+        parentId: 'demo-task-2',
+      });
+      let meta = JSON.parse(readFileSync(taskJsonPath(), 'utf8'));
+      assert.equal(meta.parentTaskId, 'demo-task-2');
+
+      await vscode.commands.executeCommand('lattice.task.update.parent', {
+        taskId: 'demo-task-1',
+        clearParent: true,
+      });
+      meta = JSON.parse(readFileSync(taskJsonPath(), 'utf8'));
+      assert.equal(meta.parentTaskId, undefined);
+    } finally {
+      rmSync(secondTaskDir, { recursive: true, force: true });
+      await vscode.commands.executeCommand('lattice.refresh');
+    }
+  });
+
+  test('spec.update writes frontmatter (title / description / tags) and keeps body', async () => {
+    const specPath = path.join(latticeHome, 'users', 't', 'spec', 'fixture-spec.md');
+    const updated = await vscode.commands.executeCommand('lattice.spec.update', {
+      specId: 'spec-aaaaaaaa',
+      title: 'Updated fixture spec',
+      description: 'updated description',
+      tags: ['x', 'y', 'x'],
+    });
+    assert.equal(updated?.specId, 'spec-aaaaaaaa');
+    const raw = readFileSync(specPath, 'utf8');
+    assert.match(raw, /title: Updated fixture spec/);
+    assert.match(raw, /description: updated description/);
+    assert.match(raw, /tags:\n\s+- x\n\s+- y/);
+    assert.match(raw, /body/, 'body preserved');
+  });
+
+  test('project commands: meta path / rename / editDescription (programmatic)', async () => {
+    const metaPath = await vscode.commands.executeCommand('lattice.project.editMeta', {
+      projectId: 'fixture-project',
+    });
+    assert.ok(String(metaPath).endsWith('project.json'), `meta path: ${metaPath}`);
+
+    const renamed = await vscode.commands.executeCommand('lattice.project.rename', {
+      projectId: 'fixture-project',
+      name: 'Fixture Project Renamed',
+    });
+    assert.equal(renamed?.name, 'Fixture Project Renamed');
+    const described = await vscode.commands.executeCommand('lattice.project.editDescription', {
+      projectId: 'fixture-project',
+      description: 'renamed fixture',
+    });
+    assert.equal(described?.description, 'renamed fixture');
+
+    const raw = JSON.parse(
+      readFileSync(
+        path.join(latticeHome, 'users', 't', 'projects', 'fixture-project', 'project.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(raw.name, 'Fixture Project Renamed');
+    assert.equal(raw.description, 'renamed fixture');
+  });
+
+  test('spec project group node carries full project ops (payload contract)', async () => {
+    const item = { lattice: { kind: 'specProjectGroup', projectId: 'fixture-project' } };
+    await vscode.commands.executeCommand('lattice.project.copyId', item);
+    assert.match(await vscode.env.clipboard.readText(), /fixture-project/);
+    assert.equal(
+      await vscode.commands.executeCommand('lattice.revealInSidebar', item),
+      true,
+      'spec project group node reveals the project node',
+    );
+  });
+
+  test('tasks scope toggle persists in workspaceState and reports the new value', async () => {
+    const toggled = await vscode.commands.executeCommand('lattice.tasks.toggleScope');
+    assert.ok(toggled === 'project' || toggled === 'all', `toggle result: ${toggled}`);
+    const back = await vscode.commands.executeCommand('lattice.tasks.toggleScope');
+    assert.notEqual(back, toggled);
   });
 
   test('workspace bootstrap initializes a fresh home in-process (no CLI)', async () => {

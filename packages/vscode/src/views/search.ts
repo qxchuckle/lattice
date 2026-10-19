@@ -3,6 +3,8 @@ import { SearchRow } from '../cli/types';
 import { truncate } from '../cli/parsers';
 import { SearchStateService } from '../state/search-state';
 import { SnapshotStore } from '../state/snapshot';
+import { ViewFilterService } from '../state/view-filter';
+import { searchResultMatchesFilter } from './filter-logic';
 import { t } from '../t';
 import { LatticeTreeItem, capitalize, makeItem, openFileCommand, tooltipMarkdown } from './items';
 
@@ -85,8 +87,23 @@ export class SearchProvider implements vscode.TreeDataProvider<LatticeTreeItem> 
   constructor(
     private readonly searchState: SearchStateService,
     private readonly snapshot: SnapshotStore,
+    private readonly viewFilter: ViewFilterService,
   ) {
-    this.disposables.push(searchState.onDidChange(() => this.refresh()));
+    this.disposables.push(
+      searchState.onDidChange(() => this.refresh()),
+      viewFilter.onDidChange((target) => {
+        if (target === 'search') this.refresh();
+      }),
+    );
+  }
+
+  /** 应用「类型 × 项目」过滤后的可见结果（分组计数与叶子共用）。 */
+  private visibleResults(): SearchRow[] {
+    const filter = this.viewFilter.get('search');
+    const canonical = (id: string): string => this.snapshot.canonicalProjectId(id) ?? id;
+    return this.searchState.current.results.filter((row) =>
+      searchResultMatchesFilter(row, filter, canonical),
+    );
   }
 
   refresh(): void {
@@ -137,8 +154,18 @@ export class SearchProvider implements vscode.TreeDataProvider<LatticeTreeItem> 
       ];
     }
     if (state.results.length === 0) return [];
+    const visible = this.visibleResults();
+    if (visible.length === 0) {
+      return [
+        makeItem({
+          label: t('All {0} result(s) are hidden by the active filter.', state.results.length),
+          contextValue: 'searchEmpty',
+          icon: new vscode.ThemeIcon('filter'),
+        }),
+      ];
+    }
     const groups = new Map<string, number>();
-    for (const row of state.results) {
+    for (const row of visible) {
       const key = TYPE_ORDER.includes(row.type as (typeof TYPE_ORDER)[number]) ? row.type : 'other';
       groups.set(key, (groups.get(key) ?? 0) + 1);
     }
@@ -159,7 +186,7 @@ export class SearchProvider implements vscode.TreeDataProvider<LatticeTreeItem> 
   }
 
   private getResultsForType(type: string): LatticeTreeItem[] {
-    const rows = this.searchState.current.results.filter((row) =>
+    const rows = this.visibleResults().filter((row) =>
       type === 'other'
         ? !TYPE_ORDER.includes(row.type as (typeof TYPE_ORDER)[number])
         : row.type === type,
