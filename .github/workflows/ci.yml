@@ -1,0 +1,167 @@
+name: CI
+
+# 全量 CI 四线（D1）：quality / vscode 集成矩阵 / node 兼容 / playwright e2e
+# - 文档类变更跳过（paths-ignore）
+# - 并发取消旧 run；全部 job 最小权限
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20 # dev 基线（vitest 4 要求 ≥20）；发布包 engines>=18 由 node-compat 线验证
+
+jobs:
+  # ── 线 1：静态检查 + 构建 + 全量测试 + 覆盖率门槛 ──
+  quality:
+    name: quality (lint / types / build / coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: lint
+        run: pnpm lint
+      - name: check-types
+        run: pnpm check-types
+      - name: build
+        run: pnpm build
+      - name: test with coverage
+        run: >-
+          pnpm test:coverage --reporter=default --reporter=json --outputFile.json=coverage/test-results.json
+
+      - name: assert tests ran (防静默空跑)
+        run: node scripts/ci-assert-tests.mjs coverage/test-results.json 200
+      - name: upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  # ── 线 2：vscode 集成矩阵（真实扩展宿主 + fixture 数据根；失败重试 ≤3）──
+  vscode-integration:
+    name: vscode integration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: build extension
+        run: pnpm build:vscode
+      - name: install xvfb (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2 || true
+      - name: integration tests (linux, xvfb)
+        if: runner.os == 'Linux'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: xvfb-run -a pnpm --filter lattice-context run test:integration
+      - name: integration tests (windows)
+        if: runner.os == 'Windows'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: pnpm --filter lattice-context run test:integration
+
+  # ── 线 3：node 兼容（低版本 Node 上验证发布产物 CLI；不用 vitest）──
+  node-compat:
+    name: node ${{ matrix.node }} compat (built artifacts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: build artifacts
+        run: pnpm build:core && pnpm build:cli
+      - name: CLI smoke on built artifacts
+        run: node scripts/ci-cli-smoke.mjs
+
+  # ── 线 4：playwright 浏览器 E2E（构建产物 webServer + 隔离 fixture 数据根）──
+  e2e:
+    name: e2e (playwright chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: cache playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: install chromium (+deps)
+        run: pnpm --filter @qcqx/lattice-e2e exec playwright install --with-deps chromium
+      - name: run e2e (build:core + build:web + playwright)
+        run: pnpm e2e
+      - name: upload report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            packages/e2e/playwright-report/
+            packages/e2e/test-results/
+          retention-days: 7

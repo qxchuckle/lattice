@@ -62,6 +62,8 @@
     "e2e": "pnpm build:core && pnpm build:web && pnpm --filter @qcqx/lattice-e2e run test",
     "e2e:headed": "pnpm --filter @qcqx/lattice-e2e run test:headed",
     "test:report": "open coverage/index.html",
+    "ci:assert-tests": "node scripts/ci-assert-tests.mjs",
+    "ci:smoke-cli": "node scripts/ci-cli-smoke.mjs",
     "clean": "pnpm -r run clean",
     "test:contract": "vitest run --project services --project web --project vscode",
     "publish:protocol": "pnpm --filter @qcqx/lattice-protocol publish --no-git-checks",

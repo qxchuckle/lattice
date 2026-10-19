@@ -33,13 +33,14 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
       // 覆盖率门槛（防回退水位）：2026-10-19 首测基线 Stmts 15.27 / Br 12.55 / Funcs 17.02 / Lines 15.33，
-      // P2 后 15.7 / 12.78 / 17.49 / 15.79，P3 后 17.01 / 13.51 / 19.04 / 16.98。
-      // 策略：水位 = 当前基线-1pt，只升不降（长期目标 lines≥85 / branches≥75）
+      // P2 后 15.7 / 12.78 / 17.49 / 15.79，P3 后 17.01 / 13.51 / 19.04 / 16.98，
+      // P5 终次上探（保留 ~0.5pt 平台差异余量）。
+      // 策略：水位 = 当前基线-~0.5pt，只升不降（长期目标 lines≥85 / branches≥75）
       thresholds: {
-        statements: 16,
-        branches: 12.5,
-        functions: 18,
-        lines: 15.9,
+        statements: 16.5,
+        branches: 13,
+        functions: 18.5,
+        lines: 16.5,
       },
     },
   },
