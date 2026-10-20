@@ -632,6 +632,7 @@ export function registerProjectCommand(program: Command): void {
     .command('move <ref> [newParent]')
     .description('移动分组（newParent 为路径或 grp- id；--root 移到根级）')
     .option('--root', '移动到根级')
+    .option('-f, --force', '跳过确认')
     .action(async (ref: string, newParent: string | undefined, opts) => {
       try {
         if (opts.root && newParent) {
