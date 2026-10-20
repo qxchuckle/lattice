@@ -3,6 +3,8 @@ import { defineProject } from 'vitest/config';
 export default defineProject({
   test: {
     name: 'cli',
+    // 硬离线：测试环境禁用语义模型加载，避免下载/初始化模型拖慢或访问网络
+    env: { LATTICE_DISABLE_SEMANTIC: '1' },
     environment: 'node',
     // tests/e2e：子进程跑构建产物 dist/index.js（测试不触发构建，先 pnpm build:cli）
     // tests/in-process：进程内 harness（register* + parseAsync），计入 v8 覆盖率
