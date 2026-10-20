@@ -6,3 +6,4 @@ export * from './json-projection';
 export * from './projection-manifest';
 export * from './pagination';
 export * from './machine-output';
+export * from './leaf-options';

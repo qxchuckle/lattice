@@ -3,14 +3,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
-import {
-  resolveCurrentProject,
-  logger,
-  setMachineMode,
-  findProjectionEntry,
-  jsonFullHintFor,
-  isPaginatedCommand,
-} from './utils';
+import { resolveCurrentProject, logger, setMachineMode, applyLeafOptions } from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerUninjectCommand } from './commands/uninject';
 import { registerLinkCommand } from './commands/link';
@@ -63,89 +56,7 @@ registerTrashCommand(program);
 registerWebCommand(program);
 registerFastStartCommand(program);
 
-/**
- * 遍历命令树的**叶子命令**；`commandPath` 是空格分隔的全路径（不含程序名，如 `fast-start log list`）。
- */
-function walkLeafCommands(
-  cmd: Command,
-  path: string[],
-  visit: (leaf: Command, commandPath: string) => void,
-): void {
-  if (cmd.commands.length === 0) {
-    visit(cmd, path.join(' '));
-    return;
-  }
-  for (const sub of cmd.commands) {
-    walkLeafCommands(sub, [...path, sub.name()], visit);
-  }
-}
-
-/** `config set` 的 `--json` 是把输入 value 按 JSON 解析，不是输出格式控制（也不配 `--json-format`） */
-function isConfigSet(leaf: Command): boolean {
-  return leaf.name() === 'set' && leaf.parent?.name() === 'config';
-}
-
-/**
- * `--json` 的帮助文案：**注册无条件**（它是 machine 模式开关），**文案按有无 JSON 数据出口分支**
- * ——由投影声明表派生，命令文件不手写（手写时期 42 处里已漂移出 `'JSON 输出'` 与
- * `'JSON 格式输出'` 两种措辞）。
- */
-function jsonHintFor(leaf: Command, commandPath: string): string {
-  if (isConfigSet(leaf)) return '将 value 按 JSON 解析';
-  if (findProjectionEntry(commandPath)) return 'JSON 格式输出';
-  return 'JSON 格式输出；本命令无 JSON 数据出口，成功仍出人读文本，失败提示走 stderr 且退出码 1';
-}
-
-/**
- * 命令选项兜底：给**叶子命令**补齐缺失的选项，避免 AI 调用时因 unknown option 报错。
- *
- * **只补叶子，绝不补父命令**：commander 里祖先声明的同名选项会**遮蔽**后代的——实测给
- * 「父命令自带 action」的形态（`sync` / `config`）补 `--json` 后，`sync domain list --json`
- * 与 `config get <key> --json` 的 `opts().json` 变成 undefined，JSON 出口直接失效。
- * 代价：`ltc sync --json` 这类「父命令自带 action」的调用会报 unknown option，
- * 属可接受的例外（已在 command-reference.md 记录），远优于静默破坏子命令的 JSON 出口。
- *
- * `--json-full` 与翻页参数**由投影声明表驱动**（`utils/projection-manifest.ts`）：hint 文案与
- * 「哪些命令接翻页」都只有一份真源，命令文件不手写。`detail` / `raw` 类命令查不到 hint →
- * 不注册 `--json-full`（避免声明了却与默认输出无差异的死选项）。
- *
- * `--json` 的**注册**不由声明表驱动（无条件补全部叶子）：它是 machine 模式开关（`preAction` 里
- * `machineOutput = json || quiet` → `setMachineMode`），不是投影开关——无 JSON 数据出口的写命令
- * 靠它把失败提示改道 stderr + 退出码 1，且多数没有 `-q`，删掉即复活「未找到 X 吐 stdout 且退出 0」
- * 的缺陷，也会让 SKILL.md「ltc 命令必须带 --json」在这些命令上报 unknown option。
- * 判据：**选项是否只在「有 JSON 数据出口」时才有意义**——是 → 声明表驱动；否 → 无条件补。
- * hint **文案**仍按声明表分支（`jsonHintFor`）：「有没有 JSON 数据出口」由声明表回答，
- * 「要不要注册」不由它回答。
- */
-function ensureLeafOptions(leaf: Command, commandPath: string): void {
-  const add = (
-    long: string,
-    flags: string,
-    description: string,
-    parser?: (value: string, previous: number) => number,
-  ): void => {
-    if (leaf.options.some((opt) => opt.long === long)) return;
-    if (parser) leaf.option(flags, description, parser);
-    else leaf.option(flags, description);
-  };
-
-  add('--force', '-f, --force', '跳过确认');
-  add('--debug', '-d, --debug', '输出调试信息');
-  add('--json', '--json', jsonHintFor(leaf, commandPath));
-  // --json-format 与 --json 成对出现；config set 除外（其 --json 是输入 value 的解析语义，无输出排版）
-  if (!isConfigSet(leaf)) {
-    add('--json-format', '--json-format', 'JSON 输出时使用格式化（默认压缩）');
-  }
-
-  const fullHint = jsonFullHintFor(commandPath);
-  if (fullHint) add('--json-full', '--json-full', fullHint);
-  if (isPaginatedCommand(commandPath)) {
-    add('--page', '--page <n>', '页码（1-based，配合 --page-size；默认输出全部）', parseInt);
-    add('--page-size', '--page-size <n>', '每页条数（不传则一次输出全部）', parseInt);
-  }
-}
-
-walkLeafCommands(program, [], ensureLeafOptions);
+applyLeafOptions(program);
 
 /* ─── 以 `-` 开头的自由文本位置参数 ─── */
 
