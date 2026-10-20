@@ -46,10 +46,10 @@ export default defineConfig({
       // 策略：水位 = 当前基线-~0.5pt，只升不降（长期目标 lines≥85 / branches≥75）
       thresholds: {
         // 全局兜底（跨包汇总；单包水位见下）
-        statements: 65.7,
-        branches: 56.5,
-        functions: 63.1,
-        lines: 67.6,
+        statements: 66.4,
+        branches: 57.4,
+        functions: 64.8,
+        lines: 68.3,
         // 高档：领域能力 + 宿主共享用例（P1/P4/P6/P7/P8 深挖后）
         'packages/core/**': { lines: 92.2, branches: 76.9, functions: 90.4 },
         'packages/services/**': { lines: 97.0, branches: 78.5, functions: 88.8 },
@@ -57,7 +57,7 @@ export default defineConfig({
         // 中档：CLI（进程内 harness 覆盖装配与逻辑；E2E 子进程不计 v8）
         'packages/cli/**': { lines: 77.6, branches: 66.2, functions: 82.0 },
         // 中高档：web-ui（纯逻辑/hooks/组件逻辑；cytoscape canvas 像素不在口径）
-        'packages/web-ui/**': { lines: 77.8, branches: 63.2, functions: 72.8 },
+        'packages/web-ui/**': { lines: 80.8, branches: 67.0, functions: 79.5 },
         // 低位防倒退：vscode（宿主外集成；不 mock vscode API 换覆盖率）
         'packages/vscode/**': { lines: 7.9, branches: 9.7, functions: 9.9 },
       },
