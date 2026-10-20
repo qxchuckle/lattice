@@ -184,4 +184,24 @@ describe('DocumentEditorModal', () => {
     resolveContent('# B');
     await waitFor(() => expect(screen.getByText('B')).toBeTruthy());
   });
+
+  it('保存未被服务端确认：提示失败且不关闭弹窗', async () => {
+    const onClose = vi.fn();
+    adapter.saveContent.mockResolvedValueOnce(false);
+    renderUi(
+      <DocumentEditorModal
+        open
+        onClose={onClose}
+        contentType='spec'
+        entityId='/u/a.md'
+        title='A 文档'
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('正文标题')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }));
+    await waitFor(() => expect(screen.getByText(/保存失败: 保存未被服务端确认/)).toBeTruthy());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('编辑 - A 文档')).toBeTruthy();
+  });
 });
