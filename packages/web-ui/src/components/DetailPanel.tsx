@@ -373,7 +373,8 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
   const { message, modal } = AntdApp.useApp();
   const handleStatusChange = async (status: string) => {
     try {
-      await adapter.updateTaskStatus(task.id, status);
+      const success = await adapter.updateTaskStatus(task.id, status);
+      if (!success) throw new Error(i18nT('操作未成功', 'Operation failed'));
       message.success(i18nT(`状态已更新为 ${status}`, `Status updated to ${status}`));
       queryClient.invalidateQueries();
     } catch (err) {
@@ -388,7 +389,8 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
       content: i18nT(`确认归档「${task.title}」？`, `Archive task "${task.title}"?`),
       onOk: async () => {
         try {
-          await adapter.archiveTask(task.id);
+          const success = await adapter.archiveTask(task.id);
+          if (!success) throw new Error(i18nT('操作未成功', 'Operation failed'));
           message.success(i18nT('已归档', 'Archived'));
           queryClient.invalidateQueries();
         } catch (err) {
@@ -398,7 +400,6 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               `Archive failed: ${(err as Error).message}`,
             ),
           );
-          throw err;
         }
       },
     });
@@ -413,7 +414,8 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
       okType: 'danger',
       onOk: async () => {
         try {
-          await adapter.deleteTask(task.id);
+          const success = await adapter.deleteTask(task.id);
+          if (!success) throw new Error(i18nT('操作未成功', 'Operation failed'));
           message.success(i18nT('已删除', 'Deleted'));
           closeDetail();
           queryClient.invalidateQueries();
@@ -424,7 +426,6 @@ function TaskDetail({ task, progress }: { task: TaskMeta; progress: CheckpointEn
               `Delete failed: ${(err as Error).message}`,
             ),
           );
-          throw err;
         }
       },
     });
