@@ -36,13 +36,14 @@ export default defineConfig({
       // 终值 16.5 / 13.0 / 18.5 / 16.5（232 用例）；
       // 二期 P1 上探（core 深挖，274 用例，实测 21.9 / 17.53 / 22.62 / 22.01）；
       // 二期 P2 上探（cli 进程内 harness，315 用例，实测 27.91 / 21.89 / 27.37 / 28.33）；
-      // 二期 P3 上探（web-ui 图逻辑/树/http/hooks，377 用例，实测 31.28 / 25.6 / 30.89 / 31.72）。
+      // 二期 P3 上探（web-ui 图逻辑/树/http/hooks，377 用例，实测 31.28 / 25.6 / 30.89 / 31.72）；
+      // 二期 P4 上探（web 路由 20 + services 写用例 9，406 用例，实测 36.74 / 30.29 / 36.54 / 37.17）。
       // 策略：水位 = 当前基线-~0.5pt，只升不降（长期目标 lines≥85 / branches≥75）
       thresholds: {
-        statements: 30.8,
-        branches: 25.1,
-        functions: 30.3,
-        lines: 31.2,
+        statements: 36.2,
+        branches: 29.7,
+        functions: 36.0,
+        lines: 36.6,
       },
     },
   },
