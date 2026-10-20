@@ -1,6 +1,6 @@
-# Lattice — 跨项目 AI 上下文
+# Lattice — 研发记忆与工作流
 
-把 [Lattice](https://github.com/qxchuckle/lattice) 的跨项目上下文带进编辑器：任务与其 PRD / 设计档案 / 进展、分层规范、RAG 检索、知识图谱，以及一条龙维护 AI 助手所依赖的元数据。
+把 [Lattice](https://github.com/qxchuckle/lattice) 的研发记忆带进编辑器：规范、任务（PRD / 设计档案 / 进展）、决策、RAG 检索、知识图谱，以及一条龙维护 AI 助手所依赖的元数据。
 
 > English docs: [README.md](./README.md)
 

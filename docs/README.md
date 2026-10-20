@@ -1,6 +1,6 @@
 # Lattice 文档索引
 
-> 主入口见根目录 [README.md](../README.md)（[中文](../README.zh-CN.md)）。
+> Lattice 是本地优先的研发记忆与工作流层。主入口见根目录 [README.md](../README.md)（[中文](../README.zh-CN.md)）。
 
 ## 阅读顺序
 
@@ -25,10 +25,10 @@
 
 面向 AI 客户端（Cursor / Claude Code / Qoder / Trae 等）的注入模板：
 
-- [技能总览](../packages/core/public/templates/skills/SKILL.md)
-- [常驻规则](../packages/core/public/templates/platforms/lattice-rules.md)
-- [命令速查](../packages/core/public/templates/skills/command-reference.md)
-- [任务工作流](../packages/core/public/templates/skills/task-workflows.md) · [Spec 工作流](../packages/core/public/templates/skills/spec-workflows.md)
+- [技能总览](../packages/core/public/templates/skills/zh/SKILL.md)
+- [常驻规则](../packages/core/public/templates/platforms/zh/lattice-rules.md)
+- [命令速查](../packages/core/public/templates/skills/zh/command-reference.md)
+- [任务工作流](../packages/core/public/templates/skills/zh/task-workflows.md) · [Spec 工作流](../packages/core/public/templates/skills/zh/spec-workflows.md)
 
 ## 参与贡献
 

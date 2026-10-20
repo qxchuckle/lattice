@@ -1,7 +1,7 @@
 {
   "name": "@qcqx/lattice-cli",
   "version": "1.29.0",
-  "description": "Lattice 命令行工具",
+  "description": "Lattice CLI — 研发记忆与工作流入口",
   "type": "module",
   "bin": {
     "lattice": "./dist/index.js",

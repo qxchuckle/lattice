@@ -54,16 +54,23 @@ export async function syncBundledSpecTemplatesWithPrompt(
 
   if (initialResult.conflicts.length > 0) {
     logger.raw(chalk.yellow(`检测到 ${initialResult.conflicts.length} 个已存在的内置模板：`));
-    overwriteTemplateNames = await checkbox({
-      message: '请选择要覆盖的内置模板（默认全不选，直接回车表示全部跳过）：',
-      choices: initialResult.conflicts.map((conflict) => ({
-        name: conflict.name,
-        value: conflict.name,
-      })),
-    });
-    skippedTemplateNames = initialResult.conflicts
-      .map((conflict) => conflict.name)
-      .filter((name) => !overwriteTemplateNames.includes(name));
+    if (!process.stdin.isTTY) {
+      // 非交互环境（CI / 管道 / 自动化脚本）不能弹勾选：默认保留现有模板，
+      // 否则 @inquirer/prompts 会直接抛 "User force closed the prompt"，中断整个 init。
+      skippedTemplateNames = initialResult.conflicts.map((conflict) => conflict.name);
+      logger.raw(chalk.dim('  非交互环境：保留现有模板，全部跳过覆盖'));
+    } else {
+      overwriteTemplateNames = await checkbox({
+        message: '请选择要覆盖的内置模板（默认全不选，直接回车表示全部跳过）：',
+        choices: initialResult.conflicts.map((conflict) => ({
+          name: conflict.name,
+          value: conflict.name,
+        })),
+      });
+      skippedTemplateNames = initialResult.conflicts
+        .map((conflict) => conflict.name)
+        .filter((name) => !overwriteTemplateNames.includes(name));
+    }
   }
 
   const syncedTemplateNames = [...initialResult.synced];

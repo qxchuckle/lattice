@@ -2,7 +2,15 @@ import { Command } from 'commander';
 import { basename, dirname, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runStartupSelfCheck, closeDb, readInitMeta, isInitialized } from '@qcqx/lattice-core';
+import {
+  runStartupSelfCheck,
+  closeDb,
+  readInitMeta,
+  isInitialized,
+  readLocalConfig,
+  resolveDocLanguage,
+  getDefaultDocLanguage,
+} from '@qcqx/lattice-core';
 import { resolveCurrentProject, logger, setMachineMode, applyLeafOptions } from './utils';
 import { registerInitCommand } from './commands/init';
 import { registerUninjectCommand } from './commands/uninject';
@@ -32,7 +40,7 @@ const cliName = invokedAs === 'index.js' ? 'lattice' : invokedAs;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf-8'));
 
-program.name(cliName).description('Lattice — 跨项目 AI 上下文管理工具').version(pkg.version);
+program.name(cliName).description('Lattice — 本地优先的研发记忆与工作流层').version(pkg.version);
 
 registerInitCommand(program);
 registerUninjectCommand(program);
@@ -175,13 +183,23 @@ async function main(): Promise<void> {
       }
     }
 
-    // init-meta 版本检查：agent 文档是否过期（init 命令本身跳过；未初始化时跳过）
+    // init-meta 版本/语言检查：agent 文档是否过期（init 命令本身跳过；未初始化时跳过）
     if (name !== 'init') {
       try {
         if (await isInitialized()) {
           const meta = await readInitMeta();
           if ((!meta || meta.version !== pkg.version) && !machineOutput) {
             console.warn('\x1b[33m⚠ lattice 注入已过期，运行 ltc init 更新\x1b[0m');
+          } else if (meta && !machineOutput) {
+            const localConfig = await readLocalConfig();
+            const currentLanguage = resolveDocLanguage(localConfig?.language ?? 'auto', {
+              defaultLanguage: getDefaultDocLanguage(),
+            });
+            if (meta.language !== currentLanguage) {
+              console.warn(
+                `\x1b[33m⚠ lattice 注入语言已变化（${meta.language ?? '未记录'} → ${currentLanguage}），运行 ltc init 更新\x1b[0m`,
+              );
+            }
           }
         }
       } catch {

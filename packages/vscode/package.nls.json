@@ -1,6 +1,6 @@
 {
-  "lattice.displayName": "Lattice — Cross-project AI Context",
-  "lattice.description": "Tasks, specs, search and a knowledge graph for your AI coding workflow — brings Lattice's cross-project context into the editor.",
+  "lattice.displayName": "Lattice — Engineering Memory & Workflow",
+  "lattice.description": "Manage specs, tasks, decisions, search and a knowledge graph in your editor — engineering memory and workflow for AI-assisted development.",
   "lattice.capabilities.untrusted": "Reads and writes Lattice data under the home directory (in-process core; data access does not require the CLI).",
   "lattice.capabilities.virtual": "Requires a real file system (watches the Lattice data directory).",
   "lattice.container.title": "Lattice",
@@ -121,7 +121,7 @@
   "lattice.config.documents.ragHintOnSave": "After saving a spec document, offer to run `spec migrate` and `rag update`.",
   "lattice.config.trace": "Verbose logging (CLI invocations, timings) in the Lattice output channel.",
   "lattice.walkthrough.title": "Get Started with Lattice",
-  "lattice.walkthrough.description": "Wire your editor into Lattice's cross-project context: tasks, specs, search and the knowledge graph.",
+  "lattice.walkthrough.description": "Wire your editor into Lattice's engineering memory: specs, tasks, decisions, search and the knowledge graph.",
   "lattice.walkthrough.cli.title": "Check the Lattice runtime",
   "lattice.walkthrough.cli.description": "The extension reads Lattice data natively (in-process core).\n\n[Check runtime](command:lattice.cli.check)",
   "lattice.walkthrough.init.title": "Initialize Lattice",

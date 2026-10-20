@@ -44,7 +44,7 @@ function entryOf(report, item) {
 async function setupBase() {
   await putFile(
     join(env.latticeHome, 'config', 'config-local.json'),
-    JSON.stringify({ username: U }),
+    JSON.stringify({ username: U, language: 'zh' }),
   );
   await putFile(join(env.latticeHome, 'config', 'config.json'), JSON.stringify({}));
 }
@@ -141,19 +141,25 @@ test('最小已初始化 home：配置/索引/一致性等关键条目 healthy�
   assert.equal(report.healthy + report.stale + report.error + report.repaired, report.total);
 });
 
-test('init-meta：版本一致 healthy；与 CLI 版本不一致 stale', async () => {
+test('init-meta：版本/语言一致 healthy；版本或语言不一致 stale', async () => {
   await setupBase();
-  await writeInitMeta('1.2.3', ['cursor', 'claude-code']);
+  await writeInitMeta('1.2.3', ['cursor', 'claude-code'], 'zh');
 
   const ok = await runDoctorCheck();
   const e1 = entryOf(ok, 'Agent 文档注入');
   assert.equal(e1.status, 'healthy');
-  assert.match(e1.message, /v1\.2\.3（cursor, claude-code）/);
+  assert.match(e1.message, /v1\.2\.3（cursor, claude-code，zh）/);
 
   const mismatch = await runDoctorCheck({ cliVersion: '9.9.9' });
   const e2 = entryOf(mismatch, 'Agent 文档注入');
   assert.equal(e2.status, 'stale');
   assert.match(e2.message, /v1\.2\.3 与当前 CLI v9\.9\.9 不一致/);
+
+  await writeInitMeta('1.2.3', ['cursor', 'claude-code'], 'en');
+  const languageMismatch = await runDoctorCheck();
+  const e3 = entryOf(languageMismatch, 'Agent 文档注入');
+  assert.equal(e3.status, 'stale');
+  assert.match(e3.message, /注入文档语言 en 与当前 zh 不一致/);
 });
 
 test('项目索引：路径失效与无路径记录分别计入', async () => {

@@ -1,6 +1,6 @@
-# Lattice — Cross-project AI Context
+# Lattice — Engineering Memory & Workflow
 
-Bring [Lattice](https://github.com/qxchuckle/lattice)'s cross-project context into your editor: tasks with their PRD / design / progress, layered specs, RAG-powered search, a knowledge graph, and one-click maintenance of the metadata your AI assistants rely on.
+Bring [Lattice](https://github.com/qxchuckle/lattice)'s engineering memory into your editor: specs, tasks with PRD / design / progress, decisions, RAG-powered search, a knowledge graph, and one-click maintenance of the metadata your AI assistants rely on.
 
 > 中文说明见 [README.zh-cn.md](./README.zh-cn.md)。
 

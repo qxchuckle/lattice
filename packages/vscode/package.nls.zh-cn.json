@@ -1,6 +1,6 @@
 {
-  "lattice.displayName": "Lattice — 跨项目 AI 上下文",
-  "lattice.description": "任务、规范、检索与知识图谱——把 Lattice 的跨项目上下文带进编辑器，服务 AI 编码工作流。",
+  "lattice.displayName": "Lattice — 研发记忆与工作流",
+  "lattice.description": "在编辑器里管理规范、任务、决策、检索与知识图谱，让 AI 辅助研发有记忆、有工作流。",
   "lattice.capabilities.untrusted": "读写用户主目录下的 Lattice 数据（进程内 core；数据访问不依赖 CLI）。",
   "lattice.capabilities.virtual": "需要真实文件系统（需监听 Lattice 数据目录）。",
   "lattice.container.title": "Lattice",
@@ -121,7 +121,7 @@
   "lattice.config.documents.ragHintOnSave": "保存规范文档后提示运行 `spec migrate` 与 `rag update`。",
   "lattice.config.trace": "详细日志（CLI 调用与耗时）输出到 Lattice 输出频道。",
   "lattice.walkthrough.title": "开始使用 Lattice",
-  "lattice.walkthrough.description": "把编辑器接入 Lattice 的跨项目上下文：任务、规范、检索与知识图谱。",
+  "lattice.walkthrough.description": "把编辑器接入 Lattice 的研发记忆：规范、任务、决策、检索与知识图谱。",
   "lattice.walkthrough.cli.title": "检查 Lattice 运行环境",
   "lattice.walkthrough.cli.description": "扩展进程内直接读取 Lattice 数据（内置 core，无需 CLI）。\n\n[检查运行环境](command:lattice.cli.check)",
   "lattice.walkthrough.init.title": "初始化 Lattice",

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { closeDb, getUserSpecDir, initDb, readLocalConfig } from '@qcqx/lattice-core';
+import { closeDb, getUserSpecDir, initDb, readInitMeta, readLocalConfig } from '@qcqx/lattice-core';
 import { registerInitCommand } from '../../src/commands/init';
 import { resolveBundledSpecTemplateNames } from '../../src/utils/spec-templates';
 import { createCliEnv, runCli, putFile, U, type CliEnv, type CliRunResult } from './helpers';
@@ -131,6 +131,31 @@ test('init 全新环境：目录/配置/模板/AI 注入/git remote/扫描/模�
       .catch(() => false),
   );
   assert.ok(await readdir(join(fakeHome, '.claude')).then((files) => files.length > 0));
+});
+
+test('init --lang en：英文语言包注入并记录到 config/init-meta', async () => {
+  env = await createBareEnv(false);
+  const names = await resolveBundledSpecTemplateNames('all');
+
+  const r = await run([
+    'init',
+    '-f',
+    '--username',
+    'alice',
+    '--lang',
+    'en',
+    '--builtin-spec-templates',
+    names[0],
+  ]);
+  assert.equal(r.exitCode, 0, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /注入文档语言：English/);
+
+  assert.equal((await readLocalConfig())?.language, 'en');
+  assert.equal((await readInitMeta())?.language, 'en');
+  const skill = await readFile(join(fakeHome, '.claude', 'skills', 'lattice', 'SKILL.md'), 'utf-8');
+  assert.match(skill, /Local-first engineering memory and workflow layer/);
+  const rules = await readFile(join(fakeHome, '.claude', 'CLAUDE.md'), 'utf-8');
+  assert.match(rules, /Always respond in the user's language/);
 });
 
 test('init 重新初始化：用户名迁移、目标已存在报错、跳过扫描/下载确认', async () => {

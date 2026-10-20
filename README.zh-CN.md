@@ -5,8 +5,8 @@
 <h1 align="center">Lattice</h1>
 
 <p align="center">
-  <b>面向开发者与 AI Agent 的跨项目、跨会话上下文脚手架</b><br>
-  规范、任务与可复用经验 —— 在 <code>~/.lattice</code> 维护一次，所有仓库复用。
+  <b>仓库之上，会话之外。</b><br>
+  本地优先的研发记忆与工作流层 —— 规范、任务、决策与经验，在 <code>~/.lattice</code> 沉淀一次，跨项目、跨会话、跨 Agent 复用。
 </p>
 
 <p align="center">
@@ -24,14 +24,14 @@
   <a href="./README.md">English</a> | <b>简体中文</b>
 </p>
 
-Lattice 是一个本地优先的 **AI 上下文脚手架**。它把散落在多个仓库与会话之间的知识 —— 分层规范、任务状态（PRD / 设计档案 / 进展）、项目关系与可复用领域经验 —— 统一收敛到一处，再通过 CLI、编辑器扩展与 Web 工作台提供给你和你的 AI Agent。
+Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落在多个仓库、会话和 Agent 之间的规范、任务、决策、项目关系与经验，沉淀为结构化、可检索、可版本化的研发资产，再通过 CLI、编辑器扩展与 Web 工作台提供给人和 AI。
 
 ## 为什么需要 Lattice
 
-- **进入陌生仓库？** 先拿到项目约定与上下文，再动手写第一行代码。
-- **多项目并行？** 统一维护任务状态与项目之间的关联。
-- **做过类似需求？** 搜索历史规范、决策与可复用经验，而不是每次从零开始。
-- **在用 AI Agent？** 把项目规则与上下文提前注入，而不是每个会话从头对齐。
+- **进入陌生仓库？** 先拿到项目约定、活跃任务与关联关系，再动手写第一行代码。
+- **多项目并行？** 规范、任务、决策与经验放在同一处，不再每个仓库维护一份。
+- **做过类似需求？** 搜索历史规范、决策与经验，而不是每次从零开始。
+- **在用 AI Agent？** 注入的是工作流，而不只是上下文：起手读记忆、实施留记录、归档做沉淀。
 
 ## 界面预览
 
@@ -50,10 +50,10 @@ Lattice 是一个本地优先的 **AI 上下文脚手架**。它把散落在多�
 | **任务与 Checkpoint** | 完整生命周期（规划 → 进行中 → 完成 → 归档）+ 11 类 checkpoint 记录上下文、决策、转向与里程碑 |
 | **项目注册与关系** | 基于指纹的项目身份、monorepo 嵌套、跨仓库关系、别名感知虚拟合并 |
 | **RAG 搜索** | 本地嵌入式向量 + 全文索引，覆盖 spec / 任务 / checkpoint / 文档 |
-| **上下文聚合** | `ltc context` 一键拿到当前仓库的全部规范、活跃任务与关联项目 |
+| **记忆聚合** | `ltc context` 一键拿到当前仓库的规范、活跃任务、关联项目与相关记忆 |
 | **双轨同步** | `origin` 单仓多机全量同步；域（经验包）多用户基于 Git 远端协作，读时合并 |
 | **模板系统** | 内置 + 远程模板仓库，快速初始化项目规范 |
-| **AI 集成** | `ltc init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入 Agent 工作流 |
+| **工作流注入** | `ltc init` 向 Cursor / Claude Code / Qoder / Trae 等客户端注入 Lattice 工作流 —— 起手读记忆、实施留记录、归档做沉淀 |
 | **VS Code 扩展** | 原生侧栏视图、图谱工作台 Webview、Problems 规范体检、多用户支持 —— core **进程内**直连 |
 | **Web 工作台** | `ltc web`（或扩展内置工作台）—— 任务 / 项目 / 规范浏览器与 Cytoscape 知识图谱 |
 
@@ -118,12 +118,12 @@ ltc web               # 打开本地 Web UI
 
 ### AI / Agent 工作流模板
 
-- [技能入口与工作流总览](./packages/core/public/templates/skills/SKILL.md)
-- [系统级常驻规则（强制约束）](./packages/core/public/templates/platforms/lattice-rules.md)
-- [CLI 命令参数速查](./packages/core/public/templates/skills/command-reference.md)
-- [任务工作流详解](./packages/core/public/templates/skills/task-workflows.md) · [Spec 工作流详解](./packages/core/public/templates/skills/spec-workflows.md)
-- [项目上下文获取](./packages/core/public/templates/skills/project-context.md) · [项目发现与识别](./packages/core/public/templates/skills/project-discovery.md)
-- [Agent Commands 用途与边界](./packages/core/public/templates/skills/agent-commands.md)
+- [技能入口与工作流总览](./packages/core/public/templates/skills/zh/SKILL.md)
+- [系统级常驻规则（强制约束）](./packages/core/public/templates/platforms/zh/lattice-rules.md)
+- [CLI 命令参数速查](./packages/core/public/templates/skills/zh/command-reference.md)
+- [任务工作流详解](./packages/core/public/templates/skills/zh/task-workflows.md) · [Spec 工作流详解](./packages/core/public/templates/skills/zh/spec-workflows.md)
+- [项目上下文获取](./packages/core/public/templates/skills/zh/project-context.md) · [项目发现与识别](./packages/core/public/templates/skills/zh/project-discovery.md)
+- [Agent Commands 用途与边界](./packages/core/public/templates/skills/zh/agent-commands.md)
 
 ## 仓库结构
 

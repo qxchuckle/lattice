@@ -375,6 +375,9 @@ export { getInitMetaPath, readInitMeta, writeInitMeta, type InitMeta } from './c
 // AI 客户端注入足迹（init 注入与 uninject 清除共享真源）
 export * from './injection';
 
+// 注入文档语言（auto/zh/en 解析与 locale 检测）
+export * from './i18n/language';
+
 // Spec
 export {
   parseSpec,
@@ -481,6 +484,7 @@ export type { RefSpecResult } from './task/refs';
 export type {
   TemplateData,
   PlatformName,
+  DocLanguageManifest,
   BundledSpecTemplateConflict,
   SyncBundledSpecTemplatesOptions,
   SyncBundledSpecTemplatesResult,
@@ -489,6 +493,8 @@ export type {
 } from './template-assets';
 export {
   getBundledTemplateDir,
+  getDocLanguageManifest,
+  getDefaultDocLanguage,
   listBundledSpecTemplates,
   renderPlatformTemplate,
   renderCursorRules,

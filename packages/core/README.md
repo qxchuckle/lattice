@@ -68,9 +68,11 @@ src/
 
 `public/templates/` 目录随包分发，包含：
 
-- `skills/` — AI Agent 工作流文档（SKILL.md、command-reference.md 等）
-- `platforms/` — 平台规则模板（lattice-rules.md）
-- `commands/` — Agent Command 模板
+- `languages.json` — 支持语言（`zh` / `en`）与默认语言
+- `skills/<lang>/` — AI Agent 工作流文档（SKILL.md、command-reference.md 等；`zh` 权威源，`en` 翻译包）
+- `platforms/<lang>/` — 平台规则模板（lattice-rules.md）
+- `commands/<lang>/` — Agent Command 模板
+- `agents/<lang>/` — 预定义 subagent 模板
 - `spec/` — 内置 spec 模板（frontend / backend / api / architecture 等）
 
 ## 开发

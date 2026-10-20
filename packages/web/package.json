@@ -1,7 +1,7 @@
 {
   "name": "@qcqx/lattice-web",
   "version": "1.29.0",
-  "description": "Lattice 可视化前端",
+  "description": "Lattice Web 工作台 —— 任务 / 项目 / Spec / 知识图谱",
   "type": "module",
   "main": "./dist/server/index.js",
   "types": "./dist/server/index.d.ts",

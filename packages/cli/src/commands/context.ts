@@ -97,7 +97,7 @@ function formatQuerySection(results: SearchResult[]): void {
 export function registerContextCommand(program: Command): void {
   program
     .command('context')
-    .description('输出当前项目的聚合上下文')
+    .description('输出当前项目的聚合上下文（规范、任务、关联记忆）')
     .option('--task <id>', '指定任务 ID')
     .option('--project <id>', '指定项目 ID')
     .option('--query <text>', '语义化查询（主题/意图/任务描述）：补充搜索相关的 spec、任务、项目')

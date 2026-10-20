@@ -42,7 +42,7 @@ export function getDefaultGlobalConfig(): GlobalConfig {
 }
 
 export function getDefaultLocalConfig(): Partial<LocalConfig> {
-  return {};
+  return { language: 'auto' };
 }
 
 function mergeGlobalConfig(config?: GlobalConfig | null): GlobalConfig {

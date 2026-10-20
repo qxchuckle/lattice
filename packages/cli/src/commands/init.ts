@@ -41,6 +41,11 @@ import {
   writeInitMeta,
   getAIToolConfigs,
   injectToToolRoot,
+  getDefaultDocLanguage,
+  resolveDocLanguage,
+  isDocLanguageSetting,
+  type DocLanguage,
+  type DocLanguageSetting,
 } from '@qcqx/lattice-core';
 import { logger } from '../utils';
 import { cliVersion } from '../version';
@@ -61,6 +66,7 @@ export function registerInitCommand(program: Command): void {
     .option('--git-remote <url>', 'git 远程仓库地址')
     .option('--scan-dirs <dirs>', '初始扫描目录（逗号分隔）')
     .option('--registry-template <urls>', '自定义 spec 模板仓库地址（逗号分隔）')
+    .option('--lang <lang>', '注入文档语言（auto | zh | en，默认读取配置或系统 locale）')
     .option('--download-model', '初始化后立即下载并预热 embedding 模型')
     .option(
       '--builtin-spec-templates <names>',
@@ -75,6 +81,23 @@ export function registerInitCommand(program: Command): void {
           readGlobalConfig(),
           readLocalConfig(),
         ]);
+
+        const requestedLanguage = (opts.lang as string | undefined)?.trim();
+        if (requestedLanguage && !isDocLanguageSetting(requestedLanguage)) {
+          throw new Error(`无效的 --lang：${requestedLanguage}（可选 auto / zh / en）`);
+        }
+        const existingLanguage = existingLocalConfig?.language;
+        if (existingLanguage && !isDocLanguageSetting(existingLanguage)) {
+          logger.raw(chalk.yellow(`配置中的 language 值无效（${existingLanguage}），已回落 auto`));
+        }
+        const languageSetting: DocLanguageSetting = requestedLanguage
+          ? (requestedLanguage as DocLanguageSetting)
+          : isDocLanguageSetting(existingLanguage)
+            ? existingLanguage
+            : 'auto';
+        const docLanguage = resolveDocLanguage(languageSetting, {
+          defaultLanguage: getDefaultDocLanguage(),
+        });
 
         if (initialized) {
           logger.raw(chalk.yellow('Lattice 已初始化，接下来将重新初始化并更新配置。'));
@@ -148,6 +171,7 @@ export function registerInitCommand(program: Command): void {
           scanDirs,
           gitEnabled,
           gitRemote,
+          language: languageSetting,
         });
 
         // 4. 更新 .gitignore
@@ -178,7 +202,8 @@ export function registerInitCommand(program: Command): void {
 
         // 7. 检测 AI 工具
         logger.raw(chalk.blue('正在检测已安装的 AI 工具...'));
-        await detectAndConfigureAITools();
+        logger.raw(chalk.dim(`  注入文档语言：${docLanguage === 'zh' ? '中文' : 'English'}`));
+        await detectAndConfigureAITools(docLanguage);
 
         // 8. 拉取模板仓库
         if (registryTemplates?.length) {
@@ -318,10 +343,10 @@ function parseCommaSeparatedOption(value: string): string[] {
 // @qcqx/lattice-core 的 injection 模块（getAIToolConfigs / injectToToolRoot），
 // 与 ltc uninject 的清除逻辑共享同一真源，注入与清除永不脱节。
 
-async function detectAndConfigureAITools(): Promise<void> {
+async function detectAndConfigureAITools(language: DocLanguage): Promise<void> {
   const home = homedir();
 
-  const tools = getAIToolConfigs(home);
+  const tools = getAIToolConfigs(home, language);
 
   const detectedToolIds = new Set<string>();
   // 收集每个 tool 所有已存在的候选根（first-match 升级为 all-matched），
@@ -402,8 +427,8 @@ async function detectAndConfigureAITools(): Promise<void> {
     }
   }
 
-  // 写入 init-meta.json，记录本次注入的版本与平台列表
-  await writeInitMeta(cliVersion, selectedToolIds);
+  // 写入 init-meta.json，记录本次注入的版本、平台列表与文档语言
+  await writeInitMeta(cliVersion, selectedToolIds, language);
 }
 
 function registerInitScanSubcommand(initCmd: Command): void {

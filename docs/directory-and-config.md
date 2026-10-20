@@ -182,6 +182,7 @@ Lattice 的配置分为两个文件，位于 `~/.lattice/config/` 目录下：
 | `scanDirs` | — | `ltc scan` 默认扫描的目录列表 |
 | `gitEnabled` | `true` | 是否对 `~/.lattice/` 启用 git 管理 |
 | `gitRemote` | — | `~/.lattice/` git 仓库的远程地址 |
+| `language` | `auto` | 注入给 AI 客户端的文档语言：`auto`（按系统 locale）/ `zh` / `en`；切换后重新运行 `ltc init` |
 | `registryTemplates` | — | 本机级别的远程模板仓库 URL（覆盖全局） |
 
 > `config-local.json` 在 `.gitignore` 中被忽略，不会提交到 git。切换机器时需要重新运行 `ltc init` 生成。

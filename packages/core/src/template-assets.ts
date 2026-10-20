@@ -16,6 +16,7 @@ import {
 } from './paths';
 import { writeSpec, parseFrontmatter, formatSpecParseError } from './spec/io';
 import { findProjectDirName } from './project';
+import type { DocLanguage } from './i18n/language';
 
 // ─── 模板读取 ───
 
@@ -77,23 +78,87 @@ function readBundledTemplate(relativePath: string): string {
   return content;
 }
 
-export function getBundledTemplateDir(relativePath: string): string {
+/** 语言包清单；`languages.json` 是支持语言与默认语言的单一真源。 */
+export interface DocLanguageManifest {
+  supportedLanguages: DocLanguage[];
+  defaultLanguage: DocLanguage;
+}
+
+const DEFAULT_DOC_LANGUAGE_MANIFEST: DocLanguageManifest = {
+  supportedLanguages: ['zh', 'en'],
+  defaultLanguage: 'zh',
+};
+
+let docLanguageManifestCache: DocLanguageManifest | undefined;
+
+export function getDocLanguageManifest(): DocLanguageManifest {
+  if (docLanguageManifestCache) return docLanguageManifestCache;
+
+  try {
+    const raw = JSON.parse(readBundledTemplate('languages.json')) as Partial<DocLanguageManifest>;
+    const supportedLanguages = Array.isArray(raw.supportedLanguages)
+      ? raw.supportedLanguages.filter((lang): lang is DocLanguage => lang === 'zh' || lang === 'en')
+      : [];
+    const defaultLanguage = raw.defaultLanguage;
+    if (
+      supportedLanguages.length > 0 &&
+      defaultLanguage &&
+      supportedLanguages.includes(defaultLanguage)
+    ) {
+      docLanguageManifestCache = { supportedLanguages, defaultLanguage };
+      return docLanguageManifestCache;
+    }
+  } catch {
+    // 模板清单缺失或损坏时退回内置默认值，避免影响 CLI 其他能力
+  }
+
+  docLanguageManifestCache = DEFAULT_DOC_LANGUAGE_MANIFEST;
+  return docLanguageManifestCache;
+}
+
+export function getDefaultDocLanguage(): DocLanguage {
+  return getDocLanguageManifest().defaultLanguage;
+}
+
+const LANGUAGE_SCOPED_TEMPLATE_KINDS = new Set(['skills', 'platforms', 'commands', 'agents']);
+
+/**
+ * 解析 bundled 模板目录。
+ *
+ * `skills` / `platforms` / `commands` / `agents` 是语言相关资产，按 `<kind>/<lang>/` 路由；
+ * 未传 `language` 时使用 `languages.json` 的 defaultLanguage。`spec` 等其余资产保持原路径。
+ */
+export function getBundledTemplateDir(relativePath: string, language?: DocLanguage): string {
+  const [kind, ...rest] = relativePath.split('/');
+  if (rest.length === 0 && LANGUAGE_SCOPED_TEMPLATE_KINDS.has(kind)) {
+    return resolveTemplatePath(`${kind}/${language ?? getDefaultDocLanguage()}`);
+  }
   return resolveTemplatePath(relativePath);
 }
 
 // 所有客户端共享同一份引导词正文（# 一级标题、无 frontmatter），
 // 仅 Cursor 系（.mdc 规则文件）需要在最前面拼接 frontmatter 以启用 alwaysApply。
-const LATTICE_RULES_TEMPLATE = 'platforms/lattice-rules.md';
+const LATTICE_RULES_TEMPLATE = 'lattice-rules.md';
 
 // Cursor .mdc 专用 frontmatter；Qoder / Agent / Trae / Claude 的 rules/ 目录复用同一种 .mdc 格式。
-const CURSOR_RULES_FRONTMATTER = `---
-description: Lattice 跨项目上下文工作流
+const CURSOR_RULES_FRONTMATTER: Record<DocLanguage, string> = {
+  zh: `---
+description: Lattice 研发记忆与工作流
 globs:
 alwaysApply: true
 trigger: always_on
 ---
 
-`;
+`,
+  en: `---
+description: Lattice engineering memory and workflow
+globs:
+alwaysApply: true
+trigger: always_on
+---
+
+`,
+};
 
 // 保留 PlatformName 4 个值用作 API 兼容；内部全部指向同一个模板文件。
 const platformTemplatePaths: Record<PlatformName, string> = {
@@ -107,24 +172,30 @@ function render(template: string, _data?: TemplateData): string {
   return template;
 }
 
-export function renderPlatformTemplate(name: PlatformName, data?: TemplateData): string {
-  return render(readBundledTemplate(platformTemplatePaths[name]), data);
+export function renderPlatformTemplate(
+  name: PlatformName,
+  data?: TemplateData,
+  language?: DocLanguage,
+): string {
+  const lang = language ?? getDefaultDocLanguage();
+  return render(readBundledTemplate(`platforms/${lang}/${platformTemplatePaths[name]}`), data);
 }
 
-export function renderCursorRules(data?: TemplateData): string {
-  return `${CURSOR_RULES_FRONTMATTER}${renderPlatformTemplate('cursorRules', data)}`;
+export function renderCursorRules(data?: TemplateData, language?: DocLanguage): string {
+  const lang = language ?? getDefaultDocLanguage();
+  return `${CURSOR_RULES_FRONTMATTER[lang]}${renderPlatformTemplate('cursorRules', data, lang)}`;
 }
 
-export function renderClaudeCode(data?: TemplateData): string {
-  return renderPlatformTemplate('claudeCode', data);
+export function renderClaudeCode(data?: TemplateData, language?: DocLanguage): string {
+  return renderPlatformTemplate('claudeCode', data, language);
 }
 
-export function renderWindsurfRules(data?: TemplateData): string {
-  return renderPlatformTemplate('windsurfRules', data);
+export function renderWindsurfRules(data?: TemplateData, language?: DocLanguage): string {
+  return renderPlatformTemplate('windsurfRules', data, language);
 }
 
-export function renderKiroSteering(data?: TemplateData): string {
-  return renderPlatformTemplate('kiroSteering', data);
+export function renderKiroSteering(data?: TemplateData, language?: DocLanguage): string {
+  return renderPlatformTemplate('kiroSteering', data, language);
 }
 
 // ─── Spec 模板 ───

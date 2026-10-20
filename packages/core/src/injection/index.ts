@@ -7,6 +7,7 @@ export {
   injectLatticeBlock,
   stripLatticeBlock,
   deployCommandsAsSkills,
+  extractCommandDescription,
   injectToToolRoot,
   listBundledAgentFiles,
   listBundledCommandSkillNames,

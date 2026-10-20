@@ -35,7 +35,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const CLI_SRC = resolve(here, '../src');
 const COMMANDS_DIR = join(CLI_SRC, 'commands');
 const MANIFEST_PATH = join(CLI_SRC, 'utils/projection-manifest.ts');
-const SKILLS_DIR = resolve(here, '../../core/public/templates/skills');
+const TEMPLATES_DIR = resolve(here, '../../core/public/templates');
+const languageManifest = JSON.parse(readFileSync(join(TEMPLATES_DIR, 'languages.json'), 'utf8'));
+const SKILLS_DIR = join(TEMPLATES_DIR, 'skills', languageManifest.defaultLanguage);
 const HUB_PATH = join(SKILLS_DIR, 'command-reference.md');
 
 const KINDS = ['table', 'list', 'item', 'detail', 'raw'];

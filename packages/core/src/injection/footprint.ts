@@ -10,8 +10,10 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { cp, readdir, rm } from 'node:fs/promises';
 import { ensureDir, fileExists, readText, writeText } from '../paths';
+import type { DocLanguage } from '../i18n/language';
 import {
   getBundledTemplateDir,
+  getDefaultDocLanguage,
   renderClaudeCode,
   renderCursorRules,
   renderKiroSteering,
@@ -40,7 +42,7 @@ export interface AIToolConfig {
   skillPath?: string;
   commandsRoot?: string;
   /**
-   * 预定义 subagent 注入目录。存在则将 getBundledTemplateDir('agents') 增量复制到该目录。
+   * 预定义 subagent 注入目录。存在则将 getBundledTemplateDir('agents', language) 增量复制到该目录。
    * 不支持 subagent 的平台（Windsurf / Kiro / Codex）不设此字段。
    */
   agentsRoot?: string;
@@ -51,6 +53,8 @@ export interface AIToolConfig {
    * 在主 rulesPath 之外再注入一份'系统级常驻规则文件'，与渐进式加载的 skill 互补。
    */
   extraRules?: ExtraRulesInjection[];
+  /** 本次注入使用的文档语言；由 getAIToolConfigs() 解析后写入。 */
+  language?: DocLanguage;
 }
 
 /**
@@ -59,14 +63,15 @@ export interface AIToolConfig {
  * 这是 inject 与 uninject 共享的唯一足迹真源：新增平台只需在此加一项，
  * 注入与清除同时生效。
  */
-export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
-  return [
+export function getAIToolConfigs(home: string = homedir(), language?: DocLanguage): AIToolConfig[] {
+  const docLanguage = language ?? getDefaultDocLanguage();
+  const tools: AIToolConfig[] = [
     {
       id: 'cursor',
       name: 'Cursor',
       detectPath: join(home, '.cursor'),
       rulesPath: join(home, '.cursor', 'rules', 'lattice.mdc'),
-      rulesContent: renderCursorRules(),
+      rulesContent: renderCursorRules(undefined, docLanguage),
       skillPath: join(home, '.cursor', 'skills', 'lattice', 'SKILL.md'),
       commandsRoot: join(home, '.cursor', 'commands'),
       agentsRoot: join(home, '.cursor', 'agents'),
@@ -76,7 +81,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       name: 'Claude Code',
       detectPath: join(home, '.claude'),
       rulesPath: join(home, '.claude', 'CLAUDE.md'),
-      rulesContent: renderClaudeCode(),
+      rulesContent: renderClaudeCode(undefined, docLanguage),
       skillPath: join(home, '.claude', 'skills', 'lattice', 'SKILL.md'),
       commandsRoot: join(home, '.claude', 'commands'),
       agentsRoot: join(home, '.claude', 'agents'),
@@ -86,7 +91,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       extraRules: [
         {
           rulesPath: join(home, '.claude', 'rules', 'lattice.mdc'),
-          rulesContent: renderCursorRules(),
+          rulesContent: renderCursorRules(undefined, docLanguage),
         },
       ],
     },
@@ -95,14 +100,14 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       name: 'Windsurf',
       detectPath: join(home, '.windsurf'),
       rulesPath: join(home, '.windsurf', 'rules', 'lattice.md'),
-      rulesContent: renderWindsurfRules(),
+      rulesContent: renderWindsurfRules(undefined, docLanguage),
     },
     {
       id: 'kiro',
       name: 'Kiro',
       detectPath: join(home, '.kiro'),
       rulesPath: join(home, '.kiro', 'steering', 'lattice.md'),
-      rulesContent: renderKiroSteering(),
+      rulesContent: renderKiroSteering(undefined, docLanguage),
     },
     {
       id: 'agent',
@@ -110,7 +115,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       detectPath: join(home, '.agents'),
       detectPaths: [join(home, '.agent')],
       rulesPath: join(home, '.agents', 'AGENT.md'),
-      rulesContent: renderClaudeCode(),
+      rulesContent: renderClaudeCode(undefined, docLanguage),
       commandsRoot: join(home, '.agents', 'commands'),
       skillPath: join(home, '.agents', 'skills', 'lattice', 'SKILL.md'),
       agentsRoot: join(home, '.agents', 'agents'),
@@ -120,7 +125,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       extraRules: [
         {
           rulesPath: join(home, '.agents', 'rules', 'lattice.mdc'),
-          rulesContent: renderCursorRules(),
+          rulesContent: renderCursorRules(undefined, docLanguage),
         },
       ],
     },
@@ -129,7 +134,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       name: 'Qoder',
       detectPath: join(home, '.qoder'),
       rulesPath: join(home, '.qoder', 'AGENT.md'),
-      rulesContent: renderClaudeCode(),
+      rulesContent: renderClaudeCode(undefined, docLanguage),
       commandsRoot: join(home, '.qoder', 'commands'),
       skillPath: join(home, '.qoder', 'skills', 'lattice', 'SKILL.md'),
       agentsRoot: join(home, '.qoder', 'agents'),
@@ -138,7 +143,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       extraRules: [
         {
           rulesPath: join(home, '.qoder', 'rules', 'lattice.mdc'),
-          rulesContent: renderCursorRules(),
+          rulesContent: renderCursorRules(undefined, docLanguage),
         },
       ],
     },
@@ -148,7 +153,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       detectPath: join(home, '.trae'),
       detectPaths: [join(home, '.trae-cn')],
       rulesPath: join(home, '.trae', 'AGENT.md'),
-      rulesContent: renderClaudeCode(),
+      rulesContent: renderClaudeCode(undefined, docLanguage),
       commandsRoot: join(home, '.trae', 'commands'),
       skillPath: join(home, '.trae', 'skills', 'lattice', 'SKILL.md'),
       agentsRoot: join(home, '.trae', 'agents'),
@@ -157,7 +162,7 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       extraRules: [
         {
           rulesPath: join(home, '.trae', 'rules', 'lattice.mdc'),
-          rulesContent: renderCursorRules(),
+          rulesContent: renderCursorRules(undefined, docLanguage),
         },
       ],
     },
@@ -166,13 +171,15 @@ export function getAIToolConfigs(home: string = homedir()): AIToolConfig[] {
       name: 'Codex',
       detectPath: join(home, '.codex'),
       rulesPath: join(home, '.codex', 'AGENTS.md'),
-      rulesContent: renderClaudeCode(),
+      rulesContent: renderClaudeCode(undefined, docLanguage),
       skillPath: join(home, '.codex', 'skills', 'lattice', 'SKILL.md'),
       // Codex 没有内置 /command 触发机制，commands 将被转化为独立 skills（见 deployCommandsAsSkills）。
       // 因此不设置 commandsRoot。
       appendRules: true,
     },
   ];
+
+  return tools.map((tool) => ({ ...tool, language: docLanguage }));
 }
 
 /**
@@ -299,6 +306,34 @@ async function walkCommandSkillEntries(
 }
 
 /**
+ * 从命令文档提取 Codex skill 的 description。
+ *
+ * 优先 YAML frontmatter 的 `description`，其次兼容 `目标：` / `Goal:` 行
+ * （允许 `**目标**：` 这种 markdown 加粗写法），最后按语言回落通用描述。
+ */
+export function extractCommandDescription(
+  content: string,
+  skillName: string,
+  language?: DocLanguage,
+): string {
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (frontmatter) {
+    const description = frontmatter[1].match(/^description:\s*(.+)$/m);
+    if (description) {
+      const value = description[1].trim();
+      return value.replace(/^(['"])(.*)\1$/, '$2');
+    }
+  }
+
+  const goal = content.match(/^\s*(?:\*\*)?(目标|Goal)(?:\*\*)?\s*[：:]\s*(.+)$/m);
+  if (goal) return goal[2].trim();
+
+  return (language ?? getDefaultDocLanguage()) === 'en'
+    ? `Lattice ${skillName} command`
+    : `Lattice ${skillName} 命令`;
+}
+
+/**
  * Codex 特有：将 bundled commands 目录下每个 .md 文件转化为独立 Codex skill。
  * 映射规则：`task/start.md` → `~/.codex/skills/lattice-task-start/SKILL.md`
  *
@@ -308,15 +343,13 @@ async function walkCommandSkillEntries(
 export async function deployCommandsAsSkills(
   commandsDir: string,
   targetSkillsRoot: string,
+  language?: DocLanguage,
 ): Promise<string[]> {
   const deployed: string[] = [];
 
   for (const { skillName, sourcePath } of await walkCommandSkillEntries(commandsDir)) {
     const content = (await readText(sourcePath)) ?? '';
-
-    // 从文件内容中提取 description：取第一行 "目标：" 开头的内容
-    const goalMatch = content.match(/^目标[：:](.+)$/m);
-    const description = goalMatch ? goalMatch[1].trim() : `Lattice ${skillName} 命令`;
+    const description = extractCommandDescription(content, skillName, language);
 
     const frontmatter = [
       '---',
@@ -339,8 +372,10 @@ export async function deployCommandsAsSkills(
  * 返回 bundled commands 会转化出的 codex skill 目录名（`lattice-*`）。
  * uninject 据此精确清除，不用前缀 glob，避免误删用户自建的 lattice-* skill。
  */
-export async function listBundledCommandSkillNames(): Promise<string[]> {
-  return (await walkCommandSkillEntries(getBundledTemplateDir('commands'))).map((e) => e.skillName);
+export async function listBundledCommandSkillNames(language?: DocLanguage): Promise<string[]> {
+  return (await walkCommandSkillEntries(getBundledTemplateDir('commands', language))).map(
+    (e) => e.skillName,
+  );
 }
 
 /** 一次注入落盘的路径 + 类别，供 CLI 展示。 */
@@ -361,6 +396,7 @@ export async function injectToToolRoot(
   targetRoot: string,
 ): Promise<InjectedPath[]> {
   const injectedPaths: InjectedPath[] = [];
+  const language = tool.language ?? getDefaultDocLanguage();
   const rp = (p: string): string => resolveToolPath(p, tool.detectPath, targetRoot);
   const rulesPath = rp(tool.rulesPath);
   const skillPath = tool.skillPath ? rp(tool.skillPath) : undefined;
@@ -387,17 +423,19 @@ export async function injectToToolRoot(
   if (skillPath) {
     const skillRoot = join(skillPath, '..');
     await rm(skillRoot, { recursive: true, force: true });
-    await cp(getBundledTemplateDir('skills'), skillRoot, { recursive: true });
+    await cp(getBundledTemplateDir('skills', language), skillRoot, { recursive: true });
     // 将工作节奏硬指令（lattice-rules.md）同步写入 skill 目录，
-    // 源自 platforms/lattice-rules.md 同一份纯正文，供 SKILL.md 引用。
-    await writeText(join(skillRoot, 'lattice-rules.md'), renderClaudeCode());
+    // 源自 platforms/<lang>/lattice-rules.md 同一份纯正文，供 SKILL.md 引用。
+    await writeText(join(skillRoot, 'lattice-rules.md'), renderClaudeCode(undefined, language));
     injectedPaths.push({ kind: 'skill', path: `${skillRoot}/` });
   }
 
   if (commandsRoot) {
     const latticeCommandsRoot = join(commandsRoot, 'lattice');
     await rm(latticeCommandsRoot, { recursive: true, force: true });
-    await cp(getBundledTemplateDir('commands'), latticeCommandsRoot, { recursive: true });
+    await cp(getBundledTemplateDir('commands', language), latticeCommandsRoot, {
+      recursive: true,
+    });
     injectedPaths.push({ kind: 'commands', path: `${latticeCommandsRoot}/` });
   }
 
@@ -405,14 +443,18 @@ export async function injectToToolRoot(
   if (tool.agentsRoot) {
     const agentsRoot = rp(tool.agentsRoot);
     await ensureDir(agentsRoot);
-    await cp(getBundledTemplateDir('agents'), agentsRoot, { recursive: true });
+    await cp(getBundledTemplateDir('agents', language), agentsRoot, { recursive: true });
     injectedPaths.push({ kind: 'agents', path: `${agentsRoot}/` });
   }
 
   // Codex 特有：将 commands 目录下每个命令文档转化为独立 Codex skill
   if (tool.id === 'codex') {
-    const commandsDir = getBundledTemplateDir('commands');
-    const deployedSkills = await deployCommandsAsSkills(commandsDir, join(targetRoot, 'skills'));
+    const commandsDir = getBundledTemplateDir('commands', language);
+    const deployedSkills = await deployCommandsAsSkills(
+      commandsDir,
+      join(targetRoot, 'skills'),
+      language,
+    );
     for (const skillName of deployedSkills) {
       injectedPaths.push({ kind: 'cmd-skill', path: `${join(targetRoot, 'skills', skillName)}/` });
     }
@@ -425,8 +467,8 @@ export async function injectToToolRoot(
  * 返回 bundled 预定义 subagent 模板文件名（如 `lattice-context.md`）。
  * uninject 据此精确识别哪些 `agents/*.md` 属 lattice 注入，避免误删用户自定义 agent。
  */
-export async function listBundledAgentFiles(): Promise<string[]> {
-  const dir = getBundledTemplateDir('agents');
+export async function listBundledAgentFiles(language?: DocLanguage): Promise<string[]> {
+  const dir = getBundledTemplateDir('agents', language);
   const entries = await readdir(dir).catch(() => [] as string[]);
   return entries.filter((name) => name.endsWith('.md'));
 }

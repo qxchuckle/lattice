@@ -1,5 +1,7 @@
 # 快速开始
 
+Lattice 是本地优先的研发记忆与工作流层。它把规范、任务、决策、项目关系与经验沉淀在 `~/.lattice`，通过 CLI、编辑器扩展和 Web 工作台供人和 AI Agent 使用。
+
 本指南将带你从零开始，逐步完成 Lattice 的安装、初始化和基本使用。
 
 ## 前置条件
@@ -52,11 +54,14 @@ ltc init --registry-template https://github.com/myorg/spec-templates.git
 
 # 初始化后立即下载 embedding 模型（用于 RAG 搜索）
 ltc init --download-model
+
+# 指定注入给 AI 客户端的文档语言（auto | zh | en；auto 按系统 locale）
+ltc init --lang en
 ```
 
 ### AI 客户端集成
 
-`ltc init` 会检测本地已安装的 AI 客户端，并询问是否注入 Lattice 工作流文件。注入后，AI 在编码前会自动获取项目规范和上下文。
+`ltc init` 会检测本地已安装的 AI 客户端，并询问是否注入 Lattice 工作流文件。注入后，AI 会按 Lattice 工作流在编码前读取项目规范、任务与相关记忆。
 
 支持的工具：
 
@@ -64,6 +69,21 @@ ltc init --download-model
 - **Claude Code**（`.claude/`）
 - **Qoder**（`.qoder/`）
 - **Trae**（`.trae/`）
+
+### 文档语言
+
+注入的 skill / command / agent / 规则文档默认跟随系统 locale：`zh*` → 中文，其余 → 英文。可显式覆盖：
+
+```bash
+# 本次注入英文（同时写入 config-local.json，后续 init 沿用）
+ltc init --lang en
+
+# 或先改配置，再重新 init
+ltc config set language zh --scope local
+ltc init
+```
+
+`language` 支持 `auto` / `zh` / `en`。切换语言后需重新运行 `ltc init` 才会替换已注入文档；`ltc doctor` 会提示注入语言与当前配置不一致。
 
 ### 移除注入（不再使用 Lattice 时）
 
@@ -129,7 +149,7 @@ ltc status
 | | CLI（`ltc`） | Agent Command（`/lattice/...`） |
 |---|---|---|
 | **使用者** | AI 在工作流中自动调用 / 人类手动执行 | 人类在 AI 助手中输入 |
-| **定位** | 底层执行（读写、搜索、状态更新） | 工作流入口（组织任务、获取上下文、沉淀经验） |
+| **定位** | 底层执行（读写、搜索、状态更新） | 工作流入口（组织任务、获取研发记忆、沉淀经验） |
 | **频率** | AI 高频调用 | 人类按需触发 |
 
 > `ltc init` 时注入的 AI 客户端文件包含完整的 agent command 定义。如果未注入，参考[初始化](#2-初始化-lattice)章节重新运行 `ltc init`。
@@ -190,7 +210,7 @@ ltc status
 ltc context
 ```
 
-这是 Lattice 的核心命令。它聚合当前项目的所有上下文信息：
+这是 Lattice 的上下文聚合命令。它聚合当前项目的规范、任务与相关记忆：
 
 - **Spec 列表**：项目级 / 用户级 / 全局级规范
 - **活跃任务**：当前进行中的任务
@@ -404,10 +424,10 @@ ltc doctor --fix
 
 - **技术架构详解**：[architecture.md](architecture.md)
 - **目录结构与配置**：[目录结构与配置详解](directory-and-config.md)
-- **Agent Command 详解**：[`packages/core/public/templates/skills/agent-commands.md`](../packages/core/public/templates/skills/agent-commands.md)
-- **AI 工作流详解**：[`packages/core/public/templates/skills/SKILL.md`](../packages/core/public/templates/skills/SKILL.md)
-- **系统级规则**：[`packages/core/public/templates/platforms/lattice-rules.md`](../packages/core/public/templates/platforms/lattice-rules.md)
-- **CLI 命令速查**：[`packages/core/public/templates/skills/command-reference.md`](../packages/core/public/templates/skills/command-reference.md)
+- **Agent Command 详解**：[`packages/core/public/templates/skills/zh/agent-commands.md`](../packages/core/public/templates/skills/zh/agent-commands.md)
+- **AI 工作流详解**：[`packages/core/public/templates/skills/zh/SKILL.md`](../packages/core/public/templates/skills/zh/SKILL.md)
+- **系统级规则**：[`packages/core/public/templates/platforms/zh/lattice-rules.md`](../packages/core/public/templates/platforms/zh/lattice-rules.md)
+- **CLI 命令速查**：[`packages/core/public/templates/skills/zh/command-reference.md`](../packages/core/public/templates/skills/zh/command-reference.md)
 - **Spec 模板仓库**：[Spec 模板仓库结构说明](spec-template-registry.md)
-- **任务工作流**：[`packages/core/public/templates/skills/task-workflows.md`](../packages/core/public/templates/skills/task-workflows.md)
-- **Spec 工作流**：[`packages/core/public/templates/skills/spec-workflows.md`](../packages/core/public/templates/skills/spec-workflows.md)
+- **任务工作流**：[`packages/core/public/templates/skills/zh/task-workflows.md`](../packages/core/public/templates/skills/zh/task-workflows.md)
+- **Spec 工作流**：[`packages/core/public/templates/skills/zh/spec-workflows.md`](../packages/core/public/templates/skills/zh/spec-workflows.md)

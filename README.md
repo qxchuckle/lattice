@@ -5,8 +5,8 @@
 <h1 align="center">Lattice</h1>
 
 <p align="center">
-  <b>Cross-project, cross-session context for developers and AI agents</b><br>
-  Specs, tasks and reusable experience — maintained once in <code>~/.lattice</code>, reused across every repo.
+  <b>Above the repo. Beyond the session.</b><br>
+  Local-first engineering memory and workflow for AI-assisted development — specs, tasks, decisions and experience captured once in <code>~/.lattice</code>, reused across projects, sessions and agents.
 </p>
 
 <p align="center">
@@ -24,14 +24,14 @@
   <b>English</b> | <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
-Lattice is a local-first **AI context scaffold**. It keeps the knowledge that usually gets lost between repos and sessions — layered specs, task state with PRD / design / progress, project relations, and reusable domain experience — in one place, and serves it back to you (and to your AI agents) through a CLI, an in-editor extension and a web workbench.
+Lattice is a local-first **engineering memory and workflow layer**. It turns specs, tasks, decisions, project relations and experience — usually lost between repos, sessions and agents — into structured, searchable, versionable engineering assets, and serves them to people and AI through a CLI, an editor extension and a web workbench.
 
 ## Why Lattice
 
-- **Entering an unfamiliar repo?** Get its conventions and context before writing a line of code.
-- **Juggling several projects?** Track task state and relations across all of them.
-- **Solved something similar before?** Search past specs, decisions and reusable experience instead of starting from scratch.
-- **Using AI agents?** Inject the project's rules and context up front instead of starting every session from zero.
+- **Entering an unfamiliar repo?** Get its conventions, active tasks and relations before writing a line of code.
+- **Working across projects?** Keep specs, tasks, decisions and experience in one place instead of one copy per repo.
+- **Solved something similar before?** Search past specs, decisions and experience instead of starting from scratch.
+- **Using AI agents?** Inject a workflow, not just context: read memory at start, record while working, distill when archiving.
 
 ## Screenshots
 
@@ -50,10 +50,10 @@ Lattice is a local-first **AI context scaffold**. It keeps the knowledge that us
 | **Tasks & checkpoints** | Full lifecycle (planning → in progress → done → archived) with typed checkpoints (11 types) recording context, decisions, pivots, milestones |
 | **Project registry** | Fingerprint-based project identity, monorepo nesting, cross-repo relations, alias-aware virtual merge |
 | **RAG search** | Local embeddings + full-text index across specs, tasks, checkpoints and docs |
-| **Context aggregation** | `ltc context` assembles every spec, active task and related project for the current repo in one shot |
+| **Memory aggregation** | `ltc context` assembles the specs, active tasks, related projects and relevant memory for the current repo in one shot |
 | **Dual-track sync** | `origin` — single-repo multi-machine full sync; domains (experience packs) — multi-user collaboration over Git remotes, merged read-time |
 | **Spec templates** | Built-in + remote template registry for project conventions |
-| **AI integrations** | `ltc init` injects agent workflows into Cursor / Claude Code / Qoder / Trae, etc. |
+| **Workflow injection** | `ltc init` injects the Lattice workflow into Cursor / Claude Code / Qoder / Trae — read memory at start, record while working, distill when archiving |
 | **VS Code extension** | Native sidebar views, graph workbench webview, Problems diagnostics, multi-user, checkpoint drafting — running the core **in-process** |
 | **Web workbench** | `ltc web` (or the extension's built-in workbench) — task / project / spec explorer and Cytoscape knowledge graph |
 
@@ -83,7 +83,7 @@ Lattice is a local-first **AI context scaffold**. It keeps the knowledge that us
 ```bash
 # CLI — installs `lattice` and `ltc`
 npm install -g @qcqx/lattice-cli
-ltc init          # create ~/.lattice, pick a username, inject AI-client workflows
+ltc init          # create ~/.lattice, pick a username, inject the Lattice workflow
 ltc scan          # register local projects (or `ltc link` inside a non-git repo)
 ltc context       # every spec / active task / related project for the current repo
 ```
@@ -118,12 +118,12 @@ Package docs: [cli](./packages/cli/README.md) · [core](./packages/core/README.m
 
 ### AI / agent workflow templates
 
-- [Skills overview](./packages/core/public/templates/skills/SKILL.md)
-- [Always-on rules (hard constraints)](./packages/core/public/templates/platforms/lattice-rules.md)
-- [CLI command reference](./packages/core/public/templates/skills/command-reference.md)
-- [Task workflows](./packages/core/public/templates/skills/task-workflows.md) · [Spec workflows](./packages/core/public/templates/skills/spec-workflows.md)
-- [Project context](./packages/core/public/templates/skills/project-context.md) · [Project discovery](./packages/core/public/templates/skills/project-discovery.md)
-- [Agent commands](./packages/core/public/templates/skills/agent-commands.md)
+- [Skills overview](./packages/core/public/templates/skills/en/SKILL.md)
+- [Always-on rules (hard constraints)](./packages/core/public/templates/platforms/en/lattice-rules.md)
+- [CLI command reference](./packages/core/public/templates/skills/en/command-reference.md)
+- [Task workflows](./packages/core/public/templates/skills/en/task-workflows.md) · [Spec workflows](./packages/core/public/templates/skills/en/spec-workflows.md)
+- [Project context](./packages/core/public/templates/skills/en/project-context.md) · [Project discovery](./packages/core/public/templates/skills/en/project-discovery.md)
+- [Agent commands](./packages/core/public/templates/skills/en/agent-commands.md)
 
 ## Repository structure
 

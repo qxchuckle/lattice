@@ -2,6 +2,14 @@
 
 本文档面向开发者和潜在贡献者，讲解 Lattice 的整体技术架构与核心设计决策。如果你是想快速上手的用户，请先阅读 [快速开始](quick-start.md)。
 
+## 系统定位
+
+Lattice 是一个本地优先的研发记忆与工作流层。仓库内代码负责三件事：
+
+- 管理 `~/.lattice` 下的项目、任务、spec、索引和模板等长期数据；
+- 通过 CLI / IDE / Web 把这些能力暴露给开发者和 AI 编码工具；
+- 通过注入的工作流，让 AI 在起手、实施、归档时持续读写这些记忆。
+
 ## 架构总览
 
 Lattice 是一个 monorepo 项目：**一份领域核心 + 一份跨端协议 + 一份应用服务 + 多个薄宿主（客户端）**。
@@ -251,7 +259,7 @@ planning → in_progress → completed → archived
 
 ## AI 客户端集成（Agent 注入）
 
-Lattice 的核心价值之一是让 AI 工具在编码前自动获取项目规范和上下文。这通过 `ltc init` 的 AI 客户端检测与注入机制实现。
+Lattice 的核心价值之一，是让 AI 工具在编码前自动获取项目规范、任务与相关记忆。这通过 `ltc init` 的 AI 客户端检测与注入机制实现。
 
 ### 三层注入模型
 
@@ -330,13 +338,15 @@ Lattice 向 AI 客户端注入三类文件，形成 **Rules + Skill + Commands**
 
 ```
 packages/core/public/templates/          — 模板真源（随 npm 包发布）
-├── platforms/lattice-rules.md           — 所有客户端共享的规则正文
-├── skills/SKILL.md + 子文档             — 技能入口 + 子文档
-├── commands/*.md                        — slash 命令模板
+├── languages.json                       — 支持语言与默认语言
+├── platforms/<lang>/lattice-rules.md    — 所有客户端共享的规则正文（zh 权威 / en 翻译）
+├── skills/<lang>/SKILL.md + 子文档       — 技能入口 + 子文档
+├── commands/<lang>/*.md                 — slash 命令模板
+├── agents/<lang>/*.md                   — 预定义 subagent 模板
 └── spec/                                — spec 模板（frontend / backend / api 等）
 ```
 
-`template-assets.ts` 负责模板的读取、渲染和分发。渲染函数按平台适配：
+`template-assets.ts` 负责模板的读取、渲染和分发。`ltc init` 按 `--lang` / `config-local.language` / 系统 locale 解析出 `zh` 或 `en`，再通过 `getBundledTemplateDir(kind, language)` 选择语言包。渲染函数按平台适配：
 
 ```typescript
 // 所有平台指向同一个模板文件
@@ -347,15 +357,16 @@ const platformTemplatePaths: Record<PlatformName, string> = {
   kiroSteering: LATTICE_RULES_TEMPLATE,
 };
 
-// Cursor 系额外拼接 frontmatter
-export function renderCursorRules(data?: TemplateData): string {
-  return `${CURSOR_RULES_FRONTMATTER}${renderPlatformTemplate('cursorRules', data)}`;
+// Cursor 系额外拼接对应语言的 frontmatter
+export function renderCursorRules(data?: TemplateData, language?: DocLanguage): string {
+  const lang = language ?? getDefaultDocLanguage();
+  return `${CURSOR_RULES_FRONTMATTER[lang]}${renderPlatformTemplate('cursorRules', data, lang)}`;
 }
 ```
 
 ## 工作流设计
 
-Lattice 不只是数据管理工具——它通过 AI 客户端注入，在 AI 编码过程中施加结构化的工作流约束。
+Lattice 不只是数据管理工具——它通过 AI 客户端注入，把研发记忆与结构化工作流带进 AI 编码过程。
 
 ### Skill + CLI 双驱动
 
@@ -570,7 +581,7 @@ CLI 入口注册 `process.on('exit', () => closeDb())`，确保 SQLite WAL check
 
 - [快速开始](quick-start.md) — 安装、初始化、基本使用
 - [Spec 模板仓库结构说明](spec-template-registry.md) — 如何组织自定义 spec 模板
-- [Skill 入口与工作流总览](../packages/core/public/templates/skills/SKILL.md) — AI 工作流完整文档
-- [系统级常驻规则](../packages/core/public/templates/platforms/lattice-rules.md) — AI 硬约束清单
-- [CLI 命令速查](../packages/core/public/templates/skills/command-reference.md) — 所有命令参数参考
-- [项目身份标识与虚拟合并机制](../packages/core/public/templates/skills/project-discovery.md) — 项目识别深入
+- [Skill 入口与工作流总览](../packages/core/public/templates/skills/zh/SKILL.md) — AI 工作流完整文档
+- [系统级常驻规则](../packages/core/public/templates/platforms/zh/lattice-rules.md) — AI 硬约束清单
+- [CLI 命令速查](../packages/core/public/templates/skills/zh/command-reference.md) — 所有命令参数参考
+- [项目身份标识与虚拟合并机制](../packages/core/public/templates/skills/zh/project-discovery.md) — 项目识别深入

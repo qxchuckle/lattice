@@ -19,12 +19,16 @@
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Productivity",
     "Other",
     "Machine Learning",
     "Data Science"
   ],
   "keywords": [
     "lattice",
+    "engineering-memory",
+    "memory",
+    "workflow",
     "context",
     "tasks",
     "specs",

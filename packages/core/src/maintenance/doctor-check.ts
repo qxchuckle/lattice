@@ -49,7 +49,9 @@ import {
   readText,
   writeJSON,
 } from '../paths';
-import { getUsername, isInitialized } from '../config';
+import { getUsername, isInitialized, readLocalConfig } from '../config';
+import { resolveDocLanguage } from '../i18n/language';
+import { getDefaultDocLanguage } from '../template-assets';
 import { closeDb, deleteProject, initDb } from '../db';
 import { FTS_INDEX_VERSION, getFtsIndexVersion } from '../db';
 import { getRAGStatus } from '../rag';
@@ -121,6 +123,10 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
 
   // 2.5 Agent 文档注入状态
   const initMeta = await readInitMeta();
+  const localConfig = await readLocalConfig();
+  const currentLanguage = resolveDocLanguage(localConfig?.language ?? 'auto', {
+    defaultLanguage: getDefaultDocLanguage(),
+  });
   if (!initMeta) {
     entries.push({
       item: 'Agent 文档注入',
@@ -135,11 +141,18 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
       message: `注入版本 v${initMeta.version} 与当前 CLI v${opts.cliVersion} 不一致`,
       fix: '运行 ltc init 更新 agent 文档',
     });
+  } else if (initMeta.language !== currentLanguage) {
+    entries.push({
+      item: 'Agent 文档注入',
+      status: 'stale',
+      message: `注入文档语言 ${initMeta.language ?? '未记录'} 与当前 ${currentLanguage} 不一致`,
+      fix: '运行 ltc init 更新 agent 文档',
+    });
   } else {
     entries.push({
       item: 'Agent 文档注入',
       status: 'healthy',
-      message: `v${initMeta.version}（${initMeta.platforms.join(', ')}）`,
+      message: `v${initMeta.version}（${initMeta.platforms.join(', ')}，${currentLanguage}）`,
     });
   }
 

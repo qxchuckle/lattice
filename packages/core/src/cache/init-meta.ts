@@ -7,6 +7,7 @@
 
 import { getCacheDir, readJSON, writeJSON, fileExists, join } from '../paths';
 import { nowISO } from '../utils/time';
+import type { DocLanguage } from '../i18n/language';
 
 const INIT_META_FILE = 'init-meta.json';
 
@@ -21,6 +22,8 @@ export interface InitMeta {
   injectedAt: string;
   /** 本次注入的平台 ID 列表（如 ['claude-code', 'cursor', 'qoder']） */
   platforms: string[];
+  /** 本次注入使用的文档语言；老版本记录可能缺失 */
+  language?: DocLanguage;
 }
 
 /**
@@ -35,11 +38,16 @@ export async function readInitMeta(): Promise<InitMeta | null> {
 /**
  * 写入 init 元数据（在 `ltc init` 注入完成后调用）。
  */
-export async function writeInitMeta(version: string, platforms: string[]): Promise<void> {
+export async function writeInitMeta(
+  version: string,
+  platforms: string[],
+  language?: DocLanguage,
+): Promise<void> {
   const meta: InitMeta = {
     version,
     injectedAt: nowISO(),
     platforms,
+    ...(language ? { language } : {}),
   };
   await writeJSON(getInitMetaPath(), meta);
 }

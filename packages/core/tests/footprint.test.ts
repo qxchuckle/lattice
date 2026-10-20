@@ -9,11 +9,14 @@ vi.mock('../src/template-assets', async () => {
   const { join: pathJoin } = await import('node:path');
   const root = () => pathJoin(process.env.LATTICE_HOME ?? '', '..', 'templates');
   return {
-    getBundledTemplateDir: (rel: string) => pathJoin(root(), rel),
-    renderClaudeCode: () => 'CLAUDE RULES',
-    renderCursorRules: () => '---\ndescription: rules\n---\n\nCURSOR RULES',
-    renderWindsurfRules: () => 'WINDSURF RULES',
-    renderKiroSteering: () => 'KIRO RULES',
+    getBundledTemplateDir: (rel: string, lang = 'zh') => pathJoin(root(), rel, lang),
+    getDefaultDocLanguage: () => 'zh',
+    getDocLanguageManifest: () => ({ supportedLanguages: ['zh', 'en'], defaultLanguage: 'zh' }),
+    renderClaudeCode: (_data?: unknown, lang = 'zh') => `CLAUDE RULES ${lang}`,
+    renderCursorRules: (_data?: unknown, lang = 'zh') =>
+      `---\ndescription: rules\n---\n\nCURSOR RULES ${lang}`,
+    renderWindsurfRules: (_data?: unknown, lang = 'zh') => `WINDSURF RULES ${lang}`,
+    renderKiroSteering: (_data?: unknown, lang = 'zh') => `KIRO RULES ${lang}`,
   };
 });
 
@@ -37,11 +40,17 @@ let env: Awaited<ReturnType<typeof createTempLatticeHome>>;
 beforeEach(async () => {
   env = await createTempLatticeHome();
   const templates = join(env.tmpRoot, 'templates');
-  await putFile(join(templates, 'skills', 'SKILL.md'), '# skill');
-  await putFile(join(templates, 'skills', 'lattice-rules.md'), '# rules');
-  await putFile(join(templates, 'commands', 'task', 'start.md'), '目标：启动任务\n\n正文');
-  await putFile(join(templates, 'commands', 'plain.md'), '# 无目标行');
-  await putFile(join(templates, 'agents', 'lattice-context.md'), '# agent');
+  await putFile(join(templates, 'skills', 'zh', 'SKILL.md'), '# skill');
+  await putFile(join(templates, 'skills', 'zh', 'lattice-rules.md'), '# rules');
+  await putFile(join(templates, 'skills', 'en', 'SKILL.md'), '# English skill');
+  await putFile(join(templates, 'commands', 'zh', 'task', 'start.md'), '目标：启动任务\n\n正文');
+  await putFile(join(templates, 'commands', 'zh', 'plain.md'), '# 无目标行');
+  await putFile(
+    join(templates, 'commands', 'en', 'task', 'start.md'),
+    '**Goal**: Start a task\n\nBody',
+  );
+  await putFile(join(templates, 'agents', 'zh', 'lattice-context.md'), '# agent');
+  await putFile(join(templates, 'agents', 'en', 'lattice-context.md'), '# agent en');
 });
 
 afterEach(async () => {
@@ -65,6 +74,7 @@ test('getAIToolConfigs：平台足迹表与路径随 home 注入', () => {
   for (const tool of tools) {
     assert.ok(tool.rulesPath.startsWith(home), `${tool.id} rules 路径应在 home 下`);
     assert.ok(tool.rulesContent.length > 0);
+    assert.equal(tool.language, 'zh');
   }
   const claude = tools.find((t) => t.id === 'claude-code');
   assert.equal(claude?.appendRules, true);
@@ -75,6 +85,9 @@ test('getAIToolConfigs：平台足迹表与路径随 home 注入', () => {
   assert.equal(tools.find((t) => t.id === 'codex')?.commandsRoot, undefined);
   // 默认 home 分支（不触达文件系统）
   assert.equal(getAIToolConfigs().length, 8);
+  // 显式语言
+  assert.equal(getAIToolConfigs(home, 'en')[0].language, 'en');
+  assert.match(getAIToolConfigs(home, 'en')[0].rulesContent, /en/);
 });
 
 test('resolveToolPath：命中 detectPath 时重写到实际根', () => {
@@ -171,13 +184,27 @@ test('deployCommandsAsSkills/listBundled*：命令转 skill 与模板清单', as
   const commandsDir = join(env.tmpRoot, 'commands');
   await putFile(join(commandsDir, 'task', 'start.md'), '目标：启动任务\n\n正文');
   await putFile(join(commandsDir, 'plain.md'), '# 无目标行');
+  await putFile(join(commandsDir, 'goal.md'), '**Goal**: Start with English marker\n\nBody');
+  await putFile(
+    join(commandsDir, 'frontmatter.md'),
+    '---\ndescription: From frontmatter\n---\n\nBody',
+  );
   const skillsRoot = join(env.tmpRoot, 'skills');
   const deployed = await deployCommandsAsSkills(commandsDir, skillsRoot);
-  assert.deepEqual(deployed.sort(), ['lattice-plain', 'lattice-task-start']);
+  assert.deepEqual(deployed.sort(), [
+    'lattice-frontmatter',
+    'lattice-goal',
+    'lattice-plain',
+    'lattice-task-start',
+  ]);
 
   const start = await readFile(join(skillsRoot, 'lattice-task-start', 'SKILL.md'), 'utf-8');
   assert.match(start, /name: lattice-task-start/);
   assert.match(start, /description: 启动任务/);
+  const goal = await readFile(join(skillsRoot, 'lattice-goal', 'SKILL.md'), 'utf-8');
+  assert.match(goal, /description: Start with English marker/);
+  const frontmatter = await readFile(join(skillsRoot, 'lattice-frontmatter', 'SKILL.md'), 'utf-8');
+  assert.match(frontmatter, /description: From frontmatter/);
   const plain = await readFile(join(skillsRoot, 'lattice-plain', 'SKILL.md'), 'utf-8');
   assert.match(plain, /description: Lattice lattice-plain 命令/);
 
@@ -228,4 +255,25 @@ test('injectToToolRoot：codex 将 commands 转为独立 skills', async () => {
   const injected = await injectToToolRoot(codex, root);
   assert.ok(injected.some((p) => p.kind === 'cmd-skill'));
   assert.ok(injected.some((p) => p.kind === 'skill'));
+});
+
+test('injectToToolRoot：按 en 语言包落盘 skill/commands/agents/rules', async () => {
+  const root = join(env.tmpRoot, 'en-root');
+  const tool = getAIToolConfigs(env.tmpRoot, 'en').find((t) => t.id === 'cursor');
+  assert.ok(tool);
+  await injectToToolRoot(tool, root);
+
+  assert.match(
+    await readFile(join(root, 'skills', 'lattice', 'SKILL.md'), 'utf-8'),
+    /English skill/,
+  );
+  assert.match(
+    await readFile(join(root, 'skills', 'lattice', 'lattice-rules.md'), 'utf-8'),
+    /CLAUDE RULES en/,
+  );
+  assert.match(
+    await readFile(join(root, 'commands', 'lattice', 'task', 'start.md'), 'utf-8'),
+    /Goal/,
+  );
+  assert.match(await readFile(join(root, 'agents', 'lattice-context.md'), 'utf-8'), /agent en/);
 });

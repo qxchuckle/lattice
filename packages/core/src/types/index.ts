@@ -1,4 +1,6 @@
 /** 项目元数据，存储在 ~/.lattice/users/<username>/projects/<id>/project.json */
+import type { DocLanguageSetting } from '../i18n/language';
+
 export interface ProjectMeta {
   /** 所有可匹配 ID，优先级由 selectPrimaryId() 在运行时基于 ID_PRIORITY_MAP 动态计算 */
   ids: string[];
@@ -274,6 +276,8 @@ export interface LocalConfig {
   username: string;
   scanDirs?: string[];
   gitEnabled?: boolean;
+  /** 注入给 AI 客户端的文档语言：auto（按系统 locale）| zh | en；缺省视为 auto */
+  language?: DocLanguageSetting;
   /** lattice 数据仓库（~/.lattice 主仓）的 git remote URL。注意与 ProjectMeta.gitRemotes（已注册项目代码仓的 remote）同名不同义 */
   gitRemote?: string;
   registryTemplates?: string[];

@@ -47,6 +47,8 @@ jobs:
         run: pnpm lint
       - name: check-types
         run: pnpm check-types
+      - name: check skill i18n parity
+        run: pnpm check:skill-i18n
       - name: build
         run: pnpm build
       - name: test with coverage

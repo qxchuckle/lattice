@@ -12,6 +12,7 @@
 - `--git-remote <url>`：Git 远程仓库
 - `--scan-dirs <dirs>`：扫描目录（逗号分隔）
 - `--registry-template <urls>`：拉取模板仓库
+- `--lang <lang>`：注入文档语言（`auto` | `zh` | `en`；默认读取 `config-local.json` 的 `language`，再按系统 locale）
 
 ### `ltc init scan`
 
