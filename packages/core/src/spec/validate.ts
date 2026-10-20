@@ -8,9 +8,9 @@ export interface SpecValidationWarning {
 
 /**
  * 适用范围标题的匹配模式：
- * 支持 "## 适用范围"、"## 适用范围（重要）" 等变体
+ * 支持 "## 适用范围"、"## 适用范围（重要）"、"## Scope" 等中英文变体。
  */
-const SCOPE_HEADING_PATTERN = /^#{1,3}\s*适用范围/m;
+const SCOPE_HEADING_PATTERN = /^#{1,3}\s*(?:适用范围|scope)(?=\s|$|[（:：])/im;
 
 /**
  * 校验 user/global 级 spec 是否包含适用范围声明。
@@ -30,7 +30,7 @@ export function validateSpecScope(
   const scopeLabel = scope === 'user' ? '用户级' : '全局级';
   return {
     type: 'missing-scope',
-    message: `${scopeLabel} spec「${spec.frontmatter.title ?? spec.fileName}」缺少「## 适用范围」声明。建议添加适用范围段，明确该规范适用于哪些项目/场景。`,
+    message: `${scopeLabel} spec「${spec.frontmatter.title ?? spec.fileName}」缺少「## 适用范围」/「## Scope」声明。建议添加适用范围段，明确该规范适用于哪些项目/场景。`,
     spec,
   };
 }

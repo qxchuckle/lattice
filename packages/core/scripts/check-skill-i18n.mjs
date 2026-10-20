@@ -12,7 +12,7 @@
  * 6. 正文体积比在合理区间（防截断/漏译）；
  * 7. 英文包正文 CJK 比例上限（frontmatter 除外）。
  *
- * 用法：node packages/core/scripts/check-skill-i18n.mjs [--root <repo-root>]
+ * 用法：node packages/core/scripts/check-skill-i18n.mjs [--root <core/public>]
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';

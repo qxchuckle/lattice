@@ -87,7 +87,7 @@ ltc init
 
 ### 移除注入（不再使用 Lattice 时）
 
-不想再让 AI 客户端加载 Lattice 工作流时，用 `ltc uninject` 清除 `ltc init` 注入到外部客户端的文档（**不会动 `~/.lattice` 里的数据**）：
+不想再让 AI 客户端加载 Lattice 工作流时，用 `ltc uninject` 清除 `ltc init` 注入到外部客户端的文档（**不会动 `~/.lattice` 业务数据，仅同步 `.cache/init-meta.json` 注入记录**）：
 
 ```bash
 # 先看看会清除哪些内容（不实际删除）

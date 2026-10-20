@@ -51,3 +51,22 @@ export async function writeInitMeta(
   };
   await writeJSON(getInitMetaPath(), meta);
 }
+
+/** 将注入记录标记为「已 uninject」：保留版本/语言，平台列表清空。 */
+export async function clearInitMetaPlatforms(): Promise<void> {
+  const meta = await readInitMeta();
+  if (!meta) return;
+
+  // 保留原 injectedAt：记录的是最后一次 init 的时间，不是 uninject 时间。
+  await writeJSON(getInitMetaPath(), { ...meta, platforms: [] });
+}
+
+/** 从注入记录中移除已清除的平台；平台清空时保留空记录表示已 uninject。 */
+export async function updateInitMetaPlatforms(removedPlatformIds: string[]): Promise<void> {
+  const meta = await readInitMeta();
+  if (!meta) return;
+
+  const removed = new Set(removedPlatformIds);
+  const platforms = meta.platforms.filter((id) => !removed.has(id));
+  await writeJSON(getInitMetaPath(), { ...meta, platforms });
+}

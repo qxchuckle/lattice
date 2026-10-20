@@ -45,8 +45,14 @@ export interface BundledSpecSyncSummary {
   missing: string[];
 }
 
+export interface BundledSpecSyncOptions {
+  /** 跳过覆盖选择（`ltc init -f` 等非交互调用），保留已有模板。 */
+  skipPrompt?: boolean;
+}
+
 export async function syncBundledSpecTemplatesWithPrompt(
   templateNames: string[],
+  options: BundledSpecSyncOptions = {},
 ): Promise<BundledSpecSyncSummary> {
   const initialResult = await syncBundledSpecTemplates({ templateNames });
   let overwriteTemplateNames: string[] = [];
@@ -54,11 +60,17 @@ export async function syncBundledSpecTemplatesWithPrompt(
 
   if (initialResult.conflicts.length > 0) {
     logger.raw(chalk.yellow(`检测到 ${initialResult.conflicts.length} 个已存在的内置模板：`));
-    if (!process.stdin.isTTY) {
-      // 非交互环境（CI / 管道 / 自动化脚本）不能弹勾选：默认保留现有模板，
-      // 否则 @inquirer/prompts 会直接抛 "User force closed the prompt"，中断整个 init。
+    if (options.skipPrompt || !process.stdin.isTTY) {
+      // 非交互/显式跳过确认：默认保留现有模板，否则 @inquirer/prompts 会直接抛
+      // "User force closed the prompt"，中断整个 init。
       skippedTemplateNames = initialResult.conflicts.map((conflict) => conflict.name);
-      logger.raw(chalk.dim('  非交互环境：保留现有模板，全部跳过覆盖'));
+      logger.raw(
+        chalk.dim(
+          options.skipPrompt
+            ? '  已跳过确认：保留现有模板，全部跳过覆盖'
+            : '  非交互环境：保留现有模板，全部跳过覆盖',
+        ),
+      );
     } else {
       overwriteTemplateNames = await checkbox({
         message: '请选择要覆盖的内置模板（默认全不选，直接回车表示全部跳过）：',

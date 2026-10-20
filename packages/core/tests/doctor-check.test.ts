@@ -160,6 +160,13 @@ test('init-meta：版本/语言一致 healthy；版本或语言不一致 stale',
   const e3 = entryOf(languageMismatch, 'Agent 文档注入');
   assert.equal(e3.status, 'stale');
   assert.match(e3.message, /注入文档语言 en 与当前 zh 不一致/);
+
+  // 全量 uninject 后：空平台列表表示「未注入」，版本/语言变化都不算 stale
+  await writeInitMeta('1.2.3', [], 'zh');
+  const uninjected = await runDoctorCheck({ cliVersion: '9.9.9' });
+  const e4 = entryOf(uninjected, 'Agent 文档注入');
+  assert.equal(e4.status, 'healthy');
+  assert.match(e4.message, /v1\.2\.3（未注入）/);
 });
 
 test('项目索引：路径失效与无路径记录分别计入', async () => {

@@ -26,8 +26,9 @@ export function detectLocaleLanguage(
   env: NodeJS.ProcessEnv = process.env,
   intlLocale?: string,
 ): DocLanguage {
-  // POSIX locale 优先级：LC_ALL > LC_MESSAGES > LANG > LANGUAGE；只取首个生效值。
-  const primary = env.LC_ALL || env.LC_MESSAGES || env.LANG || env.LANGUAGE;
+  // POSIX locale 优先级：LC_ALL > LC_MESSAGES > LANGUAGE > LANG；只取首个生效值。
+  // GNU gettext 的 LANGUAGE 是语言偏好列表，优先级高于 LANG（如 LANGUAGE=zh_CN:zh LANG=en_US）。
+  const primary = env.LC_ALL || env.LC_MESSAGES || env.LANGUAGE || env.LANG;
   // Windows 等环境可能没有 LANG/LC_*，用 Intl 的运行时 locale 兜底。
   const locale = primary || intlLocale || getRuntimeLocale();
   return locale && /^zh(?:[_-]|$)/i.test(locale) ? 'zh' : 'en';

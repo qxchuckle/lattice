@@ -188,7 +188,9 @@ async function main(): Promise<void> {
       try {
         if (await isInitialized()) {
           const meta = await readInitMeta();
-          if ((!meta || meta.version !== pkg.version) && !machineOutput) {
+          if (meta && meta.platforms.length === 0) {
+            // 显式 uninject 后没有注入物，不应提示版本/语言过期
+          } else if ((!meta || meta.version !== pkg.version) && !machineOutput) {
             console.warn('\x1b[33m⚠ lattice 注入已过期，运行 ltc init 更新\x1b[0m');
           } else if (meta && !machineOutput) {
             const localConfig = await readLocalConfig();

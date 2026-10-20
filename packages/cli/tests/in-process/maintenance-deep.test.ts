@@ -11,7 +11,9 @@ import {
   getUserSpecDir,
   initDb,
   injectToToolRoot,
+  readInitMeta,
   updateTask,
+  writeInitMeta,
 } from '@qcqx/lattice-core';
 import { registerScanCommand } from '../../src/commands/scan';
 import { registerUninjectCommand } from '../../src/commands/uninject';
@@ -122,6 +124,7 @@ test('uninject：未知平台/dry-run/确认取消/指定平台清除/无残留'
   await mkdir(toolB.detectPath, { recursive: true });
   await injectToToolRoot(toolA, toolA.detectPath);
   await injectToToolRoot(toolB, toolB.detectPath);
+  await writeInitMeta('1.2.3', [toolA.id, toolB.id], 'zh');
 
   const unknown = await runUninject(['uninject', '--tool', 'no-such-tool']);
   assert.equal(unknown.exitCode, 1);
@@ -141,7 +144,8 @@ test('uninject：未知平台/dry-run/确认取消/指定平台清除/无残留'
   const selected = await runUninject(['uninject', '--tool', toolA.id, '-f']);
   assert.equal(selected.exitCode, 0, selected.stderr);
   assert.match(selected.stdout, /清除完成：删除/);
-  assert.match(selected.stdout, /~\/.lattice 数据未改动/);
+  assert.match(selected.stdout, /~\/.lattice 业务数据未改动/);
+  assert.deepEqual((await readInitMeta())?.platforms, [toolB.id]);
 
   const remaining = await runUninject(['uninject', '--tool', toolA.id, '--dry-run']);
   assert.match(remaining.stdout, /未发现 lattice 注入残留/);
@@ -149,6 +153,7 @@ test('uninject：未知平台/dry-run/确认取消/指定平台清除/无残留'
   const all = await runUninject(['uninject', '-f']);
   assert.equal(all.exitCode, 0, all.stderr);
   assert.match(all.stdout, /清除完成|未发现/);
+  assert.deepEqual((await readInitMeta())?.platforms, []);
 });
 
 async function seedExportData() {

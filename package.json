@@ -58,7 +58,7 @@
     "format:check": "prettier --check .",
     "lint-staged": "lint-staged",
     "check-types": "pnpm -r run check-types",
-    "check:cli-doc": "node packages/cli/scripts/check-projection-doc-sync.mjs",
+    "check:cli-doc": "node packages/cli/scripts/check-projection-doc-sync.mjs --lang zh && node packages/cli/scripts/check-projection-doc-sync.mjs --lang en",
     "check:skill-i18n": "node packages/core/scripts/check-skill-i18n.mjs",
     "rag:benchmark": "node scripts/rag-benchmark.mjs",
     "test": "vitest run",

@@ -49,6 +49,8 @@ jobs:
         run: pnpm check-types
       - name: check skill i18n parity
         run: pnpm check:skill-i18n
+      - name: check CLI doc sync (zh/en)
+        run: pnpm check:cli-doc
       - name: build
         run: pnpm build
       - name: test with coverage

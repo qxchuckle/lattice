@@ -180,7 +180,9 @@ export function registerInitCommand(program: Command): void {
         // 5. 安装内置 spec 模板
         if (bundledSpecTemplateNames.length > 0) {
           logger.raw(chalk.blue('正在安装内置 spec 模板...'));
-          const result = await syncBundledSpecTemplatesWithPrompt(bundledSpecTemplateNames);
+          const result = await syncBundledSpecTemplatesWithPrompt(bundledSpecTemplateNames, {
+            skipPrompt: shouldSkipConfirm(opts),
+          });
           logger.raw(chalk.green(`  ✓ 已安装 ${result.synced.length} 个内置模板`));
           if (result.skipped.length > 0) {
             logger.raw(chalk.yellow(`  跳过：${result.skipped.join(', ')}`));

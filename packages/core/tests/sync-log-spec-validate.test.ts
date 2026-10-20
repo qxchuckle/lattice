@@ -66,6 +66,11 @@ test('validateSpecScope：适用范围声明与 user/global 文案', () => {
   assert.equal(validateSpecScope(spec('## 适用范围（重要）'), 'user'), null);
   assert.equal(validateSpecScope(spec('### 适用范围'), 'user'), null);
   assert.equal(validateSpecScope(spec('#### 适用范围'), 'user')?.type, 'missing-scope');
+  assert.equal(validateSpecScope(spec('## Scope\n\nApplies to all projects'), 'global'), null);
+  assert.equal(validateSpecScope(spec('### Scope (important)'), 'user'), null);
+  assert.equal(validateSpecScope(spec('## scope'), 'user'), null);
+  assert.equal(validateSpecScope(spec('#### Scope'), 'user')?.type, 'missing-scope');
+  assert.equal(validateSpecScope(spec('## Scoped'), 'user')?.type, 'missing-scope');
 
   const user = validateSpecScope(spec('body', '用户规范'), 'user');
   assert.equal(user?.type, 'missing-scope');

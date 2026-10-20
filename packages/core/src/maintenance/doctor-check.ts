@@ -134,6 +134,13 @@ export async function runDoctorCheck(options?: DoctorOptions): Promise<DoctorRep
       message: '未找到注入记录（init-meta.json 缺失）',
       fix: '运行 ltc init 注入 agent 文档',
     });
+  } else if (initMeta.platforms.length === 0) {
+    // 显式 uninject 后保留空平台记录：没有注入物，版本/语言变化都不需要提示
+    entries.push({
+      item: 'Agent 文档注入',
+      status: 'healthy',
+      message: `v${initMeta.version}（未注入）`,
+    });
   } else if (opts.cliVersion && initMeta.version !== opts.cliVersion) {
     entries.push({
       item: 'Agent 文档注入',

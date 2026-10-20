@@ -7,6 +7,8 @@ import {
   scanInjections,
   executeUninjectPlan,
   readInitMeta,
+  clearInitMetaPlatforms,
+  updateInitMetaPlatforms,
   type InjectionFinding,
 } from '@qcqx/lattice-core';
 import { logger, shouldSkipConfirm } from '../utils';
@@ -67,6 +69,7 @@ export function registerUninjectCommand(program: Command): void {
           if (plan.scannedRoots.length > 0) {
             logger.raw(chalk.dim(`  已排查 ${plan.scannedRoots.length} 个客户端根目录`));
           }
+          if (!opts.dryRun) await syncInitMetaAfterUninject(toolIds);
           return;
         }
 
@@ -111,15 +114,33 @@ export function registerUninjectCommand(program: Command): void {
         }
 
         const result = await executeUninjectPlan(plan);
+        await syncInitMetaAfterUninject(toolIds);
         logger.raw(
           chalk.green(
             `\n✓ 清除完成：删除 ${result.deletedDirs.length} 个目录、${result.deletedFiles.length} 个文件，从 ${result.removedBlocks.length} 个共享文件移除标记块。`,
           ),
         );
-        logger.raw(chalk.dim('  ~/.lattice 数据未改动；如需重新注入运行 ltc init。'));
+        logger.raw(
+          chalk.dim('  ~/.lattice 业务数据未改动；注入记录已同步；如需重新注入运行 ltc init。'),
+        );
       } catch (err) {
         logger.stderr(chalk.red('清除失败：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
+}
+
+/** uninject 后同步 init-meta：全量清除标记「未注入」，指定平台则移除对应平台。 */
+async function syncInitMetaAfterUninject(toolIds: string[] | undefined): Promise<void> {
+  try {
+    if (toolIds?.length) {
+      await updateInitMetaPlatforms(toolIds);
+    } else {
+      await clearInitMetaPlatforms();
+    }
+  } catch (err) {
+    logger.raw(
+      chalk.yellow(`  init-meta 更新失败（不影响已完成的清除）：${(err as Error).message}`),
+    );
+  }
 }

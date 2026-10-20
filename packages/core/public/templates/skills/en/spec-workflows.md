@@ -22,7 +22,7 @@ Specs are not always right — cross-verify against code when they conflict, and
 | user-level | `~/.lattice/users/<u>/spec/` | cross-project |
 | global-level | `~/.lattice/spec/` | multi-user multi-project |
 
-Conflicts: nearer overrides farther; same-name conflicts notify the user. When sync domains are associated: for same-level same-path conflicts, the local data source and current user win (local > domain; across domains, by `sync.domains` array order); domain specs are read-only, and `spec show <name> --source <hash8>` can directly read a shadowed domain version. user/global must include `## 适用范围`.
+Conflicts: nearer overrides farther; same-name conflicts notify the user. When sync domains are associated: for same-level same-path conflicts, the local data source and current user win (local > domain; across domains, by `sync.domains` array order); domain specs are read-only, and `spec show <name> --source <hash8>` can directly read a shadowed domain version. user/global must include `## Scope`.
 
 ## Read Related Specs in Full by Task Topic
 
@@ -60,7 +60,7 @@ Conflicts: nearer overrides farther; same-name conflicts notify the user. When s
 1. Preparation: `ltc context` + `ltc spec list --scope <level>` + review the conversation
 2. Check existing: `ltc spec show <related>`, prefer supplementing over duplicate creation
 3. Conflict detection: contradictions at the same level and adjacent levels → notify the user
-4. Write: one topic per file · specific and actionable · user/global must include scope · **sensitive information → `~/.lattice/.cache/sensitive/`**
+4. Write: one topic per file · specific and actionable · user/global must include `## Scope` · **sensitive information → `~/.lattice/.cache/sensitive/`**
 5. Metadata: after editing the body run `ltc spec migrate`; if only frontmatter changed use `ltc spec set`
 6. Second review + `ltc rag update`
 

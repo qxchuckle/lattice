@@ -31,7 +31,7 @@ Domain (experience package) management.
 - Shadowing: local primary data > domains (domains ordered by the config array order); key = spec relative path in the same namespace / task id / project contract ID; domain data is always read-only (write operations hitting a domain object report "domain is read-only")
 - `use` has three consumption tiers: `trusted` = read + constraints apply (default); `reference` = read-only, no constraint injection; `off` = sync the mirror only, never read
 - push is whitelist-incremental: covers only one's own contribution set + baseline fingerprint propagation on exit (`~/.lattice/.cache/sync-baseline/<hash>.json`; if missing, conservatively delete nothing); **others' content is never deleted because of my push**
-- Conflict (the mirror has unpushed commits and the remote has diverged): on `pull --rebase` failure, auto-abort escape + conflict list; zero contamination of primary data
+- Conflict (the mirror has unpushed commits and the remote has diverged): on pull --rebase failure, auto-abort escape + conflict list; zero contamination of primary data
 - `ltc spec show <name> --source <hash8>`: read a shadowed domain version directly
 
 ## `ltc user`

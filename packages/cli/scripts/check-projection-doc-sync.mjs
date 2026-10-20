@@ -23,7 +23,7 @@
  * 先移除；选项只从反引号项提取（散文里的裸 `--xxx` 是叙述不是参数字典）；正文内联子命令项
  * 必须带参数占位符才参与归属（`list [--json]` 是命令列举，`tree` 可能只是字段名）。
  *
- * 用法：`pnpm check:cli-doc`（仓库根）或 `node packages/cli/scripts/check-projection-doc-sync.mjs`
+ * 用法：`pnpm check:cli-doc`（同时校验 zh/en）或 `node packages/cli/scripts/check-projection-doc-sync.mjs [--lang zh|en]`
  * 退出码：0 = 一致；1 = 有 ERROR
  */
 
@@ -37,8 +37,26 @@ const COMMANDS_DIR = join(CLI_SRC, 'commands');
 const MANIFEST_PATH = join(CLI_SRC, 'utils/projection-manifest.ts');
 const TEMPLATES_DIR = resolve(here, '../../core/public/templates');
 const languageManifest = JSON.parse(readFileSync(join(TEMPLATES_DIR, 'languages.json'), 'utf8'));
-const SKILLS_DIR = join(TEMPLATES_DIR, 'skills', languageManifest.defaultLanguage);
+const langIndex = process.argv.indexOf('--lang');
+const docLanguage = langIndex >= 0 ? process.argv[langIndex + 1] : languageManifest.defaultLanguage;
+const SKILLS_DIR = join(TEMPLATES_DIR, 'skills', docLanguage);
 const HUB_PATH = join(SKILLS_DIR, 'command-reference.md');
+const HUB_LABELS =
+  docLanguage === 'en'
+    ? {
+        full: 'Applicable commands:',
+        detail: 'Detail commands (',
+        detailRe: /Detail commands \(([^)]*)\)/,
+        page: 'generic pagination for list commands',
+        pageRe: /generic pagination for list commands\*\* \(([^)]*)\)/,
+      }
+    : {
+        full: '适用命令：',
+        detail: 'detail 命令（',
+        detailRe: /detail 命令（([^）]*)）/,
+        page: 'list 类命令通用翻页',
+        pageRe: /list 类命令通用翻页\*\*（([^）]*)）/,
+      };
 
 const KINDS = ['table', 'list', 'item', 'detail', 'raw'];
 const SHARDS = [
@@ -268,7 +286,10 @@ function cleanText(text, sectionCmds) {
   const withoutRefs = text.replace(/`ltc ([^`]+)`/g, (whole, inner) =>
     sectionCmds.includes(ltcPath(`ltc ${inner}`)) ? whole : '',
   );
-  return withoutRefs.replace(/(?:不设|无|没有|不需要|不接|不接受)[^。\n]{0,16}?`--[\w-]+`/g, '');
+  return withoutRefs.replace(
+    /(?:不设|无|没有|不需要|不接|不接受|does not accept|doesn't accept|does not set|doesn't set|has no|have no|there is no|there are no|without|not available|\bno\b)[^。\n.]{0,24}?`--[\w-]+`/gi,
+    '',
+  );
 }
 
 /* ─── 解析 ─── */
@@ -430,22 +451,26 @@ function compareSets(label, got, expected) {
   }
 }
 
-const fullLine = hubLines.find((l) => l.includes('适用命令：'));
-if (!fullLine) errors.push('[E5] hub 缺少「适用命令：」清单行（--json-full 段）');
+const fullLine = hubLines.find((l) => l.includes(HUB_LABELS.full));
+if (!fullLine) errors.push(`[E5] hub 缺少「${HUB_LABELS.full}」清单行（--json-full 段）`);
 else
-  compareSets('--json-full 适用命令清单', namesIn(fullLine.split('适用命令：')[1]), projectedSet);
+  compareSets(
+    '--json-full 适用命令清单',
+    namesIn(fullLine.split(HUB_LABELS.full)[1]),
+    projectedSet,
+  );
 
-const detailLine = hubLines.find((l) => l.includes('detail 命令（'));
-if (!detailLine) errors.push('[E5] hub 缺少「detail 命令（」清单行');
+const detailLine = hubLines.find((l) => l.includes(HUB_LABELS.detail));
+if (!detailLine) errors.push(`[E5] hub 缺少「${HUB_LABELS.detail}」清单行`);
 else {
-  const seg = detailLine.match(/detail 命令（([^）]*)）/);
+  const seg = detailLine.match(HUB_LABELS.detailRe);
   compareSets('detail 命令清单', namesIn(seg ? seg[1] : ''), detailSet);
 }
 
-const pageLine = hubLines.find((l) => l.includes('list 类命令通用翻页'));
-if (!pageLine) errors.push('[E5] hub 缺少「list 类命令通用翻页」清单行');
+const pageLine = hubLines.find((l) => l.includes(HUB_LABELS.page));
+if (!pageLine) errors.push(`[E5] hub 缺少「${HUB_LABELS.page}」清单行`);
 else {
-  const seg = pageLine.match(/list 类命令通用翻页\*\*（([^）]*)）/);
+  const seg = pageLine.match(HUB_LABELS.pageRe);
   compareSets('翻页命令清单', namesIn(seg ? seg[1] : ''), tableSet);
 }
 
