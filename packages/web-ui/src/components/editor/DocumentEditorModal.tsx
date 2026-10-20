@@ -124,7 +124,8 @@ export const DocumentEditorModal = memo(function DocumentEditorModal({
     setSaving(true);
     try {
       const adapter = getAdapter();
-      await adapter.saveContent(contentType, entityId, content);
+      const success = await adapter.saveContent(contentType, entityId, content);
+      if (!success) throw new Error('保存未被服务端确认');
       message.success('已保存，RAG 索引已自动更新');
       queryClient.invalidateQueries({ queryKey: ['content', contentType, entityId] });
       queryClient.invalidateQueries({ queryKey: ['rag-status'] });
