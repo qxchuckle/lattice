@@ -41,19 +41,19 @@ export default defineConfig({
       // 二期 P5 分档（按包实测 −0.5pt）：core/services/web 高档，cli 中档，web-ui 起步档，vscode 低位防倒退。
       // 三期 P6（core 深挖 I：profile/git-ops/footprint/lookup/register/merge/relation/fast-start-log，444 用例，
       //   实测 40.40 / 33.43 / 39.23 / 40.96；core 80.23）。
-      // 三期 P9（CLI 深水 II：init/link/unlink/scan/export/sync + 残余，
-      //   557 用例，实测 52.31 / 44.18 / 46.51 / 53.27；core 92.46、cli 78.11）。
+      // 三期 P10（web 深水 + services 收口：server/index、git/domains、terminal、rag、scan，
+      //   566 用例，实测 54.02 / 45.43 / 48.68 / 54.97；web 90.19、services 97.53）。
       // 策略：水位 = 当前基线-~0.5pt，只升不降（长期目标 lines≥85 / branches≥75）
       thresholds: {
         // 全局兜底（跨包汇总；单包水位见下）
-        statements: 51.8,
-        branches: 43.7,
-        functions: 46.0,
-        lines: 52.8,
+        statements: 53.5,
+        branches: 44.9,
+        functions: 48.2,
+        lines: 54.5,
         // 高档：领域能力 + 宿主共享用例（P1/P4/P6/P7/P8 深挖后）
-        'packages/core/**': { lines: 91.9, branches: 76.6, functions: 89.8 },
-        'packages/services/**': { lines: 91.8, branches: 72.4, functions: 84.3 },
-        'packages/web/**': { lines: 56.0, branches: 37.5, functions: 54.6 },
+        'packages/core/**': { lines: 92.2, branches: 76.9, functions: 90.4 },
+        'packages/services/**': { lines: 97.0, branches: 78.5, functions: 88.8 },
+        'packages/web/**': { lines: 89.7, branches: 69.5, functions: 92.0 },
         // 中档：CLI（进程内 harness 覆盖装配与逻辑；E2E 子进程不计 v8）
         'packages/cli/**': { lines: 77.6, branches: 66.2, functions: 82.0 },
         // 起步档：web-ui（纯逻辑/hooks 优先；组件深渲与 cytoscape 像素不在口径）

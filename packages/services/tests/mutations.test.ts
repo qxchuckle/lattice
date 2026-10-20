@@ -3,7 +3,7 @@
  * 与 contract.test.ts 同一 fixture 口径（隔离 LATTICE_HOME + tester 用户），硬离线。
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, test } from 'vitest';
 import { createFixtureHome } from './fixture';
@@ -300,6 +300,16 @@ test('specs：分层列表/按 ID 名称查找/冲突/迁移/frontmatter 更新'
     null,
   );
 
+  // 同名跨层冲突：global + user 同 relativePath
+  const globalConflict = join(core.getGlobalSpecDir(), 'conflict-services.md');
+  const userConflict = join(core.getUserSpecDir('tester'), 'conflict-services.md');
+  writeFileSync(globalConflict, '---\nid: spec-gconf001\ntitle: 全局冲突\n---\n\nG\n');
+  writeFileSync(userConflict, '---\nid: spec-uconf001\ntitle: 用户冲突\n---\n\nU\n');
+  const conflicts = await services.detectAllConflicts('tester');
+  assert.ok(conflicts.some((c) => c.fileName === 'conflict-services.md'));
+  unlinkSync(globalConflict);
+  unlinkSync(userConflict);
+
   const brokenPath = join(fixture.home, 'users', 'tester', 'spec', 'broken-services.md');
   writeFileSync(brokenPath, '---\ntitle: [bad\n---\n');
   await assert.rejects(
@@ -337,6 +347,14 @@ test('content：路径解析与读取的缺失分支', async () => {
   assert.match(
     await services.resolveContentPath('tester', 'profile', 'alpha').then((p) => p ?? ''),
     /alpha/,
+  );
+  assert.match(
+    await services.resolveContentPath('tester', 'design', 'task-alpha-1').then((p) => p ?? ''),
+    /design/,
+  );
+  assert.match(
+    await services.resolveContentPath('tester', 'progress', 'task-alpha-1').then((p) => p ?? ''),
+    /progress/,
   );
   assert.equal(await services.resolveContentPath('tester', 'unknown', 'x'), null);
   assert.match(
@@ -387,4 +405,20 @@ test('maintenance：RAG 状态/update/rebuild 与 doctor 修复模式', async ()
 
   assert.equal(typeof (await services.updateRag('update')), 'number');
   assert.equal(typeof (await services.updateRag('rebuild')), 'number');
+});
+
+test('projects：缺失详情/更新/目录回退与元数据路径', async () => {
+  assert.deepEqual(await services.getProjectDetail('tester', 'ghost'), {
+    project: null,
+    specs: [],
+    tasks: [],
+    relations: [],
+  });
+  const updated = await services.updateProject('tester', 'alpha', { name: 'Alpha Project' });
+  assert.ok(updated?.id.endsWith('alpha'));
+  assert.equal(await services.resolveProjectDirName('tester', 'ghost'), 'ghost');
+  assert.match(
+    (await services.getProjectMetaPath('tester', 'ghost')) ?? '',
+    /projects\/ghost\/project\.json$/,
+  );
 });
