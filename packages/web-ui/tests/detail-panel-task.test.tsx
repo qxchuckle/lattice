@@ -220,4 +220,51 @@ describe('DetailPanel 任务详情', () => {
     await waitFor(() => expect(screen.getByText('已删除')).toBeTruthy());
     expect(detailStore.open).toBe(false);
   });
+
+  it('状态更新/归档/删除失败：提示错误、保持详情与确认框', { timeout: 20000 }, async () => {
+    renderUi(<DetailPanel />);
+    await waitFor(() => expect(screen.getByText('任务详情')).toBeTruthy());
+
+    // adapter 返回 false：不能误报成功
+    adapter.updateTaskStatus.mockResolvedValueOnce(false);
+    openHeaderMenu();
+    fireEvent.click(await screen.findByText('planning'));
+    await waitFor(() => expect(screen.getByText(/更新失败: 操作未成功/)).toBeTruthy());
+    expect(screen.queryByText(/状态已更新为 planning/)).toBeNull();
+    expect(detailStore.open).toBe(true);
+
+    // 归档失败：错误提示，确认框与详情保持
+    adapter.archiveTask.mockRejectedValueOnce(new Error('git locked'));
+    openHeaderMenu();
+    fireEvent.click(await screen.findByText('归档'));
+    await waitFor(() =>
+      expect(document.querySelector('.ant-modal-confirm-title')?.textContent).toBe('归档任务'),
+    );
+    fireEvent.click(
+      Array.from(document.querySelectorAll<HTMLButtonElement>('.ant-modal-confirm-btns button')).at(
+        -1,
+      )!,
+    );
+    await waitFor(() => expect(screen.getByText(/归档失败: git locked/)).toBeTruthy());
+    expect(detailStore.open).toBe(true);
+    expect(screen.getByText('任务详情')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.ant-modal-confirm')).toBeNull());
+
+    // 删除返回 false：不关闭详情
+    adapter.deleteTask.mockResolvedValueOnce(false);
+    openHeaderMenu();
+    fireEvent.click(await screen.findByText('删除'));
+    await waitFor(() =>
+      expect(document.querySelector('.ant-modal-confirm-title')?.textContent).toBe('删除任务'),
+    );
+    fireEvent.click(
+      Array.from(document.querySelectorAll<HTMLButtonElement>('.ant-modal-confirm-btns button')).at(
+        -1,
+      )!,
+    );
+    await waitFor(() => expect(screen.getByText(/删除失败: 操作未成功/)).toBeTruthy());
+    expect(screen.queryByText(/已删除/)).toBeNull();
+    expect(detailStore.open).toBe(true);
+    expect(screen.getByText('任务详情')).toBeTruthy();
+  });
 });
