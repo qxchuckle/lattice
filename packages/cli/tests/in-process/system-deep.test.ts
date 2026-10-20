@@ -287,6 +287,27 @@ test('context：项目/任务/查询/JSON/当前用户/未知项目', async () =
   );
   const task = await seedTask('上下文任务', [ID_A]);
   await initDb();
+  await updateTask(U, task.id, {
+    referencedSpecs: [
+      {
+        id: 'spec-ctxu001',
+        relativePath: 'ctx-user.md',
+        scope: 'user',
+        firstReadAt: '2026-10-20T00:00:00.000Z',
+      },
+    ],
+  });
+
+  const taskHuman = await runContext(['context', '--task', task.id]);
+  assert.equal(taskHuman.exitCode, 0, taskHuman.stderr);
+  assert.match(taskHuman.stdout, /任务上下文：上下文任务/);
+  assert.match(taskHuman.stdout, /直接关联 Spec（1）/);
+  assert.match(taskHuman.stdout, /项目上下文规范/);
+  assert.match(taskHuman.stdout, /摘要：/);
+  const taskQueryHuman = await runContext(['context', '--task', task.id, '--query', '上下文']);
+  assert.equal(taskQueryHuman.exitCode, 0, taskQueryHuman.stderr);
+  const missingTask = await runContext(['context', '--task', '2020-01-01-0000-ghos', '--json']);
+  assert.equal(missingTask.exitCode, 1);
 
   const human = await runContext(['context', '--project', ID_A]);
   assert.equal(human.exitCode, 0, human.stderr);
