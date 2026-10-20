@@ -58,12 +58,16 @@ export function registerScanCommand(program: Command): void {
               0,
               120,
             );
-          process.stdout.clearLine(0);
-          process.stdout.cursorTo(0);
+          if (process.stdout.isTTY) {
+            process.stdout.clearLine(0);
+            process.stdout.cursorTo(0);
+          }
           process.stdout.write(line);
         });
-        process.stdout.clearLine(0);
-        process.stdout.cursorTo(0);
+        if (process.stdout.isTTY) {
+          process.stdout.clearLine(0);
+          process.stdout.cursorTo(0);
+        }
 
         closeDb();
 

@@ -9,6 +9,7 @@ import {
   initDb,
   closeDb,
   findProjectById,
+  normalizeLegacyId,
 } from '@qcqx/lattice-core';
 import { logger, resolveProjectAtDirectory, shouldSkipConfirm } from '../utils';
 
@@ -111,7 +112,7 @@ export function registerUnlinkCommand(program: Command): void {
         if (opts.removeData) {
           const username = await getUsername();
           await initDb();
-          await unregisterProject(username, data.id);
+          await unregisterProject(username, normalizeLegacyId(data.id));
           closeDb();
           logger.raw(chalk.green('✓ 已将 Lattice 项目数据移入垃圾桶（含关系与指纹）'));
           logger.raw(chalk.dim('  使用 lattice trash list 查看，lattice trash restore <id> 恢复'));
