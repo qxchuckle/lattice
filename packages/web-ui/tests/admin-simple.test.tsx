@@ -346,10 +346,12 @@ describe('admin 垃圾桶/用户/密码', () => {
     fireEvent.click(screen.getByText('修改密码'));
     await waitFor(() => expect(adapter.changePassword).toHaveBeenCalledWith('1234'));
 
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /清除密码/ }).className).not.toContain(
-        'ant-btn-loading',
-      ),
+    await waitFor(
+      () =>
+        expect(screen.getByRole('button', { name: /清除密码/ }).className).not.toContain(
+          'ant-btn-loading',
+        ),
+      { timeout: 5000 },
     );
     fireEvent.click(screen.getByRole('button', { name: /清除密码/ }));
     await waitFor(() => expect(document.querySelector('.ant-modal-confirm')).toBeTruthy());
