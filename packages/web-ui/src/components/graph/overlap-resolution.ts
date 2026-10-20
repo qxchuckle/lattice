@@ -288,12 +288,7 @@ export function resolveOverlapsContinuous(
       }
     }
 
-    if (!hasWork) {
-      options.onDone?.();
-      return;
-    }
-
-    // 只应用最终位置一次（单次 canvas 重绘替代 K 次重绘）
+    // 先应用本帧位置（即使本帧已收敛也要落盘——否则「首帧即收敛」时位移永远不生效）
     cy.batch(() => {
       for (let i = 0; i < n; i++) {
         if (data[i].x !== origPos[i].x || data[i].y !== origPos[i].y) {
@@ -301,6 +296,11 @@ export function resolveOverlapsContinuous(
         }
       }
     });
+
+    if (!hasWork) {
+      options.onDone?.();
+      return;
+    }
 
     requestAnimationFrame(step);
   }
