@@ -59,7 +59,7 @@ jobs:
 
 
       - name: assert tests ran (防静默空跑)
-        run: node scripts/ci-assert-tests.mjs coverage/test-results.json 651
+        run: node scripts/ci-assert-tests.mjs coverage/test-results.json 655
       - name: upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
