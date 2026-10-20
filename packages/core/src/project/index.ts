@@ -104,7 +104,7 @@ export async function registerProject(
   const dirName = normalizeLegacyId(id);
   const rawExisting = await readJSON<ProjectMeta>(getProjectMetaPath(username, dirName));
   const existingMeta = rawExisting ? normalizeProjectMeta(rawExisting) : null;
-  const name = opts?.name ?? detected.name ?? existingMeta?.name;
+  const name = opts?.name ?? existingMeta?.name ?? detected.name;
   const normalizedPath = normalizeLocalPath(localPath);
 
   // 生成完整 IDs（legacy + git + remote）
