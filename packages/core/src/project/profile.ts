@@ -179,7 +179,7 @@ export async function collectProfileInputs(
       const isRepo = await gitInstance.checkIsRepo();
       if (isRepo) {
         const headSha = await gitInstance.revparse(['HEAD']);
-        const countResult = await gitInstance.revparse(['--count', 'HEAD']);
+        const countResult = await gitInstance.raw(['rev-list', '--count', 'HEAD']);
         git = { headSha: headSha.trim(), commitCount: parseInt(countResult.trim(), 10) || null };
       }
     } catch {
@@ -426,6 +426,10 @@ export async function markProfileDone(
   projectDirName: string,
   projectId: string,
 ): Promise<void> {
+  // 先同步 project.json 的 profileUpdated，再采集输入并计算 hash：
+  // 否则 collectProfileInputs 读到的是更新前的 updated 时间，cache 写完后会立即 stale。
+  await updateProjectMeta(username, projectId, { profileUpdated: nowISO() });
+
   // 采集当前输入
   const inputs = await collectProfileInputs(username, projectId, projectDirName);
   const hash = computeInputsHash(inputs);
@@ -441,9 +445,6 @@ export async function markProfileDone(
   // 写入 cache.json
   await ensureDir(getProjectProfileDir(username, projectDirName));
   await writeJSON(getProjectProfileCachePath(username, projectDirName), cache);
-
-  // 同步 project.json profileUpdated
-  await updateProjectMeta(username, projectId, { profileUpdated: nowISO() });
 }
 
 // ─── 综合查询 ───

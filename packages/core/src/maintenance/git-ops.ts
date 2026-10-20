@@ -236,7 +236,18 @@ export async function initLatticeGit(root: string, remoteUrl?: string): Promise<
   // 显式 -b main：不依赖 git 全局 init.defaultBranch（可能默认 master）
   await git.raw(['init', '-b', 'main']);
   await git.add('.');
-  await git.commit('chore: 初始化 lattice');
+  // --allow-empty：空数据根也能产生 HEAD，否则后续 status/push/set-url 无法工作
+  await git.raw([
+    '-c',
+    'user.name=lattice',
+    '-c',
+    'user.email=lattice@local',
+    'commit',
+    '--allow-empty',
+    '-q',
+    '-m',
+    'chore: 初始化 lattice',
+  ]);
   if (remoteUrl) {
     await git.addRemote('origin', remoteUrl);
   }
@@ -303,15 +314,19 @@ export async function setRemoteUrl(name: string, url: string): Promise<GitOpResu
     // simple-git 没有直接的 set-url 方法，用 raw
     await g.raw(['remote', 'set-url', name, url]);
 
-    // 同步更新 upstream 跟踪
-    const branch = await g.revparse(['--abbrev-ref', 'HEAD']);
-    const trimmed = branch.trim();
-    if (trimmed && trimmed !== 'HEAD') {
-      try {
-        await g.raw(['branch', `--set-upstream-to=${name}/${trimmed}`, trimmed]);
-      } catch {
-        // upstream 设置失败不影响 URL 切换
+    // 同步更新 upstream 跟踪（空仓库/无 HEAD 时跳过，不影响 URL 切换）
+    try {
+      const branch = await g.revparse(['--abbrev-ref', 'HEAD']);
+      const trimmed = branch.trim();
+      if (trimmed && trimmed !== 'HEAD') {
+        try {
+          await g.raw(['branch', `--set-upstream-to=${name}/${trimmed}`, trimmed]);
+        } catch {
+          // upstream 设置失败不影响 URL 切换
+        }
       }
+    } catch {
+      // 空仓库（尚无 HEAD）时跳过 upstream
     }
     return { success: true, message: `已切换 ${name} -> ${url}` };
   } catch (err) {
