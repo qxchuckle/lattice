@@ -10,8 +10,9 @@ together. The VS Code extension is versioned separately — see
 [`packages/vscode/CHANGELOG.md`](packages/vscode/CHANGELOG.md).
 
 Releases before `1.28.0` are recorded as git tags only (`git tag --list 'v*'`); they were not
-backfilled here. New entries are appended by `pnpm release`, which also creates the matching GitHub
-Release and attaches the VSIX when one was built.
+backfilled here. New entries are appended by `pnpm release`; pushing the tag triggers
+`.github/workflows/release.yml`, which builds the VSIX from that tag and creates the GitHub Release
+whose body is the matching section of this file.
 
 ## [Unreleased]
 

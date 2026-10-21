@@ -1,0 +1,95 @@
+name: Release
+
+# tag 推送后自动发布 GitHub Release：
+# - 正文取自 CHANGELOG.md 对应版本段（scripts/release-notes.mjs）
+# - 附件是从同一个 tag 构建的 VSIX（不是本地工作树的产物）
+# npm 包与两个扩展市场的发布仍在本地完成（见 CONTRIBUTING.md → Releasing）。
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  release:
+    name: release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # tag 与 npm 包版本必须一致；不一致说明漏了 release 提交或 tag 打错了
+      - name: verify tag matches package versions
+        run: |
+          TAG="${{ github.ref_name }}"
+          CORE=$(node -p "require('./packages/core/package.json').version")
+          CLI=$(node -p "require('./packages/cli/package.json').version")
+          WEB=$(node -p "require('./packages/web/package.json').version")
+          echo "tag=$TAG core=$CORE cli=$CLI web=$WEB"
+          if [ "v$CORE" != "$TAG" ] || [ "$CLI" != "$CORE" ] || [ "$WEB" != "$CORE" ]; then
+            echo "::error::tag 与 packages/{core,cli,web} 版本不一致"
+            exit 1
+          fi
+
+      - name: build vsix from tag
+        run: pnpm --filter lattice-context run package
+
+      - name: locate vsix
+        id: vsix
+        run: |
+          EXT=$(node -p "require('./packages/vscode/package.json').version")
+          FILE="packages/vscode/dist-vsix/lattice-context-${EXT}.vsix"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::未找到 $FILE"
+            exit 1
+          fi
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "ext=$EXT" >> "$GITHUB_OUTPUT"
+
+      - name: write release notes
+        run: >-
+          node scripts/release-notes.mjs "${{ github.ref_name }}" --out .release-notes.md --asset "${{ steps.vsix.outputs.file }}"
+
+
+      # 幂等：已存在就改正文，不存在才创建；附件始终覆盖，便于重跑
+      - name: create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file .release-notes.md
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file .release-notes.md --verify-tag
+          fi
+          gh release upload "$TAG" "${{ steps.vsix.outputs.file }}" --clobber
+
+      - name: summarize
+        run: |
+          {
+            echo "### Release ${{ github.ref_name }}"
+            echo ""
+            echo "- 正文：CHANGELOG.md 的 \`[${{ github.ref_name }}]\` 段"
+            echo "- 附件：\`${{ steps.vsix.outputs.name }}\`（扩展 ${{ steps.vsix.outputs.ext }}，由该 tag 构建）"
+            echo "- 页面：https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -68,15 +68,14 @@ Small typo fixes and doc improvements are fine without opening an issue first; f
 
 ## Releasing (maintainers)
 
-No CI — releases run locally from a clean, verified worktree.
+npm publishing runs locally from a clean, verified worktree; the GitHub Release is built by CI from the pushed tag.
 
-- **npm packages** — `pnpm release patch` (or `minor` / `major` / an exact `x.y.z`; add `--core`, `--cli`, `--web` to limit the targets). The script bumps `@qcqx/lattice-{core,cli,web}`, appends the new version section to `CHANGELOG.md` from the commits since the last tag, builds, publishes, commits `release: vX.Y.Z`, tags, pushes, then creates the GitHub Release from that CHANGELOG section. If `packages/vscode/dist-vsix/` holds a VSIX matching the current extension version it is uploaded as a release asset. Flags: `--dry-run`, `--no-push` (skip push and release), `--no-release`, and `continue` (retry a failed publish). Credentials live in npm's own `~/.npmrc` (`npm login` or a granular access token with read+write on `@qcqx`).
-- **VS Code extension** (versioned separately)
+- **npm packages** — `pnpm release patch` (or `minor` / `major` / an exact `x.y.z`; add `--core`, `--cli`, `--web` to limit the targets). It bumps `@qcqx/lattice-{core,cli,web}`, appends the new version section to `CHANGELOG.md` (moving curated `[Unreleased]` entries, or generating them from commits since the last tag), builds, publishes, commits `release: vX.Y.Z`, tags and pushes. Flags: `--dry-run`, `--no-push` (keep everything local), and `continue` (retry a failed publish). Credentials live in npm's own `~/.npmrc` (`npm login` or a granular access token with read+write on `@qcqx`).
+- **GitHub Release** — `.github/workflows/release.yml` runs on every `v*` tag push: it checks the tag against the package versions, builds the VSIX **from that tag**, renders the notes from the CHANGELOG section (`scripts/release-notes.mjs`) and creates or updates the Release with the VSIX attached. Nothing to run locally and no extra secrets — it uses the built-in `GITHUB_TOKEN`. Re-running the workflow is idempotent (notes and asset are replaced).
+- **VS Code extension markets** (versioned separately)
   1. Copy `.env.release.example` → `.env.release` and fill in `OVSX_PAT` (Open VSX) and `VSCE_PAT` (Azure DevOps PAT, scopes ≥ *Marketplace: Manage*). The file is **git-ignored** — never commit it (env vars override the file).
   2. `pnpm --filter lattice-context run release` — CHANGELOG consistency check → build → VSIX → sha256.
   3. `pnpm --filter lattice-context run release:publish` — the above **plus publishing to both marketplaces** (channels without credentials are skipped with a warning; tokens are masked in logs).
-
-Run step 2 **before** `pnpm release` if you want the fresh VSIX attached to the GitHub Release.
 
 ## Reporting issues
 
@@ -94,4 +93,4 @@ Use the [issue templates](https://github.com/qxchuckle/lattice/issues/new/choose
 - 文案：面向用户的文案必须走 l10n（扩展内 `t()` + `packages/vscode/l10n/`），中英双语。
 - 文档：公开文档英文为默认入口（`docs/foo.md`），中文为 `docs/foo.zh-CN.md`；两边同轮更新，新增文档对登记到 `i18n-manifest.json`，并跑 `pnpm check:docs-i18n`。官网直接渲染仓库文档、不维护第二套：新增页面须在 `apps/site/scripts/docs-nav.mjs` 登记，改完 `docs/` 后跑 `pnpm sync:docs` 与 `pnpm check:docs`；`apps/site/src/content/docs/{,zh-cn/}docs/` 是生成物（已 gitignore），不要手改。`pnpm dev:site` 会基于同一份文档生成开发用 Pagefind 索引，本地不构建生产包也能搜索；生产环境仍使用 Starlight 的 HTML 索引。
 - PR：小改动直接提；大改动先开 Issue 讨论设计。描述里写清动机与验证方式。
-- 发布：npm 包用 `pnpm release patch|minor|x.y.z`（自动写 `CHANGELOG.md`、打 tag、推送、建 GitHub Release 并附上匹配版本的 VSIX）；VS Code 扩展单独走 `pnpm --filter lattice-context run release:publish`，扩展版本与 `packages/vscode/CHANGELOG.md` 独立维护。
+- 发布：`pnpm release patch|minor|x.y.z` 负责 npm 包（bump → 写 `CHANGELOG.md` → 构建 → 发布 → tag → 推送）；推 tag 后 `.github/workflows/release.yml` 从同一个 tag 构建 VSIX 并建 GitHub Release（正文取 `CHANGELOG.md` 对应版本段）。扩展市场仍走本地 `pnpm --filter lattice-context run release:publish`，版本与 `packages/vscode/CHANGELOG.md` 独立维护。

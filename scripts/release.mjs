@@ -13,16 +13,16 @@
  *   pnpm release patch --core --web  # 发布 core 和 web
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
  *   pnpm release continue        # 发布失败后继续（跳过版本bump和构建，重试发布+git）
- *   pnpm release patch --no-push # 不推送到远端，也不建 GitHub Release
- *   pnpm release patch --no-release # 推送但不建 GitHub Release
+ *   pnpm release patch --no-push # 不推送到远端（tag 不上去，CI 也就不会建 Release）
  *
- * 完整流程：bump → 写入 CHANGELOG → 构建 → npm 发布 → 提交 + tag → 推送 →
- * GitHub Release（正文取自 CHANGELOG 对应版本段；若 dist-vsix 有匹配版本的 VSIX 则作为附件上传）
+ * 完整流程：bump → 写入 CHANGELOG → 构建 → npm 发布 → 提交 + tag → 推送。
+ * 推送后由 `.github/workflows/release.yml` 在 tag 上构建 VSIX 并建 GitHub Release
+ * （正文 = CHANGELOG 对应版本段 + 安装/包表/链接，附件 = 同一 tag 构建的 VSIX）。
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,7 +40,6 @@ const CHANGELOG_PATH = resolve(root, 'CHANGELOG.md');
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const skipPush = args.includes('--no-push');
-const skipRelease = skipPush || args.includes('--no-release');
 const onlyCore = args.includes('--core');
 const onlyCli = args.includes('--cli');
 const onlyWeb = args.includes('--web');
@@ -89,7 +88,7 @@ function run(cmd, opts = {}) {
   }
 }
 
-// --- CHANGELOG 与 GitHub Release ---
+// --- CHANGELOG ---
 
 const SECTION_TYPES = {
   feat: 'Added',
@@ -189,96 +188,6 @@ function updateChangelog(version) {
   writeFileSync(CHANGELOG_PATH, next);
 }
 
-function readChangelogSection(version) {
-  const text = readFileSync(CHANGELOG_PATH, 'utf-8');
-  const start = text.indexOf(`## [${version}]`);
-  if (start < 0) return '';
-  const rest = text.slice(start);
-  const end = rest.indexOf('\n## [', 1);
-  return (end < 0 ? rest : rest.slice(0, end)).trimEnd();
-}
-
-function releaseBody(version) {
-  return [
-    readChangelogSection(version),
-    '',
-    '## 安装 · Install',
-    '',
-    '```bash',
-    'npm i -g @qcqx/lattice-cli',
-    'npm i -g @qcqx/lattice-web    # Web 工作台',
-    '```',
-    '',
-    '## 包 · Packages',
-    '',
-    '| Package | Version |',
-    '|---|---|',
-    `| [@qcqx/lattice-cli](https://www.npmjs.com/package/@qcqx/lattice-cli) | ${version} |`,
-    `| [@qcqx/lattice-core](https://www.npmjs.com/package/@qcqx/lattice-core) | ${version} |`,
-    `| [@qcqx/lattice-web](https://www.npmjs.com/package/@qcqx/lattice-web) | ${version} |`,
-    '',
-    '**官网** https://lattice.qcqx.cn · **文档** https://lattice.qcqx.cn/docs · **在线 Demo** https://lattice.qcqx.cn/demo/',
-    '',
-  ].join('\n');
-}
-
-// 只接受与当前扩展版本匹配的 VSIX，避免把旧包当成新版本附件
-function findVsix() {
-  const dir = resolve(root, 'packages/vscode/dist-vsix');
-  if (!existsSync(dir)) return null;
-  const ext = JSON.parse(readFileSync(resolve(root, 'packages/vscode/package.json'), 'utf-8'));
-  const name = readdirSync(dir).find((file) => file.endsWith(`-${ext.version}.vsix`));
-  return name ? resolve(dir, name) : null;
-}
-
-function createGithubRelease(version) {
-  const tag = `v${version}`;
-  if (skipRelease) {
-    console.log('\nℹ 已跳过 GitHub Release（--no-push / --no-release）');
-    return;
-  }
-  if (dryRun) {
-    console.log(`\n(dry-run) gh release create ${tag}，并上传匹配版本的 VSIX`);
-    return;
-  }
-  try {
-    execSync('gh --version', { stdio: 'pipe' });
-  } catch {
-    console.log('\n⚠ 未找到 gh CLI，跳过 GitHub Release');
-    return;
-  }
-  try {
-    execSync(`gh release view ${tag}`, { cwd: root, stdio: 'pipe' });
-    console.log(`\nℹ GitHub Release ${tag} 已存在，跳过`);
-    return;
-  } catch {
-    // 不存在 → 创建
-  }
-  const notesFile = resolve(root, `.release-notes-${version}.md`);
-  writeFileSync(notesFile, releaseBody(version));
-  try {
-    execSync(`gh release create ${tag} --title ${tag} --notes-file "${notesFile}" --verify-tag`, {
-      cwd: root,
-      stdio: 'inherit',
-    });
-    const vsix = findVsix();
-    if (vsix) {
-      execSync(`gh release upload ${tag} "${vsix}" --clobber`, { cwd: root, stdio: 'inherit' });
-      console.log(`  ✔ 附件：${basename(vsix)}`);
-    } else {
-      console.log(
-        '  ⚠ 未找到与扩展版本匹配的 VSIX，未上传附件（可先跑 pnpm --filter lattice-context run release）',
-      );
-    }
-    console.log(`  ✔ GitHub Release ${tag} 已创建`);
-  } catch (error) {
-    console.log(`  ⚠ GitHub Release 创建失败：${String(error.message).split('\n')[0]}`);
-    console.log('    修好后可手动重试：gh release create ' + tag);
-  } finally {
-    rmSync(notesFile, { force: true });
-  }
-}
-
 // --- 确定要发布的包 ---
 const targets = [];
 const hasFlag = onlyCore || onlyCli || onlyWeb;
@@ -359,28 +268,26 @@ for (const name of targets) {
   }
 }
 
-// --- Git tag + 推送 + GitHub Release ---
+// --- Git tag + 推送 ---
 console.log(`\n🏷️  创建 git tag: v${newVersion}`);
 const pkgPaths = `${targets.map((name) => `packages/${name}/package.json`).join(' ')} CHANGELOG.md`;
 run(`git add ${pkgPaths}`);
 run(`git commit -m "release: v${newVersion}"`);
 run(`git tag v${newVersion}`);
 
-if (!skipPush) {
+if (skipPush) {
+  console.log(`\nℹ 未推送：推上去后由 Actions 构建 VSIX 并建 Release`);
+  console.log(`   git push origin HEAD && git push origin v${newVersion}\n`);
+} else {
   console.log('\n📤 推送...');
   run('git push origin HEAD');
   run(`git push origin v${newVersion}`);
 }
 
-createGithubRelease(newVersion);
-
 console.log(`\n✅ 发布完成! v${newVersion}`);
 if (dryRun) {
   console.log('   (dry-run 模式，以上命令未实际执行)');
-} else if (skipPush) {
-  console.log(`   仍待推送: git push origin HEAD && git push origin v${newVersion}\n`);
-} else {
-  console.log(
-    `   GitHub Release: https://github.com/qxchuckle/lattice/releases/tag/v${newVersion}\n`,
-  );
+} else if (!skipPush) {
+  console.log('   GitHub Release 由 Actions 在 tag 上构建并创建：');
+  console.log(`   https://github.com/qxchuckle/lattice/actions/workflows/release.yml\n`);
 }
