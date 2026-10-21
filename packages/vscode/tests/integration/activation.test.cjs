@@ -1,10 +1,43 @@
 /* global suite, test, suiteSetup, suiteTeardown */
 const assert = require('node:assert/strict');
 const vscode = require('vscode');
-const { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} = require('node:fs');
 const path = require('node:path');
 
 const EXTENSION_ID = 'qcqx.lattice-context';
+
+/**
+ * 重置 fixture 数据根（可重复运行）。
+ * 扩展激活期已用 fs.watch 监听数据根及 users / spec / .trash（见 src/state/watcher.ts），
+ * Windows 下删除仍被监听的目录会 EPERM（POSIX 允许删除），所以这些目录本身保留、
+ * 只清空其中内容；其余条目（如 .cache 下的 SQLite）仍由扩展持有句柄，尽力删除。
+ */
+function resetDataRoot(root) {
+  const preserved = ['users', 'spec', '.trash'];
+  mkdirSync(root, { recursive: true });
+  for (const entry of readdirSync(root)) {
+    if (preserved.includes(entry)) continue;
+    try {
+      rmSync(path.join(root, entry), { recursive: true, force: true });
+    } catch {
+      // Windows：扩展仍持有句柄（如 .cache 下的索引库）；缓存不是 fixture 真源，跳过
+    }
+  }
+  for (const name of preserved) {
+    const dir = path.join(root, name);
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir)) {
+      rmSync(path.join(dir, entry), { recursive: true, force: true });
+    }
+  }
+}
 
 /**
  * 集成测试：扩展在「真实 fixture 数据根」上跑（进程内 core 直读文件，不再需要假 ltc）。
@@ -23,7 +56,7 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
 
   suiteSetup(async function () {
     assert.ok(latticeHome, 'LATTICE_HOME should be provided by .vscode-test.mjs');
-    rmSync(latticeHome, { recursive: true, force: true });
+    resetDataRoot(latticeHome);
 
     // ── fixture 数据根（进程内 core 的真源）──
     // 用户（username 存在本地配置：<home>/config/config-local.json）
