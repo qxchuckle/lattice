@@ -24,6 +24,13 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  PLACEHOLDER,
+  groupCommits,
+  insertVersionSection,
+  readUnreleased,
+  renderBody,
+} from './changelog.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -56,6 +63,20 @@ const isContinue = versionArg === 'continue';
 
 // --- 发布前置检查（先验证再动版本号，避免半途留下已 bump 的 package.json） ---
 if (!isContinue) {
+  // 单测先过：CHANGELOG 写入 / Release 正文逻辑坏了就别开始
+  try {
+    execSync('node --test scripts/__tests__/', { cwd: root, stdio: 'pipe', encoding: 'utf8' });
+    console.log('✔ release 脚本单测通过');
+  } catch (error) {
+    console.error('❌ release 脚本单测失败，先修 scripts/ 再发版：');
+    console.error(
+      String(error.stdout ?? error.message)
+        .split('\n')
+        .slice(-20)
+        .join('\n'),
+    );
+    process.exit(1);
+  }
   if (!existsSync(CHANGELOG_PATH)) {
     console.error('❌ 缺少 CHANGELOG.md：请先创建（格式见仓库根 CHANGELOG.md）');
     process.exit(1);
@@ -108,19 +129,6 @@ function run(cmd, opts = {}) {
 
 // --- CHANGELOG ---
 
-const SECTION_TYPES = {
-  feat: 'Added',
-  fix: 'Fixed',
-  perf: 'Changed',
-  refactor: 'Changed',
-  revert: 'Changed',
-  docs: 'Documentation',
-};
-const SECTION_ORDER = ['Added', 'Changed', 'Fixed', 'Documentation'];
-// 纯内部提交不进 CHANGELOG
-const SKIP_TYPES = new Set(['test', 'chore', 'ci', 'build', 'style']);
-const PLACEHOLDER = '- No user-facing changes.';
-
 function git(cmd) {
   return execSync(cmd, { cwd: root, encoding: 'utf8' }).trim();
 }
@@ -143,54 +151,15 @@ function today() {
 // 上一个 tag → HEAD 的非 merge 提交，按 Conventional Commits 类型归组
 function collectEntries(fromTag) {
   const range = fromTag ? `${fromTag}..HEAD` : 'HEAD';
-  const messages = git(`git log --no-merges --reverse --format=%s ${range}`)
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !/^release: v?\d/.test(line));
-
-  const groups = new Map();
-  for (const raw of messages) {
-    const match = raw.match(/^(\w+)(?:\(([^)]+)\))?!?:\s*(.+)$/);
-    if (match && SKIP_TYPES.has(match[1])) continue;
-    const section = (match && SECTION_TYPES[match[1]]) || 'Changed';
-    const scope = match?.[2];
-    const text = match ? match[3] : raw;
-    if (!groups.has(section)) groups.set(section, []);
-    groups.get(section).push(scope ? `**${scope}**: ${text}` : text);
-  }
-  return groups;
-}
-
-// 不带标题的版本段落正文（用于拼到 `## [x.y.z] - date` 之后）
-function renderBody(groups) {
-  const lines = [];
-  const emitted = SECTION_ORDER.filter((title) => groups.get(title)?.length);
-  if (!emitted.length) return PLACEHOLDER;
-  for (const title of emitted) {
-    lines.push(`### ${title}`, '');
-    for (const entry of groups.get(title)) lines.push(`- ${entry}`);
-    lines.push('');
-  }
-  return lines.join('\n').trimEnd();
-}
-
-// 取 [Unreleased] 段正文；只有占位符时视为空
-function readUnreleased(text) {
-  const start = text.indexOf('## [Unreleased]');
-  if (start < 0) return { start: -1, end: -1, body: '' };
-  const end = text.indexOf('\n## [', start + 1);
-  const body = (end < 0 ? text.slice(start) : text.slice(start, end))
-    .replace('## [Unreleased]', '')
-    .trim();
-  return { start, end, body: body === PLACEHOLDER ? '' : body };
+  const messages = git(`git log --no-merges --reverse --format=%s ${range}`).split('\n');
+  return groupCommits(messages);
 }
 
 // 优先搬 [Unreleased] 里手写的条目；没写则从 commit 生成（并提示去润色）
 function updateChangelog(version) {
   const date = today();
   const text = readFileSync(CHANGELOG_PATH, 'utf-8');
-  const { start, end, body } = readUnreleased(text);
-  if (start < 0) throw new Error('CHANGELOG.md 缺少 `## [Unreleased]` 段落');
+  const { body } = readUnreleased(text);
 
   const curated = body.length > 0;
   const sectionBody = curated ? body : renderBody(collectEntries(previousTag()));
@@ -200,10 +169,8 @@ function updateChangelog(version) {
     console.log('⚠ [Unreleased] 为空，已从 commit 自动生成；建议发布后润色该段');
   }
 
-  const head = `## [Unreleased]\n\n`;
+  const next = insertVersionSection(text, { version, date, body: sectionBody });
   const section = `## [${version}] - ${date}\n\n${sectionBody}\n\n`;
-  const tail = end < 0 ? '' : text.slice(end + 1);
-  const next = `${text.slice(0, start)}${head}${section}${tail}`;
 
   console.log(`✏️  CHANGELOG.md → [${version}]（${curated ? '手写要点' : 'commit 自动生成'}）`);
   if (dryRun) {

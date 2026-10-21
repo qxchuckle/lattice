@@ -48,6 +48,7 @@
     "sync:docs": "pnpm --filter @qcqx/lattice-site run sync:docs",
     "check:docs": "pnpm --filter @qcqx/lattice-site run check:docs",
     "selftest:site-gates": "pnpm --filter @qcqx/lattice-site run selftest:gates",
+    "check:release": "node --test scripts/__tests__/",
     "check:site": "pnpm --filter @qcqx/lattice-site run check",
     "build:vscode": "pnpm --filter lattice-context run build",
     "package:vscode": "pnpm build:vscode && pnpm --filter lattice-context run package",
