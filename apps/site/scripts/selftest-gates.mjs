@@ -5,6 +5,8 @@
  *
  * Usage: node apps/site/scripts/selftest-gates.mjs
  * Requires a built `apps/site/dist` for the two anchor cases (run `pnpm build:site` first).
+ * The canonical SITE_URL/SITE_BASE are read back from `dist/robots.txt` so the anchor cases check
+ * the same site the build targeted, even when the build used a non-default domain.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,10 +25,31 @@ const dist = resolve(siteRoot, 'dist');
 const results = [];
 let failures = 0;
 
+/** Mirror the build's canonical URL so `check-build` validates the same site. */
+function resolveGateEnv() {
+  const env = { ...process.env };
+  if (env.SITE_URL && env.SITE_BASE) return env;
+  try {
+    const sitemap = readFileSync(join(dist, 'robots.txt'), 'utf8').match(
+      /^Sitemap:\s*(\S+)$/m,
+    )?.[1];
+    if (!sitemap) return env;
+    const url = new URL(sitemap);
+    env.SITE_URL ??= url.origin;
+    env.SITE_BASE ??= url.pathname.replace(/sitemap-index\.xml$/, '').replace(/\/$/, '') || '/';
+  } catch {
+    // A missing dist is reported by the anchor cases below.
+  }
+  return env;
+}
+
+const gateEnv = resolveGateEnv();
+
 function run(script, args = []) {
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
+    env: gateEnv,
   });
   return { status: result.status ?? 1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
 }
