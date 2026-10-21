@@ -66,7 +66,7 @@ jobs:
       - name: gate self-test
         run: pnpm selftest:site-gates
       - name: install chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter @qcqx/lattice-site exec playwright install --with-deps chromium
       - name: test site
         run: pnpm --filter @qcqx/lattice-site test:e2e
       - name: configure pages
