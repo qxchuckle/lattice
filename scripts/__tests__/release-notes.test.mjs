@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { buildReleaseBody, normalizeVersion, readChangelogSection } from '../release-notes.mjs';
+
+const root = resolve(import.meta.dirname, '..', '..');
 
 test('normalizeVersion：v 前缀可有可无', () => {
   assert.equal(normalizeVersion('v1.29.0'), '1.29.0');
@@ -51,4 +54,33 @@ test('buildReleaseBody：带附件时给出文件名、大小与 sha256', () => 
   assert.match(body, /lattice-context-0\.4\.2\.vsix/);
   assert.ok(body.includes(sha256), '正文应带该附件的 sha256');
   assert.match(body, /code --install-extension lattice-context-0\.4\.2\.vsix/);
+});
+
+test('CLI：按 <tag> --out --asset 写出正文文件', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'release-notes-cli-'));
+  const asset = join(dir, 'lattice-context-0.4.2.vsix');
+  const out = join(dir, 'notes.md');
+  writeFileSync(asset, 'fake-vsix-binary');
+
+  execFileSync(
+    process.execPath,
+    ['scripts/release-notes.mjs', 'v1.29.0', '--out', out, '--asset', asset],
+    { cwd: root, encoding: 'utf8' },
+  );
+
+  const written = readFileSync(out, 'utf-8');
+  assert.match(written, /## \[1\.29\.0\]/);
+  assert.match(written, /## 附件 · Assets/);
+  assert.ok(written.includes(createHash('sha256').update('fake-vsix-binary').digest('hex')));
+});
+
+test('CLI：缺参数时以非 0 退出', () => {
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, ['scripts/release-notes.mjs', 'v1.29.0'], {
+        cwd: root,
+        stdio: 'pipe',
+      }),
+    (error) => error.status === 2,
+  );
 });

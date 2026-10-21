@@ -14,6 +14,7 @@
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
  *   pnpm release continue        # 发布失败后继续（跳过版本bump和构建，重试发布+git）
  *   pnpm release patch --no-push # 不推送到远端（tag 不上去，CI 也就不会建 Release）
+ *   pnpm release patch --allow-red-ci # 跳过发布前“HEAD 的 CI 必须绿”检查
  *
  * 完整流程：bump → 写入 CHANGELOG → 构建 → npm 发布 → 提交 + tag → 推送。
  * 推送后由 `.github/workflows/release.yml` 在 tag 上构建 VSIX 并建 GitHub Release
