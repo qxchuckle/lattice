@@ -296,10 +296,19 @@ for (const name of targets) {
 // --- Git tag + 推送 ---
 console.log(`\n🏷️  创建 git tag: v${newVersion}`);
 const pkgPaths = `${targets.map((name) => `packages/${name}/package.json`).join(' ')} CHANGELOG.md`;
-run(`git add ${pkgPaths}`);
-// --only：只提交这些路径的最新内容，不把工作区其他已暂存改动卷进 release 提交
-run(`git commit --only -m "release: v${newVersion}" -- ${pkgPaths}`);
-run(`git tag v${newVersion}`);
+// continue 重试时可能已经提交过 / 打过 tag，两者都要容忍"已存在"
+if (dryRun || git(`git status --porcelain -- ${pkgPaths}`)) {
+  run(`git add ${pkgPaths}`);
+  // --only：只提交这些路径的最新内容，不把工作区其他已暂存改动卷进 release 提交
+  run(`git commit --only -m "release: v${newVersion}" -- ${pkgPaths}`);
+} else {
+  console.log('  ℹ 没有待提交的版本改动，跳过提交');
+}
+if (!dryRun && git(`git tag -l v${newVersion}`)) {
+  console.log(`  ℹ tag v${newVersion} 已存在，跳过创建`);
+} else {
+  run(`git tag v${newVersion}`);
+}
 
 if (skipPush) {
   console.log(`\nℹ 未推送：推上去后由 Actions 构建 VSIX 并建 Release`);
