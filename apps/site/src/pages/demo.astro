@@ -1,0 +1,348 @@
+---
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
+import logo from '../assets/lattice-logo.png';
+import DemoRoot from '../components/demo/DemoRoot';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<!doctype html>
+<html lang='en' data-theme='dark' data-demo-lang='en'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    {
+      import.meta.env.PROD && (
+        <meta
+          http-equiv='Content-Security-Policy'
+          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; media-src 'none'; worker-src 'none'"
+        />
+      )
+    }
+    <meta name='robots' content='noindex' />
+    <meta name='theme-color' content='#070b12' />
+    <meta name='color-scheme' content='dark light' />
+    <link rel='icon' href={`${base}favicon.svg`} />
+    <script is:inline src={`${base}demo-boot.js`}></script>
+    <script is:inline>
+      (() => {
+        const showFailure = () => {
+          const loading = document.getElementById('demo-loading');
+          if (!loading || loading.classList.contains('is-hidden')) return;
+          loading.classList.add('is-error');
+          loading.querySelector('[data-loading-progress]')?.setAttribute('hidden', '');
+          loading.querySelector('[data-loading-error]')?.removeAttribute('hidden');
+        };
+
+        const reveal = () => {
+          const loading = document.getElementById('demo-loading');
+          if (!loading) return;
+          loading.classList.add('is-hidden');
+          document.documentElement.dataset.demoReady = 'true';
+        };
+
+        const watch = () => {
+          const root = document.getElementById('root');
+          if (!root) return;
+
+          if (root.querySelector('.app-root')) {
+            reveal();
+          } else {
+            const observer = new MutationObserver(() => {
+              if (!root.querySelector('.app-root')) return;
+              observer.disconnect();
+              reveal();
+            });
+            observer.observe(root, { childList: true, subtree: true });
+          }
+
+          window.setTimeout(showFailure, 8000);
+        };
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            if (event.target instanceof HTMLScriptElement) showFailure();
+          },
+          true,
+        );
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', watch, { once: true });
+        } else {
+          watch();
+        }
+      })();
+    </script>
+    <title>Lattice workbench demo</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      :global(html),
+      :global(body) {
+        height: 100%;
+        margin: 0;
+        background: #070b12;
+        color: #e6edf3;
+        font-family: 'Geist Variable', ui-sans-serif, system-ui, 'PingFang SC', sans-serif;
+      }
+      :global(body) {
+        overflow: hidden;
+      }
+      .demo-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        height: 60px;
+        padding: 0 20px;
+        border-bottom: 1px solid rgba(125, 155, 200, 0.16);
+        background: #080d16;
+        font-family: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+        font-size: 13px;
+      }
+      .demo-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: #e6edf3;
+        text-decoration: none;
+        letter-spacing: 0.12em;
+      }
+      .demo-brand img {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+      }
+      .demo-context {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border: 1px solid rgba(125, 155, 200, 0.14);
+        border-radius: 6px;
+        color: #8b9bb0;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+      }
+      .demo-context i {
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #67e8f9;
+      }
+      .demo-spacer {
+        flex: 1;
+      }
+      .demo-links {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .demo-links a,
+      .demo-links button {
+        padding: 7px 9px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: transparent;
+        color: #8b9bb0;
+        font: inherit;
+        font-size: 12px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .demo-links a:hover,
+      .demo-links button:hover,
+      .demo-links a:focus-visible,
+      .demo-links button:focus-visible {
+        border-color: rgba(125, 155, 200, 0.18);
+        color: #e6edf3;
+      }
+      .demo-links .demo-open {
+        border-color: rgba(88, 166, 255, 0.28);
+        color: #cfe3ff;
+      }
+      .demo-frame {
+        position: relative;
+        height: calc(100dvh - 60px);
+        background: #070b12;
+      }
+      .demo-root {
+        height: 100%;
+      }
+      .demo-root :global(astro-island) {
+        display: block;
+        height: 100%;
+      }
+      .demo-root :global(.ant-app) {
+        height: 100%;
+      }
+      .demo-root :global(.app-root) {
+        width: 100%;
+        height: 100%;
+      }
+      .demo-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #070b12;
+        color: #71849b;
+        font-family: 'Geist Mono Variable', monospace;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        transition: opacity 240ms ease;
+        pointer-events: none;
+      }
+      .demo-loading.is-hidden {
+        opacity: 0;
+      }
+      .demo-loading.is-error {
+        pointer-events: auto;
+      }
+      .demo-loading__progress,
+      .demo-loading__error {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        text-align: center;
+      }
+      .demo-loading__error {
+        flex-direction: column;
+        gap: 12px;
+        max-width: 440px;
+        padding: 0 24px;
+        line-height: 1.6;
+      }
+      .demo-loading__error[hidden],
+      .demo-loading__progress[hidden] {
+        display: none;
+      }
+      .demo-loading__retry {
+        padding: 7px 12px;
+        border: 1px solid rgba(88, 166, 255, 0.35);
+        border-radius: 6px;
+        background: rgba(47, 129, 247, 0.1);
+        color: #cfe3ff;
+        font: inherit;
+        text-decoration: none;
+      }
+      .demo-loading__retry:hover,
+      .demo-loading__retry:focus-visible {
+        border-color: rgba(88, 166, 255, 0.65);
+        background: rgba(47, 129, 247, 0.18);
+        color: #fff;
+      }
+      .demo-loading i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #58a6ff;
+        box-shadow: 0 0 16px rgba(88, 166, 255, 0.8);
+      }
+      .demo-loading.is-error i {
+        background: #ff7b72;
+        box-shadow: 0 0 16px rgba(255, 123, 114, 0.6);
+      }
+      .demo-noscript {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #070b12;
+        color: #8b9bb0;
+        font-family: 'Geist Mono Variable', monospace;
+        font-size: 13px;
+        text-align: center;
+      }
+      :global(html[data-demo-lang='en']) [data-lang='zh'],
+      :global(html[data-demo-lang='zh']) [data-lang='en'] {
+        display: none;
+      }
+      @media (max-width: 640px) {
+        .demo-bar {
+          height: 54px;
+          padding: 0 14px;
+          gap: 12px;
+        }
+        .demo-context {
+          display: none;
+        }
+        .demo-links {
+          gap: 4px;
+        }
+        .demo-links a,
+        .demo-links button {
+          font-size: 12px;
+          padding: 5px;
+        }
+        .demo-frame {
+          height: calc(100dvh - 54px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class='demo-bar'>
+      <a class='demo-brand' href={base}>
+        <img src={logo.src} alt='' width='24' height='24' />
+        <span>LATTICE</span>
+      </a>
+      <span class='demo-context'>
+        <i aria-hidden='true'></i>
+        <span data-lang='en'>Mock data · no network requests</span>
+        <span data-lang='zh'>模拟数据 · 无网络请求</span>
+      </span>
+      <span class='demo-spacer'></span>
+      <nav class='demo-links' aria-label='Demo actions / Demo 操作'>
+        <a data-set-lang='zh' href='?lang=zh' data-lang='en'>中文</a>
+        <a data-set-lang='en' href='?lang=en' data-lang='zh'>EN</a>
+        <button type='button' data-reset>
+          <span data-lang='en'>Reset</span>
+          <span data-lang='zh'>重置</span>
+        </button>
+        <a
+          class='demo-open'
+          data-open-link
+          href={`${base}demo/`}
+          target='_blank'
+          rel='noreferrer'
+        >
+          <span data-lang='en'>Open in new tab ↗</span>
+          <span data-lang='zh'>新标签打开 ↗</span>
+        </a>
+      </nav>
+    </header>
+    <main class='demo-frame'>
+      <div class='demo-loading' id='demo-loading' role='status' aria-live='polite'>
+        <div class='demo-loading__progress' data-loading-progress>
+          <i aria-hidden='true'></i>
+          <span data-lang='en'>Loading workbench…</span>
+          <span data-lang='zh'>正在装载工作台…</span>
+        </div>
+        <div class='demo-loading__error' data-loading-error hidden>
+          <i aria-hidden='true'></i>
+          <span data-lang='en'>The workbench did not load. Check your connection and try again.</span>
+          <span data-lang='zh'>工作台加载失败，请检查网络后重试。</span>
+          <a class='demo-loading__retry' href=''>
+            <span data-lang='en'>Reload demo</span>
+            <span data-lang='zh'>重新加载 Demo</span>
+          </a>
+        </div>
+      </div>
+      <noscript>
+        <div class='demo-noscript'>
+          <span data-lang='en'>JavaScript is required for the live demo.</span>
+          <span data-lang='zh'>在线 Demo 需要启用 JavaScript。</span>
+        </div>
+      </noscript>
+      <div class='demo-root' id='root'>
+        <DemoRoot client:only='react' />
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,276 +1,281 @@
-# Lattice 技术架构详解
+# Lattice Architecture
 
-本文档面向开发者和潜在贡献者，讲解 Lattice 的整体技术架构与核心设计决策。如果你是想快速上手的用户，请先阅读 [快速开始](quick-start.md)。
+> English | [简体中文](./architecture.zh-CN.md)
 
-## 系统定位
+This document is for developers and potential contributors. It explains Lattice's overall technical architecture and key design decisions. If you are a user who wants to get started quickly, read [Quick Start](./quick-start.md) first.
 
-Lattice 是一个本地优先的研发记忆与工作流层。仓库内代码负责三件事：
+## System positioning
 
-- 管理 `~/.lattice` 下的项目、任务、spec、索引和模板等长期数据；
-- 通过 CLI / IDE / Web 把这些能力暴露给开发者和 AI 编码工具；
-- 通过注入的工作流，让 AI 在起手、实施、归档时持续读写这些记忆。
+Lattice is a local-first engineering memory and workflow layer. The code in this repository does three things:
 
-## 架构总览
+- Manages long-lived data under `~/.lattice`: projects, tasks, specs, indexes and templates.
+- Exposes those capabilities to developers and AI coding tools through the CLI / IDE / Web.
+- Uses injected workflows so AI continuously reads and writes that memory at task start, during implementation and at archive time.
 
-Lattice 是一个 monorepo 项目：**一份领域核心 + 一份跨端协议 + 一份应用服务 + 多个薄宿主（客户端）**。
+## Architecture overview
+
+Lattice is a monorepo: **one domain core + one cross-host protocol + one application service layer + multiple thin hosts (clients)**.
 
 ```
 packages/
-├── core/      → @qcqx/lattice-core      — 领域逻辑 + 存储（文件真源 + SQLite 索引）+ 平台端口
-├── protocol/  → @qcqx/lattice-protocol  — 跨端契约（DTO 与方法类型，types-only）
-├── services/  → @qcqx/lattice-services  — 应用服务层（用例实现，多宿主共享）
-├── web-ui/    → @qcqx/lattice-web-ui    — 共享 UI（React 组件 + 客户端状态 + LatticeDataAdapter 端口）
-├── cli/       → @qcqx/lattice-cli       — 命令行客户端（commander.js，依赖 core）
-├── web/       → @qcqx/lattice-web       — Web 工作台服务端（Fastify + HTTP 绑定 + 静态托管，UI 在 web-ui）
-└── vscode/    → qcqx.lattice-context    — VSCode 扩展（宿主 + Webview 应用，依赖 core/services/protocol/web-ui）
+├── core/      → @qcqx/lattice-core      — domain logic + storage (file source of truth + SQLite index) + platform ports
+├── protocol/  → @qcqx/lattice-protocol  — cross-host contracts (DTOs and method types, types-only)
+├── services/  → @qcqx/lattice-services  — application service layer (use cases shared by hosts)
+├── web-ui/    → @qcqx/lattice-web-ui    — shared UI (React components + client state + LatticeDataAdapter port)
+├── cli/       → @qcqx/lattice-cli       — command-line client (commander.js, depends on core)
+├── web/       → @qcqx/lattice-web       — web workbench server (Fastify + HTTP binding + static hosting; UI lives in web-ui)
+└── vscode/    → qcqx.lattice-context    — VS Code extension (host + webview app; depends on core/services/protocol/web-ui)
 ```
 
-四层依赖关系（严格单向）：
+Four-layer dependency relationship (strictly one-way):
 
 ```
-宿主绑定（HTTP / postMessage / 终端 UX）
-      │        cli ──→ core（终端绑定）
-      │        web/server ──→ services ──→ core（HTTP 绑定）
-      │        vscode（扩展宿主）──→ services ──→ core（postMessage 绑定）
+Host bindings (HTTP / postMessage / terminal UX)
+      │        cli ──→ core (terminal binding)
+      │        web/server ──→ services ──→ core (HTTP binding)
+      │        vscode (extension host) ──→ services ──→ core (postMessage binding)
       ▼
-services（用例：快照/详情/搜索/上下文/写操作；多宿主唯一实现）
+services (use cases: snapshot/detail/search/context/write operations; single implementation for all hosts)
       ▼
-core（领域 + 存储 + 端口；零宿主依赖）
+core (domain + storage + ports; zero host dependencies)
       ▲
-protocol（DTO/方法类型；被宿主与客户端共同引用）
+protocol (DTO/method types; referenced by hosts and clients)
 ```
 
-**为什么这样拆**：
+**Why this split**:
 
-- `core` 是所有领域逻辑与存储的唯一载体；`services` 是所有"用例组装与降级"的唯一实现（虚拟合并、文件回退、跨用户聚合、写操作前置校验）。
-- `protocol` 是宿主与客户端之间唯一的数据形状约定——**DTO 直接复用 core 领域类型，禁止各宿主自定义"精简形状"**（历史事故：桥自造 lite 形状导致图谱崩溃）。
-- 各宿主只是"绑定"：CLI 做终端 UX、Web server 做 HTTP 绑定、VSCode 扩展做 postMessage 绑定。新增客户端（未来桌面/移动/TUI）只需写一个薄适配器。
-- `core` 的 `browser.ts` 入口剔除了 Node.js 专有依赖（`crypto`、`fs`），使纯函数子集可在浏览器端直接引用。
-- 发版时可以独立更新各宿主，不需要同时发布。
+- `core` is the sole home of domain logic and storage; `services` is the sole implementation of "use-case composition and fallback" (virtual merge, file fallback, cross-user aggregation, pre-write validation).
+- `protocol` is the single data-shape contract between hosts and clients — **DTOs reuse core domain types directly; hosts must not invent "lite shapes"** (historical incident: a bridge-specific lite shape crashed the graph).
+- Hosts are just bindings: the CLI provides terminal UX, the web server provides HTTP binding, and the VS Code extension provides postMessage binding. A new client (future desktop/mobile/TUI) only needs a thin adapter.
+- `core`'s `browser.ts` entry excludes Node.js-specific dependencies (`crypto`, `fs`), so the pure-function subset can be imported directly in the browser.
+- Each host can be released independently; they do not need to ship together.
 
-### 数据流
+### Data flow
 
 ```
-用户操作（终端 / 浏览器 / IDE / 未来客户端）
+User action (terminal / browser / IDE / future client)
         │
         ▼
-  宿主绑定（CLI 命令 / Web HTTP 路由 / VSCode 桥）──→ services 用例
+  Host binding (CLI command / Web HTTP route / VS Code bridge) ──→ services use case
         │                                              │
         │                                              ▼
-        │                                       core 领域函数
+        │                                       core domain functions
         │                                              │
         │                      ┌───────────────────────┼──────────────────────┐
         │                      ▼                       ▼                      ▼
-        │               文件系统（~/.lattice/）   SQLite（索引+缓存）   Embedding 模型
+        │                Filesystem (~/.lattice/)  SQLite (index + cache)  Embedding model
         ▼
-  输出结果（终端文本 / JSON / HTTP 响应 / Webview 数据）
+  Output (terminal text / JSON / HTTP response / webview data)
 ```
 
-Lattice 的数据真源是 `~/.lattice/` 下的文件系统（JSON + Markdown）。SQLite 数据库是加速查询的索引层，可通过 `ltc rag rebuild` 从文件系统全量重建。这种"文件优先、DB 辅助"的设计使得数据可读、可 git 管理、可手动恢复。**DB 不可用时（如旧版编辑器宿主），services 层自动回退文件真源，功能优雅降级。**
+Lattice's source of truth is the filesystem under `~/.lattice/` (JSON + Markdown). The SQLite database is an index that accelerates queries and can be rebuilt from the filesystem with `ltc rag rebuild`. This "files first, DB as an aid" design keeps data readable, git-manageable and manually recoverable. **When the DB is unavailable (for example in older editor hosts), the services layer falls back to the file source of truth automatically and degrades gracefully.**
 
-## Core 领域逻辑层
+## Core domain layer
 
-`packages/core/src/` 按领域划分为以下模块，依赖方向严格单向无循环：
+`packages/core/src/` is divided into the following modules. Dependencies are strictly one-way with no cycles:
 
 ```
 core/src/
-├── types/          — 全局类型定义（ProjectMeta / TaskMeta / SpecFrontmatter 等）
-├── paths/          — 路径工具（~/.lattice/ 目录结构 + 文件读写）
-├── config/         — 配置管理（global + local 双层配置）
-├── db/             — SQLite 数据库层（better-sqlite3，WAL 模式）
-├── project/        — 项目身份与注册（核心模块，10+ 子文件）
-├── spec/           — Spec 管理（解析 / 级联 / 冲突检测 / lint / 迁移）
-├── task/           — 任务生命周期（创建 / 更新 / 归档 / checkpoint）
-├── rag/            — RAG 搜索（embedding 生成 / 索引 / 语义检索）
-├── search/         — 上下文聚合 + 混合搜索（FTS + 向量 RRF 融合）
-├── trash/          — 软删除回收站
-├── maintenance/    — 启动自检
-├── template-assets.ts — 模板渲染（AI 客户端注入 + Spec 模板）
-├── browser.ts      — 浏览器安全入口（纯函数子集，Vite alias 指向）
-└── index.ts        — 统一 re-export（CLI / Web 的唯一导入入口）
+├── types/          — global type definitions (ProjectMeta / TaskMeta / SpecFrontmatter, etc.)
+├── paths/          — path utilities (~/.lattice layout + file read/write)
+├── config/         — config management (global + local two-layer config)
+├── db/             — SQLite database layer (better-sqlite3, WAL mode)
+├── project/        — project identity and registration (core module, 10+ subfiles)
+├── spec/           — spec management (parse / cascade / conflict detection / lint / migrate)
+├── task/           — task lifecycle (create / update / archive / checkpoint)
+├── rag/            — RAG search (embedding generation / indexing / semantic retrieval)
+├── search/         — context aggregation + hybrid search (FTS + vector RRF fusion)
+├── trash/          — soft-delete recycle bin
+├── maintenance/    — startup self-check
+├── template-assets.ts — template rendering (AI client injection + spec templates)
+├── browser.ts      — browser-safe entry (pure-function subset, Vite alias target)
+└── index.ts        — unified re-export (the single import entry for CLI / Web)
 ```
 
-### 项目模块（project/）
+### Project module (project/)
 
-项目模块是 core 中最复杂的子系统，负责项目身份识别、自动注册、虚拟合并、嵌套检测等核心能力：
+The project module is the most complex subsystem in core. It handles project identity, automatic registration, virtual merge and nested detection:
 
 ```
 project/
-├── identity.ts          — ID 模型纯函数（零 Node.js 依赖）
-├── identity-generate.ts — ID 生成（依赖 crypto）
-├── lookup.ts            — 项目查找 + 虚拟合并
-├── association.ts       — 任务关联判断
-├── register.ts          — 注册 + 自动注册
-├── scan.ts              — 扫描 + 黑名单
-├── nested-in.ts         — 嵌套关系自动检测
-├── merge.ts             — 物理合并事务
-├── fingerprint.ts       — git 指纹采集
-├── relation.ts          — 项目间关系 CRUD
-├── cross-user.ts        — 跨用户聚合
-└── index.ts             — re-export + DB 同步
+├── identity.ts          — ID model pure functions (zero Node.js dependencies)
+├── identity-generate.ts — ID generation (depends on crypto)
+├── lookup.ts            — project lookup + virtual merge
+├── association.ts       — task association checks
+├── register.ts          — registration + automatic registration
+├── scan.ts              — scanning + blacklist
+├── nested-in.ts         — automatic nested-relation detection
+├── merge.ts             — physical merge transaction
+├── fingerprint.ts       — git fingerprint collection
+├── relation.ts          — project relation CRUD
+├── cross-user.ts        — cross-user aggregation
+└── index.ts             — re-export + DB sync
 ```
 
-依赖方向单向无循环：`identity → lookup → association`，`identity → register → scan`。
+Dependencies are one-way with no cycles: `identity → lookup → association`, `identity → register → scan`.
 
-**纯函数设计**：`identity.ts` 中的 `selectPrimaryId`、`normalizeProjectMeta`、`normalizeLegacyId` 等函数零 Node.js 依赖，可被 `browser.ts` 安全导出到浏览器端。Node.js 专有的 `identity-generate.ts`（依赖 `crypto`）单独拆分。
+**Pure-function design**: functions such as `selectPrimaryId`, `normalizeProjectMeta` and `normalizeLegacyId` in `identity.ts` have zero Node.js dependencies and can be safely exported to the browser through `browser.ts`. The Node.js-specific `identity-generate.ts` (which depends on `crypto`) is split out separately.
 
-### Spec 模块（spec/）
+### Spec module (spec/)
 
-Spec 是 Lattice 中的可复用知识单元。spec 模块负责解析、级联、冲突检测和迁移：
+A spec is Lattice's reusable knowledge unit. The spec module handles parsing, cascading, conflict detection and migration:
 
-| 文件 | 职责 |
+| File | Responsibility |
 |---|---|
-| `io.ts` | 解析 / 写入 spec 文件（frontmatter + 正文） |
-| `cascade.ts` | 三层级联聚合（global → user → project） |
-| `conflicts.ts` | 多层级同名冲突检测 |
-| `query.ts` | 模糊查找 / scope 验证 |
-| `lint.ts` | frontmatter 规范校验 |
-| `migrate.ts` | 旧格式 spec 迁移（`ltc spec migrate`） |
-| `id.ts` | spec ID 生成（`spec-` 前缀 + base36） |
-| `validate.ts` | scope 合法性验证 |
+| `io.ts` | Parse / write spec files (frontmatter + body) |
+| `cascade.ts` | Three-level cascade aggregation (global → user → project) |
+| `conflicts.ts` | Cross-level name-conflict detection |
+| `query.ts` | Fuzzy lookup / scope validation |
+| `lint.ts` | Frontmatter convention validation |
+| `migrate.ts` | Legacy spec migration (`ltc spec migrate`) |
+| `id.ts` | Spec ID generation (`spec-` prefix + base36) |
+| `validate.ts` | Scope validity validation |
 
-### 任务模块（task/）
+### Task module (task/)
 
-任务模块管理从创建到归档的完整生命周期：
+The task module manages the full lifecycle from creation to archive:
 
-| 文件 | 职责 |
+| File | Responsibility |
 |---|---|
-| `index.ts` | 任务 CRUD + 元数据管理 + DB 同步 |
-| `checkpoint.ts` | 进度追踪（progress.yaml 追加写入，11 类 checkpoint） |
-| `refs.ts` | 任务 ↔ spec 引用关系管理 |
+| `index.ts` | Task CRUD + metadata management + DB sync |
+| `checkpoint.ts` | Progress tracking (append-only progress.yaml, 11 checkpoint types) |
+| `refs.ts` | Task ↔ spec reference management |
 
-每个任务在磁盘上是一个目录，包含 4 个文件，职责不重叠：
+Each task is a directory containing four files with non-overlapping responsibilities:
 
 ```
 ~/.lattice/users/<user>/tasks/<task-id>/
-├── task.json       — 元数据（状态 / 关联项目 / spec 引用）
-├── prd.md          — 当前最佳认知快照（目标 / 方案 / 文件索引）
-├── progress.yaml   — 过程日志（checkpoint 追加记录）
-└── design.md       — 方案讨论档案（被否决方案及理由，可选）
+├── task.json       — metadata (status / associated projects / spec references)
+├── prd.md          — current best-understanding snapshot (goals / plan / file index)
+├── progress.yaml   — process log (append-only checkpoints)
+└── design.md       — design discussion archive (rejected options and reasons; optional)
 ```
 
-## CLI 命令层
+## CLI layer
 
-`packages/cli/` 使用 [commander.js](https://github.com/tj/commander.js) 构建，采用"注册函数"模式组织命令：
+`packages/cli/` is built with [commander.js](https://github.com/tj/commander.js) and organizes commands with a "register function" pattern:
 
 ```typescript
-// cli/src/index.ts — 入口
+// cli/src/index.ts — entry
 const program = new Command();
 registerInitCommand(program);      // ltc init
 registerLinkCommand(program);      // ltc link
 registerTaskCommand(program);      // ltc task ...
 registerSpecCommand(program);      // ltc spec ...
-// ... 共 18 个命令模块
+// ... 20 command modules in total
 ```
 
-每个命令模块导出一个 `registerXxxCommand(program: Command)` 函数，在入口统一注册。这种模式的好处是命令间完全解耦，新增命令只需写一个文件 + 在入口加一行。
+Each command module exports a `registerXxxCommand(program: Command)` function, registered centrally at the entry. This keeps commands fully decoupled: adding a command means writing one file and adding one line at the entry.
 
-### 命令模块清单
+### Command modules
 
-| 模块 | 命令 | 职责 |
+| Module | Command | Responsibility |
 |---|---|---|
-| `init.ts` | `ltc init` | 初始化 + AI 客户端检测注入 |
-| `link.ts` | `ltc link` | 手动注册项目（生成 lattice.json） |
-| `unlink.ts` | `ltc unlink` | 取消项目注册 |
-| `scan.ts` | `ltc scan` | 批量扫描 git 项目 |
-| `project.ts` | `ltc project ...` | 项目管理 + 关系管理 |
-| `task.ts` | `ltc task ...` | 任务全生命周期 |
-| `spec.ts` | `ltc spec ...` | Spec 管理 + 模板 |
-| `context.ts` | `ltc context` | 上下文聚合（核心命令） |
-| `search.ts` | `ltc search` | RAG 搜索 |
-| `config.ts` | `ltc config ...` | 配置管理 |
-| `status.ts` | `ltc status` | 当前项目状态 |
-| `doctor.ts` | `ltc doctor` | 健康检查 + 自动修复 |
-| `sync.ts` | `ltc sync` | 同步 spec 模板 |
-| `user.ts` | `ltc user ...` | 用户管理 |
-| `rag.ts` | `ltc rag ...` | RAG 索引管理 |
-| `trash.ts` | `ltc trash ...` | 回收站管理 |
-| `web.ts` | `ltc web` | 启动可视化服务 |
+| `init.ts` | `ltc init` | Initialization + AI client detection and injection |
+| `uninject.ts` | `ltc uninject` | Remove files injected into AI clients |
+| `link.ts` | `ltc link` | Manually register a project (creates lattice.json) |
+| `unlink.ts` | `ltc unlink` | Unregister a project |
+| `scan.ts` | `ltc scan` | Batch-scan git projects |
+| `project.ts` | `ltc project ...` | Project management + relation management |
+| `task.ts` | `ltc task ...` | Full task lifecycle |
+| `spec.ts` | `ltc spec ...` | Spec management + templates |
+| `export.ts` | `ltc export` | Export specs / tasks as Agent Skills directories |
+| `context.ts` | `ltc context` | Context aggregation (core command) |
+| `search.ts` | `ltc search` | RAG search |
+| `config.ts` | `ltc config ...` | Config management |
+| `status.ts` | `ltc status` / `ltc open` | Current project status / open the Lattice root |
+| `doctor.ts` | `ltc doctor` | Health check + automatic repair |
+| `sync.ts` | `ltc sync` | Sync spec templates |
+| `user.ts` | `ltc user ...` | User management |
+| `rag.ts` | `ltc rag ...` | RAG index management |
+| `trash.ts` | `ltc trash ...` | Recycle bin management |
+| `web.ts` | `ltc web` | Start the web UI |
+| `fast-start.ts` | `ltc fast-start ...` | Lightweight-mode logging |
 
-### 全局选项注入
+### Global option injection
 
-CLI 入口在命令注册后，通过递归遍历为所有叶子命令自动注入两个全局选项：
+After registering commands, the CLI entry recursively injects two global options into every leaf command:
 
-- `--force` / `-f`：跳过二次确认（AI 调用时必须，避免阻塞等待用户输入）
-- `--debug` / `-d`：输出调试信息
+- `--force` / `-f`: skip confirmation (required for AI calls to avoid blocking on user input)
+- `--debug` / `-d`: print debug information
 
 ```typescript
-// 递归为所有叶子命令添加 --force / --debug
+// Recursively add --force / --debug to every leaf command
 ensureForceOption(program);
 ensureDebugOption(program);
 ```
 
-### 进程生命周期
+### Process lifecycle
 
 ```typescript
 async function main(): Promise<void> {
-  // 进程退出时确保 DB 正确关闭（WAL checkpoint，防数据丢失）
+  // Ensure the DB closes correctly on process exit (WAL checkpoint, prevents data loss)
   process.on('exit', () => closeDb());
 
-  // 启动自检（失败不阻断主命令）
+  // Startup self-check (failures do not block the main command)
   await runStartupSelfCheck();
 
   await program.parseAsync(process.argv);
 }
 ```
 
-## 数据模型
+## Data model
 
-### 项目身份标识
+### Project identity
 
-Lattice 的项目身份识别是其最核心的设计之一。每个项目有一组 IDs，格式为 `<prefix>:<content>`：
+Project identity is one of Lattice's core designs. Each project has a set of IDs in the form `<prefix>:<content>`:
 
-| 前缀 | 来源 | 优先级 |
+| Prefix | Source | Priority |
 |---|---|---|
-| `legacy:` | `lattice.json` 中的随机 16 字符 ID | 1（最高） |
-| `git:` | git first commit SHA 前 16 位 | 2 |
-| `remote:` | `sha256(normalize(git_remote))` 前 16 位 | 3 |
+| `legacy:` | Random 16-character ID in `lattice.json` | 1 (highest) |
+| `git:` | First 16 characters of the git first-commit SHA | 2 |
+| `remote:` | First 16 characters of `sha256(normalize(git_remote))` | 3 |
 
-任一 ID 匹配即视为同一项目。优先级由 `selectPrimaryId()` 基于 `ID_PRIORITY_MAP` 运行时动态计算，不靠数组顺序。
+A match on any ID means the same project. Priority is computed dynamically by `selectPrimaryId()` from `ID_PRIORITY_MAP`, not by array order.
 
-**虚拟合并**：多个物理注册项目如果有 ID 交集，在查询层自动聚合为一个逻辑项目，零物理操作。各自保留独立的 `project.json` / spec / task。这实现了"同一个项目在多台机器、多个 fork、多个 worktree 下都能被识别为同一个"。
+**Virtual merge**: when multiple physical project registrations share IDs, the query layer aggregates them into one logical project with zero physical operations. Each keeps its own `project.json` / specs / tasks. This makes "the same project" recognizable across machines, forks and worktrees.
 
-### Spec 三级分层
+### Three-level spec hierarchy
 
 ```
-全局级  ~/.lattice/spec/                    — 多用户多项目通用
-用户级  ~/.lattice/users/<user>/spec/       — 跨项目复用
-项目级  ~/.lattice/users/<user>/projects/<id>/spec/  — 仅当前项目
+Global   ~/.lattice/spec/                    — shared across users and projects
+User     ~/.lattice/users/<user>/spec/       — reused across projects
+Project  ~/.lattice/users/<user>/projects/<id>/spec/  — current project only
 ```
 
-优先级：项目级 > 用户级 > 全局级。同名冲突时高优先级覆盖低优先级，通过 `getCascadedSpecs()` 在运行时聚合。
+Priority: project > user > global. On a name conflict, the higher priority overrides the lower one; aggregation happens at runtime through `getCascadedSpecs()`.
 
-### Task 生命周期
+### Task lifecycle
 
-任务有 4 种状态，状态流转由 CLI 命令驱动：
+Tasks have four states, driven by CLI commands:
 
 ```
 planning → in_progress → completed → archived
               ↑                │
-              └─── 可回退 ──────┘
+              └─── can revert ─┘
 ```
 
-任务的核心数据结构 `TaskMeta` 包含：
+The core task data structure `TaskMeta` contains:
 
-- `projects` — 关联的项目 ID 列表（可跨项目）
-- `scopePaths` — 额外路径（不属于已注册项目但任务涉及的路径）
-- `referencedSpecs` — 引用的 spec 列表
-- `parentTaskId` — 父任务 ID（支持子任务树）
+- `projects` — associated project ID list (can span projects)
+- `scopePaths` — extra paths involved in the task but outside registered projects
+- `referencedSpecs` — referenced spec list
+- `parentTaskId` — parent task ID (supports subtask trees)
 
-## AI 客户端集成（Agent 注入）
+## AI client integration (agent injection)
 
-Lattice 的核心价值之一，是让 AI 工具在编码前自动获取项目规范、任务与相关记忆。这通过 `ltc init` 的 AI 客户端检测与注入机制实现。
+One of Lattice's core values is letting AI tools obtain project specs, tasks and related memory before writing code. This is implemented by `ltc init`'s AI client detection and injection.
 
-### 三层注入模型
+### Three-layer injection model
 
-Lattice 向 AI 客户端注入三类文件，形成 **Rules + Skill + Commands** 三层工作流约束：
+Lattice injects three kinds of files into AI clients, forming a **Rules + Skill + Commands** three-layer workflow constraint:
 
 ```
 ~/.<client>/
-├── rules/lattice.mdc        — 常驻规则（alwaysApply，每次对话都加载）
-├── AGENT.md / CLAUDE.md     — 原生规则入口（部分客户端）
-├── skills/lattice/SKILL.md  — 技能入口（渐进式加载，按需展开子文档）
-└── commands/                — Slash 命令（/lattice:task:start 等）
+├── rules/lattice.mdc        — always-on rules (alwaysApply, loaded for every conversation)
+├── AGENT.md / CLAUDE.md     — native rules entry (some clients)
+├── skills/lattice/SKILL.md  — skill entry (progressive loading, expands subdocuments on demand)
+└── commands/                — slash commands (/lattice:task:start, etc.)
     ├── task/
     │   ├── start.md
     │   ├── checkpoint.md
@@ -279,23 +284,23 @@ Lattice 向 AI 客户端注入三类文件，形成 **Rules + Skill + Commands**
     └── ...
 ```
 
-| 层 | 加载策略 | 内容 | 文件真源 |
+| Layer | Loading strategy | Content | File source of truth |
 |---|---|---|---|
-| **Rules** | alwaysApply（常驻） | 系统级硬约束清单（起手契约 / 实施期循环 / 归档闭环） | `platforms/lattice-rules.md` |
-| **Skill** | 渐进式（按需展开） | 工作流总览 + 子文档锚点（任务 / spec / 项目 / 搜索） | `skills/SKILL.md` + 子文档 |
-| **Commands** | 用户触发（slash） | 具体操作流程（task start / task design / keep 等） | `commands/*.md` |
+| **Rules** | alwaysApply (always on) | System-level hard constraints (start contract / implementation loop / archive loop) | `platforms/lattice-rules.md` |
+| **Skill** | Progressive (expand on demand) | Workflow overview + subdocument anchors (tasks / specs / projects / search) | `skills/SKILL.md` + subdocuments |
+| **Commands** | User-triggered (slash) | Concrete operation flows (task start / task design / keep, etc.) | `commands/*.md` |
 
-**为什么三层而不是一层**：Rules 保证底线约束不遗漏（即使 AI 忘了读 Skill），Skill 提供完整的上下文按需加载（避免一次性塞入过多 token），Commands 提供标准化的操作入口（用户一句话触发完整流程）。三者互补：
+**Why three layers instead of one**: Rules guarantee that baseline constraints are never missed (even if the AI forgets to read the Skill); Skill provides complete context loaded on demand (avoiding a huge one-shot token dump); Commands provide standardized operation entry points (one sentence triggers a complete flow). They complement each other:
 
-- Rules 是"必须遵守的"——硬约束、禁令、强制循环
-- Skill 是"应该知道的"——工作流全貌、判定条件、命令速查
-- Commands 是"怎么做的"——具体步骤、输出格式
+- Rules are "must obey" — hard constraints, prohibitions, mandatory loops.
+- Skill is "should know" — the full workflow, decision criteria, command reference.
+- Commands are "how to do it" — concrete steps and output formats.
 
-### 多客户端适配
+### Multi-client adaptation
 
-`ltc init` 通过 `detectAndConfigureAITools()` 自动检测本地已安装的 AI 客户端，并按各客户端的目录约定注入文件：
+`ltc init` detects locally installed AI clients through `detectAndConfigureAITools()` and injects files according to each client's directory conventions:
 
-| 客户端 | 检测路径 | Rules 落地 | Skill 落地 | Commands 落地 | Agents 落地 |
+| Client | Detection path | Rules landing | Skill landing | Commands landing | Agents landing |
 |---|---|---|---|---|---|
 | **Cursor** | `~/.cursor/` | `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
 | **Claude Code** | `~/.claude/` | `CLAUDE.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
@@ -304,52 +309,52 @@ Lattice 向 AI 客户端注入三类文件，形成 **Rules + Skill + Commands**
 | **Agent** | `~/.agents/` | `AGENT.md` + `rules/lattice.mdc` | `skills/lattice/SKILL.md` | `commands/` | `agents/` |
 | **Windsurf** | `~/.windsurf/` | `rules/lattice.md` | — | — | — |
 | **Kiro** | `~/.kiro/` | `steering/lattice.md` | — | — | — |
-| **Codex** | `~/.codex/` | `AGENTS.md` | `skills/lattice/SKILL.md` | 转化为独立 skills | — |
+| **Codex** | `~/.codex/` | `AGENTS.md` | `skills/lattice/SKILL.md` | Converted into standalone skills | — |
 
-所有客户端共享同一份 `lattice-rules.md` 正文内容，差异仅在于：
+All clients share the same `lattice-rules.md` body. The differences are:
 
-- **Cursor 系**（.mdc 格式）在正文前拼接 frontmatter（`alwaysApply: true`）
-- **Claude Code / Qoder / Trae / Agent** 同时写入原生入口文件（`CLAUDE.md` / `AGENT.md`）和 `.mdc` 规则文件
-- **Codex** 没有原生 slash command 机制，commands 被转化为独立 skills（`deployCommandsAsSkills`）
-- **Agents 注入**使用增量复制（同名覆盖 + 新增，不删除用户自定义 agent），不支持 subagent 的平台跳过
+- **Cursor family** (`.mdc` format) prepends frontmatter (`alwaysApply: true`) to the body.
+- **Claude Code / Qoder / Trae / Agent** also write native entry files (`CLAUDE.md` / `AGENT.md`) alongside the `.mdc` rules file.
+- **Codex** has no native slash-command mechanism, so commands are converted into standalone skills (`deployCommandsAsSkills`).
+- **Agent injection** uses incremental copying (overwrite same names + add new files; never delete user-defined agents). Platforms without subagent support are skipped.
 
-### 标记化更新机制
+### Marker-based updates
 
-规则文件注入使用 `LATTICE:BEGIN` / `LATTICE:END` 标记包裹正文，实现幂等更新：
+Rule injection wraps the body with `LATTICE:BEGIN` / `LATTICE:END` markers for idempotent updates:
 
 ```markdown
 <!-- LATTICE:BEGIN -->
-（Lattice 规则正文，更新时只替换标记之间的内容）
+(Lattice rule body; updates replace only the content between the markers)
 <!-- LATTICE:END -->
 ```
 
-`injectLatticeBlock()` 函数处理四种情况：
+`injectLatticeBlock()` handles four cases:
 
-| 文件状态 | 行为 |
+| File state | Behavior |
 |---|---|
-| 已含完整标记 | 仅替换标记之间的正文，标记外的用户内容保留 |
-| 文件不存在 / 空 | 写入完整内容（含 frontmatter） |
-| 无标记 + 覆盖模式 | 整文件覆盖为带标记的内容 |
-| 无标记 + 追加模式 | 在原内容末尾追加带标记的块 |
+| Complete markers present | Replace only the body between markers; preserve user content outside them |
+| File missing / empty | Write the full content (including frontmatter) |
+| No markers + overwrite mode | Overwrite the whole file with marker-wrapped content |
+| No markers + append mode | Append the marker-wrapped block to the existing content |
 
-这确保用户在同一个 `CLAUDE.md` 中混入自己的规则时，`ltc init` 更新不会覆盖用户内容。
+This ensures that when a user mixes their own rules into the same `CLAUDE.md`, `ltc init` does not overwrite their content.
 
-### 模板渲染管线
+### Template rendering pipeline
 
 ```
-packages/core/public/templates/          — 模板真源（随 npm 包发布）
-├── languages.json                       — 支持语言与默认语言
-├── platforms/<lang>/lattice-rules.md    — 所有客户端共享的规则正文（zh 权威 / en 翻译）
-├── skills/<lang>/SKILL.md + 子文档       — 技能入口 + 子文档
-├── commands/<lang>/*.md                 — slash 命令模板
-├── agents/<lang>/*.md                   — 预定义 subagent 模板
-└── spec/                                — spec 模板（frontend / backend / api 等）
+packages/core/public/templates/          — template source of truth (shipped with the npm package)
+├── languages.json                       — supported languages and default language
+├── platforms/<lang>/lattice-rules.md    — rule body shared by all clients (zh authoritative / en translation)
+├── skills/<lang>/SKILL.md + subdocs     — skill entry + subdocuments
+├── commands/<lang>/*.md                 — slash command templates
+├── agents/<lang>/*.md                   — predefined subagent templates
+└── spec/<lang>/                         — spec templates (frontend / backend / api, etc.; zh / en each)
 ```
 
-`template-assets.ts` 负责模板的读取、渲染和分发。`ltc init` 按 `--lang` / `config-local.language` / 系统 locale 解析出 `zh` 或 `en`，再通过 `getBundledTemplateDir(kind, language)` 选择语言包。渲染函数按平台适配：
+`template-assets.ts` reads, renders and distributes templates. `ltc init` resolves `zh` or `en` from `--lang` / `config-local.language` / the system locale, then selects the language pack through `getBundledTemplateDir(kind, language)`. Rendering adapts per platform:
 
 ```typescript
-// 所有平台指向同一个模板文件
+// All platforms point at the same template file
 const platformTemplatePaths: Record<PlatformName, string> = {
   cursorRules: LATTICE_RULES_TEMPLATE,
   claudeCode: LATTICE_RULES_TEMPLATE,
@@ -357,231 +362,227 @@ const platformTemplatePaths: Record<PlatformName, string> = {
   kiroSteering: LATTICE_RULES_TEMPLATE,
 };
 
-// Cursor 系额外拼接对应语言的 frontmatter
+// The Cursor family prepends the language-specific frontmatter
 export function renderCursorRules(data?: TemplateData, language?: DocLanguage): string {
   const lang = language ?? getDefaultDocLanguage();
   return `${CURSOR_RULES_FRONTMATTER[lang]}${renderPlatformTemplate('cursorRules', data, lang)}`;
 }
 ```
 
-## 工作流设计
+## Workflow design
 
-Lattice 不只是数据管理工具——它通过 AI 客户端注入，把研发记忆与结构化工作流带进 AI 编码过程。
+Lattice is more than a data-management tool. Through AI client injection, it brings engineering memory and a structured workflow into the AI coding process.
 
-### Skill + CLI 双驱动
+### Skill + CLI dual drive
 
-Lattice 的工作流由两个引擎驱动：
+Lattice's workflow is driven by two engines:
 
-1. **Skill 驱动（AI 侧）**：注入到 AI 客户端的 Skill 文档定义了"AI 应该怎么做"——何时获取上下文、何时读 spec、何时打 checkpoint、何时改 PRD。这是声明式的，靠 AI 遵守文档约定。
+1. **Skill-driven (AI side)**: skill documents injected into AI clients define "what the AI should do" — when to fetch context, when to read specs, when to checkpoint, when to update the PRD. This is declarative and relies on the AI following the document.
+2. **CLI-driven (tool side)**: `ltc` commands are "the tools the AI actually executes" — create tasks, checkpoint, search specs, aggregate context. This is imperative and relies on the CLI's input/output contract to shape behavior.
 
-2. **CLI 驱动（工具侧）**：`ltc` 命令是"AI 实际执行操作的工具"——创建任务、打 checkpoint、搜索 spec、聚合上下文。这是命令式的，靠 CLI 的输入输出约束行为。
+Together they form a loop: Skill tells the AI "what to do"; the CLI provides "the tools to do it".
 
-两者形成闭环：Skill 告诉 AI"该做什么"，CLI 提供"怎么做的工具"。
+### PRD-driven development
 
-### PRD 驱动开发
-
-每个任务有一个 PRD 文件（`prd.md`），是"当前最佳认知的活体快照"。它不是需求文档（写完就不动的），而是边做边修订的：
-
-```
-目标 → 关键约束 → 当前方案 → 修改文件索引 → 风险 → 任务完成总结
-```
-
-工作流强制要求"PRD 永不落后于代码"——命中硬触发清单（T1~T8）时必须先改 PRD 再改代码。这确保了上下文压缩后 AI 读 PRD 仍能获得正确的认知。
-
-### Checkpoint 11 类
-
-任务进展通过 `progress.yaml` 追加记录，11 种类型按信息来源分三组，完全正交：
+Each task has a PRD file (`prd.md`) that is a "living snapshot of the current best understanding". It is not a requirements document written once and left alone; it is revised as work progresses:
 
 ```
-用户输入类（3）              AI 判断类（3）           进程事件类（5）
-├── context（背景）          ├── assumption（推断）   ├── decision（决策）
-├── correction（纠错）       ├── followup（待办）     ├── pivot（转折）
-└── constraint（约束）       └── note（事实）         ├── milestone（里程碑）
-                                                     ├── issue（踩坑）
-                                                     └── summary（总结）
+Goals → Key constraints → Current plan → File index → Risks → Task completion summary
 ```
 
-**设计原则**：多类型是互补记录，不是重复记录。单条用户输入常需多类型并发打点——比如用户推翻方案，同时打 `pivot`（方向转折）+ `correction`（纠错）+ `constraint`（新约束）。
+The workflow enforces "the PRD never lags behind the code": when a hard trigger (T1–T8) fires, the PRD must be updated before the code. This ensures that after context compaction, the AI can still recover correct understanding by reading the PRD.
 
-### Design vs Implementation 模式
+### 11 checkpoint types
 
-任务有两种运行模式：
-
-- **Design 模式**：只读 + 分析，禁止改业务代码，讨论写入 `design.md`。退出条件是用户明确说"开始实施"。
-- **Implementation 模式**：`ltc task start` 后默认状态，可改代码。
-
-这分离了"想清楚"和"做出来"两个阶段，避免 AI 在方案未定时就开始写代码。
-
-## RAG 搜索架构
-
-Lattice 内置本地 RAG（Retrieval-Augmented Generation）搜索，不依赖任何远程 API。
-
-### 混合检索
-
-搜索采用 **FTS（全文索引）+ Embedding（语义向量）** 混合策略，通过 RRF（Reciprocal Rank Fusion）融合排序：
+Task progress is appended to `progress.yaml`. The 11 types are grouped by information source and are completely orthogonal:
 
 ```
-用户查询
+User-input type (3)          AI-judgment type (3)      Process-event type (5)
+├── context (background)     ├── assumption (inference) ├── decision
+├── correction               ├── followup (todo)        ├── pivot
+└── constraint               └── note (fact)            ├── milestone
+                                                        ├── issue (pitfall)
+                                                        └── summary
+```
+
+**Design principle**: multiple types are complementary records, not duplicates. A single user input often needs several types at once — for example, when the user overturns a plan, record `pivot` (direction change) + `correction` (fix) + `constraint` (new constraint).
+
+### Design vs implementation mode
+
+Tasks have two modes:
+
+- **Design mode**: read-only + analysis; business code changes are forbidden; discussion goes to `design.md`. It exits when the user explicitly says "start implementing".
+- **Implementation mode**: the default after `ltc task start`; code changes are allowed.
+
+This separates "think it through" from "build it", preventing the AI from writing code before the plan is settled.
+
+## RAG search architecture
+
+Lattice includes local RAG (Retrieval-Augmented Generation) search with no remote API dependency.
+
+### Hybrid retrieval
+
+Search combines **FTS (full-text index) + embeddings (semantic vectors)** and fuses rankings with RRF (Reciprocal Rank Fusion):
+
+```
+User query
    │
-   ├──→ FTS5 全文检索（SQLite 内置）
-   │       └── 关键词匹配（title / content / tags / ngram）
+   ├──→ FTS5 full-text search (built into SQLite)
+   │       └── keyword matching (title / content / tags / ngram)
    │
-   ├──→ 语义检索（all-MiniLM-L6-v2 embedding）
-   │       └── 余弦相似度排序
+   ├──→ Semantic retrieval (bge-small-zh-v1.5 embeddings)
+   │       └── cosine similarity ranking
    │
-   └──→ RRF 融合
-           ├── rank-based 基础分（1 / (K + rank)）
-           ├── title boost（精确 / 部分 / 关键词命中）
-           ├── scope 加权（project > user > global）
-           ├── type 加权（relation 降权）
-           └── 多维度 rerank boost（domain / heading / tag / path）
+   └──→ RRF fusion
+           ├── rank-based base score (1 / (K + rank))
+           ├── title boost (exact / partial / keyword hit)
+           ├── scope weighting (project > user > global)
+           ├── type weighting (relation down-weighted)
+           └── multi-dimensional rerank boost (domain / heading / tag / path)
 ```
 
-**为什么混合**：FTS 擅长精确关键词匹配（"lattice init"），语义检索擅长概念相似（"项目注册" ≈ "项目发现"）。单用任一种都有盲区，RRF 融合取长补短。
+**Why hybrid**: FTS excels at exact keyword matches ("lattice init"); semantic retrieval excels at conceptual similarity ("project registration" ≈ "project discovery"). Either alone has blind spots; RRF combines their strengths.
 
-### 增量索引
+### Incremental indexing
 
-`ltc rag update` 默认增量更新——只处理内容哈希变化的文档，不全量重建：
+`ltc rag update` is incremental by default — it only processes documents whose content hash changed, rather than rebuilding everything:
 
 ```
-collectAllSearchDocuments()    — 收集所有可索引文档（spec / task / project / relation）
+collectAllSearchDocuments()    — collect all indexable documents (spec / task / project / relation)
     │
-    ├── 新文档 → 生成 embedding + 写入 FTS
-    ├── 内容变化 → 更新 embedding + 更新 FTS
-    └── 文档消失 → 删除 embedding + 删除 FTS
+    ├── New document → generate embedding + write FTS
+    ├── Content changed → update embedding + update FTS
+    └── Document removed → delete embedding + delete FTS
 ```
 
-异常时回退全量重建（`ltc rag rebuild`）。
+On failure it falls back to a full rebuild (`ltc rag rebuild`).
 
-### Embedding 模型
+### Embedding model
 
-使用 `Xenova/all-MiniLM-L6-v2`（384 维），通过 `@xenova/transformers` 在 Node.js 中本地推理，无需 GPU 或远程 API。模型文件缓存在 `~/.lattice/models/`，支持通过 `HF_ENDPOINT` 环境变量切换国内镜像。
+Uses `Xenova/bge-small-zh-v1.5` (512 dimensions) by default with local inference in Node.js through `@huggingface/transformers` — no GPU or remote API required. `ltc init` offers built-in presets (MiniLM, multilingual E5, BGE Base); use `ltc init --model <id>` for non-interactive setup, plus `--dimension` (required when switching to a custom model) and optional `--query-prefix` / `--document-prefix`. Model files are cached under `~/.lattice/models/`; `HF_ENDPOINT` can switch to a regional mirror.
 
-## Web 可视化层
+## Web visualization layer
 
-拆分为两个包：`packages/web`（服务端 + 静态托管）+ `packages/web-ui`（共享 UI，web 与 VSCode Webview 共用）。
+Split into two packages: `packages/web` (server + static hosting) + `packages/web-ui` (shared UI used by both web and the VS Code webview).
 
 ```
-web/src/                 — Fastify 服务端（HTTP 绑定）+ vite 入口薄壳（src/main.tsx）
+web/src/                 — Fastify server (HTTP binding) + thin Vite entry (src/main.tsx)
 ├── server/
-│   ├── app.ts           — Fastify app 创建（initDb + 路由注册）
-│   ├── index.ts         — 服务启动 / 端口探测 / 浏览器打开
-│   ├── routes/          — REST API 路由（@qcqx/lattice-services 的 HTTP 绑定）
-│   └── schemas.ts       — 请求 / 响应 schema
-└── shared/              — 前后端共享类型
+│   ├── app.ts           — Fastify app creation (initDb + route registration)
+│   ├── index.ts         — server startup / port probing / browser opening
+│   ├── routes/          — REST API routes (HTTP binding for @qcqx/lattice-services)
+│   └── schemas.ts       — request / response schemas
+└── shared/              — shared client/server types
 
-web-ui/src/              — @qcqx/lattice-web-ui（共享 UI 面）
-├── ui.ts                — 唯一出口（视图组件 / 状态 / 主题 / adapter 类型）
-├── main.tsx             — 浏览器 boot（web 宿主经 `@qcqx/lattice-web-ui/boot` 引用）
-├── store.ts             — 全局状态管理（valtio）
-├── hooks/               — React hooks（数据获取 + 业务逻辑）
-├── adapters/            — 数据适配层（HttpAdapter / 类型端口）
-├── components/          — UI 组件（图谱 / 详情 / 侧栏 / 编辑器…）
-└── styles/              — 全局样式
+web-ui/src/              — @qcqx/lattice-web-ui (shared UI surface)
+├── ui.ts                — sole export (view components / state / theme / adapter types)
+├── main.tsx             — browser boot (web host imports `@qcqx/lattice-web-ui/boot`)
+├── store.ts             — global state management (valtio)
+├── hooks/               — React hooks (data fetching + business logic)
+├── adapters/            — data adapter layer (HttpAdapter / type ports)
+├── components/          — UI components (graph / detail / sidebar / editor…)
+└── styles/              — global styles
 ```
 
-### Adapter 模式
+### Adapter pattern
 
-客户端通过 `adapters/http.ts` 调用服务端 REST API，不直接调用 core 函数。这层抽象使得未来可以替换为 WebSocket 或其他传输方式。
+The client calls the server REST API through `adapters/http.ts` and does not call core functions directly. This abstraction makes it possible to swap in WebSocket or another transport later.
 
 ```
-React 组件 → hooks → adapters/http → Express API → core 函数
+React component → hooks → adapters/http → Express API → core functions
 ```
 
-### 力导向图
+### Force-directed graph
 
-项目关系可视化使用 [Cytoscape.js](https://js.cytoscape.org) + COSE-Bilkent / fcose 布局算法，支持：
+Project relation visualization uses [Cytoscape.js](https://js.cytoscape.org) with COSE-Bilkent / fcose layouts and supports:
 
-- 节点拖拽 / 缩放 / 点击查看详情
-- 关系类型筛选（fork / depends-on / shares-component / nested-in）
-- 重叠节点自动消解
-- 径向布局 / 顺序布局切换
+- Node dragging / zooming / click-to-view-details
+- Relation-type filters (fork / depends-on / shares-component / nested-in)
+- Automatic overlap resolution
+- Radial / sequential layout switching
 
-## 多端共享架构（protocol + services）
+## Multi-host architecture (protocol + services)
 
-> 2026-10 重构落地：VSCode 扩展不再经由 `ltc --json` 子进程取数，改为进程内直调 core/services（与 web server 同源）。
+> Landed in the 2026-10 refactor: the VS Code extension no longer shells out to `ltc --json` for data. It calls core/services in-process, sharing the same source as the web server.
 
-### 分层与规则
+### Layers and rules
 
-| 层 | 包 | 职责 | 硬性规则 |
+| Layer | Package | Responsibility | Hard rule |
 |---|---|---|---|
-| 领域 + 存储 | `core` | 文件真源、SQLite 索引、领域函数、平台端口（`DatabasePort`） | 零宿主依赖（不 import vscode/fastify/express） |
-| 契约 | `protocol` | DTO 与方法类型（types-only） | DTO 直接复用 core 类型；禁止"精简形状" |
-| 用例 | `services` | 快照/详情/搜索/上下文/写操作；组合与降级 | 唯一实现；DB 不可用自动回退文件真源 |
-| 宿主绑定 | `cli` / `web/server` / `vscode` | 传输绑定 + 参数归一 + 视图模型 | 只做绑定，不写业务组合 |
+| Domain + storage | `core` | File source of truth, SQLite index, domain functions, platform ports (`DatabasePort`) | Zero host dependencies (no vscode/fastify/express imports) |
+| Contracts | `protocol` | DTOs and method types (types-only) | DTOs reuse core types directly; no "lite shapes" |
+| Use cases | `services` | Snapshot/detail/search/context/write operations; composition and fallback | Single implementation; automatic fallback to files when the DB is unavailable |
+| Host bindings | `cli` / `web/server` / `vscode` | Transport binding + parameter normalization + view models | Bindings only; no business composition |
 
-### 平台能力端口（宿主 × 能力矩阵）
+### Platform capability ports (host × capability matrix)
 
-| 能力 | CLI / web（Node） | VSCode 扩展（Electron） |
+| Capability | CLI / web (Node) | VS Code extension (Electron) |
 |---|---|---|
-| 文件真源读写 | ✅ | ✅ |
-| 项目索引 / 虚拟合并 | ✅ better-sqlite3 | ✅ node:sqlite（Electron ≥35）/ 磁盘扫描降级 |
-| FTS 全文搜索 | ✅ | ✅（node:sqlite 自带 FTS5） |
-| 向量检索（sqlite-vec） | ✅ | ❌ 降级跳过 |
-| 语义 embedding | ✅（可选装模型） | ❌ 不打包（onnxruntime 体积原因） |
+| File source-of-truth read/write | ✅ | ✅ |
+| Project index / virtual merge | ✅ better-sqlite3 | ✅ node:sqlite (Electron ≥35) / disk-scan fallback |
+| FTS full-text search | ✅ | ✅ (node:sqlite includes FTS5) |
+| Vector retrieval (sqlite-vec) | ✅ | ❌ skipped in fallback |
+| Semantic embeddings | ✅ (model optional) | ❌ not bundled (onnxruntime size) |
 
-### 新增一个客户端（Checklist）
+### Adding a client (checklist)
 
-1. 数据面：实现 `LatticeDataAdapter`（web 客户端已是此模式）或直接调用 `services` + `protocol` 类型；
-2. 传输：HTTP（复用 web server）/ postMessage（复用 VSCode 桥）/ IPC/stdio —— 任选，形状不变；
-3. 平台能力：绑定 `DatabasePort`（或依赖宿主已有的 DB）与 `setLatticeRootOverride`；
-4. UI：优先复用 `@qcqx/lattice-web-ui`（React 组件 + adapter 端口 + 浏览器 boot）；原生客户端只需实现对应控件；
-5. 测试：接入 services 契约测试（同一 fixture 数据根）+ 自己的宿主冒烟。
+1. Data plane: implement `LatticeDataAdapter` (the web client already does this) or call `services` + `protocol` types directly.
+2. Transport: HTTP (reuse the web server) / postMessage (reuse the VS Code bridge) / IPC/stdio — pick one; shapes stay the same.
+3. Platform capabilities: bind `DatabasePort` (or rely on the host's existing DB) and `setLatticeRootOverride`.
+4. UI: prefer `@qcqx/lattice-web-ui` (React components + adapter port + browser boot); a native client only needs the corresponding controls.
+5. Tests: wire into the services contract tests (same fixture data root) + your own host smoke test.
 
-## 演进路线（2026-10）
+## Evolution roadmap (2026-10)
 
-- **P1（已落地）**：`protocol`/`services` 独立成包；VSCode 扩展全量迁入（删除 `ltc` 数据面）；冒烟/集成/单测全绿。
-- **P2（已落地）**：web server 路由迁移为 services 的 HTTP 绑定（projects / tasks / specs / search / stats / trash / users / doctor / 内容与路径解析；sync-domains 域数据回退保留在 web 层）；**三路契约测试**落地——`pnpm test:contract`，同一 fixture 数据根分别跑 services 直调 / web HTTP（fastify inject）/ vscode bridge，任一绑定的形状漂移都会被断言捕获（含历史崩溃点守卫：spec 行必须带 frontmatter/fileName）。
-- **P3（已落地 2026-10-18）**：`web-ui` 包化——`packages/web/src/client` → `packages/web-ui`（`@qcqx/lattice-web-ui`：唯一出口 `ui.ts` + 浏览器 boot `./boot`；web 仅保留入口薄壳与 vite 装配，vscode webview 改引新包）；`packages/foundation`、`packages/e2e`、`packages/core/dist-types` 残骸清理；发布策略——三新包去掉 `private` 并补 `files`，新增 `publish:protocol/services/web-ui` 脚本，发布顺序约定：core → protocol/services → web-ui → web/cli（web 依赖 services + web-ui，需先发布）。
-- **P4（已落地 2026-10-18）**：开源门面——根 README 双语重构（英文主 + `README.zh-CN.md`，徽章/三入口矩阵/7 包表格）、根 LICENSE、社区健康文件（CONTRIBUTING / SECURITY / CODE_OF_CONDUCT / ISSUE 模板 / PR 模板）、
-  protocol·services·web-ui 三个包 README、`docs/` 索引、真实产品截图与社交预览资产（`docs/assets/`）。
-- **P5（已落地 2026-10-18）**：VS Code 宿主深度演进——多用户（切换/新建/重命名 + 只读浏览数据面拦截）、三视图按内容搜索（名称字段 + FTS 并集）、spec 体检入 Problems、
-  任务详情 WebviewView、Walkthrough 8 步、QuickPick 修饰键、批量/拖拽、图谱 Git 状态；
-  性能——webview 代码拆分（入口 -43%）、图谱推送合并与可见性门控、激活瘦身；发布——Open VSX 与 npm 六包上线（扩展 ID 后因 Marketplace 名称占位更名为 `qcqx.lattice-context`）。
-- **待办（按需）**：CLI 写操作可选迁入 services；`@qcqx/lattice-web-ui` 若需独立构建产物（当前为 TS 源码出口，bundler/tsc 消费）再补；core 错误文案 i18n 统一（边缘路径）。
+- **P1 (landed)**: `protocol`/`services` became standalone packages; the VS Code extension fully migrated (removed the `ltc` data plane); smoke/integration/unit tests all green.
+- **P2 (landed)**: web server routes migrated to services' HTTP binding (projects / tasks / specs / search / stats / trash / users / doctor / content and path resolution; sync-domain data fallback remains in the web layer); **three-way contract tests** landed — `pnpm test:contract` runs services direct calls / web HTTP (fastify inject) / VS Code bridge against the same fixture data root, so shape drift in any binding is caught (including guards for the historical crash: spec rows must carry frontmatter/fileName).
+- **P3 (landed 2026-10-18)**: `web-ui` package split — `packages/web/src/client` → `packages/web-ui` (`@qcqx/lattice-web-ui`: sole export `ui.ts` + browser boot `./boot`; web keeps only the entry shell and Vite wiring; the VS Code webview imports the new package); cleanup of `packages/foundation`, `packages/e2e`, `packages/core/dist-types` leftovers; release strategy — the three new packages drop `private` and add `files`, with new `publish:protocol/services/web-ui` scripts; publish order: core → protocol/services → web-ui → web/cli (web depends on services + web-ui and must be published later).
+- **P4 (landed 2026-10-18)**: open-source face — root README bilingual restructure (English primary + `README.zh-CN.md`, badges / three-entry matrix / 7-package table), root LICENSE, community health files (CONTRIBUTING / SECURITY / CODE_OF_CONDUCT / issue templates / PR template), READMEs for protocol·services·web-ui, `docs/` index, real product screenshots and social preview assets (`docs/assets/`).
+- **P5 (landed 2026-10-18)**: deep VS Code host evolution — multi-user (switch/create/rename + read-only data-plane interception), content search across three views (name fields + FTS union), spec health in Problems, task detail WebviewView, 8-step Walkthrough, QuickPick modifier keys, batch/drag-and-drop, graph Git status; performance — webview code splitting (entry -43%), graph push merging and visibility gating, activation slimming; release — Open VSX and six npm packages live (extension ID later renamed to `qcqx.lattice-context` due to a Marketplace name placeholder).
+- **Backlog (as needed)**: optionally move CLI write operations into services; add a standalone build output for `@qcqx/lattice-web-ui` if needed (currently TS source exports consumed by bundlers/tsc); unify core error-message i18n (edge paths).
 
-## 关键设计决策
+## Key design decisions
 
-### 1. 文件优先，DB 辅助
+### 1. Files first, DB as an aid
 
-Lattice 的数据真源是文件系统（JSON + Markdown），SQLite 是加速查询的索引层。这意味着：
+Lattice's source of truth is the filesystem (JSON + Markdown); SQLite is an index that accelerates queries. This means:
 
-- 数据可读——直接 `cat` 就能看到内容
-- 可 git 管理——`~/.lattice/` 可纳入版本控制
-- 可手动恢复——即使 SQLite 损坏，`ltc rag rebuild` 可从文件全量重建
-- DB 同步是约束——写物理文件后必须同步 DB（`syncProjectMetaToDb` 而非裸 `upsertProject`）
+- Data is readable — `cat` shows the content directly.
+- Git-manageable — `~/.lattice/` can be version-controlled.
+- Manually recoverable — even if SQLite is corrupted, `ltc rag rebuild` can rebuild from files.
+- DB sync is a constraint — after writing physical files, the DB must be synced (`syncProjectMetaToDb`, not a bare `upsertProject`).
 
-### 2. 虚拟合并零物理操作
+### 2. Virtual merge with zero physical operations
 
-多个物理项目有 ID 交集时，在查询层聚合为一个逻辑项目，**不合并物理文件**。各自保留独立的 `project.json` / spec / task。
+When multiple physical projects share IDs, the query layer aggregates them into one logical project **without merging physical files**. Each keeps its own `project.json` / specs / tasks.
 
-**为什么**：`lattice link` 在 fork / worktree 场景下可能创建多个注册项指向同一个仓库。物理合并会有数据丢失风险（spec 冲突怎么选？），虚拟合并在查询层解决，零风险。
+**Why**: `lattice link` can create multiple registrations pointing at the same repository in fork / worktree scenarios. Physical merging risks data loss (how do you choose between conflicting specs?). Virtual merging solves it in the query layer with zero risk.
 
-### 3. 磁盘回退扫描
+### 3. Disk fallback scan
 
-`autoRegisterProject` 查 DB 未命中时，回退扫描磁盘 projects 目录，通过 `project.json` 中的 IDs 匹配。找到则自愈同步到 DB。
+When `autoRegisterProject` misses in the DB, it falls back to scanning the disk projects directory and matches IDs from `project.json`. If found, it self-heals the DB.
 
-**为什么需要**：当磁盘有 `project.json` 但 DB 无记录时（数据不一致状态），只查 DB 会创建重复注册。磁盘回退在 DB 未命中时兜底。
+**Why**: when the disk has a `project.json` but the DB has no record (an inconsistent state), querying only the DB would create a duplicate registration. The disk fallback covers this case.
 
-### 4. Spec 级联继承
+### 4. Spec cascade inheritance
 
-嵌套项目（如 monorepo 子包）自动继承祖先项目的 spec。`getCascadedSpecsWithAncestors` 在聚合时把祖先项目的 spec 一并纳入，优先级低于当前项目。
+Nested projects (such as monorepo packages) automatically inherit ancestor project specs. `getCascadedSpecsWithAncestors` includes ancestor specs during aggregation, with lower priority than the current project.
 
-**为什么**：monorepo 中根项目的规范（如 "所有子包使用 pnpm"）应该自动适用于子包，不需要每个子包重复声明。
+**Why**: a root project convention (such as "all packages use pnpm") should automatically apply to subpackages without each one redeclaring it.
 
-### 5. --force 全局注入
+### 5. Global `--force` injection
 
-CLI 入口递归为所有叶子命令注入 `--force` 选项。AI 调用 CLI 时常需要跳过二次确认，如果不统一注入，遇到未声明的 `--force` 会报 `unknown option` 错误。
+The CLI entry recursively injects `--force` into every leaf command. AI calls often need to skip confirmation; without uniform injection, an undeclared `--force` would produce an `unknown option` error.
 
-### 6. 进程退出 DB 关闭
+### 6. Close the DB on process exit
 
-CLI 入口注册 `process.on('exit', () => closeDb())`，确保 SQLite WAL checkpoint 在进程退出前执行。WAL 模式下未 checkpoint 的数据可能丢失，这行代码是数据安全的兜底。
+The CLI entry registers `process.on('exit', () => closeDb())` to ensure SQLite WAL checkpointing runs before exit. In WAL mode, un-checkpointed data can be lost; this line is the data-safety backstop.
 
-## 扩展阅读
+## Further reading
 
-- [快速开始](quick-start.md) — 安装、初始化、基本使用
-- [Spec 模板仓库结构说明](spec-template-registry.md) — 如何组织自定义 spec 模板
-- [Skill 入口与工作流总览](../packages/core/public/templates/skills/zh/SKILL.md) — AI 工作流完整文档
-- [系统级常驻规则](../packages/core/public/templates/platforms/zh/lattice-rules.md) — AI 硬约束清单
-- [CLI 命令速查](../packages/core/public/templates/skills/zh/command-reference.md) — 所有命令参数参考
-- [项目身份标识与虚拟合并机制](../packages/core/public/templates/skills/zh/project-discovery.md) — 项目识别深入
+- [Quick Start](./quick-start.md) — install, initialize, basic usage
+- [Spec template repository layout](./spec-template-registry.md) — how to organize custom spec templates
+- [Skill entry and workflow overview](../packages/core/public/templates/skills/en/SKILL.md) — the full AI workflow documentation
+- [Always-on system rules](../packages/core/public/templates/platforms/en/lattice-rules.md) — hard constraints for AI
+- [CLI command reference](../packages/core/public/templates/skills/en/command-reference.md) — all command options
+- [Project identity and virtual merge](../packages/core/public/templates/skills/en/project-discovery.md) — deep dive into project identification

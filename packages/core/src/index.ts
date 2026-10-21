@@ -35,6 +35,7 @@ export type {
   SearchResult,
   SemanticSearchResult,
   RAGStatus,
+  RAGEmbeddingConfig,
   EmbeddingRecord,
   ProjectRow,
   ProjectRelation,
@@ -551,6 +552,8 @@ export {
   forceRebuildIndex,
   updateRagIndex,
   generateEmbedding,
+  getEmbeddingConfig,
+  getDefaultEmbeddingConfig,
   contentHash,
   isModelInstalled,
   isModelLoaded,
@@ -559,12 +562,22 @@ export {
   getModelLoadError,
   removeInstalledModel,
   collectAllSearchDocuments,
+  DEFAULT_EMBEDDING_MODEL_ID,
+  EMBEDDING_MODEL_PRESETS,
+  EMBEDDING_MODEL_RELATED_KEYS,
+  getEmbeddingModelPreset,
+  getEmbeddingModelConfig,
+  applyEmbeddingModelPreset,
+  clearEmbeddingModelPresetFields,
 } from './rag';
 export type {
   IncrementalIndexResult,
   IndexProgressCallback,
   SearchDocumentInput,
   RagUpdateResult,
+  EmbeddingModelPreset,
+  ApplyEmbeddingModelPresetOptions,
+  ApplyEmbeddingModelPresetResult,
 } from './rag';
 
 // 垃圾桶

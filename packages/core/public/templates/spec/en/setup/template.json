@@ -1,0 +1,5 @@
+{
+  "description": "Development environment setup template (installation + common commands)",
+  "defaultScope": "project",
+  "source": "built-in"
+}

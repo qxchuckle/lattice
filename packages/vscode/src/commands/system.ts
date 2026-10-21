@@ -44,7 +44,7 @@ function runInTerminal(services: CommandServices, name: string, command: string)
   const terminal = vscode.window.createTerminal({
     name,
     cwd:
-      services.activeProject.currentAnchorRoot ?? services.activeProject.currentFolder?.uri.fsPath,
+      services.activeProject.currentProjectRoot ?? services.activeProject.currentFolder?.uri.fsPath,
   });
   terminal.show();
   terminal.sendText(command);
@@ -140,6 +140,7 @@ export function registerSystemCommands(services: CommandServices, register: Regi
     }
     items.push({ label: `$(arrow-swap) ${t('Switch Active Project…')}`, action: 'switch' });
     items.push({ label: `$(book) ${t('Open Specs')}`, action: 'specs' });
+    items.push({ label: `$(settings-gear) ${t('Lattice Configuration…')}`, action: 'config' });
     items.push({ label: `$(refresh) ${t('Refresh Data')}`, action: 'refresh' });
     const picked = await vscode.window.showQuickPick(items, { title: t('Lattice') });
     if (!picked) return;
@@ -170,6 +171,9 @@ export function registerSystemCommands(services: CommandServices, register: Regi
         break;
       case 'specs':
         await vscode.commands.executeCommand('lattice.specs.focus');
+        break;
+      case 'config':
+        await vscode.commands.executeCommand('lattice.config.open');
         break;
       case 'refresh':
         await vscode.commands.executeCommand('lattice.refresh');
@@ -342,11 +346,11 @@ export function registerSystemCommands(services: CommandServices, register: Regi
       username = input.trim();
     }
 
-    // 2) 扫描目录（逗号分隔；缺省 = 当前工作区；留空跳过）
+    // 2) 扫描目录（逗号分隔；缺省 = 所有工作区根；留空跳过）
     let scanDirs = args.scanDirs?.map((dir) => dir.trim()).filter(Boolean);
     if (scanDirs === undefined) {
-      const workspaceDir = services.activeProject.currentFolder?.uri.fsPath;
-      const suggested = existing?.scanDirs?.join(', ') ?? workspaceDir ?? '';
+      const workspaceDirs = services.activeProject.allFolders.map((folder) => folder.uri.fsPath);
+      const suggested = existing?.scanDirs?.join(', ') ?? workspaceDirs.join(', ');
       const input = await vscode.window.showInputBox({
         title: t('Quick Start (No CLI)'),
         prompt: t('Directories to scan for projects (comma separated; leave empty to skip)'),
@@ -421,11 +425,16 @@ export function registerSystemCommands(services: CommandServices, register: Regi
   });
   register('lattice.workspace.bootstrap', (arg) => bootstrapWorkspace(services, arg));
 
-  register('lattice.workspace.scan', () => {
+  register('lattice.workspace.scan', () =>
+    services.config?.open({ section: 'projects', anchor: 'scan' }),
+  );
+  register('lattice.workspace.link', () => services.config?.registerCurrent());
+  // 终端逃生口（命令面板隐藏）：保留给习惯 CLI 交互/排查的用户。
+  register('lattice.workspace.scanTerminal', () => {
     runInTerminal(services, 'Lattice Scan', 'ltc init scan');
   });
-  register('lattice.workspace.link', () => {
-    if (!services.activeProject.currentFolder) {
+  register('lattice.workspace.linkTerminal', () => {
+    if (services.activeProject.allFolders.length === 0) {
       void showDeduped('warn', t('Open a workspace folder first.'));
       return;
     }

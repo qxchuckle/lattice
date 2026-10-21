@@ -1,0 +1,37 @@
+---
+import Default from '@astrojs/starlight/components/Head.astro';
+
+const base = import.meta.env.BASE_URL;
+const pathname = Astro.url.pathname;
+const rest = pathname.startsWith(base) ? pathname.slice(base.length) : pathname;
+const isLanding = rest === '' || rest === '/' || rest === 'zh-cn' || rest === 'zh-cn/';
+
+const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
+const isZh = lang.toLowerCase().startsWith('zh');
+const origin = Astro.site?.origin ?? 'https://qxchuckle.github.io';
+
+const jsonLd = isLanding
+  ? {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'Lattice',
+      alternateName: isZh ? '本地优先的研发记忆与工作流层' : undefined,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Cross-platform',
+      url: `${origin}${base}`,
+      description: isZh
+        ? '本地优先的研发记忆与工作流层：规范、任务、决策与经验一次沉淀，跨项目、跨会话、跨 Agent 复用。'
+        : 'A local-first engineering memory and workflow layer for AI-assisted development. Specs, tasks, decisions and experience captured once, reused across projects, sessions and agents.',
+      license: 'https://opensource.org/licenses/MIT',
+      isAccessibleForFree: true,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      codeRepository: 'https://github.com/qxchuckle/lattice',
+      softwareVersion: '1.0',
+      sameAs: ['https://www.npmjs.com/package/@qcqx/lattice-cli'],
+    }
+  : null;
+---
+
+<Default />
+
+{jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}

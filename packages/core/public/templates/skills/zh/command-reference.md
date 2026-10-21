@@ -8,7 +8,7 @@
 
 | 命令 | 确认内容 |
 |---|---|
-| `ltc init` | 扫描目录 + 是否下载 embedding 模型 |
+| `ltc init` | 扫描目录 + 选择/下载 embedding 模型 |
 | `ltc init scan` | 扫描目录（或 `--auto` 跳过交互） |
 | `ltc uninject` | 清除注入（删目录/文件、移除标记块） |
 | `ltc unlink` | 取消项目注册 |

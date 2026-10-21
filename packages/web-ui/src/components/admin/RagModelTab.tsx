@@ -1,5 +1,5 @@
 import { memo, useState, useCallback } from 'react';
-import { Card, Descriptions, Tag, Button, Progress, App, Space } from 'antd';
+import { Alert, Card, Descriptions, Tag, Button, Progress, App, Space } from 'antd';
 import {
   ReloadOutlined,
   ThunderboltOutlined,
@@ -120,6 +120,7 @@ export const RagModelTab = memo(function RagModelTab() {
                 message.success('模型下载完成');
               }
               refetchModel();
+              refetchRag();
               return;
             }
           }
@@ -132,7 +133,7 @@ export const RagModelTab = memo(function RagModelTab() {
       setProgress(null);
       setRunning(false);
     }
-  }, [message, refetchModel]);
+  }, [message, refetchModel, refetchRag]);
 
   const handleModelRemove = useCallback(() => {
     modal.confirm({
@@ -143,19 +144,31 @@ export const RagModelTab = memo(function RagModelTab() {
           await getAdapter().removeModel();
           message.success('模型已删除');
           refetchModel();
+          refetchRag();
         } catch (err) {
           message.error(`删除失败: ${(err as Error).message}`);
           throw err;
         }
       },
     });
-  }, [modal, message, refetchModel]);
+  }, [modal, message, refetchModel, refetchRag]);
 
   const pct =
     progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
     <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {ragStatus && (!ragStatus.modelInstalled || ragStatus.modelChanged) && (
+        <Alert
+          type={ragStatus.modelChanged ? 'warning' : 'info'}
+          showIcon
+          message={
+            ragStatus.modelChanged
+              ? `当前配置模型 ${ragStatus.modelId} 与索引模型 ${ragStatus.lastModelId ?? '未知'} 不一致，请点击“全量重建”更新索引${!ragStatus.modelInstalled ? '；新模型尚未安装，重建时会自动下载' : ''}。`
+              : `当前模型 ${ragStatus.modelId} 尚未安装；点击“全量重建”会自动下载并建立索引。`
+          }
+        />
+      )}
       {progress && (
         <Card size='small'>
           <Progress percent={pct} status='active' />

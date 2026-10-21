@@ -34,10 +34,13 @@ export function errorHtml(message: string): string {
 export function buildWebviewHtml(
   context: vscode.ExtensionContext,
   webview: vscode.Webview,
-  options: { view?: 'detail' } = {},
+  options: { view?: 'detail' | 'config'; htmlFile?: string } = {},
 ): string {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media', 'webview');
-  const html = readFileSync(path.join(mediaRoot.fsPath, 'webview.html'), 'utf8');
+  const html = readFileSync(
+    path.join(mediaRoot.fsPath, options.htmlFile ?? 'webview.html'),
+    'utf8',
+  );
   const withUris = html.replace(
     /(src|href)="\.\/assets\/([^"]+)"/g,
     (_match, attr: string, relative: string) =>

@@ -6,6 +6,7 @@ import {
   resolveOverlapsContinuous,
 } from '../src/components/graph/overlap-resolution';
 import { buildLayoutConfig } from '../src/components/graph/layout';
+import { setLanguage } from '../src/i18n';
 import { getTaskStatusColor, getEntityColor } from '../src/lib';
 import type { LatticeEdge, LatticeNode, LatticeNodeData } from '../src/types/graph';
 
@@ -248,6 +249,20 @@ describe('getNodeLabel', () => {
     expect(
       getNodeLabel(nodeData({ entityType: 'task', title: '异常', status: 'weird' as never })),
     ).toBe('[Task][weird]\n异常');
+  });
+
+  it('英文宿主使用英文状态与 scope 标签', () => {
+    setLanguage('en');
+    try {
+      expect(
+        getNodeLabel(nodeData({ entityType: 'task', title: 'Task A', status: 'completed' })),
+      ).toBe('[Task][Completed]\nTask A');
+      expect(
+        getNodeLabel(nodeData({ entityType: 'spec', title: 'Spec A', scope: 'project' })),
+      ).toBe('[Spec][Project]\nSpec A');
+    } finally {
+      setLanguage('zh-cn');
+    }
   });
 
   it('项目：git 标记；spec：scope 中文标签；未知类型走 [Node]', () => {

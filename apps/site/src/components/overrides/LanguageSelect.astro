@@ -1,0 +1,75 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+import config from 'virtual:starlight/user-config';
+
+const locales = Object.entries(config.locales ?? {});
+const currentLocale = Astro.locals.starlightRoute.locale ?? 'root';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const localeCodes = new Set(locales.map(([code]) => code));
+
+function localizedPath(locale: string): string {
+  let pathname = Astro.url.pathname;
+  if (pathname.startsWith(base)) pathname = pathname.slice(base.length);
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`;
+
+  const segments = pathname.split('/').filter(Boolean);
+  const first = segments[0];
+  if (first && localeCodes.has(first)) segments.shift();
+
+  const rest = segments.length > 0 ? `/${segments.join('/')}${pathname.endsWith('/') ? '/' : ''}` : '/';
+  const prefix = locale === 'root' ? '' : `/${locale}`;
+  return `${base}${prefix}${rest}`;
+}
+
+const current = locales.find(([code]) => code === currentLocale)?.[1];
+const label = Astro.locals.t('languageSelect.accessibleLabel');
+---
+
+{
+  config.isMultilingual && current && (
+    <div class='ll-nav-select' data-language-select>
+      <details class='ll-nav-select__details'>
+        <summary class='ll-nav-select__trigger' aria-label={label}>
+          <Icon name='translate' class='ll-nav-select__icon' />
+          <span class='ll-nav-select__value'>{current.label}</span>
+          <Icon name='down-caret' class='ll-nav-select__caret' />
+        </summary>
+        <div class='ll-nav-select__menu'>
+          {locales.map(([code, locale]) => (
+            <a
+              class='ll-nav-select__option'
+              href={localizedPath(code)}
+              data-language-choice={code === 'root' ? 'en' : code.startsWith('zh') ? 'zh' : code}
+              aria-current={code === currentLocale ? 'page' : undefined}>
+              <span class='ll-nav-select__language-code'>{code === 'root' ? 'EN' : code.toUpperCase()}</span>
+              <span>{locale.label}</span>
+              <Icon name='approve-check' class='ll-nav-select__check' />
+            </a>
+          ))}
+        </div>
+      </details>
+    </div>
+  )
+}
+
+<script>
+  const selects = Array.from(document.querySelectorAll<HTMLElement>('[data-language-select]'));
+  if (selects.length > 0) {
+    document.addEventListener('click', (event) => {
+      selects.forEach((select) => {
+        const details = select.querySelector<HTMLDetailsElement>('.ll-nav-select__details');
+        if (details && !select.contains(event.target as Node)) details.open = false;
+      });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      selects.forEach((select) => {
+        const details = select.querySelector<HTMLDetailsElement>('.ll-nav-select__details');
+        if (details) details.open = false;
+      });
+    });
+  }
+</script>
+
+

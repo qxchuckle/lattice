@@ -49,8 +49,18 @@ const layoutOptions: { label: string; value: string; icon: React.ReactNode }[] =
   { label: t('径向', 'Radial'), value: 'radial', icon: <ReloadOutlined /> },
 ];
 
+export interface FloatingStatusBarProps {
+  /** 是否显示管理入口；宿主关闭 admin 时同步隐藏，避免留下无效按钮。 */
+  showAdmin?: boolean;
+  /** 是否显示终端入口；宿主关闭 terminal 时同步隐藏，避免留下无效按钮。 */
+  showTerminal?: boolean;
+}
+
 /** 顶部浮动状态岛：布局切换 + 缩放/聚焦 + 统计 + 刷新 + 主题 */
-export const FloatingStatusBar = memo(function FloatingStatusBar() {
+export const FloatingStatusBar = memo(function FloatingStatusBar({
+  showAdmin = true,
+  showTerminal = true,
+}: FloatingStatusBarProps = {}) {
   const { mode } = useSnapshot(themeStore);
   const { layoutMode, selectedNodeId, layoutRunning } = useSnapshot(canvasStore);
   const {
@@ -220,7 +230,7 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
           onClick={toggleTheme}
           style={{ borderRadius: '50%' }}
         />
-        {!isWebviewHost() && (
+        {!isWebviewHost() && showTerminal && (
           <Tooltip
             title={
               terminalOpen && !terminalCollapsed
@@ -241,7 +251,7 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
             </Badge>
           </Tooltip>
         )}
-        {!isWebviewHost() && initialized && !authEnabled && (
+        {!isWebviewHost() && showAdmin && initialized && !authEnabled && (
           <Tooltip
             title={t(
               '未设置访问密码，存在安全风险。点击去设置',
@@ -256,7 +266,7 @@ export const FloatingStatusBar = memo(function FloatingStatusBar() {
             />
           </Tooltip>
         )}
-        {!isWebviewHost() && (
+        {!isWebviewHost() && showAdmin && (
           <Tooltip title={t('管理', 'Admin')}>
             <Button
               size='small'

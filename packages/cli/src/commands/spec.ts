@@ -46,6 +46,9 @@ import {
   type ParsedSpec,
   type SpecMatch,
   type SpecLintReport,
+  resolveDocLanguage,
+  getDefaultDocLanguage,
+  type DocLanguage,
 } from '@qcqx/lattice-core';
 import {
   logger,
@@ -81,6 +84,13 @@ function migrateLevelLabel(ref: { level: string; projectName: string | null }): 
 async function getConfiguredTemplateRegistries(): Promise<string[]> {
   const config = await readResolvedConfig();
   return [...new Set(config.registryTemplates ?? [])];
+}
+
+async function resolveConfiguredDocLanguage(): Promise<DocLanguage> {
+  const localConfig = await readLocalConfig();
+  return resolveDocLanguage(localConfig?.language ?? 'auto', {
+    defaultLanguage: getDefaultDocLanguage(),
+  });
 }
 
 async function writeConfiguredTemplateRegistries(registryTemplates: string[]): Promise<void> {
@@ -530,8 +540,9 @@ export function registerSpecCommand(program: Command): void {
     .action(async (opts) => {
       try {
         const templateInput = opts.all ? 'all' : (opts.template as string | undefined);
-        const templateNames = await resolveBundledSpecTemplateNames(templateInput);
-        const result = await syncBundledSpecTemplatesWithPrompt(templateNames);
+        const language = await resolveConfiguredDocLanguage();
+        const templateNames = await resolveBundledSpecTemplateNames(templateInput, language);
+        const result = await syncBundledSpecTemplatesWithPrompt(templateNames, { language });
 
         logger.raw(chalk.green(`✓ 已同步 ${result.synced.length} 个内置模板`));
         if (result.skipped.length > 0) {

@@ -1,44 +1,46 @@
 # @qcqx/lattice-web-ui
 
-**Lattice 共享 React UI** —— web 客户端与 VS Code webview 共用的组件与 hooks。同一套界面在浏览器和编辑器内渲染，数据来源由宿主通过 **adapter 接缝** 注入。
+> English | [简体中文](./README.zh-CN.md)
 
-## 内容
+**Lattice shared React UI** — components and hooks shared by the web client and the VS Code webview. The same interface renders in the browser and in the editor; the host injects the data source through an **adapter seam**.
 
-| 类别 | 代表导出 |
+## Contents
+
+| Category | Representative exports |
 |---|---|
-| 应用外壳 | `AppShell`（导航 + 主内容 + 详情面板）、`ErrorBoundary`、`FloatingStatusBar` |
-| 图谱 | `CytoscapeGraph`、`useGlobalGraph` |
-| 面板 / 侧栏 | `DetailPanel`、`TreeBrowserSidebar`、`GlobalSearchPanel` |
-| 主题 / 交互 | `getAntdThemeConfig`、`themeStore`、`useKeyboard`、`useIsMobile` |
-| 数据接缝 | `setAdapter` / `getAdapter`、`isWebviewHost` |
+| App shell | `AppShell` (navigation + main content + detail panel), `ErrorBoundary`, `FloatingStatusBar` |
+| Graph | `CytoscapeGraph`, `useGlobalGraph` |
+| Panels / sidebar | `DetailPanel`, `TreeBrowserSidebar`, `GlobalSearchPanel` |
+| Theme / interaction | `getAntdThemeConfig`, `themeStore`, `useKeyboard`, `useIsMobile` |
+| Data seam | `setAdapter` / `getAdapter`, `isWebviewHost` |
 
-## 安装
+## Install
 
 ```bash
 pnpm add @qcqx/lattice-web-ui
 ```
 
-依赖 React 19、antd 6、Cytoscape 等（随包声明）；`exports` 直出源码（`./src/ui.ts`），由消费方 bundler 编译。
+Depends on React 19, antd 6, Cytoscape and others (declared with the package); `exports` points directly at source (`./src/ui.ts`), compiled by the consumer's bundler.
 
-## 使用
+## Usage
 
 ```tsx
 import { AppShell, setAdapter, getAntdThemeConfig } from '@qcqx/lattice-web-ui';
 
-setAdapter(myHostAdapter); // 宿主提供数据面（HTTP / postMessage / 内存）
+setAdapter(myHostAdapter); // the host provides the data plane (HTTP / postMessage / in-memory)
 
 export function App() {
   return <AppShell features={{ login: false, admin: false, terminal: false }} />;
 }
 ```
 
-`AppShell` 内置路由（`/task/:id`、`/project/:id`、`/spec/:id`…），宿主可通过事件把导航指令路由进应用（VS Code webview 桥即如此）。
+`AppShell` includes routing (`/task/:id`, `/project/:id`, `/spec/:id`…). Hosts can route navigation commands into the app through events (the VS Code webview bridge does exactly this).
 
-## 消费方
+## Consumers
 
-- [`@qcqx/lattice-web`](../web)：浏览器客户端
-- [`packages/vscode`](../vscode)：扩展 webview（图谱工作台）——通过 postMessage 桥提供数据
+- [`@qcqx/lattice-web`](https://github.com/qxchuckle/lattice/tree/master/packages/web): browser client
+- [`packages/vscode`](https://github.com/qxchuckle/lattice/tree/master/packages/vscode): extension webview (graph workbench) — data comes through the postMessage bridge
 
 ## License
 
-[MIT](./LICENSE) © 2026 qcqx
+[MIT](https://github.com/qxchuckle/lattice/blob/master/LICENSE) © 2026 qcqx

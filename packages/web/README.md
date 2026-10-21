@@ -1,76 +1,78 @@
 # @qcqx/lattice-web
 
-Lattice Web 工作台 —— 任务 / 项目 / Spec 关系图与知识图谱浏览器（Cytoscape 画布，与 VS Code 扩展 Webview 共用同一套 UI）。
+> English | [简体中文](./README.zh-CN.md)
 
-![Web 工作台](https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/assets/screenshots/workbench-home.jpg)
+Lattice Web Workbench — a task / project / spec relation graph and knowledge graph browser (Cytoscape canvas, sharing the same UI as the VS Code extension webview).
 
-## 功能
+![Lattice Web Workbench](https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/assets/screenshots/workbench-home.jpg)
 
-- **四种视角**：全局关系图、任务展开、项目展开、Spec 概览
-- **交互画布**：Cytoscape 自动布局，节点点击打开详情，连线高亮
-- **实时搜索**：混合检索（BM25 + 语义），侧栏即时筛选
-- **表格模式**：项目/任务表格列表，支持排序分页
-- **明暗主题**：跟随系统或手动切换
-- **路由驱动**：URL 反映当前视角和锚点，支持浏览器前进/后退
+## Features
 
-## 安装
+- **Four views**: global relation graph, task expansion, project expansion, spec overview
+- **Interactive canvas**: Cytoscape automatic layout, click a node to open details, highlighted edges
+- **Live search**: hybrid retrieval (BM25 + semantic), instant sidebar filtering
+- **Table mode**: project/task table lists with sorting and pagination
+- **Light/dark theme**: follow the system or switch manually
+- **Route-driven**: the URL reflects the current view and anchor; browser back/forward works
+
+## Install
 
 ```bash
-# 全局安装
+# Global install
 npm i -g @qcqx/lattice-web
 ```
 
-## 使用
+## Usage
 
 ```bash
-# 通过 lattice CLI 启动
+# Start through the lattice CLI
 ltc web
-# 指定端口，默认 14527
+# Specify a port; default 14527
 ltc web --port 8080
-# 不自动打开浏览器
+# Do not open a browser automatically
 ltc web --no-open
 ```
 
-启动后访问 `http://localhost:14527`。重复启动会检测已有服务并提示。
+After startup, open `http://localhost:14527`. Re-running detects an existing service and prompts.
 
-## 路由
+## Routes
 
-| 路径 | 说明 |
+| Path | Description |
 |---|---|
-| `/` | 全局关系图 |
-| `/task` | 任务视角（全部） |
-| `/task/:taskId` | 任务视角（指定） |
-| `/project` | 项目视角（全部） |
-| `/project/:projectId` | 项目视角（指定） |
-| `/spec` | Spec 概览 |
-| `/spec/:specId` | Spec 详情 |
-| `?mode=table` | 切换表格显示 |
+| `/` | Global relation graph |
+| `/task` | Task view (all) |
+| `/task/:taskId` | Task view (specific) |
+| `/project` | Project view (all) |
+| `/project/:projectId` | Project view (specific) |
+| `/spec` | Spec overview |
+| `/spec/:specId` | Spec details |
+| `?mode=table` | Switch to table display |
 
-## 技术栈
+## Tech stack
 
 React 19 · Vite 8 · antd v6 · Cytoscape · Valtio · TanStack Query · Fastify 5 · TypeBox
 
-## 开发
+## Development
 
-详见 [docs/development.md](docs/development.md)。
+See [docs/development.md](https://github.com/qxchuckle/lattice/blob/master/packages/web/docs/development.md).
 
 ```bash
-# 开发模式（Vite :5173 + Fastify :14527）
+# Development mode (Vite :5173 + Fastify :14527)
 pnpm dev:web
 
-# 构建
+# Build
 pnpm build:web
 ```
 
-## 架构
+## Architecture
 
 ```
-浏览器 → Fastify API → @qcqx/lattice-core → ~/.lattice/
-         ↑
+Browser → Fastify API → @qcqx/lattice-core → ~/.lattice/
+          ↑
   Vite SPA (Cytoscape + antd)
 ```
 
-前端通过 adapter 接口获取数据（`HttpAdapter` → fetch → Fastify API → core），为未来 VSCode 插件（`WebviewAdapter`）预留。
+The frontend gets data through an adapter interface (`HttpAdapter` → fetch → Fastify API → core), leaving room for a future VS Code `WebviewAdapter`.
 
 ## License
 

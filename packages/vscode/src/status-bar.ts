@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { getConfig, onConfigChanged } from './config';
 import { ActiveProjectService } from './state/active-project';
 import { ActiveTaskService } from './state/active-task';
@@ -42,16 +43,26 @@ export class StatusBarController implements vscode.Disposable {
   update(): void {
     const config = getConfig();
     const project = this.activeProject.currentProject;
+    const candidate = this.activeProject.currentCandidate;
 
     if (config.statusBarProject) {
-      this.projectItem.text = project
-        ? `$(library) ${project.name || project.id}`
-        : '$(library) Lattice';
+      const label = project
+        ? project.name || project.id
+        : candidate
+          ? candidate.projectName || path.basename(candidate.rootPath)
+          : undefined;
+      this.projectItem.text = label ? `$(library) ${label}` : '$(library) Lattice';
       const tooltip = new vscode.MarkdownString();
       if (project) {
         tooltip.appendMarkdown(`**${project.name || project.id}**\n\n`);
         tooltip.appendMarkdown(`${project.id}\n\n`);
-        for (const path of project.localPaths) tooltip.appendMarkdown(`- ${path}\n`);
+        for (const localPath of project.localPaths) tooltip.appendMarkdown(`- ${localPath}\n`);
+      } else if (candidate) {
+        tooltip.appendMarkdown(
+          `**${candidate.projectName || path.basename(candidate.rootPath)}**\n\n`,
+        );
+        tooltip.appendMarkdown(`${candidate.rootPath}\n\n`);
+        tooltip.appendMarkdown(t('Project is not registered yet.'));
       } else {
         tooltip.appendMarkdown(t('No active Lattice project.'));
       }

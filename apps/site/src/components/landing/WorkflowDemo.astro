@@ -1,0 +1,785 @@
+---
+import { ArrowRight, Zap } from 'lucide-astro';
+
+const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
+const isZh = lang.toLowerCase().startsWith('zh');
+const base = import.meta.env.BASE_URL;
+const quickStartHref = `${base}docs/quick-start/`;
+
+type Checkpoint = { type: string; title: string };
+type Memory = {
+  status: 'in_progress' | 'archived' | 'distilled';
+  specs: string[];
+  checkpoints: Checkpoint[];
+  distilled?: string;
+};
+type Step = {
+  short: string;
+  title: string;
+  user?: string;
+  userCommand?: string;
+  command?: string;
+  output?: string;
+  agent: string[];
+  checkpoint?: { type: string; title: string; message: string };
+  memory: Memory;
+};
+
+const copy = isZh
+  ? {
+      kicker: '工作流 / 闭环',
+      title: '一个任务，走完整个闭环。',
+      lede:
+        '安装一次 CLI，然后在 Agent 里完成从开始、读取上下文、记录决策，到归档和沉淀规范的完整流程。下一次会话，记忆已经在这里。',
+      installLabel: '01 / 安装一次',
+      agentLabel: '02 / 在 Agent 输入框调用',
+      installNote: 'Node.js 20.19+ · 无需账号 · 数据在本地',
+      userInput: '用户输入',
+      exampleCommand: 'lattice:task:start',
+      windowTitle: 'agent · acme-portal',
+      windowStatus: '本地 · 模拟',
+      memoryTitle: '任务记忆',
+      memorySpecs: '引用的规范',
+      memoryCheckpoints: '检查点',
+      memoryDistilled: '已沉淀',
+      memoryEmpty: '尚无检查点',
+      pause: '暂停',
+      play: '播放',
+      replay: '重播',
+      prev: '上一步',
+      next: '下一步',
+      step: '步骤',
+      reduced: '动效已关闭',
+      readDocs: '查看快速开始',
+      statusLabels: {
+        in_progress: '进行中',
+        archived: '已归档',
+        distilled: '已沉淀',
+      } as Record<string, string>,
+      steps: [
+        {
+          short: '开始',
+          title: '从任务开始，而不是空白对话',
+          user: '继续 auth-guard 这个任务，保持公共 API 约定不变。',
+          userCommand: 'lattice:task:start',
+          command: 'ltc task start auth-guard',
+          output: 'task/auth-guard  ·  in_progress',
+          agent: ['已载入任务和它的记忆。我会先读相关规范，再动代码。'],
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+            ],
+          },
+        },
+        {
+          short: '上下文',
+          title: '先读记忆，再写代码',
+          command: 'ltc context --task auth-guard',
+          output: '3 specs · 2 project relations · 4 checkpoints',
+          agent: [
+            'Portal 仍然把 token 放在 localStorage；API 已经支持 HttpOnly cookie。',
+            '我会迁移登录守卫，并保留现有 API envelope。',
+          ],
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+            ],
+          },
+        },
+        {
+          short: '决策',
+          title: '趁决策还新鲜，把它记下来',
+          user: '把 token 移出浏览器，轮换仍然由 API 负责。',
+          command:
+            'ltc task checkpoint auth-guard --type decision \\\n  --title "Move tokens to HttpOnly cookies"',
+          output: 'checkpoint · decision',
+          agent: ['方案定了：API 写 HttpOnly cookie，Portal 只在内存里保存用户画像。'],
+          checkpoint: {
+            type: 'decision',
+            title: 'Move tokens to HttpOnly cookies',
+            message: 'Portal 不再读取或持久化 access token。',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+            ],
+          },
+        },
+        {
+          short: '实现',
+          title: '实现和证据放在一起',
+          agent: ['登录守卫已迁移，cookie、logout 和重定向都有测试覆盖。'],
+          command:
+            'ltc task checkpoint auth-guard --type milestone \\\n  --title "Login guard migrated"',
+          output: 'checkpoint · milestone',
+          checkpoint: {
+            type: 'milestone',
+            title: 'Login guard migrated',
+            message: 'Cookie path, logout and redirect are covered by tests.',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+            ],
+          },
+        },
+        {
+          short: '纠偏',
+          title: '一次纠偏，变成长期约束',
+          user: '不要给老客户端留 localStorage 兜底。这是硬约束。',
+          command:
+            'ltc task checkpoint auth-guard --type correction \\\n  --title "Removed localStorage fallback"',
+          output: 'checkpoint · correction',
+          agent: ['兜底已移除。Portal 不再读取或写入 token。', '这条纠偏现在属于任务记忆。'],
+          checkpoint: {
+            type: 'correction',
+            title: 'Removed localStorage fallback',
+            message: 'The portal reads the session only through the API.',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+            ],
+          },
+        },
+        {
+          short: '归档',
+          title: '关闭任务，留下经验',
+          user: '把 auth-guard 归档，并留下可复用的经验。',
+          userCommand: 'lattice:task:archive',
+          command: 'ltc task complete auth-guard && ltc task archive auth-guard',
+          output: 'task archived · summary written',
+          agent: ['任务已归档。登录流程变化足够通用，我会把它蒸馏成项目规范。'],
+          checkpoint: {
+            type: 'summary',
+            title: 'Cookie session model adopted',
+            message: 'The auth guard, logout and rotation path are documented.',
+          },
+          memory: {
+            status: 'archived',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+              { type: 'summary', title: 'Cookie session model adopted' },
+            ],
+          },
+        },
+        {
+          short: '沉淀',
+          title: '让下一次从更高处开始',
+          user: '把这次登录改造沉淀成项目规范。',
+          userCommand: 'lattice:spec:update',
+          command: 'ltc spec init session-auth.md',
+          output: 'spec/session-auth  ·  project scope',
+          agent: [
+            '已蒸馏 session-auth：cookie 边界、轮换规则和测试证据都写进去了。',
+            '下一个碰登录的会话，会直接带着这份上下文开始。',
+          ],
+          memory: {
+            status: 'distilled',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope', 'session-auth'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+              { type: 'summary', title: 'Cookie session model adopted' },
+            ],
+            distilled: 'session-auth.md',
+          },
+        },
+      ],
+    }
+  : {
+      kicker: 'WORKFLOW / END TO END',
+      title: 'One task. A full loop.',
+      lede:
+        'Install the CLI once. Then run the whole workflow from your agent — start, load context, record decisions, archive, and distill a spec. The next session starts with the memory already in place.',
+      installLabel: '01 / INSTALL ONCE',
+      agentLabel: '02 / CALL IT FROM YOUR AGENT',
+      installNote: 'Node.js 20.19+ · no account · local files',
+      userInput: 'Ask your agent…',
+      exampleCommand: 'lattice:task:start',
+      windowTitle: 'agent · acme-portal',
+      windowStatus: 'local · simulated',
+      memoryTitle: 'TASK MEMORY',
+      memorySpecs: 'Referenced specs',
+      memoryCheckpoints: 'Checkpoints',
+      memoryDistilled: 'Distilled',
+      memoryEmpty: 'No checkpoints yet',
+      pause: 'Pause',
+      play: 'Play',
+      replay: 'Replay',
+      prev: 'Previous',
+      next: 'Next',
+      step: 'Step',
+      reduced: 'Motion off',
+      readDocs: 'Read the quick start',
+      statusLabels: {
+        in_progress: 'in progress',
+        archived: 'archived',
+        distilled: 'distilled',
+      } as Record<string, string>,
+      steps: [
+        {
+          short: 'Start',
+          title: 'Start with the task, not a blank chat',
+          user: 'Continue auth-guard. Keep the public API contract unchanged.',
+          userCommand: 'lattice:task:start',
+          command: 'ltc task start auth-guard',
+          output: 'task/auth-guard  ·  in_progress',
+          agent: ['Loaded the task and its memory. I’ll read the relevant specs before touching code.'],
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+            ],
+          },
+        },
+        {
+          short: 'Context',
+          title: 'Read the memory before writing code',
+          command: 'ltc context --task auth-guard',
+          output: '3 specs · 2 project relations · 4 checkpoints',
+          agent: [
+            'The portal still keeps a token in localStorage. The API already supports HttpOnly cookies.',
+            'I’ll migrate the login guard and preserve the existing API envelope.',
+          ],
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+            ],
+          },
+        },
+        {
+          short: 'Decide',
+          title: 'Record the decision while it is fresh',
+          user: 'Move tokens out of the browser. Let the API own rotation.',
+          command:
+            'ltc task checkpoint auth-guard --type decision \\\n  --title "Move tokens to HttpOnly cookies"',
+          output: 'checkpoint · decision',
+          agent: ['Plan set: the API writes an HttpOnly cookie; the portal keeps only the profile in memory.'],
+          checkpoint: {
+            type: 'decision',
+            title: 'Move tokens to HttpOnly cookies',
+            message: 'The portal will not read or persist an access token.',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+            ],
+          },
+        },
+        {
+          short: 'Build',
+          title: 'Keep implementation and evidence together',
+          agent: ['Login guard migrated. Cookie refresh, logout and redirect are covered by tests.'],
+          command:
+            'ltc task checkpoint auth-guard --type milestone \\\n  --title "Login guard migrated"',
+          output: 'checkpoint · milestone',
+          checkpoint: {
+            type: 'milestone',
+            title: 'Login guard migrated',
+            message: 'Cookie path, logout and redirect are covered by tests.',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+            ],
+          },
+        },
+        {
+          short: 'Correct',
+          title: 'A correction becomes a durable constraint',
+          user: 'No localStorage fallback, even for legacy clients. That is a hard constraint.',
+          command:
+            'ltc task checkpoint auth-guard --type correction \\\n  --title "Removed localStorage fallback"',
+          output: 'checkpoint · correction',
+          agent: ['Removed the fallback. The portal no longer reads or writes tokens.', 'This correction is now part of the task memory.'],
+          checkpoint: {
+            type: 'correction',
+            title: 'Removed localStorage fallback',
+            message: 'The portal reads the session only through the API.',
+          },
+          memory: {
+            status: 'in_progress',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+            ],
+          },
+        },
+        {
+          short: 'Archive',
+          title: 'Close the task, keep the experience',
+          user: 'Archive auth-guard and leave the reusable experience behind.',
+          userCommand: 'lattice:task:archive',
+          command: 'ltc task complete auth-guard && ltc task archive auth-guard',
+          output: 'task archived · summary written',
+          agent: ['Archived. The auth flow changed enough to be reusable, so I’ll distill it into a project spec.'],
+          checkpoint: {
+            type: 'summary',
+            title: 'Cookie session model adopted',
+            message: 'The auth guard, logout and rotation path are documented.',
+          },
+          memory: {
+            status: 'archived',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+              { type: 'summary', title: 'Cookie session model adopted' },
+            ],
+          },
+        },
+        {
+          short: 'Distill',
+          title: 'Make the next task start higher',
+          user: 'Distill the login changes into a project spec.',
+          userCommand: 'lattice:spec:update',
+          command: 'ltc spec init session-auth.md',
+          output: 'spec/session-auth  ·  project scope',
+          agent: [
+            'Distilled session-auth with the cookie boundary, rotation rule and test evidence.',
+            'The next session that touches login will start with this context already in place.',
+          ],
+          memory: {
+            status: 'distilled',
+            specs: ['portal-architecture', 'auth-model', 'api-envelope', 'session-auth'],
+            checkpoints: [
+              { type: 'context', title: 'Session ownership' },
+              { type: 'followup', title: 'Mobile drawer labels' },
+              { type: 'note', title: 'API envelope adopted' },
+              { type: 'decision', title: 'Move tokens to HttpOnly cookies' },
+              { type: 'milestone', title: 'Login guard migrated' },
+              { type: 'correction', title: 'Removed localStorage fallback' },
+              { type: 'summary', title: 'Cookie session model adopted' },
+            ],
+            distilled: 'session-auth.md',
+          },
+        },
+      ],
+    };
+
+const steps = copy.steps as Step[];
+---
+
+<section class='ll-section ll-workflow' id='workflow' aria-labelledby='ll-workflow-title'>
+  <div class='ll-section-head' data-reveal>
+    <p class='ll-kicker'>{copy.kicker}</p>
+    <h2 id='ll-workflow-title'>{copy.title}</h2>
+    <p class='ll-section-lede'>{copy.lede}</p>
+  </div>
+
+  <div class='ll-flow-setup' data-reveal>
+    <div class='ll-flow-setup-block'>
+      <p class='ll-flow-label'>{copy.installLabel}</p>
+      <div class='ll-install'>
+        <span aria-hidden='true'>$</span>
+        <code>npm i -g @qcqx/lattice-cli</code>
+        <button class='ll-copy' type='button' data-workflow-copy aria-label={isZh ? '复制安装命令' : 'Copy install command'}>
+          {isZh ? '复制' : 'Copy'}
+        </button>
+      </div>
+      <p class='ll-flow-note'>{copy.installNote}</p>
+    </div>
+    <div class='ll-flow-setup-block'>
+      <p class='ll-flow-label'>{copy.agentLabel}</p>
+      <div class='ll-flow-agent-command ll-flow-agent-command--input'>
+        <span class='ll-flow-command-chip'>
+          <Zap size={12} aria-hidden='true' />
+          {copy.exampleCommand}
+        </span>
+        <span class='ll-flow-input-placeholder'>{copy.userInput}</span>
+      </div>
+      <p class='ll-flow-note'>
+        {isZh
+          ? '在 Agent 输入框开头输入 / 或 @ 唤起命令；CLI 会在后台读写 ~/.lattice。'
+          : 'Type / or @ at the start of your agent input to invoke it; the CLI reads and writes ~/.lattice underneath.'}
+      </p>
+    </div>
+  </div>
+
+  <div class='ll-flow-shell' data-workflow data-reveal>
+    <div class='ll-flow-windowbar'>
+      <span class='ll-flow-dots' aria-hidden='true'><i></i><i></i><i></i></span>
+      <span class='ll-flow-window-title'>{copy.windowTitle}</span>
+      <span class='ll-flow-window-status'><i aria-hidden='true'></i>{copy.windowStatus}</span>
+    </div>
+
+    {steps.map((step, index) => (
+      <div class='ll-flow-scene' data-flow-scene={index} hidden={index !== 0}>
+        <div class='ll-flow-feed' data-flow-feed aria-label={isZh ? 'Agent 对话' : 'Agent conversation'}>
+          {steps.slice(0, index + 1).map((entry) => (
+            <>
+              {entry.user && (
+                <div class='ll-flow-message ll-flow-message--user'>
+                  <div class='ll-flow-bubble'>
+                    <p>
+                      {entry.userCommand && (
+                        <span class='ll-flow-command-chip'>
+                          <Zap size={12} aria-hidden='true' />
+                          {entry.userCommand}
+                        </span>
+                      )}
+                      <span class='ll-flow-text'>{entry.user}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+              {entry.command && (
+                <div class='ll-flow-command'>
+                  <span class='ll-flow-command-prompt' aria-hidden='true'>$</span>
+                  <code>{entry.command}</code>
+                </div>
+              )}
+              {entry.output && <div class='ll-flow-output'><span aria-hidden='true'>↳</span>{entry.output}</div>}
+              {entry.agent.map((line) => (
+                <div class='ll-flow-message ll-flow-message--agent'>
+                  <span class='ll-flow-avatar' aria-hidden='true'>L</span>
+                  <div class='ll-flow-bubble'>
+                    <span class='ll-flow-who'>Lattice agent</span>
+                    <p>{line}</p>
+                  </div>
+                </div>
+              ))}
+              {entry.checkpoint && (
+                <div class={`ll-flow-checkpoint ll-flow-checkpoint--${entry.checkpoint.type}`}>
+                  <span class='ll-flow-checkpoint-type'>{entry.checkpoint.type}</span>
+                  <div>
+                    <strong>{entry.checkpoint.title}</strong>
+                    <p>{entry.checkpoint.message}</p>
+                  </div>
+                </div>
+              )}
+            </>
+          ))}
+        </div>
+
+        <aside class='ll-flow-memory' aria-label={copy.memoryTitle}>
+          <div class='ll-flow-memory-head'>
+            <span class='ll-flow-label'>{copy.memoryTitle}</span>
+            <span class={`ll-flow-status ll-flow-status--${step.memory.status}`}>{copy.statusLabels[step.memory.status]}</span>
+          </div>
+          <div class='ll-flow-memory-section'>
+            <span class='ll-flow-memory-label'>{copy.memorySpecs}</span>
+            <ul class='ll-flow-specs'>
+              {step.memory.specs.map((spec) => (
+                <li class={spec === 'session-auth' ? 'is-new' : ''}>
+                  <span aria-hidden='true'>↳</span>
+                  <code>{spec}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div class='ll-flow-memory-section'>
+            <span class='ll-flow-memory-label'>{copy.memoryCheckpoints} <em>{step.memory.checkpoints.length}</em></span>
+            {step.memory.checkpoints.length ? (
+              <ul class='ll-flow-checkpoints'>
+                {step.memory.checkpoints.map((checkpoint) => (
+                  <li class={`ll-flow-cp ll-flow-cp--${checkpoint.type}`}>
+                    <span>{checkpoint.type}</span>
+                    <strong>{checkpoint.title}</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class='ll-flow-empty'>{copy.memoryEmpty}</p>
+            )}
+          </div>
+          {step.memory.distilled && (
+            <div class='ll-flow-distilled'>
+              <span>{copy.memoryDistilled}</span>
+              <code>spec/{step.memory.distilled.replace('.md', '')}</code>
+              <small>{isZh ? '下一个任务会自动引用' : 'Available to the next task'}</small>
+            </div>
+          )}
+        </aside>
+      </div>
+    ))}
+
+    <div class='ll-flow-footer'>
+      <div
+        class='ll-flow-progress'
+        data-flow-progress-track
+        role='presentation'
+        title={isZh ? '点击跳转步骤' : 'Click to jump to a step'}
+      ><span data-flow-progress></span></div>
+      <div class='ll-flow-nav'>
+        <div class='ll-flow-steps' role='group' aria-label={isZh ? '工作流步骤' : 'Workflow steps'}>
+          {steps.map((step, index) => (
+            <button
+              class:list={['ll-flow-step', { 'is-active': index === 0 }]}
+              type='button'
+              data-flow-jump={index}
+              aria-current={index === 0 ? 'step' : undefined}
+              aria-label={`${copy.step} ${index + 1}: ${step.title}`}
+            >
+              <span class='ll-flow-step-num'>0{index + 1}</span>
+              <span>{step.short}</span>
+            </button>
+          ))}
+        </div>
+        <div class='ll-flow-actions'>
+          <button class='ll-flow-action' type='button' data-flow-prev aria-label={copy.prev}>←</button>
+          <button class='ll-flow-play' type='button' data-flow-play>{copy.pause}</button>
+          <button class='ll-flow-action' type='button' data-flow-next aria-label={copy.next}>→</button>
+          <span class='ll-flow-counter' data-flow-counter>01 / 07</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class='ll-flow-footnote' data-reveal>
+    <span>{isZh ? '自动播放只是演示；真实 CLI 命令与输出都以本地状态为准。' : 'Autoplay is only a demo; the real CLI reads and writes your local state.'}</span>
+    <a href={quickStartHref}>{copy.readDocs} <ArrowRight size={14} /></a>
+  </div>
+</section>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-workflow]');
+  if (root) {
+    const scenes = [...root.querySelectorAll<HTMLElement>('[data-flow-scene]')];
+    const jumps = [...root.querySelectorAll<HTMLButtonElement>('[data-flow-jump]')];
+    const progress = root.querySelector<HTMLElement>('[data-flow-progress]');
+    const progressTrack = root.querySelector<HTMLElement>('[data-flow-progress-track]');
+    const playButton = root.querySelector<HTMLButtonElement>('[data-flow-play]');
+    const prevButton = root.querySelector<HTMLButtonElement>('[data-flow-prev]');
+    const nextButton = root.querySelector<HTMLButtonElement>('[data-flow-next]');
+    const counter = root.querySelector<HTMLElement>('[data-flow-counter]');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration = 4800;
+
+    let index = 0;
+    let elapsed = 0;
+    let playing = false;
+    let started = false;
+    let inView = false;
+    let timer: number | undefined;
+    let last = 0;
+
+    const isZh = document.documentElement.lang.toLowerCase().startsWith('zh');
+    const labels = {
+      pause: isZh ? '暂停' : 'Pause',
+      play: isZh ? '播放' : 'Play',
+      replay: isZh ? '重播' : 'Replay',
+    };
+
+    function setProgress(value: number): void {
+      if (progress) progress.style.width = `${Math.max(0, Math.min(100, value))}%`;
+    }
+
+    function updateControls(): void {
+      if (counter) {
+        counter.textContent = `${String(index + 1).padStart(2, '0')} / ${String(scenes.length).padStart(2, '0')}`;
+      }
+      if (playButton) {
+        playButton.textContent = playing ? labels.pause : index === scenes.length - 1 ? labels.replay : labels.play;
+        playButton.setAttribute('aria-pressed', String(playing));
+      }
+      prevButton?.toggleAttribute('disabled', index === 0);
+      nextButton?.toggleAttribute('disabled', index === scenes.length - 1);
+      jumps.forEach((button, buttonIndex) => {
+        const active = buttonIndex === index;
+        button.classList.toggle('is-active', active);
+        if (active) button.setAttribute('aria-current', 'step');
+        else button.removeAttribute('aria-current');
+      });
+    }
+
+    function syncScene(scroll = true): void {
+      scenes.forEach((scene, sceneIndex) => {
+        scene.hidden = sceneIndex !== index;
+      });
+      updateControls();
+      setProgress(((index + elapsed / duration) / scenes.length) * 100);
+      if (scroll) {
+        const feed = scenes[index]?.querySelector<HTMLElement>('[data-flow-feed]');
+        if (feed) feed.scrollTop = feed.scrollHeight;
+      }
+    }
+
+    function stopTimer(): void {
+      if (timer !== undefined) {
+        window.clearInterval(timer);
+        timer = undefined;
+      }
+    }
+
+    function startTimer(): void {
+      if (timer !== undefined) return;
+      last = performance.now();
+      timer = window.setInterval(() => {
+        if (!playing || !inView) return;
+        const now = performance.now();
+        elapsed += now - last;
+        last = now;
+        if (elapsed >= duration) {
+          if (index < scenes.length - 1) {
+            index += 1;
+            elapsed = 0;
+            syncScene();
+          } else {
+            elapsed = duration;
+            setPlaying(false);
+            setProgress(100);
+          }
+        } else {
+          setProgress(((index + elapsed / duration) / scenes.length) * 100);
+        }
+      }, 60);
+    }
+
+    function setPlaying(next: boolean, restart = false): void {
+      if (restart && index === scenes.length - 1) {
+        index = 0;
+        elapsed = 0;
+        syncScene();
+      }
+      playing = next;
+      if (restart) elapsed = 0;
+      if (playing) {
+        startTimer();
+      } else {
+        stopTimer();
+      }
+      updateControls();
+    }
+
+    function goTo(nextIndex: number, pause = true): void {
+      index = Math.max(0, Math.min(scenes.length - 1, nextIndex));
+      elapsed = 0;
+      if (pause) setPlaying(false);
+      syncScene();
+      if (pause) setProgress(((index + 1) / scenes.length) * 100);
+    }
+
+    jumps.forEach((button) => {
+      button.addEventListener('click', () => goTo(Number(button.dataset.flowJump)));
+    });
+    prevButton?.addEventListener('click', () => goTo(index - 1));
+    nextButton?.addEventListener('click', () => goTo(index + 1));
+    progressTrack?.addEventListener('click', (event) => {
+      const rect = progressTrack.getBoundingClientRect();
+      const ratio = (event.clientX - rect.left) / Math.max(rect.width, 1);
+      goTo(Math.floor(ratio * scenes.length));
+    });
+    playButton?.addEventListener('click', () => {
+      if (playing) {
+        setPlaying(false);
+      } else {
+        setPlaying(true, index === scenes.length - 1);
+      }
+    });
+
+    const copyButton = document.querySelector<HTMLButtonElement>('[data-workflow-copy]');
+    if (copyButton) {
+      const original = copyButton.textContent;
+      copyButton.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText('npm i -g @qcqx/lattice-cli');
+        } catch {
+          const input = document.createElement('textarea');
+          input.value = 'npm i -g @qcqx/lattice-cli';
+          input.style.position = 'fixed';
+          input.style.opacity = '0';
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand('copy');
+          input.remove();
+        }
+        copyButton.textContent = isZh ? '已复制' : 'Copied';
+        window.setTimeout(() => {
+          copyButton.textContent = original;
+        }, 1400);
+      });
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        inView = entries.some((entry) => entry.isIntersecting);
+        if (!started && inView) {
+          started = true;
+          if (!reducedMotion) setPlaying(true);
+          else syncScene();
+        } else if (!inView) {
+          stopTimer();
+        } else if (playing) {
+          startTimer();
+        }
+      },
+      { threshold: 0.18 },
+    );
+    observer.observe(root);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopTimer();
+      } else if (playing && inView) {
+        startTimer();
+      }
+    });
+
+    syncScene();
+  }
+</script>

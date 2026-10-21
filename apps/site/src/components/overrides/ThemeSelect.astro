@@ -1,0 +1,120 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+
+const t = Astro.locals.t;
+const label = t('themeSelect.accessibleLabel');
+const options = [
+  { value: 'dark', label: t('themeSelect.dark'), icon: 'moon' as const },
+  { value: 'light', label: t('themeSelect.light'), icon: 'sun' as const },
+  { value: 'auto', label: t('themeSelect.auto'), icon: 'laptop' as const },
+];
+---
+
+<div class='ll-nav-select' data-theme-mode='auto' data-theme-select>
+  <details class='ll-nav-select__details'>
+    <summary class='ll-nav-select__trigger' aria-label={label}>
+      <span class='ll-nav-select__icon' aria-hidden='true'>
+        {
+          options.map((option) => (
+            <Icon
+              name={option.icon}
+              class='ll-nav-select__glyph'
+              data-theme-icon={option.value}
+            />
+          ))
+        }
+      </span>
+      <span class='ll-nav-select__value'>
+        {
+          options.map((option) => (
+            <span class='ll-nav-select__label' data-theme-label={option.value}>
+              {option.label}
+            </span>
+          ))
+        }
+      </span>
+      <Icon name='down-caret' class='ll-nav-select__caret' />
+    </summary>
+    <div class='ll-nav-select__menu'>
+      {
+        options.map((option) => (
+          <button
+            type='button'
+            class='ll-nav-select__option'
+            data-theme-option={option.value}
+            aria-pressed='false'>
+            <Icon name={option.icon} class='ll-nav-select__option-icon' />
+            <span>{option.label}</span>
+            <Icon name='approve-check' class='ll-nav-select__check' />
+          </button>
+        ))
+      }
+    </div>
+  </details>
+</div>
+
+<script>
+  type Theme = 'auto' | 'dark' | 'light';
+
+  const storageKey = 'starlight-theme';
+  const parseTheme = (value: unknown): Theme =>
+    value === 'auto' || value === 'dark' || value === 'light' ? value : 'auto';
+  const loadTheme = (): Theme =>
+    parseTheme(typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null);
+  const systemTheme = (): Theme =>
+    matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+
+  const roots = Array.from(document.querySelectorAll<HTMLElement>('[data-theme-select]'));
+  if (roots.length > 0) {
+    const applyTheme = (theme: Theme, persist = true) => {
+      document.documentElement.dataset.theme = theme === 'auto' ? systemTheme() : theme;
+
+      if (persist && typeof localStorage !== 'undefined') {
+        localStorage.setItem(storageKey, theme === 'auto' ? '' : theme);
+      }
+
+      roots.forEach((root) => {
+        root.dataset.themeMode = theme;
+        root.querySelectorAll<HTMLButtonElement>('[data-theme-option]').forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.themeOption === theme));
+        });
+      });
+    };
+
+    roots.forEach((root) => {
+      root.querySelectorAll<HTMLButtonElement>('[data-theme-option]').forEach((button) => {
+        button.addEventListener('click', () => {
+          applyTheme(parseTheme(button.dataset.themeOption));
+          const details = root.querySelector<HTMLDetailsElement>('.ll-nav-select__details');
+          if (details) {
+            details.open = false;
+            details.querySelector<HTMLElement>('summary')?.focus();
+          }
+        });
+      });
+    });
+
+    document.addEventListener('click', (event) => {
+      roots.forEach((root) => {
+        const details = root.querySelector<HTMLDetailsElement>('.ll-nav-select__details');
+        if (details && !root.contains(event.target as Node)) details.open = false;
+      });
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      roots.forEach((root) => {
+        const details = root.querySelector<HTMLDetailsElement>('.ll-nav-select__details');
+        if (details) details.open = false;
+      });
+    });
+
+    matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+      if (loadTheme() === 'auto') applyTheme('auto', false);
+    });
+
+    applyTheme(loadTheme(), false);
+  }
+</script>
+
+

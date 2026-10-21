@@ -7,6 +7,7 @@ import { registerSpecCommands } from './spec';
 import { registerProjectCommands } from './project';
 import { registerSearchCommands } from './search';
 import { registerSystemCommands } from './system';
+import { registerConfigCommands } from './config';
 import { registerRevealCommands } from './reveal';
 import { registerTaskBatchCommands } from './task-batch';
 import { registerSpecCreateCommands } from './spec-create';
@@ -49,4 +50,5 @@ export function registerAllCommands(services: CommandServices): void {
   registerSearchCommands(services, register);
   registerRevealCommands(services, register);
   registerSystemCommands(services, register);
+  registerConfigCommands(services, register);
 }

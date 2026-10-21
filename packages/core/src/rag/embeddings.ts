@@ -4,6 +4,7 @@ import { getGlobalDispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 import { dirExists, ensureDir, fileExists, listDir, removeDir } from '../paths';
 import { readExplicitEmbeddingConfig, readResolvedConfig } from '../config';
 import type { RAGEmbeddingConfig } from '../types';
+import { DEFAULT_EMBEDDING_MODEL_ID, EMBEDDING_MODEL_PRESETS } from './model-presets';
 
 let pipeline: ((text: string | string[]) => Promise<{ tolist: () => number[][] }>) | null = null;
 let loadingPromise: Promise<void> | null = null;
@@ -52,17 +53,18 @@ export function formatModelNetworkHint(): string {
 
 /** 已知模型的输出维度（未显式配置 dimension 时自动推断） */
 const KNOWN_MODEL_DIMENSIONS: Record<string, number> = {
-  'Xenova/all-MiniLM-L6-v2': 384,
-  'Xenova/bge-small-zh-v1.5': 512,
-  'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2': 384,
-  'Xenova/paraphrase-multilingual-MiniLM-L12-v2': 384,
-  'Xenova/multilingual-e5-small': 384,
+  ...Object.fromEntries(EMBEDDING_MODEL_PRESETS.map((preset) => [preset.id, preset.dimension])),
+  // 非预设但历史上可能已配置的模型别名
   'BAAI/bge-small-zh-v1.5': 512,
-  'BAAI/bge-base-zh-v1.5': 768,
+  'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2': 384,
 };
 
+const DEFAULT_EMBEDDING_PRESET = EMBEDDING_MODEL_PRESETS.find(
+  (preset) => preset.id === DEFAULT_EMBEDDING_MODEL_ID,
+)!;
+
 const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
-  modelId: 'Xenova/bge-small-zh-v1.5',
+  modelId: DEFAULT_EMBEDDING_PRESET.id,
   remoteHost: 'https://huggingface.co/',
   remotePathTemplate: '{model}/resolve/{revision}/',
   localModelPath: '',
@@ -70,11 +72,11 @@ const DEFAULT_EMBEDDING_CONFIG: Required<RAGEmbeddingConfig> = {
   allowRemoteModels: true,
   allowLocalModels: true,
   proxy: '',
-  dimension: 512,
-  dtype: 'q8',
-  pooling: 'mean',
-  queryPrefix: '为这个句子生成表示以用于检索相关文章：',
-  documentPrefix: '',
+  dimension: DEFAULT_EMBEDDING_PRESET.dimension,
+  dtype: DEFAULT_EMBEDDING_PRESET.dtype,
+  pooling: DEFAULT_EMBEDDING_PRESET.pooling,
+  queryPrefix: DEFAULT_EMBEDDING_PRESET.queryPrefix,
+  documentPrefix: DEFAULT_EMBEDDING_PRESET.documentPrefix,
   distanceThreshold: 1.2,
   excerptLength: 1200,
   batchSize: 64,
@@ -118,6 +120,11 @@ function applyEmbeddingProxy(proxy: string | null): void {
   }
 
   activeProxy = proxy;
+}
+
+/** 返回内置 embedding 默认配置（不受用户配置与本机覆盖影响）。 */
+export function getDefaultEmbeddingConfig(): Required<RAGEmbeddingConfig> {
+  return { ...DEFAULT_EMBEDDING_CONFIG };
 }
 
 export async function getEmbeddingConfig(): Promise<Required<RAGEmbeddingConfig>> {
@@ -283,15 +290,10 @@ async function hasModelArtifacts(baseDir: string, modelId: string): Promise<bool
   const entries = await listDir(baseDir);
   const normalizedModelId = modelId.replace(/[\\/]/g, '--').toLowerCase();
   const modelLeaf = modelId.split('/').at(-1)?.toLowerCase() ?? modelId.toLowerCase();
-  const modelOwner = modelId.split('/').at(0)?.toLowerCase() ?? '';
 
   for (const entry of entries) {
     const lowerEntry = entry.toLowerCase();
-    if (
-      lowerEntry.includes(normalizedModelId) ||
-      lowerEntry.includes(modelLeaf) ||
-      (modelOwner && lowerEntry.includes(modelOwner))
-    ) {
+    if (lowerEntry.includes(normalizedModelId) || lowerEntry.includes(modelLeaf)) {
       return true;
     }
   }
@@ -349,15 +351,19 @@ export function isModelLoadNetworkError(): boolean {
   return modelLoadError !== null && isNetworkError(modelLoadError);
 }
 
-/** 检查模型是否已落盘（已安装/已缓存） */
-export async function isModelInstalled(): Promise<boolean> {
+/**
+ * 检查模型是否已落盘（已安装/已缓存）。
+ * 传入 modelId 可检查尚未写入配置的候选模型，用于切换模型前的状态提示。
+ */
+export async function isModelInstalled(modelId?: string): Promise<boolean> {
   const config = await getEmbeddingConfig();
+  const targetModelId = modelId?.trim() || config.modelId;
 
-  if (config.localModelPath && (await hasModelArtifacts(config.localModelPath, config.modelId))) {
+  if (config.localModelPath && (await hasModelArtifacts(config.localModelPath, targetModelId))) {
     return true;
   }
 
-  if (config.cacheDir && (await hasModelArtifacts(config.cacheDir, config.modelId))) {
+  if (config.cacheDir && (await hasModelArtifacts(config.cacheDir, targetModelId))) {
     return true;
   }
 

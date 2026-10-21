@@ -1,90 +1,92 @@
 # @qcqx/lattice-core
 
-Lattice 的领域逻辑核心库。所有路径管理、配置、数据库、项目、任务、Spec、搜索、RAG 和模板能力均由本包实现，CLI 和其他消费方直接调用导出函数即可。
+> English | [简体中文](./README.zh-CN.md)
 
-## 安装
+The domain logic core of Lattice. Path management, configuration, database, projects, tasks, specs, search, RAG and templates are all implemented here. The CLI and other consumers call the exported functions directly.
+
+## Install
 
 ```bash
 pnpm add @qcqx/lattice-core
 ```
 
-## 模块结构
+## Module layout
 
 ```
 src/
-├── browser.ts          → 浏览器打开工具
-├── cache/              → 扫描缓存
-├── config/             → 全局 & 本地配置读写
-├── db/                 → SQLite 数据库（项目索引、FTS、向量搜索）
-├── maintenance/        → 启动自检与数据迁移
-├── paths/              → 路径计算与文件工具
-├── project/            → 项目注册、多 ID 模型、虚拟合并、跨用户发现、关系管理
-├── rag/                → 嵌入生成、增量/全量索引、语义搜索
-├── search/             → 混合搜索（语义 + FTS）与上下文聚合
-├── spec/               → Spec 解析、级联、冲突检测、校验
-├── task/               → 任务 CRUD、checkpoint 进展追踪
-├── trash/              → 软删除与恢复
-├── types/              → 公共类型定义
-├── utils/              → 工具函数
-├── template-assets.ts  → 模板分发与同步
-└── index.ts            → 统一导出入口
+├── browser.ts          → browser-safe entry
+├── cache/              → scan cache
+├── config/             → global & local config read/write
+├── db/                 → SQLite database (project index, FTS, vector search)
+├── maintenance/        → startup self-check and data migration
+├── paths/              → path calculation and file utilities
+├── project/            → project registration, multi-ID model, virtual merge, cross-user discovery, relations
+├── rag/                → embedding generation, incremental/full indexing, semantic search
+├── search/             → hybrid search (semantic + FTS) and context aggregation
+├── spec/               → spec parsing, cascade, conflict detection, validation
+├── task/               → task CRUD, checkpoint progress tracking
+├── trash/              → soft delete and restore
+├── types/              → public type definitions
+├── utils/              → utility functions
+├── template-assets.ts  → template distribution and sync
+└── index.ts            → unified export entry
 ```
 
-## 核心导出
+## Core exports
 
-### 路径与文件
+### Paths and files
 
-`getLatticeRoot()` / `getUserDir()` / `getProjectDir()` / `getTaskDir()` 等全套路径计算函数，以及 `ensureDir` / `readJSON` / `writeJSON` 等文件工具。
+`getLatticeRoot()` / `getUserDir()` / `getProjectDir()` / `getTaskDir()` and the full path-calculation family, plus file utilities such as `ensureDir` / `readJSON` / `writeJSON`.
 
-### 配置
+### Configuration
 
-`readResolvedConfig()` / `getUsername()` / `isInitialized()` — 读取合并后的全局 + 本地配置。
+`readResolvedConfig()` / `getUsername()` / `isInitialized()` — read the merged global + local config.
 
-### 项目
+### Projects
 
-`registerProject()` / `unregisterProject()` / `findProjectByPath()` / `findProjectByAnyId()` / `scanForProjects()` / `selectPrimaryId()` / `normalizeProjectMeta()` / `getRelatedProjectIds()` / `mergeProjects()` — 项目注册、多 ID 查找、批量扫描、虚拟合并与物理合并。
+`registerProject()` / `unregisterProject()` / `findProjectByPath()` / `findProjectByAnyId()` / `scanForProjects()` / `selectPrimaryId()` / `normalizeProjectMeta()` / `getRelatedProjectIds()` / `mergeProjects()` — project registration, multi-ID lookup, batch scanning, virtual merge and physical merge.
 
-### 任务
+### Tasks
 
-`createTask()` / `updateTask()` / `archiveTask()` / `addCheckpoint()` / `listCheckpoints()` — 完整任务生命周期。
+`createTask()` / `updateTask()` / `archiveTask()` / `addCheckpoint()` / `listCheckpoints()` — the full task lifecycle.
 
-### Spec
+### Specs
 
-`getCascadedSpecs()` / `detectSpecConflicts()` / `parseSpec()` / `writeSpec()` — 三级级联、冲突检测和读写。
+`getCascadedSpecs()` / `detectSpecConflicts()` / `parseSpec()` / `writeSpec()` — three-level cascade, conflict detection and read/write.
 
-### 搜索与上下文
+### Search and context
 
-`hybridSearch()` / `getSmartContext()` / `formatContextAsMarkdown()` — 语义 + 全文混合搜索和上下文聚合。
+`hybridSearch()` / `getSmartContext()` / `formatContextAsMarkdown()` — semantic + full-text hybrid search and context aggregation.
 
 ### RAG
 
-`incrementalIndex()` / `rebuildIndex()` / `semanticSearch()` / `getRAGStatus()` — 索引管理和向量搜索。
+`incrementalIndex()` / `rebuildIndex()` / `semanticSearch()` / `getRAGStatus()` — index management and vector search.
 
-### 模板
+### Templates
 
-`applySpecTemplate()` / `syncSpecTemplateRegistry()` / `renderPlatformTemplate()` — 模板应用与平台规则渲染。
+`applySpecTemplate()` / `syncSpecTemplateRegistry()` / `renderPlatformTemplate()` — template application and platform rule rendering.
 
-## 公共资源
+## Public assets
 
-`public/templates/` 目录随包分发，包含：
+The `public/templates/` directory ships with the package and contains:
 
-- `languages.json` — 支持语言（`zh` / `en`）与默认语言
-- `skills/<lang>/` — AI Agent 工作流文档（SKILL.md、command-reference.md 等；`zh` 权威源，`en` 翻译包）
-- `platforms/<lang>/` — 平台规则模板（lattice-rules.md）
-- `commands/<lang>/` — Agent Command 模板
-- `agents/<lang>/` — 预定义 subagent 模板
-- `spec/` — 内置 spec 模板（frontend / backend / api / architecture 等）
+- `languages.json` — supported languages (`zh` / `en`) and the default language
+- `skills/<lang>/` — AI agent workflow docs (SKILL.md, command-reference.md, etc.; `zh` is authoritative, `en` is the translation pack)
+- `platforms/<lang>/` — platform rule templates (lattice-rules.md)
+- `commands/<lang>/` — Agent Command templates
+- `agents/<lang>/` — predefined subagent templates
+- `spec/<lang>/` — built-in spec templates (frontend / backend / api / architecture, etc.; one set per language)
 
-## 开发
+## Development
 
 ```bash
-# 构建
+# Build
 pnpm --filter @qcqx/lattice-core build
 
-# watch 模式
+# Watch mode
 pnpm --filter @qcqx/lattice-core dev
 
-# 类型检查
+# Type check
 pnpm --filter @qcqx/lattice-core check-types
 ```
 

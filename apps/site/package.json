@@ -1,0 +1,49 @@
+{
+  "name": "@qcqx/lattice-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "sync:docs": "node scripts/sync-docs.mjs",
+    "predev": "pnpm sync:docs",
+    "dev": "astro dev",
+    "prebuild": "pnpm sync:docs",
+    "build": "astro build && node scripts/check-build.mjs",
+    "preview": "astro preview",
+    "precheck": "pnpm sync:docs",
+    "check": "astro check",
+    "check:docs": "node scripts/sync-docs.mjs --check && node --test scripts/__tests__/sync-docs.test.mjs",
+    "selftest:gates": "node scripts/selftest-gates.mjs",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.0",
+    "@astrojs/starlight": "^0.42.6",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@qcqx/lattice-core": "workspace:*",
+    "@qcqx/lattice-web-ui": "workspace:*",
+    "@tanstack/react-query": "^5.0.0",
+    "antd": "^6.0.0",
+    "astro": "^7.4.1",
+    "glightbox": "^3.3.1",
+    "gsap": "^3.15.0",
+    "lucide-astro": "^0.556.0",
+    "pixi.js": "^8.22.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router": "^8.0.0",
+    "valtio": "^2.0.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.11",
+    "@playwright/test": "^1.64.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "less": "^4.2.0",
+    "typescript": "^5.8.0"
+  }
+}

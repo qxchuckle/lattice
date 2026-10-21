@@ -5,6 +5,36 @@ All notable changes to the Lattice VS Code extension are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-10-21
+
+### Added
+
+- **Multi-project workspace context**: the active project is now resolved per project, not per workspace folder. It follows the nearest `lattice.json`, the deepest registered project path, or the nearest Git root under the active file; multi-root workspaces, monorepos and nested Git repositories are supported. Use the status bar or **Switch Active Project** to pin/auto-select a project.
+- **Project-level workspace registration**: the Configuration Center lists every root and registered nested project under each workspace folder, with active state, registration, open-folder, metadata and **Set active** actions. The sidebar **Configuration & Maintenance** view gained a **Switch Active Project** entry, and registration now targets the active project root.
+- **Configuration Center** (editor-area singleton WebviewPanel): Overview (runtime / DB / watcher / RAG / Git / sync-domain summary), Projects & registration, Editor settings, global/local Lattice config, Users & sync (knowledge-pack domains and `~/.lattice` Git operations), Diagnostics (RAG update/rebuild, Doctor, diagnostics copy, logs, config/data paths), and Advanced (raw JSON view + open file). Open it from the Command Palette, the sidebar **Configuration & Maintenance** view, any view title gear, or the project status menu.
+- **Configuration & Maintenance sidebar view**: fixed one-click entries for the Configuration Center overview, scan/register, active-project registration, active-project switching, users & sync, diagnostics, editor settings and Lattice config; title-bar gear / scan / register / native-settings actions.
+- **Native project registration**: register the active project from the command palette or the Configuration Center. Git projects register by fingerprint and **do not write `lattice.json` by default**; writing an anchor requires an explicit choice. Non-Git folders require an anchor. Nested project roots can be registered separately.
+- **Project scanning UI**: manage scan directories (defaults to all workspace folders), start scans with live progress, cancel, and browse/edit registered project metadata.
+- **Staged configuration editing**: schema-driven forms for every `lattice.*` setting (defaults, source scope, reset, user/workspace target), global/local config with RAG model preset linkage, save/discard bar, and draft recovery after closing the panel.
+- **Users & sync**: switch/create/rename users; add/edit/reorder/unlink/sync knowledge-pack domains; main data-repo Git status, commit, pull, push, sync and remote management.
+- **Pure-Git active project recognition**: registered Git projects without `lattice.json` are resolved as the active project (Git root fallback).
+- Hidden terminal escape hatches `lattice.workspace.scanTerminal` / `lattice.workspace.linkTerminal` for users who prefer the CLI.
+
+### Changed
+
+- `lattice.workspace.scan` now opens the Configuration Center Projects section instead of running `ltc init scan` in a terminal.
+- `lattice.workspace.link` now runs the native “Register Current Project…” flow instead of `ltc link` in a terminal.
+- Status bar, task/spec views, task creation, spec creation, project commands, task scope and Spec migration all consume the same project-level context; RAG / Doctor / users / sync remain global.
+- README, walkthrough, welcome view, package nls and l10n updated for multi-project workspaces and the Configuration Center.
+- Configuration Center layout polish: form controls such as model pickers and dropdowns now fill their field column, nested RAG values load from `config.json` instead of showing blank fields, and repeated per-card hint banners were removed in favor of concise inline notes.
+- Wide tables in Projects, Users & Sync and the data-repo Git section now scroll horizontally at narrow panel widths instead of collapsing columns into one-character lines.
+
+### Fixed
+
+- Lattice core-config forms now show **effective** embedding values (built-in defaults, global config and local overrides) instead of blank model / dimension fields when `config.json` only contains `version`. Reset controls only appear for values that are actually persisted or edited, and reverting an edit no longer leaves a misleading “Modified” marker.
+- The Advanced JSON tab’s “Open current file” action follows the selected global/local tab; resetting a default field no longer creates a spurious unsaved change.
+- The old `lattice.pinnedFolder` state remains honored as a folder-level pin, while the new project pin takes precedence and can be cleared with **Auto (follow active editor)**.
+
 ## [0.4.2] - 2026-10-19
 
 ### Changed

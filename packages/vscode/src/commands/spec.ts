@@ -158,7 +158,7 @@ export async function runSpecSync(
     const summary = await withNotificationProgress(
       t('Migrating spec frontmatter…'),
       (_update, signal) =>
-        services.data.specMigrate(services.activeProject.currentAnchorRoot, signal),
+        services.data.specMigrate(services.activeProject.currentProjectRoot, signal),
       true,
     );
     const migrated = Array.isArray((summary as { migrated?: unknown })?.migrated)

@@ -1,8 +1,10 @@
-import { memo, useState, useCallback, useEffect } from 'react';
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   Modal,
   Tabs,
   Switch,
+  Alert,
+  AutoComplete,
   Button,
   Input,
   InputNumber,
@@ -15,17 +17,39 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdapter } from '../../adapters';
 import { WebPasswordSection } from './WebPasswordSection';
+import {
+  EMBEDDING_MODEL_PRESETS,
+  applyEmbeddingPresetToValues,
+  getEmbeddingModelPreset,
+} from './embedding-presets';
 
 type ConfigScope = 'global' | 'local';
 
 interface ConfigField {
   key: string;
   label: string;
-  type: 'string' | 'number' | 'boolean' | 'select' | 'stringArray';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'autocomplete' | 'stringArray';
   options?: { label: string; value: string }[];
   placeholder?: string;
   warning?: string;
 }
+
+interface CustomModelDraft {
+  modelId: string;
+  previousModelId: string;
+  dimension: number | null;
+  queryPrefix: string;
+  documentPrefix: string;
+}
+
+const EMBEDDING_PRESET_FIELD_KEYS = new Set([
+  'rag.embedding.modelId',
+  'rag.embedding.dimension',
+  'rag.embedding.dtype',
+  'rag.embedding.pooling',
+  'rag.embedding.queryPrefix',
+  'rag.embedding.documentPrefix',
+]);
 
 const GLOBAL_FIELDS: ConfigField[] = [
   {
@@ -40,14 +64,14 @@ const EMBEDDING_FIELDS: ConfigField[] = [
   {
     key: 'rag.embedding.modelId',
     label: '模型 ID',
-    type: 'select',
-    options: [
-      { label: 'Xenova/bge-small-zh-v1.5 (推荐)', value: 'Xenova/bge-small-zh-v1.5' },
-      { label: 'Xenova/all-MiniLM-L6-v2', value: 'Xenova/all-MiniLM-L6-v2' },
-      { label: 'Xenova/multilingual-e5-small', value: 'Xenova/multilingual-e5-small' },
-      { label: 'BAAI/bge-base-zh-v1.5', value: 'BAAI/bge-base-zh-v1.5' },
-    ],
-    warning: '修改模型 ID 后需 rebuild 索引，向量维度可能变化',
+    type: 'autocomplete',
+    options: EMBEDDING_MODEL_PRESETS.map((preset) => ({
+      label: `${preset.label} · ${preset.dimension} 维`,
+      value: preset.id,
+    })),
+    placeholder: '默认：Xenova/bge-small-zh-v1.5',
+    warning:
+      '切换内置模型会自动同步维度、精度、池化和前缀；自定义模型需手动确认这些参数，保存后需 rebuild 索引',
   },
   {
     key: 'rag.embedding.dimension',
@@ -95,6 +119,11 @@ const EMBEDDING_FIELDS: ConfigField[] = [
   {
     key: 'rag.embedding.queryPrefix',
     label: '查询前缀',
+    type: 'string',
+  },
+  {
+    key: 'rag.embedding.documentPrefix',
+    label: '文档前缀',
     type: 'string',
   },
   {
@@ -155,6 +184,19 @@ function getByPath(obj: Record<string, unknown>, path: string): unknown {
   return current;
 }
 
+function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path.split('.');
+  let current = obj;
+  for (const part of parts.slice(0, -1)) {
+    const next = current[part];
+    if (!next || typeof next !== 'object' || Array.isArray(next)) {
+      current[part] = {};
+    }
+    current = current[part] as Record<string, unknown>;
+  }
+  current[parts.at(-1)!] = value;
+}
+
 export const ConfigModal = memo(function ConfigModal({
   open,
   onClose,
@@ -169,6 +211,8 @@ export const ConfigModal = memo(function ConfigModal({
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [customModelDraft, setCustomModelDraft] = useState<CustomModelDraft | null>(null);
+  const confirmedModelIdRef = useRef('');
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['config', scope, diffMode, open],
@@ -176,40 +220,233 @@ export const ConfigModal = memo(function ConfigModal({
     enabled: open,
   });
 
+  const { data: ragStatus } = useQuery({
+    queryKey: ['rag-status'],
+    queryFn: () => getAdapter().getRagStatus(),
+    enabled: open && scope === 'global',
+    staleTime: 15_000,
+  });
+
   useEffect(() => {
     if (config) {
       setValues(structuredClone(config) as Record<string, unknown>);
+      const modelId = getByPath(config, 'rag.embedding.modelId');
+      confirmedModelIdRef.current = typeof modelId === 'string' ? modelId.trim() : '';
       setDirty(false);
     } else {
       setValues({});
+      confirmedModelIdRef.current = '';
       setDirty(false);
     }
+    setCustomModelDraft(null);
   }, [config]);
 
   const fields = scope === 'global' ? [...GLOBAL_FIELDS, ...EMBEDDING_FIELDS] : LOCAL_FIELDS;
+  const selectedModelId = getByPath(values, 'rag.embedding.modelId');
+  const selectedPreset =
+    typeof selectedModelId === 'string' ? getEmbeddingModelPreset(selectedModelId) : undefined;
+  const selectedDimension = getByPath(values, 'rag.embedding.dimension');
+  const hasValidDimension =
+    typeof selectedDimension === 'number' &&
+    Number.isFinite(selectedDimension) &&
+    selectedDimension > 0;
+  const presetDimensionMismatch =
+    !!selectedPreset && hasValidDimension && selectedDimension !== selectedPreset.dimension;
+  const selectedModelIdTrimmed = typeof selectedModelId === 'string' ? selectedModelId.trim() : '';
+  const selectedModelChangedToIndex =
+    scope === 'global' &&
+    !!ragStatus &&
+    selectedModelIdTrimmed.length > 0 &&
+    selectedModelIdTrimmed !== ragStatus.modelId;
+  const embeddingAlert =
+    scope !== 'global' || !ragStatus
+      ? null
+      : selectedModelChangedToIndex
+        ? {
+            type: 'warning' as const,
+            message: `模型将切换为 ${selectedModelIdTrimmed}：保存后需运行 ltc rag rebuild 重建索引；若模型未安装，rebuild 会自动下载。`,
+          }
+        : ragStatus.modelChanged
+          ? {
+              type: 'warning' as const,
+              message: `当前模型 ${ragStatus.modelId} 与上次索引模型 ${ragStatus.lastModelId ?? '未知'} 不一致，请运行 ltc rag rebuild 重建索引。`,
+            }
+          : !ragStatus.modelInstalled
+            ? {
+                type: 'info' as const,
+                message: `当前模型 ${ragStatus.modelId} 尚未安装；运行 ltc rag rebuild 会自动下载并重建索引。`,
+              }
+            : null;
 
   const handleFieldChange = useCallback((key: string, value: unknown) => {
+    if (key === 'rag.embedding.modelId' && typeof value === 'string') {
+      if (getEmbeddingModelPreset(value)) {
+        confirmedModelIdRef.current = value.trim();
+        setCustomModelDraft(null);
+      }
+    }
+
     setValues((prev) => {
       const next = structuredClone(prev) as Record<string, unknown>;
-      const parts = key.split('.');
-      if (parts.length === 1) {
-        next[parts[0]] = value;
-      } else {
-        let current: Record<string, unknown> = next;
-        for (let i = 0; i < parts.length - 1; i++) {
-          if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
-            current[parts[i]] = {};
-          }
-          current = current[parts[i]] as Record<string, unknown>;
-        }
-        current[parts[parts.length - 1]] = value;
+      setByPath(next, key, value);
+      if (key === 'rag.embedding.modelId' && typeof value === 'string') {
+        applyEmbeddingPresetToValues(next, value);
       }
       return next;
     });
     setDirty(true);
   }, []);
 
+  const openCustomModelDraft = useCallback(
+    (modelId: string) => {
+      const normalized = modelId.trim();
+      if (
+        !normalized ||
+        getEmbeddingModelPreset(normalized) ||
+        normalized === confirmedModelIdRef.current
+      ) {
+        return false;
+      }
+
+      const storedModelId = config ? getByPath(config, 'rag.embedding.modelId') : undefined;
+      const previousModelId =
+        confirmedModelIdRef.current ||
+        (typeof storedModelId === 'string' ? storedModelId.trim() : '');
+      const dimension = getByPath(values, 'rag.embedding.dimension');
+
+      setCustomModelDraft({
+        modelId: normalized,
+        previousModelId,
+        dimension: typeof dimension === 'number' ? dimension : 512,
+        queryPrefix: '',
+        documentPrefix: '',
+      });
+      return true;
+    },
+    [config, values],
+  );
+
+  const handleModelBlur = useCallback(() => {
+    const modelId = getByPath(values, 'rag.embedding.modelId');
+    if (typeof modelId === 'string') {
+      openCustomModelDraft(modelId);
+    }
+  }, [values, openCustomModelDraft]);
+
+  const cancelCustomModel = useCallback(() => {
+    if (customModelDraft) {
+      setValues((prev) => {
+        const next = structuredClone(prev) as Record<string, unknown>;
+        setByPath(next, 'rag.embedding.modelId', customModelDraft.previousModelId);
+        return next;
+      });
+    }
+    setCustomModelDraft(null);
+  }, [customModelDraft]);
+
+  const confirmCustomModel = useCallback(() => {
+    if (!customModelDraft) return;
+    if (!customModelDraft.dimension || customModelDraft.dimension <= 0) {
+      message.warning('请输入有效的向量维度');
+      return;
+    }
+
+    setValues((prev) => {
+      const next = structuredClone(prev) as Record<string, unknown>;
+      setByPath(next, 'rag.embedding.modelId', customModelDraft.modelId);
+      setByPath(next, 'rag.embedding.dimension', customModelDraft.dimension);
+      setByPath(next, 'rag.embedding.queryPrefix', customModelDraft.queryPrefix);
+      setByPath(next, 'rag.embedding.documentPrefix', customModelDraft.documentPrefix);
+      return next;
+    });
+    confirmedModelIdRef.current = customModelDraft.modelId;
+    setDirty(true);
+    setCustomModelDraft(null);
+    message.success('自定义模型参数已应用；保存后请运行 ltc rag rebuild');
+  }, [customModelDraft, message]);
+
+  const handleClose = useCallback(() => {
+    if (!dirty) {
+      setCustomModelDraft(null);
+      onClose();
+      return;
+    }
+    modal.confirm({
+      title: '放弃未保存的修改？',
+      content: '关闭后当前修改将丢失。',
+      okText: '放弃修改',
+      cancelText: '继续编辑',
+      okButtonProps: { danger: true },
+      onOk: () => {
+        setCustomModelDraft(null);
+        onClose();
+      },
+    });
+  }, [dirty, modal, onClose]);
+  const confirmDiscardChanges = useCallback(
+    (title: string, onConfirm: () => void) => {
+      if (!dirty) {
+        onConfirm();
+        return;
+      }
+      modal.confirm({
+        title,
+        content: '当前修改尚未保存，切换后将丢失，确定继续吗？',
+        okText: '继续',
+        cancelText: '取消',
+        onOk: onConfirm,
+      });
+    },
+    [dirty, modal],
+  );
+
+  const handleScopeChange = useCallback(
+    (nextScope: ConfigScope) => {
+      if (nextScope === scope) return;
+      confirmDiscardChanges('切换配置范围', () => setScope(nextScope));
+    },
+    [confirmDiscardChanges, scope],
+  );
+
+  const handleDiffModeChange = useCallback(
+    (nextDiffMode: boolean) => {
+      confirmDiscardChanges('切换显示模式', () => setDiffMode(nextDiffMode));
+    },
+    [confirmDiscardChanges],
+  );
+
   const handleSave = useCallback(async () => {
+    const modelIdValue = getByPath(values, 'rag.embedding.modelId');
+    if (scope === 'global' && typeof modelIdValue === 'string') {
+      if (!modelIdValue.trim()) {
+        message.warning('模型 ID 不能为空');
+        return;
+      }
+      if (openCustomModelDraft(modelIdValue)) {
+        return;
+      }
+    }
+
+    const fallbackModelId = config ? getByPath(config, 'rag.embedding.modelId') : undefined;
+    const previousEffectiveModelId =
+      ragStatus?.modelId ?? (typeof fallbackModelId === 'string' ? fallbackModelId.trim() : '');
+    const nextModelId = typeof modelIdValue === 'string' ? modelIdValue.trim() : '';
+    const modelChangedAfterSave =
+      scope === 'global' &&
+      !!nextModelId &&
+      !!previousEffectiveModelId &&
+      nextModelId !== previousEffectiveModelId;
+    const embeddingParamsChanged =
+      scope === 'global' &&
+      ['dimension', 'dtype', 'pooling', 'queryPrefix', 'documentPrefix', 'minChunkSize'].some(
+        (field) => {
+          const key = `rag.embedding.${field}`;
+          const before = config ? getByPath(config, key) : undefined;
+          const after = getByPath(values, key);
+          return JSON.stringify(before) !== JSON.stringify(after);
+        },
+      );
+
     setSaving(true);
     try {
       // 检查关键项修改
@@ -229,15 +466,50 @@ export const ConfigModal = memo(function ConfigModal({
         try {
           for (const field of fields) {
             const value = getByPath(values, field.key);
-            if (value !== undefined) {
-              const ok = await getAdapter().setConfig(field.key, value, scope);
-              if (!ok) throw new Error(`保存 ${field.label} 失败`);
+            if (value === undefined) continue;
+            // 只写入用户实际修改过的字段，避免把接口返回的生效默认值固化进配置文件
+            const originalValue = config ? getByPath(config, field.key) : undefined;
+            const unchanged = JSON.stringify(originalValue) === JSON.stringify(value);
+            // 切换模型时后端会自动同步预设字段；这里强制把表单值全部写回，
+            // 避免用户手动改回旧值（如维度）后被后端预设覆盖。
+            if (
+              unchanged &&
+              !(modelChangedAfterSave && EMBEDDING_PRESET_FIELD_KEYS.has(field.key))
+            ) {
+              continue;
             }
+            const ok = await getAdapter().setConfig(field.key, value, scope);
+            if (!ok) throw new Error(`保存 ${field.label} 失败`);
           }
-          message.success('配置已保存');
           setDirty(false);
           queryClient.invalidateQueries({ queryKey: ['config'] });
           queryClient.invalidateQueries({ queryKey: ['rag-status'] });
+          queryClient.invalidateQueries({ queryKey: ['model-status'] });
+          if (modelChangedAfterSave) {
+            let installed: boolean | null = null;
+            try {
+              installed = (await getAdapter().getRagStatus()).modelInstalled;
+            } catch {
+              installed = null;
+            }
+            message.warning(
+              `模型已切换为 ${nextModelId}；${
+                installed === true
+                  ? '模型已安装'
+                  : installed === false
+                    ? '模型尚未安装，rebuild 时会自动下载'
+                    : '请确认模型安装状态'
+              }。请运行 ltc rag rebuild 重建索引。`,
+              8,
+            );
+          } else if (embeddingParamsChanged) {
+            message.warning(
+              '配置已保存；embedding 参数已变更，请运行 ltc rag rebuild 重建索引。',
+              8,
+            );
+          } else {
+            message.success('配置已保存');
+          }
           onClose();
         } catch (err) {
           message.error(`保存失败: ${(err as Error).message}`);
@@ -268,7 +540,18 @@ export const ConfigModal = memo(function ConfigModal({
       message.error(`保存失败: ${(err as Error).message}`);
       setSaving(false);
     }
-  }, [values, fields, config, scope, message, modal, queryClient, onClose]);
+  }, [
+    values,
+    fields,
+    config,
+    scope,
+    ragStatus,
+    message,
+    modal,
+    queryClient,
+    onClose,
+    openCustomModelDraft,
+  ]);
 
   const renderField = (field: ConfigField) => {
     const value = config ? getByPath(config, field.key) : undefined;
@@ -309,9 +592,26 @@ export const ConfigModal = memo(function ConfigModal({
             value={editValue as string}
             onChange={(v) => handleFieldChange(field.key, v)}
             options={field.options}
+            placeholder={field.placeholder}
+            optionFilterProp='label'
             style={{ width: '100%' }}
             size='small'
             showSearch
+          />
+        ) : field.type === 'autocomplete' ? (
+          <AutoComplete
+            value={editValue as string}
+            onChange={(v) => handleFieldChange(field.key, v)}
+            onBlur={handleModelBlur}
+            options={field.options}
+            placeholder={field.placeholder}
+            filterOption={(input, option) =>
+              String(option?.label ?? '')
+                .toLowerCase()
+                .includes(input.toLowerCase())
+            }
+            style={{ width: '100%' }}
+            size='small'
           />
         ) : field.type === 'stringArray' ? (
           <Input.TextArea
@@ -331,6 +631,19 @@ export const ConfigModal = memo(function ConfigModal({
             placeholder={placeholder}
           />
         )}
+        {field.key === 'rag.embedding.dimension' &&
+          typeof selectedModelId === 'string' &&
+          selectedModelId.trim().length > 0 && (
+            <div style={{ marginTop: 4, fontSize: 11, color: '#d46b08' }}>
+              {!hasValidDimension
+                ? '请填写有效的向量维度'
+                : presetDimensionMismatch && selectedPreset
+                  ? `该模型预设维度为 ${selectedPreset.dimension}，当前为 ${selectedDimension}；保存后可能无法搜索。`
+                  : !selectedPreset
+                    ? '自定义模型：请确认该维度与模型实际输出一致。'
+                    : null}
+            </div>
+          )}
         {field.warning && (
           <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
             ⚠ {field.warning}
@@ -348,56 +661,124 @@ export const ConfigModal = memo(function ConfigModal({
   ];
 
   return (
-    <Modal
-      title='配置编辑'
-      open={open}
-      onCancel={onClose}
-      width={640}
-      styles={{ body: { maxHeight: 'calc(80vh - 100px)', overflowY: 'auto' } }}
-      footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <span style={{ fontSize: 12, marginRight: 12 }}>仅显示差异</span>
-            <Switch checked={diffMode} onChange={setDiffMode} size='small' />
+    <>
+      <Modal
+        title='配置编辑'
+        open={open}
+        onCancel={handleClose}
+        width={640}
+        styles={{ body: { maxHeight: 'calc(80vh - 100px)', overflowY: 'auto' } }}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontSize: 12, marginRight: 12 }}>仅显示差异</span>
+              <Switch checked={diffMode} onChange={handleDiffModeChange} size='small' />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button onClick={handleClose}>取消</Button>
+              <Button type='primary' loading={saving} onClick={handleSave} disabled={!dirty}>
+                保存
+              </Button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button onClick={onClose}>取消</Button>
-            <Button type='primary' loading={saving} onClick={handleSave} disabled={!dirty}>
-              保存
-            </Button>
-          </div>
-        </div>
-      }>
-      <Tabs
-        activeKey={scope}
-        onChange={(k) => setScope(k as ConfigScope)}
-        size='small'
-        items={[
-          { key: 'global', label: '全局配置' },
-          { key: 'local', label: '本机配置' },
-        ]}
-        style={{ marginBottom: 12 }}
-      />
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: 24 }}>
-          <Spin />
-        </div>
-      ) : scope === 'global' ? (
-        <Collapse
+        }>
+        <Tabs
+          activeKey={scope}
+          onChange={(k) => handleScopeChange(k as ConfigScope)}
           size='small'
-          defaultActiveKey={globalGroups.map((g) => g.key)}
-          items={globalGroups.map((group) => ({
-            key: group.key,
-            label: group.label,
-            children: <div>{group.fields.map(renderField)}</div>,
-          }))}
+          items={[
+            { key: 'global', label: '全局配置' },
+            { key: 'local', label: '本机配置' },
+          ]}
+          style={{ marginBottom: 12 }}
         />
-      ) : (
-        <div>
-          {LOCAL_FIELDS.map(renderField)}
-          <WebPasswordSection />
+        {embeddingAlert && (
+          <Alert
+            type={embeddingAlert.type}
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={embeddingAlert.message}
+          />
+        )}
+        {isLoading ? (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <Spin />
+          </div>
+        ) : scope === 'global' ? (
+          <Collapse
+            size='small'
+            defaultActiveKey={globalGroups.map((g) => g.key)}
+            items={globalGroups.map((group) => ({
+              key: group.key,
+              label: group.label,
+              children: <div>{group.fields.map(renderField)}</div>,
+            }))}
+          />
+        ) : (
+          <div>
+            {LOCAL_FIELDS.map(renderField)}
+            <WebPasswordSection />
+          </div>
+        )}
+      </Modal>
+      <Modal
+        title='配置自定义模型'
+        open={open && customModelDraft !== null}
+        onCancel={cancelCustomModel}
+        onOk={confirmCustomModel}
+        okText='应用参数'
+        cancelText='取消'
+        width={520}
+        okButtonProps={{
+          disabled: !customModelDraft?.dimension || customModelDraft.dimension <= 0,
+        }}>
+        <div style={{ marginBottom: 12 }}>
+          未识别模型 <code>{customModelDraft?.modelId}</code>
+          。请确认向量维度与查询/文档前缀；保存后仍需运行 <code>ltc rag rebuild</code>。
         </div>
-      )}
-    </Modal>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 4 }}>向量维度</div>
+          <InputNumber
+            min={1}
+            precision={0}
+            value={customModelDraft?.dimension ?? undefined}
+            onChange={(v) =>
+              setCustomModelDraft((prev) =>
+                prev ? { ...prev, dimension: typeof v === 'number' ? v : null } : prev,
+              )
+            }
+            style={{ width: '100%' }}
+            placeholder='例如 384 / 512 / 768'
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 4 }}>查询前缀</div>
+          <Input
+            value={customModelDraft?.queryPrefix ?? ''}
+            onChange={(e) =>
+              setCustomModelDraft((prev) =>
+                prev ? { ...prev, queryPrefix: e.target.value } : prev,
+              )
+            }
+            placeholder='例如 E5 使用 query: '
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 4 }}>文档前缀</div>
+          <Input
+            value={customModelDraft?.documentPrefix ?? ''}
+            onChange={(e) =>
+              setCustomModelDraft((prev) =>
+                prev ? { ...prev, documentPrefix: e.target.value } : prev,
+              )
+            }
+            placeholder='例如 E5 使用 passage: '
+          />
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          精度和池化沿用当前配置；不确定时可先保持默认 q8 / mean。
+        </div>
+      </Modal>
+    </>
   );
 });

@@ -8,7 +8,7 @@ Lookup-style dictionary routing. Route to the matching sub-document by command c
 
 | Command | Confirmation |
 |---|---|
-| `ltc init` | Scan directories + whether to download the embedding model |
+| `ltc init` | Scan directories + select/download the embedding model |
 | `ltc init scan` | Scan directories (or `--auto` to skip interaction) |
 | `ltc uninject` | Clear injections (delete directories/files, remove marker blocks) |
 | `ltc unlink` | Unregister the project |

@@ -6,13 +6,19 @@
 
 Initialize Lattice (`~/.lattice/`).
 
-- `-f, --force`: skip confirmation
+- `-f, --force`: skip confirmations, model selection and interactive input (username falls back to the current config or system user; model falls back to the current config or default model; model downloads are auto-confirmed unless `--no-download-model` is set)
 - `--username <name>`: specify the username
 - `--git [boolean]`: enable Git management (on by default)
 - `--git-remote <url>`: Git remote
 - `--scan-dirs <dirs>`: scan directories (comma-separated)
 - `--registry-template <urls>`: pull template repos
 - `--lang <lang>`: language of injected docs (`auto` | `zh` | `en`; defaults to `language` from `config-local.json`, then the system locale)
+- `--model <id>`: RAG embedding model (default `Xenova/bge-small-zh-v1.5`; built-in presets include MiniLM / multilingual E5 / BGE Base)
+- `--dimension <n>`: vector dimension for a custom model (required when switching to a custom model; use with `--model`)
+- `--query-prefix <text>`: query prefix for a custom model (defaults to empty; old prefixes are cleared)
+- `--document-prefix <text>`: document prefix for a custom model (defaults to empty; old prefixes are cleared)
+- `--download-model`: download and warm up the embedding model immediately after initialization
+- `--no-download-model`: skip the embedding model download even with `-f`
 
 ### `ltc init scan`
 
@@ -49,6 +55,8 @@ View and modify global config.
 | `set <key> <value> --json` | force the entire value to be parsed as JSON; a parse failure is an error (a plain string like `alice` always errors) |
 
 Scalar JSON (`123` / `true` / `null`) requires `--json` to be written by type; objects / arrays don't need it.
+
+`set rag.embedding.modelId` automatically applies the built-in preset's `dimension` / `dtype` / `pooling` / `queryPrefix` / `documentPrefix`; `unset rag.embedding.modelId` clears those fields and falls back to the default model. After saving, it reports whether the model is installed and reminds you to run `ltc rag rebuild` (which downloads the model when needed). For a non-preset model, set `rag.embedding.dimension` explicitly; old query/document prefixes are cleared automatically. `show` displays resolved embedding defaults; `--diff-defaults` shows only explicit differences.
 
 ## `ltc doctor`
 

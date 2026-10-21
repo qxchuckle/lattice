@@ -1,433 +1,447 @@
-# 快速开始
+# Quick Start
 
-Lattice 是本地优先的研发记忆与工作流层。它把规范、任务、决策、项目关系与经验沉淀在 `~/.lattice`，通过 CLI、编辑器扩展和 Web 工作台供人和 AI Agent 使用。
+> English | [简体中文](./quick-start.zh-CN.md)
 
-本指南将带你从零开始，逐步完成 Lattice 的安装、初始化和基本使用。
+Lattice is a local-first engineering memory and workflow layer. It captures specs, tasks, decisions, project relations and experience in `~/.lattice`, and serves them to people and AI agents through a CLI, an editor extension and a web workbench.
 
-## 前置条件
+This guide walks you through installing, initializing and using Lattice from scratch.
+
+## Prerequisites
 
 - **Node.js** >= 18
-- **Git**（Lattice 通过 git 指纹识别项目）
+- **Git** (Lattice identifies projects through git fingerprints)
 
-## 1. 安装
+## 1. Install
 
 ```bash
-# 全局安装，提供 lattice 和 ltc 两个命令
+# Global install; provides the lattice and ltc commands
 npm install -g @qcqx/lattice-cli
 ```
 
-验证安装：
+Verify the installation:
 
 ```bash
 ltc --version
 ```
 
-> `lattice` 和 `ltc` 是同一个命令的两个别名，本指南统一使用 `ltc`。
+> `lattice` and `ltc` are two aliases of the same command. This guide uses `ltc` throughout.
 
-## 2. 初始化 Lattice
+## 2. Initialize Lattice
 
 ```bash
 ltc init
 ```
 
-初始化会完成以下工作：
+Initialization does the following:
 
-- 创建 `~/.lattice/` 目录结构（详见 [目录结构与配置详解](directory-and-config.md)）
-- 设置当前用户（默认使用系统用户名）
-- 可选：扫描本地 git 项目并自动注册
-- 可选：向 AI 客户端（Cursor / Claude Code / Qoder / Trae 等）注入 Lattice 工作流
+- Creates the `~/.lattice/` directory structure (see [Directory & configuration](./directory-and-config.md))
+- Sets the current user (the system username by default)
+- Optionally scans local git projects and registers them
+- Optionally injects the Lattice workflow into AI clients (Cursor / Claude Code / Qoder / Trae and others)
 
-### 常用选项
+### Common options
 
 ```bash
-# 指定用户名
+# Set the username
 ltc init --username myname
 
-# 初始化时不启用 git 管理
+# Skip git management during initialization
 ltc init --git false
 
-# 初始化时指定扫描目录
+# Set scan directories during initialization
 ltc init --scan-dirs ~/projects,~/work
 
-# 导入自定义 spec 模板仓库
+# Import a custom spec template repository
 ltc init --registry-template https://github.com/myorg/spec-templates.git
 
-# 初始化后立即下载 embedding 模型（用于 RAG 搜索）
+# Download the embedding model immediately (for RAG search)
 ltc init --download-model
 
-# 指定注入给 AI 客户端的文档语言（auto | zh | en；auto 按系统 locale）
+# Skip the model download even in non-interactive/-f mode
+ltc init -f --no-download-model
+
+# Choose the RAG embedding model during initialization
+ltc init --model Xenova/all-MiniLM-L6-v2
+
+# Custom model: specify dimension and prefixes (E5 / private models)
+ltc init --model my-org/my-embedding --dimension 768 \
+  --query-prefix 'query: ' --document-prefix 'passage: '
+
+# Set the document language injected into AI clients (auto | zh | en; auto follows the system locale)
 ltc init --lang en
 ```
 
-### AI 客户端集成
+In an interactive terminal, `ltc init` also lets you choose the embedding model; the default is `Xenova/bge-small-zh-v1.5` (512 dimensions). Non-interactive runs skip prompts, keep the current config, or use the default when no model is configured; the username falls back to the current config or the system user. Use `--username` / `--model` to override either value. For custom models, `--dimension` is required when switching models; `--query-prefix` / `--document-prefix` default to empty and can be set explicitly.
 
-`ltc init` 会检测本地已安装的 AI 客户端，并询问是否注入 Lattice 工作流文件。注入后，AI 会按 Lattice 工作流在编码前读取项目规范、任务与相关记忆。
+### AI client integration
 
-支持的工具：
+`ltc init` detects locally installed AI clients and asks whether to inject the Lattice workflow files. Once injected, the AI reads project specs, tasks and related memory before writing code.
 
-- **Cursor**（`.cursor/`）
-- **Claude Code**（`.claude/`）
-- **Qoder**（`.qoder/`）
-- **Trae**（`.trae/`）
+Supported tools:
 
-### 文档语言
+- **Cursor** (`.cursor/`)
+- **Claude Code** (`.claude/`)
+- **Qoder** (`.qoder/`)
+- **Trae** (`.trae/`)
 
-注入的 skill / command / agent / 规则文档默认跟随系统 locale：`zh*` → 中文，其余 → 英文。可显式覆盖：
+### Document language
+
+Injected skill / command / agent / rules documents follow the system locale by default: `zh*` → Chinese, everything else → English. You can override it explicitly:
 
 ```bash
-# 本次注入英文（同时写入 config-local.json，后续 init 沿用）
+# Inject English for this run (also writes config-local.json for later init runs)
 ltc init --lang en
 
-# 或先改配置，再重新 init
+# Or change the config first, then re-run init
 ltc config set language zh --scope local
 ltc init
 ```
 
-`language` 支持 `auto` / `zh` / `en`。切换语言后需重新运行 `ltc init` 才会替换已注入文档；`ltc doctor` 会提示注入语言与当前配置不一致。
+`language` accepts `auto` / `zh` / `en`. After switching languages, re-run `ltc init` to replace the injected documents; `ltc doctor` reports a mismatch between the injected language and the current config. The built-in spec templates installed by `ltc init` follow the same setting.
 
-### 移除注入（不再使用 Lattice 时）
+### Remove injections (when you no longer use Lattice)
 
-不想再让 AI 客户端加载 Lattice 工作流时，用 `ltc uninject` 清除 `ltc init` 注入到外部客户端的文档（**不会动 `~/.lattice` 业务数据，仅同步 `.cache/init-meta.json` 注入记录**）：
+If you no longer want AI clients to load the Lattice workflow, use `ltc uninject` to remove the documents that `ltc init` injected into external clients (**it does not touch business data in `~/.lattice`; it only syncs the injection record in `.cache/init-meta.json`**):
 
 ```bash
-# 先看看会清除哪些内容（不实际删除）
+# Preview what would be removed (no deletion)
 ltc uninject --dry-run
 
-# 全量排查 → 打印将删清单 → 确认后清除
+# Full scan → print the removal list → remove after confirmation
 ltc uninject
 
-# 只清指定客户端
+# Remove only from specific clients
 ltc uninject --tool qoder,cursor
 ```
 
-清除以全量排查为准：`skills/lattice`、`commands/lattice` 等 Lattice 独占目录整体删除；共享文件（如 `CLAUDE.md`）只移除 `<!-- LATTICE:BEGIN/END -->` 标记块，保留你自己的内容；`agents/` 下只删 Lattice 注入的 `lattice-*.md`，不动你自定义的 agent。如需恢复，重新运行 `ltc init` 即可。
+Removal is based on a full scan: Lattice-owned directories such as `skills/lattice` and `commands/lattice` are removed as a whole; shared files (such as `CLAUDE.md`) only lose the `<!-- LATTICE:BEGIN/END -->` block, preserving your own content; under `agents/`, only `lattice-*.md` files injected by Lattice are removed, never your custom agents. To restore, run `ltc init` again.
 
-## 3. 注册项目
+## 3. Register projects
 
-Lattice 通过 git 指纹自动识别项目。根据项目类型选择注册方式：
+Lattice identifies projects through git fingerprints. Choose a registration method based on the project type:
 
-### 方式一：自动扫描（推荐，适用于 Git 项目）
+### Option 1: Automatic scan (recommended for Git projects)
 
 ```bash
-# 扫描指定目录下的所有 git 项目
+# Scan all git projects under the given directory
 ltc scan --dirs ~/projects
 
-# 或在初始化时直接扫描
+# Or scan directly during initialization
 ltc init scan
 ```
 
-扫描会自动发现 git 项目并注册，同时检测嵌套项目关系（如 monorepo 子包）。大多数情况下这是最省事的方式——只需指定你的项目根目录，Lattice 会自动完成识别和注册。
+The scan discovers and registers git projects automatically and detects nested project relations (such as monorepo packages). In most cases this is the easiest path: point it at your project root and Lattice handles identification and registration.
 
-### 方式二：手动注册（适用于非 Git 项目）
+### Option 2: Manual registration (for non-Git projects)
 
-对于纯本地项目（没有 `.git` 目录），需要手动注册：
+For purely local projects (without a `.git` directory), register manually:
 
 ```bash
 cd ~/my-project
 ltc link
 ```
 
-`ltc link` 会在项目根目录生成 `lattice.json`，将项目注册到 Lattice。你可以附加元信息：
+`ltc link` creates `lattice.json` in the project root and registers the project with Lattice. You can attach metadata:
 
 ```bash
-ltc link --name "我的项目" --description "项目描述" --tags "frontend,react"
+ltc link --name "My project" --description "Project description" --tags "frontend,react"
 ```
 
-### 验证注册
+### Verify registration
 
 ```bash
-# 查看当前项目是否已注册
+# Check whether the current project is registered
 ltc status
 ```
 
-## 4. 通过 Agent Command 使用 Lattice
+## 4. Use Lattice through Agent Commands
 
-完成安装、初始化和项目注册后，日常使用 Lattice 的主要方式是 **Agent Command**——在 AI 编程助手（Cursor / Claude Code / Qoder / Trae）中输入 `/lattice/...` 命令触发工作流。
+After installation, initialization and project registration, the main way to use Lattice day to day is **Agent Commands** — type `/lattice/...` commands in an AI coding assistant (Cursor / Claude Code / Qoder / Trae) to trigger the workflow.
 
-### CLI 与 Agent Command 的分工
+### Division of labor between the CLI and Agent Commands
 
-| | CLI（`ltc`） | Agent Command（`/lattice/...`） |
+| | CLI (`ltc`) | Agent Command (`/lattice/...`) |
 |---|---|---|
-| **使用者** | AI 在工作流中自动调用 / 人类手动执行 | 人类在 AI 助手中输入 |
-| **定位** | 底层执行（读写、搜索、状态更新） | 工作流入口（组织任务、获取研发记忆、沉淀经验） |
-| **频率** | AI 高频调用 | 人类按需触发 |
+| **User** | Called automatically by AI workflows / run manually by humans | Typed by humans in an AI assistant |
+| **Role** | Low-level execution (read/write, search, state updates) | Workflow entry point (organize tasks, retrieve engineering memory, distill experience) |
+| **Frequency** | High-frequency AI calls | Human-triggered as needed |
 
-> `ltc init` 时注入的 AI 客户端文件包含完整的 agent command 定义。如果未注入，参考[初始化](#2-初始化-lattice)章节重新运行 `ltc init`。
+> The AI client files injected by `ltc init` contain the full agent command definitions. If they were not injected, re-run `ltc init` as described in [Initialization](#2-initialize-lattice).
 
-### Agent Command 清单
+### Agent Command reference
 
-| 命令 | 用途 | 何时使用 |
+| Command | Purpose | When to use |
 |---|---|---|
-| `/lattice/context` | 获取项目或任务上下文 | 进入新项目 / 切换工作目录 / 开始新会话 |
-| `/lattice/keep` | 轻量工作流自检 | 连续对话中快速核对任务身份 / 工作流约束 / PRD 范围 |
-| `/lattice/task/query` | 查询项目情况 / 任务进展 / 历史完成（只读） | 想了解当前任务、历史方案、项目规范 |
-| `/lattice/task/design` | 讨论方案 / 分析设计（不改代码） | 需要分析架构、比较方案、评估可行性 |
-| `/lattice/task/start` | 开始实施任务 | 方案确定，准备动手写代码 |
-| `/lattice/task/checkpoint` | 记录任务关键进展 | 做出技术决策 / 用户给出约束 / 发现问题 |
-| `/lattice/task/archive` | 结束任务并判断是否沉淀规则 | 任务完成，准备收尾 |
-| `/lattice/task/delete` | 删除任务 | 任务创建错误 / 需要清理 |
-| `/lattice/spec/update/project` | 沉淀当前项目特有规则 | 项目级约定、架构认知 |
-| `/lattice/spec/update/user` | 沉淀跨项目可复用规则 | 跨项目通用经验、用户级偏好 |
-| `/lattice/spec/update/global` | 沉淀多用户多项目共享规则 | 全局默认规则 |
+| `/lattice/context` | Get project or task context | Entering a new project / switching working directories / starting a new session |
+| `/lattice/keep` | Lightweight workflow self-check | Quickly verify task identity / workflow constraints / PRD scope during a long conversation |
+| `/lattice/task/query` | Query project status / task progress / history (read-only) | You want to understand the current task, prior solutions or project specs |
+| `/lattice/task/design` | Discuss options / analyze design (no code changes) | You need to analyze architecture, compare options or assess feasibility |
+| `/lattice/task/start` | Start implementation | The plan is settled and you are ready to write code |
+| `/lattice/task/checkpoint` | Record key task progress | A technical decision is made / the user adds a constraint / a problem is found |
+| `/lattice/task/archive` | Finish a task and decide whether to distill rules | The task is complete and you are wrapping up |
+| `/lattice/task/delete` | Delete a task | The task was created by mistake / needs cleanup |
+| `/lattice/spec/update/project` | Distill project-specific rules | Project-level conventions, architecture knowledge |
+| `/lattice/spec/update/user` | Distill cross-project reusable rules | Cross-project experience, user-level preferences |
+| `/lattice/spec/update/global` | Distill multi-user, multi-project shared rules | Global defaults |
 
-### 典型使用流程
+### Typical flow
 
 ```
-新会话开始
+New session starts
   │
-  ├─ 需要查信息？
-  │    └─ /lattice/task/query  ← 只读查询，不改任何文件
+  ├─ Need information?
+  │    └─ /lattice/task/query  ← read-only, changes nothing
   │
-  ├─ 需要讨论方案？
-  │    └─ /lattice/task/design ← 只读分析，讨论写入 design.md
+  ├─ Need to discuss a plan?
+  │    └─ /lattice/task/design ← read-only analysis; discussion goes to design.md
   │
-  ├─ 准备实施？
-  │    └─ /lattice/task/start  ← 创建/启动任务，进入实施模式
+  ├─ Ready to implement?
+  │    └─ /lattice/task/start  ← create/start the task and enter implementation mode
   │         │
-  │         ├─ （AI 自动调用 ltc CLI 执行工作流，包括自动打 checkpoint）
+  │         ├─ (AI calls the ltc CLI automatically, including checkpoints)
   │         │
-  │         └─ /lattice/task/checkpoint  ← 也可主动触发，记录关键进展
+  │         └─ /lattice/task/checkpoint  ← can also be triggered manually to record progress
   │
-  ├─ 觉得 AI 脱离了 Lattice 工作流？
-  │    └─ /lattice/keep         ← 轻量自检，纠正回工作流轨道
+  ├─ AI drifting away from the Lattice workflow?
+  │    └─ /lattice/keep         ← lightweight self-check to get back on track
   │
-  ├─ 任务完成？
-  │    └─ /lattice/task/archive ← 归档 + AI 自动判断是否沉淀 spec
+  ├─ Task complete?
+  │    └─ /lattice/task/archive ← archive + AI decides whether to distill a spec
   │
-  └─ 形成了可复用经验？
-       └─ /lattice/spec/update/{project|user|global}  ← 沉淀为 spec（按层级选择）
+  └─ Reusable experience?
+       └─ /lattice/spec/update/{project|user|global}  ← distill into a spec at the right level
 ```
 
-> Agent Command 的详细工作流由 Lattice skill 文档驱动，AI 接收命令后会自动加载对应的 skill 并按流程执行。人类只需知道**何时用哪个命令**。
+> The detailed Agent Command workflows are driven by the Lattice skill documents. After receiving a command, the AI loads the corresponding skill and follows its process. Humans only need to know **which command to use and when**.
 
-## 5. CLI 命令参考
+## 5. CLI reference
 
-> 以下 CLI 命令主要由 AI 在 Agent Command 工作流中自动调用。人类手动操作时也可直接使用，但日常使用推荐通过 [Agent Command](#4-通过-agent-command-使用-lattice) 触发。
+> These CLI commands are mainly called by AI as part of Agent Command workflows. You can also run them manually, but day-to-day use is better triggered through [Agent Commands](#4-use-lattice-through-agent-commands).
 
-### 获取项目上下文
+### Get project context
 
 ```bash
 ltc context
 ```
 
-这是 Lattice 的上下文聚合命令。它聚合当前项目的规范、任务与相关记忆：
+This is Lattice's context aggregation command. It combines the current project's specs, tasks and related memory:
 
-- **Spec 列表**：项目级 / 用户级 / 全局级规范
-- **活跃任务**：当前进行中的任务
-- **关联项目**：与其他项目的关系
+- **Spec list**: project-level / user-level / global specs
+- **Active tasks**: tasks currently in progress
+- **Related projects**: relations with other projects
 
 ```bash
-# 查看指定项目的上下文
+# Show context for a specific project
 ltc context --project <project-id>
 
-# 结合任务查看上下文
+# Show context for a task
 ltc context --task <task-id>
 ```
 
-### 管理 Spec
+### Manage specs
 
-Spec 是 Lattice 中的可复用知识单元，记录项目规范、架构认知、开发经验等。
+A spec is Lattice's reusable knowledge unit. It records project conventions, architecture knowledge, development experience and more.
 
-#### 三级分层
+#### Three-level hierarchy
 
-| 层级 | 路径 | 适用范围 |
+| Level | Path | Scope |
 |---|---|---|
-| **项目级** | `~/.lattice/users/<user>/projects/<id>/spec/` | 仅当前项目 |
-| **用户级** | `~/.lattice/users/<user>/spec/` | 跨项目复用 |
-| **全局级** | `~/.lattice/spec/` | 多用户多项目通用 |
+| **Project** | `~/.lattice/users/<user>/projects/<id>/spec/` | Current project only |
+| **User** | `~/.lattice/users/<user>/spec/` | Reusable across projects |
+| **Global** | `~/.lattice/spec/` | Shared across users and projects |
 
-优先级：项目级 > 用户级 > 全局级。同名冲突时高优先级覆盖低优先级。
+Priority: project > user > global. On a name conflict, the higher priority overrides the lower one.
 
-#### 基本操作
+#### Basic operations
 
 ```bash
-# 列出所有 spec
+# List all specs
 ltc spec list
 
-# 查看某个 spec 的详情（支持模糊匹配）
+# Show a spec (supports fuzzy matching)
 ltc spec show frontend-conventions
 
-# 检测多层级 spec 冲突
+# Detect conflicts across levels
 ltc spec conflicts
 
-# 创建新的 spec 文件
+# Create a new spec file
 ltc spec init coding-style.md
 ```
 
-#### 使用 Spec 模板
+#### Use spec templates
 
 ```bash
-# 查看可用模板
+# List available templates
 ltc spec template list
 
-# 应用模板
+# Apply a template
 ltc spec template apply frontend
 
-# 拉取远程模板仓库
+# Pull a remote template repository
 ltc spec template pull https://github.com/myorg/spec-templates.git
 ```
 
-> Spec 模板仓库的组织方式详见 [Spec 模板仓库结构说明](spec-template-registry.md)。
+> See [Spec template repository layout](./spec-template-registry.md) for how to organize template repositories.
 
-### 任务管理
+### Task management
 
-Lattice 提供完整的任务生命周期管理，支持跨项目追踪。
+Lattice provides full task lifecycle management with cross-project tracking.
 
-#### 创建任务
+#### Create a task
 
 ```bash
-# 创建任务并关联当前项目
-ltc task create "实现用户登录功能" --current
+# Create a task associated with the current project
+ltc task create "Implement user login" --current
 
-# 创建子任务
-ltc task create "登录表单校验" --current --parent <parent-task-id>
+# Create a subtask
+ltc task create "Login form validation" --current --parent <parent-task-id>
 ```
 
-#### 启动任务
+#### Start a task
 
 ```bash
 ltc task start <task-id>
 ```
 
-#### 记录进展（Checkpoint）
+#### Record progress (checkpoints)
 
-任务进行中，用 checkpoint 记录关键决策、纠错、约束等信息：
+While a task is in progress, use checkpoints to record key decisions, corrections, constraints and other information:
 
 ```bash
-# 记录一个决策
-ltc task checkpoint <task-id> --type decision --title "选用 JWT 方案" -m "对比 Session 后选择 JWT，理由是无状态、易扩展"
+# Record a decision
+ltc task checkpoint <task-id> --type decision --title "Use JWT" -m "Chose JWT over sessions because it is stateless and easy to scale"
 
-# 记录用户约束
-ltc task checkpoint <task-id> --type constraint --title "不许使用 localStorage" -m "安全要求，token 只能放 httpOnly cookie"
+# Record a user constraint
+ltc task checkpoint <task-id> --type constraint --title "Do not use localStorage" -m "Security requirement: tokens may only be stored in httpOnly cookies"
 
-# 记录纠错
-ltc task checkpoint <task-id> --type correction --title "修复了 token 过期未刷新" -m "漏写了 refresh 逻辑，已补上"
+# Record a correction
+ltc task checkpoint <task-id> --type correction --title "Fixed missing token refresh" -m "The refresh logic was missing; added it"
 ```
 
-Checkpoint 类型：
+Checkpoint types:
 
-| 类型 | 用途 |
+| Type | Purpose |
 |---|---|
-| `context` | 用户提供的背景、需求、领域知识 |
-| `correction` | 纠错记录 |
-| `constraint` | 硬约束 / 红线 |
-| `decision` | 技术决策、方案选型 |
-| `pivot` | 方向性转折 |
-| `milestone` | 阶段性成果 |
-| `issue` | 外因踩坑 |
-| `note` | 客观事实记录 |
-| `assumption` | 隐含推断 |
-| `followup` | 待办事项 |
-| `summary` | 任务总结 |
+| `context` | Background, requirements or domain knowledge provided by the user |
+| `correction` | Correction record |
+| `constraint` | Hard constraint / red line |
+| `decision` | Technical decision or option selection |
+| `pivot` | Direction change |
+| `milestone` | Stage result |
+| `issue` | External problem or pitfall |
+| `note` | Objective fact |
+| `assumption` | Implicit assumption |
+| `followup` | Follow-up item |
+| `summary` | Task summary |
 
-#### 查看进展
+#### View progress
 
 ```bash
-# 查看最近进展
+# Show recent progress
 ltc task progress <task-id>
 
-# 查看最近 5 条
+# Show the last five entries
 ltc task progress <task-id> --last 5
 
-# 按类型筛选
+# Filter by type
 ltc task progress <task-id> --type correction
 ```
 
-#### 完成与归档
+#### Complete and archive
 
 ```bash
-# 标记任务完成
+# Mark a task complete
 ltc task complete <task-id>
 
-# 归档任务
+# Archive a task
 ltc task archive <task-id>
 ```
 
-#### 其他常用操作
+#### Other common operations
 
 ```bash
-# 列出当前进行中的任务
+# List active tasks in the current project
 ltc task list --current
 
-# 查看任务详情
+# Show task details
 ltc task info <task-id>
 
-# 查看任务树（含子任务）
+# Show the task tree (including subtasks)
 ltc task tree <task-id>
 
-# 为任务关联项目或路径
+# Associate a task with a project or path
 ltc task associate <task-id> --current
 ltc task associate <task-id> --paths ~/my-project/src
 
-# 为任务添加 spec 引用
+# Add a spec reference to a task
 ltc task ref-spec <task-id> frontend-conventions
 ```
 
-### 搜索
+### Search
 
-Lattice 内置本地 RAG 搜索（embedding 向量 + 全文索引），可以搜索 spec、任务、项目、checkpoint 和关联关系。
+Lattice includes local RAG search (embedding vectors + full-text index) across specs, tasks, projects, checkpoints and relations.
 
 ```bash
-# 基本搜索
-ltc search "认证方案"
+# Basic search
+ltc search "authentication design"
 
-# 限制搜索类型
-ltc search "登录" --type task
-ltc search "组件规范" --type spec
+# Restrict the result type
+ltc search "login" --type task
+ltc search "component conventions" --type spec
 
-# 限制在指定项目范围内
-ltc search "API 设计" --project <project-id>
+# Restrict to a project
+ltc search "API design" --project <project-id>
 
-# JSON 格式输出（便于程序处理）
-ltc search "认证" --json
+# JSON output (for programmatic use)
+ltc search "authentication" --json
 ```
 
-搜索范围默认包含所有用户的数据。如果只需要当前用户的数据：
+Search covers all users by default. To search only the current user's data:
 
 ```bash
-ltc search "认证" --users myname
+ltc search "authentication" --users myname
 ```
 
-### Web 可视化
+### Web UI
 
 ```bash
-# 安装 web 包
+# Install the web package
 npm install -g @qcqx/lattice-web
 
-# 启动可视化服务（默认端口 3000）
+# Start the web UI (default port 14527)
 ltc web
 
-# 指定端口
+# Use a custom port
 ltc web --port 8080
 
-# 不自动打开浏览器
+# Do not open a browser automatically
 ltc web --no-open
 ```
 
-Web 界面提供：
+The web UI provides:
 
-- 项目关系图（力导向图）
-- 任务 / Spec / 项目浏览
-- 跨项目关联可视化
+- Project relation graph (force-directed layout)
+- Task / spec / project browsing
+- Cross-project relation visualization
 
-### 健康检查
+### Health check
 
 ```bash
-# 检查 Lattice 配置健康状况
+# Check Lattice configuration health
 ltc doctor
 
-# 自动修复检测到的问题
+# Automatically fix detected issues
 ltc doctor --fix
 ```
 
-## 下一步
+## Next steps
 
-- **技术架构详解**：[architecture.md](architecture.md)
-- **目录结构与配置**：[目录结构与配置详解](directory-and-config.md)
-- **Agent Command 详解**：[`packages/core/public/templates/skills/zh/agent-commands.md`](../packages/core/public/templates/skills/zh/agent-commands.md)
-- **AI 工作流详解**：[`packages/core/public/templates/skills/zh/SKILL.md`](../packages/core/public/templates/skills/zh/SKILL.md)
-- **系统级规则**：[`packages/core/public/templates/platforms/zh/lattice-rules.md`](../packages/core/public/templates/platforms/zh/lattice-rules.md)
-- **CLI 命令速查**：[`packages/core/public/templates/skills/zh/command-reference.md`](../packages/core/public/templates/skills/zh/command-reference.md)
-- **Spec 模板仓库**：[Spec 模板仓库结构说明](spec-template-registry.md)
-- **任务工作流**：[`packages/core/public/templates/skills/zh/task-workflows.md`](../packages/core/public/templates/skills/zh/task-workflows.md)
-- **Spec 工作流**：[`packages/core/public/templates/skills/zh/spec-workflows.md`](../packages/core/public/templates/skills/zh/spec-workflows.md)
+- **Architecture**: [architecture.md](./architecture.md)
+- **Directory & configuration**: [Directory & configuration](./directory-and-config.md)
+- **Agent Commands**: [`packages/core/public/templates/skills/en/agent-commands.md`](../packages/core/public/templates/skills/en/agent-commands.md)
+- **AI workflow**: [`packages/core/public/templates/skills/en/SKILL.md`](../packages/core/public/templates/skills/en/SKILL.md)
+- **Always-on rules**: [`packages/core/public/templates/platforms/en/lattice-rules.md`](../packages/core/public/templates/platforms/en/lattice-rules.md)
+- **CLI reference**: [`packages/core/public/templates/skills/en/command-reference.md`](../packages/core/public/templates/skills/en/command-reference.md)
+- **Spec template registry**: [Spec template repository layout](./spec-template-registry.md)
+- **Task workflows**: [`packages/core/public/templates/skills/en/task-workflows.md`](../packages/core/public/templates/skills/en/task-workflows.md)
+- **Spec workflows**: [`packages/core/public/templates/skills/en/spec-workflows.md`](../packages/core/public/templates/skills/en/spec-workflows.md)

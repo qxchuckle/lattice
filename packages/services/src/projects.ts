@@ -1,6 +1,10 @@
 /** 项目域：列表 / 详情 / 路径匹配 / 更新。 */
-import { resolve as resolvePath } from 'node:path';
+import { join as joinPath, resolve as resolvePath } from 'node:path';
 import {
+  autoRegisterProject,
+  collectFingerprint,
+  computeProjectIds,
+  generateProjectId,
   getProjectGitStatus as coreGetProjectGitStatus,
   getProjectMetaPath as coreGetProjectMetaPath,
   getVirtualProjectMeta,
@@ -9,12 +13,23 @@ import {
   listRelations as coreListRelations,
   listTasks as coreListTasks,
   listVirtualProjectMetas,
+  normalizeLegacyId,
   normalizeLocalPath,
+  readJSON,
   resolveProjectById,
+  scanForProjects,
+  selectPrimaryId,
   updateProjectMeta,
   findProjectDirName,
+  writeJSON,
 } from '@qcqx/lattice-core';
-import type { GitStatus, ProjectMeta } from '@qcqx/lattice-core';
+import type {
+  FingerprintDerived,
+  GitStatus,
+  ProjectMeta,
+  ScanProgress,
+  ScanResult,
+} from '@qcqx/lattice-core';
 import { canonicalKey, idMatches, projectIdSet, type SpecWithScope } from './shared';
 import { listSpecs } from './specs';
 
@@ -183,4 +198,97 @@ export async function getProjectMetaPath(username: string, id: string): Promise<
   const dirName = await resolveProjectDirName(username, id);
   if (!dirName) return null;
   return coreGetProjectMetaPath(username, dirName);
+}
+
+// ── 扫描 / 单项目注册（VSCode 项目控制台复用） ──
+
+/** 递归扫描目录并注册项目；signal 用于配置面板的取消操作。 */
+export async function scanProjects(
+  username: string,
+  dirs: string[],
+  onProgress?: (progress: ScanProgress) => void,
+  signal?: AbortSignal,
+): Promise<ScanResult> {
+  return scanForProjects(username, dirs, onProgress, signal);
+}
+
+export interface RegisterProjectOptions {
+  /** 注册 Git 根还是当前指定目录（默认 Git 根由宿主解析后传入）。 */
+  createAnchor?: boolean;
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface RegisterProjectResult {
+  projectId: string;
+  projectName: string;
+  created: boolean;
+  anchorPath?: string;
+  ids: string[];
+}
+
+async function readLegacyIdFromAnchor(dir: string): Promise<string | null> {
+  const data = await readJSON<{ id?: string }>(joinPath(dir, 'lattice.json'));
+  if (!data?.id || typeof data.id !== 'string') return null;
+  return normalizeLegacyId(data.id);
+}
+
+/**
+ * 注册单个目录（不递归）。
+ *
+ * - Git 项目：使用 git / remote 指纹；createAnchor=false 时不写任何文件；
+ * - 非 Git 目录：必须 createAnchor=true，写入 lattice.json 获得稳定 legacy ID；
+ * - 已注册项目：幂等更新 localPaths，不重复创建。
+ */
+export async function registerProjectAtPath(
+  username: string,
+  dir: string,
+  options: RegisterProjectOptions = {},
+): Promise<RegisterProjectResult> {
+  const projectPath = resolvePath(dir);
+  const { derived } = await collectFingerprint(projectPath);
+  // 新 `git init` 的仓库可能既没有 commit 也没有 remote，无法生成 Git 指纹；
+  // 这种目录仍可通过 lattice.json 锚点注册。
+  const hasGitFingerprint = Boolean(derived.gitFirstCommit) || derived.gitRemotes.length > 0;
+  let legacyId = await readLegacyIdFromAnchor(projectPath);
+  let anchorPath: string | undefined;
+
+  if (!hasGitFingerprint && !legacyId && !options.createAnchor) {
+    throw new Error(
+      '该目录没有可用于注册的 Git 指纹（尚无 commit/remote），请创建 lattice.json 后注册',
+    );
+  }
+
+  if (options.createAnchor && !legacyId) {
+    const rawId = generateProjectId(projectPath);
+    await writeJSON(joinPath(projectPath, 'lattice.json'), { id: rawId });
+    legacyId = normalizeLegacyId(rawId);
+    anchorPath = joinPath(projectPath, 'lattice.json');
+  }
+
+  const ids = computeProjectIds(derived as FingerprintDerived, legacyId);
+  if (ids.length === 0) {
+    throw new Error('无法识别项目：目录不是 Git 仓库且没有可用的 lattice.json');
+  }
+
+  const { meta, isNew } = await autoRegisterProject(username, ids, projectPath, derived, false);
+  if (!meta) throw new Error('项目注册失败');
+
+  const projectId = selectPrimaryId(meta.ids) ?? meta.id ?? ids[0];
+  if (options.name || options.description !== undefined || options.tags) {
+    await updateProjectMeta(username, projectId, {
+      ...(options.name ? { name: options.name } : {}),
+      ...(options.description !== undefined ? { description: options.description } : {}),
+      ...(options.tags ? { tags: options.tags } : {}),
+    });
+  }
+
+  return {
+    projectId,
+    projectName: options.name ?? meta.name ?? projectId,
+    created: isNew,
+    ...(anchorPath ? { anchorPath } : {}),
+    ids: meta.ids,
+  };
 }

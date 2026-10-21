@@ -176,4 +176,19 @@ test('isModelInstalled/removeInstalledModel：缓存与本地模型目录探测'
   assert.equal(await isModelInstalled(), true);
   assert.equal(await removeInstalledModel(), true);
   assert.equal(await isModelInstalled(), false);
+
+  // 同一 owner 下的其他模型目录不应被误判为当前模型已安装
+  await writeEmbeddingConfig({
+    modelId: 'Xenova/all-MiniLM-L6-v2',
+    cacheDir,
+    localModelPath: '',
+    dimension: 384,
+  });
+  await mkdir(join(cacheDir, 'Xenova', 'bge-small-zh-v1.5'), { recursive: true });
+  await putFile(join(cacheDir, 'Xenova', 'bge-small-zh-v1.5', 'config.json'), '{}');
+  assert.equal(await isModelInstalled(), false);
+
+  // 显式 modelId 可检查尚未写入配置的候选模型，供切换前提示使用
+  assert.equal(await isModelInstalled('Xenova/bge-small-zh-v1.5'), true);
+  assert.equal(await isModelInstalled('Xenova/all-MiniLM-L6-v2'), false);
 });

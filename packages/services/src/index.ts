@@ -10,6 +10,16 @@
  */
 export { currentUsername, listUsers } from './users';
 export {
+  applyConfigPatch,
+  isSafeConfigKey,
+  readConfig,
+  readConfigDefaults,
+  readEffectiveConfigValue,
+  type ConfigApplyResult,
+  type ConfigPatch,
+  type ConfigScope,
+} from './config';
+export {
   findProjectsByPath,
   getProject,
   getProjectDetail,
@@ -19,11 +29,15 @@ export {
   getProjectSpecsFor,
   getProjectTasks,
   listProjects,
+  registerProjectAtPath,
   resolveProjectDirName,
   resolveProjectId,
+  scanProjects,
   updateProject,
   type ProjectDetail,
   type ProjectPathMatch,
+  type RegisterProjectOptions,
+  type RegisterProjectResult,
 } from './projects';
 export {
   createProjectGroup,

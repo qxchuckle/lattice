@@ -1,0 +1,103 @@
+{
+  "sourceLanguage": "en",
+  "languages": ["en", "zh-CN"],
+  "pairs": [
+    {
+      "source": "README.md",
+      "translations": {
+        "zh-CN": "README.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/README.md",
+      "translations": {
+        "zh-CN": "docs/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/quick-start.md",
+      "translations": {
+        "zh-CN": "docs/quick-start.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/concepts.md",
+      "translations": {
+        "zh-CN": "docs/concepts.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/web-workbench.md",
+      "translations": {
+        "zh-CN": "docs/web-workbench.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/architecture.md",
+      "translations": {
+        "zh-CN": "docs/architecture.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/directory-and-config.md",
+      "translations": {
+        "zh-CN": "docs/directory-and-config.zh-CN.md"
+      }
+    },
+    {
+      "source": "docs/spec-template-registry.md",
+      "translations": {
+        "zh-CN": "docs/spec-template-registry.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/vscode/README.md",
+      "translations": {
+        "zh-CN": "packages/vscode/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/cli/README.md",
+      "translations": {
+        "zh-CN": "packages/cli/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/core/README.md",
+      "translations": {
+        "zh-CN": "packages/core/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/protocol/README.md",
+      "translations": {
+        "zh-CN": "packages/protocol/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/services/README.md",
+      "translations": {
+        "zh-CN": "packages/services/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/web/README.md",
+      "translations": {
+        "zh-CN": "packages/web/README.zh-CN.md"
+      }
+    },
+    {
+      "source": "packages/web-ui/README.md",
+      "translations": {
+        "zh-CN": "packages/web-ui/README.zh-CN.md"
+      }
+    }
+  ],
+  "linkCheck": [
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "packages/web/docs/development.md"
+  ]
+}

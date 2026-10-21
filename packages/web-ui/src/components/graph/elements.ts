@@ -1,21 +1,28 @@
 import type cytoscape from 'cytoscape';
 import { getEntityColor, getTaskStatusColor } from '../../lib';
+import { t } from '../../i18n';
 import type { LatticeNode, LatticeEdge, LatticeNodeData } from '../../types/graph';
 
-/** 任务状态中文标签 */
-const TASK_STATUS_LABEL: Record<string, string> = {
-  in_progress: '进行中',
-  completed: '已完成',
-  archived: '已归档',
-  planning: '规划中',
-};
+/** 任务状态显示标签跟随宿主语言 */
+function taskStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    in_progress: t('进行中', 'In Progress'),
+    completed: t('已完成', 'Completed'),
+    archived: t('已归档', 'Archived'),
+    planning: t('规划中', 'Planning'),
+  };
+  return labels[status] ?? status;
+}
 
-/** spec scope 中文标签 */
-const SPEC_SCOPE_LABEL: Record<string, string> = {
-  global: '全局',
-  user: '用户级',
-  project: '项目级',
-};
+/** spec scope 显示标签跟随宿主语言 */
+function specScopeLabel(scope: string): string {
+  const labels: Record<string, string> = {
+    global: t('全局', 'Global'),
+    user: t('用户级', 'User'),
+    project: t('项目级', 'Project'),
+  };
+  return labels[scope] ?? scope;
+}
 
 /** 节点标签：单行多标签（[类型][状态] 标题），多用户模式追加用户名 */
 export function getNodeLabel(data: LatticeNodeData): string {
@@ -52,11 +59,11 @@ export function getNodeLabel(data: LatticeNodeData): string {
     switch (data.entityType) {
       case 'task': {
         const status = data.status || 'planning';
-        return `[${TASK_STATUS_LABEL[status] ?? status}]`;
+        return `[${taskStatusLabel(status)}]`;
       }
       case 'spec': {
         const scope = data.scope || '';
-        const label = SPEC_SCOPE_LABEL[scope] ?? scope;
+        const label = specScopeLabel(scope);
         return label ? `[${label}]` : '';
       }
       case 'project':

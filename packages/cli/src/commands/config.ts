@@ -12,6 +12,10 @@ import {
   readLocalConfig,
   writeGlobalConfig,
   writeLocalConfig,
+  getEmbeddingConfig,
+  isModelInstalled,
+  applyEmbeddingModelPreset,
+  clearEmbeddingModelPresetFields,
   getByPath,
   setByPath,
   deleteByPath,
@@ -20,6 +24,16 @@ import {
 import { logger, outputJson, reportFailure, reportFailureHint } from '../utils';
 
 type ConfigScope = 'global' | 'local';
+
+/** 修改这些 embedding 参数会影响索引内容或查询向量，需要重建索引 */
+const EMBEDDING_REBUILD_KEYS = new Set([
+  'rag.embedding.dimension',
+  'rag.embedding.dtype',
+  'rag.embedding.pooling',
+  'rag.embedding.queryPrefix',
+  'rag.embedding.documentPrefix',
+  'rag.embedding.minChunkSize',
+]);
 
 interface ScopeOptions {
   scope?: string;
@@ -70,7 +84,19 @@ export function registerConfigCommand(program: Command): void {
         try {
           await ensureInitialized();
           const { config } = await loadConfig(resolveScope(opts, command));
-          const value = getByPath(config, key);
+          let value = getByPath(config, key);
+
+          // embedding 的完整默认值由 core 统一管理，未显式写入 config 时也能读到实际生效值
+          if (
+            value === undefined &&
+            (key === 'rag.embedding' || key.startsWith('rag.embedding.'))
+          ) {
+            const embedding = await getEmbeddingConfig();
+            const embeddingKey = key.replace(/^rag\.embedding\.?/, '');
+            value = embeddingKey
+              ? getByPath(embedding as unknown as Record<string, unknown>, embeddingKey)
+              : embedding;
+          }
 
           if (value === undefined) {
             reportFailure(`未找到配置项：${key}`);
@@ -107,9 +133,80 @@ export function registerConfigCommand(program: Command): void {
           const scope = resolveScope(opts, command);
           const { config } = await loadConfig(scope);
           const parsedValue = opts.json ? JSON.parse(value) : smartParse(value);
-          setByPath(config, key, parsedValue);
+
+          let rebuildModelId: string | null = null;
+          let embeddingParamChanged = false;
+          if (key === 'rag.embedding.modelId') {
+            if (typeof parsedValue !== 'string' || !parsedValue.trim()) {
+              throw new Error('模型 ID 不能为空');
+            }
+            const modelId = parsedValue.trim();
+            const storedModelId = getByPath(config, key);
+            const previousModelId =
+              typeof storedModelId === 'string' && storedModelId.trim()
+                ? storedModelId.trim()
+                : (await getEmbeddingConfig()).modelId;
+            const result = applyEmbeddingModelPreset(config, modelId, {
+              scope,
+              previousModelId,
+            });
+
+            if (result.preset) {
+              if (result.modelChanged) {
+                logger.raw(
+                  chalk.dim(
+                    `已同步模型预设：${result.preset.dimension} 维 / ${result.preset.dtype} / ${result.preset.pooling}`,
+                  ),
+                );
+              } else if (result.appliedFields.length > 0) {
+                logger.raw(
+                  chalk.dim(`模型未变化，已补齐缺失参数：${result.appliedFields.join(' / ')}`),
+                );
+              } else {
+                logger.raw(chalk.dim('模型未变化，保留现有 dimension / dtype / 前缀设置'));
+              }
+
+              if (result.appliedFields.length > 0) {
+                rebuildModelId = modelId;
+              }
+            } else if (result.modelChanged) {
+              logger.raw(
+                chalk.yellow(
+                  '未识别的模型：已更新 modelId 并清空旧模型前后缀；请先设置 rag.embedding.dimension，再运行 ltc rag rebuild',
+                ),
+              );
+              rebuildModelId = modelId;
+            }
+          } else {
+            const before = getByPath(config, key);
+            setByPath(config, key, parsedValue);
+            if (
+              EMBEDDING_REBUILD_KEYS.has(key) &&
+              JSON.stringify(before) !== JSON.stringify(parsedValue)
+            ) {
+              embeddingParamChanged = true;
+            }
+          }
+
           await saveConfig(scope, config);
           logger.raw(chalk.green(`✓ 已更新 ${scope} 配置 ${key}`));
+          if (rebuildModelId) {
+            try {
+              const effective = await getEmbeddingConfig();
+              if (effective.modelId !== rebuildModelId) {
+                logger.raw(
+                  chalk.yellow(
+                    `本机配置中的 rag.embedding.modelId 覆盖了本次设置（当前生效：${effective.modelId}）`,
+                  ),
+                );
+              }
+              await reportModelRebuildHint(effective.modelId);
+            } catch {
+              await reportModelRebuildHint(rebuildModelId);
+            }
+          } else if (embeddingParamChanged) {
+            logger.raw(chalk.yellow('embedding 参数已变更；请运行 ltc rag rebuild 重建索引'));
+          }
         } catch (err) {
           logger.stderr(chalk.red('错误：'), (err as Error).message);
           process.exitCode = 1;
@@ -134,13 +231,46 @@ export function registerConfigCommand(program: Command): void {
           return;
         }
 
+        if (key === 'rag.embedding.modelId') {
+          const removedRelated = clearEmbeddingModelPresetFields(config);
+          const fallbackLabel = scope === 'global' ? '默认' : '全局/默认';
+          logger.raw(
+            chalk.yellow(
+              `模型已移除，回落到${fallbackLabel}模型参数${removedRelated.length > 0 ? `（同步清理 ${removedRelated.length} 项）` : ''}`,
+            ),
+          );
+        }
+
         await saveConfig(scope, config);
         logger.raw(chalk.green(`✓ 已移除 ${scope} 配置 ${key}`));
+        if (key === 'rag.embedding.modelId') {
+          try {
+            const effective = await getEmbeddingConfig();
+            await reportModelRebuildHint(effective.modelId);
+          } catch {
+            logger.raw(chalk.yellow('请运行 ltc rag rebuild 重建索引'));
+          }
+        }
       } catch (err) {
         logger.stderr(chalk.red('错误：'), (err as Error).message);
         process.exitCode = 1;
       }
     });
+}
+
+async function reportModelRebuildHint(modelId: string): Promise<void> {
+  try {
+    const installed = await isModelInstalled(modelId);
+    logger.raw(
+      chalk.yellow(
+        installed
+          ? `模型 ${modelId} 已安装；请运行 ltc rag rebuild 重建索引`
+          : `模型 ${modelId} 尚未安装；请运行 ltc rag rebuild 下载模型并重建索引`,
+      ),
+    );
+  } catch {
+    logger.raw(chalk.yellow('请运行 ltc rag rebuild 重建索引（无法读取模型安装状态）'));
+  }
 }
 
 function addScopeOption(command: Command): Command {
@@ -223,7 +353,26 @@ async function showConfig(
   try {
     await ensureInitialized();
     const { path, config } = await loadConfig(scope);
-    const output = diffDefaults ? diffConfig(config, getDefaultConfig(scope)) : config;
+    let effectiveConfig = config;
+
+    // 默认值由 core 统一解析；普通 show 展示实际生效值，diff-defaults 仍只展示显式差异
+    if (scope === 'global' && !diffDefaults) {
+      const embedding = await getEmbeddingConfig();
+      const rag = (config.rag ?? {}) as Record<string, unknown>;
+      const configuredEmbedding = (rag.embedding ?? {}) as Record<string, unknown>;
+      effectiveConfig = {
+        ...config,
+        rag: {
+          ...rag,
+          embedding: {
+            ...embedding,
+            ...configuredEmbedding,
+          },
+        },
+      };
+    }
+
+    const output = diffDefaults ? diffConfig(config, getDefaultConfig(scope)) : effectiveConfig;
 
     if (asJson) {
       outputJson(output, jsonFormat);

@@ -1,0 +1,185 @@
+---
+// Standalone GitHub Pages 404: no Starlight chrome, no client JS, self-contained tokens.
+const base = import.meta.env.BASE_URL;
+const home = base;
+const docs = `${base}docs/`;
+const demo = `${base}demo/`;
+const github = 'https://github.com/qxchuckle/lattice';
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 · Page not found | Lattice</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href={`${base}favicon.svg`} />
+    <link rel="canonical" href={`https://qxchuckle.github.io${base}`} />
+    <style>
+      :root {
+        --ink: #070b12;
+        --panel: rgba(10, 16, 28, 0.72);
+        --line: rgba(125, 155, 200, 0.16);
+        --text: #e6edf3;
+        --muted: #8b9bb0;
+        --muted-2: #6d7f96;
+        --blue: #58a6ff;
+        --amber: #f0b429;
+        --mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+        --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --ink: #f6f8fb;
+          --panel: rgba(255, 255, 255, 0.8);
+          --line: rgba(31, 58, 95, 0.16);
+          --text: #162033;
+          --muted: #52627a;
+          --muted-2: #5b6b82;
+          --blue: #0b5fcc;
+          --amber: #a96a00;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        padding: 32px 24px;
+        background:
+          radial-gradient(760px 420px at 50% 0%, rgba(47, 129, 247, 0.12), transparent 68%), var(--ink);
+        color: var(--text);
+        font-family: var(--sans);
+        line-height: 1.6;
+        text-align: center;
+      }
+
+      main {
+        max-width: 560px;
+      }
+
+      .mark {
+        display: grid;
+        grid-template-columns: repeat(3, 7px);
+        grid-template-rows: repeat(3, 7px);
+        gap: 4px;
+        margin: 0 auto 26px;
+        width: fit-content;
+      }
+
+      .mark i {
+        border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent);
+        border-radius: 50%;
+      }
+
+      .mark i:nth-child(5) {
+        border-color: var(--amber);
+        background: var(--amber);
+      }
+
+      .code {
+        color: var(--blue);
+        font-family: var(--mono);
+        font-size: 13px;
+        letter-spacing: 0.2em;
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-size: clamp(1.9rem, 5.5vw, 2.7rem);
+        font-weight: 560;
+        letter-spacing: -0.03em;
+        line-height: 1.14;
+      }
+
+      .zh {
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      p.lede {
+        margin: 18px auto 0;
+        max-width: 44ch;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 28px;
+      }
+
+      a.button {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--panel);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 14px;
+        text-decoration: none;
+        transition:
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+
+      a.button.primary {
+        border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+        background: linear-gradient(180deg, #2670d8, #1b5fc0);
+        color: #fff;
+      }
+
+      a.button:hover,
+      a.button:focus-visible {
+        border-color: var(--blue);
+      }
+
+      a.button:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+
+      .hint {
+        margin-top: 26px;
+        color: var(--muted-2);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <p class="code">404</p>
+      <h1>This page does not exist.</h1>
+      <p class="zh">这个地址不存在，或者已经被移动。</p>
+      <p class="lede">
+        The site is static, so a stale link is usually the only cause — the docs and the workbench demo
+        are both one click away. 本站是静态站点，通常是链接过期，从下面两个入口继续即可。
+      </p>
+      <nav aria-label="Recovery links / 恢复入口">
+        <a class="button primary" href={home}>Home · 首页</a>
+        <a class="button" href={docs}>Docs · 文档</a>
+        <a class="button" href={demo}>Live demo · 在线 Demo</a>
+        <a class="button" href={github} rel="noreferrer" target="_blank">GitHub ↗</a>
+      </nav>
+      <p class="hint">Lattice — local-first engineering memory · 仓库之上，会话之外</p>
+    </main>
+  </body>
+</html>

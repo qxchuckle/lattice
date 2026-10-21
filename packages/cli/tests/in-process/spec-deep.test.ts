@@ -298,6 +298,26 @@ test('spec lint/conflicts/migrate/suggest-description：项目内/外与 JSON �
   });
 });
 
+test('spec template sync-builtins：按 config-local.language 安装英文模板', async () => {
+  await putFile(
+    join(env.latticeHome, 'config', 'config-local.json'),
+    JSON.stringify({ username: U, language: 'en' }),
+  );
+  const { resolveBundledSpecTemplateNames } = await import('../../src/utils/spec-templates');
+  const names = await resolveBundledSpecTemplateNames('all', 'en');
+  const target = names[0];
+
+  const synced = await run(['spec', 'template', 'sync-builtins', '--template', target]);
+  assert.equal(synced.exitCode, 0, synced.stderr);
+  assert.match(synced.stdout, /已同步/);
+
+  const content = await readFile(
+    join(env.latticeHome, 'templates', 'spec', target, 'index.md'),
+    'utf-8',
+  );
+  assert.doesNotMatch(content, /[\u4e00-\u9fff]/);
+});
+
 test('spec template：内置同步/列表/应用/无仓库/未注册删除/拉取失败', async () => {
   const { resolveBundledSpecTemplateNames } = await import('../../src/utils/spec-templates');
   const names = await resolveBundledSpecTemplateNames('all');

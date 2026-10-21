@@ -334,9 +334,50 @@ test('specs lint/conflicts/templates：只读面可用；未知模板 not_found'
 test('config：global/local 读写、diffDefaults、非法键拒绝', async () => {
   const globalCfg = await get('/api/config?scope=global');
   assert.equal(globalCfg.statusCode, 200);
+  const effective = globalCfg.json() as {
+    rag: { embedding: { modelId: string; dimension: number } };
+  };
+  assert.equal(effective.rag.embedding.modelId, 'Xenova/bge-small-zh-v1.5');
+  assert.equal(effective.rag.embedding.dimension, 512);
 
   const localDiff = await get('/api/config?scope=local&diffDefaults=true');
   assert.equal(localDiff.statusCode, 200);
+
+  // Web 端切换模型与 CLI 一样自动同步维度/前缀
+  const setModel = await post('/api/config/set', {
+    key: 'rag.embedding.modelId',
+    value: 'Xenova/all-MiniLM-L6-v2',
+    scope: 'global',
+  });
+  assert.equal((setModel.json() as { success: boolean }).success, true);
+  const afterModel = (await get('/api/config?scope=global')).json() as {
+    rag: { embedding: { modelId: string; dimension: number; queryPrefix: string } };
+  };
+  assert.equal(afterModel.rag.embedding.modelId, 'Xenova/all-MiniLM-L6-v2');
+  assert.equal(afterModel.rag.embedding.dimension, 384);
+  assert.equal(afterModel.rag.embedding.queryPrefix, '');
+
+  const emptyModel = await post('/api/config/set', {
+    key: 'rag.embedding.modelId',
+    value: '   ',
+    scope: 'global',
+  });
+  assert.equal((emptyModel.json() as { error: string }).error, 'bad_request');
+  const afterEmptyModel = (await get('/api/config?scope=global')).json() as {
+    rag: { embedding: { modelId: string } };
+  };
+  assert.equal(afterEmptyModel.rag.embedding.modelId, 'Xenova/all-MiniLM-L6-v2');
+
+  const unsetModel = await post('/api/config/unset', {
+    key: 'rag.embedding.modelId',
+    scope: 'global',
+  });
+  assert.equal((unsetModel.json() as { success: boolean }).success, true);
+  const afterUnset = (await get('/api/config?scope=global')).json() as {
+    rag: { embedding: { modelId: string; dimension: number } };
+  };
+  assert.equal(afterUnset.rag.embedding.modelId, 'Xenova/bge-small-zh-v1.5');
+  assert.equal(afterUnset.rag.embedding.dimension, 512);
 
   const setGlobal = await post('/api/config/set', {
     key: 'ui.theme',

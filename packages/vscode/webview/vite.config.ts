@@ -37,7 +37,10 @@ export default defineConfig({
     sourcemap: true,
     chunkSizeWarningLimit: 4096,
     rollupOptions: {
-      input: resolve(here, 'webview.html'),
+      input: {
+        main: resolve(here, 'webview.html'),
+        config: resolve(here, 'config.html'),
+      },
     },
   },
   css: {

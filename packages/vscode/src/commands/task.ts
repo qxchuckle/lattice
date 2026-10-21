@@ -211,7 +211,9 @@ async function associatePaths(services: CommandServices, ...args: unknown[]): Pr
       canSelectFiles: true,
       canSelectFolders: true,
       canSelectMany: true,
-      defaultUri: services.activeProject.currentFolder?.uri,
+      defaultUri: services.activeProject.currentProjectRoot
+        ? vscode.Uri.file(services.activeProject.currentProjectRoot)
+        : services.activeProject.currentFolder?.uri,
       openLabel: t('Associate with task'),
       title: t('Pick files/folders to add to the task scope'),
     });

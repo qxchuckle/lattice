@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { ProjectRow } from '../cli/types';
 import { t } from '../t';
 import { showEnhancedPicker } from '../pickers/enhanced';
@@ -388,27 +389,93 @@ export function registerProjectCommands(services: CommandServices, register: Reg
     }
   });
 
-  register('lattice.project.switchActive', async () => {
-    const candidates = services.activeProject.folderCandidates;
+  register('lattice.project.switchActive', async (arg) => {
+    const args = extractArgObject<{
+      folderUri?: string;
+      folderPath?: string;
+      rootPath?: string;
+      auto?: boolean;
+    }>(arg);
+    const candidates = await services.activeProject.getProjectCandidates();
     if (candidates.length === 0) {
-      void showDeduped('warn', t('No workspace folders to switch between.'));
+      void vscode.window.showWarningMessage(t('No workspace projects to switch between.'));
       return;
     }
-    interface FolderPickItem extends vscode.QuickPickItem {
-      folderUri?: string;
+
+    if (args?.auto) {
+      await services.activeProject.clearPin();
+      void vscode.window.showInformationMessage(
+        t('Active project: {0}', t('Auto (follow active editor)')),
+      );
+      return;
     }
-    const items: FolderPickItem[] = candidates.map((candidate) => ({
-      label: candidate.folder.name,
-      description: candidate.anchorRoot ?? candidate.folder.uri.fsPath,
-      folderUri: candidate.folder.uri.toString(),
-    }));
-    items.unshift({ label: t('(Auto)'), description: t('Follow the active editor') });
-    const picked = await vscode.window.showQuickPick(items, { title: t('Switch Active Project') });
+
+    if (args?.rootPath) {
+      const target = candidates.find(
+        (candidate) =>
+          (!args.folderUri || candidate.folderUri === args.folderUri) &&
+          (!args.folderPath ||
+            path.resolve(candidate.folderPath) === path.resolve(args.folderPath)) &&
+          path.resolve(candidate.rootPath) === path.resolve(args.rootPath ?? ''),
+      );
+      if (!target) {
+        void vscode.window.showWarningMessage(
+          t('The selected project is no longer in this workspace.'),
+        );
+        return;
+      }
+      await services.activeProject.pinProject(target);
+      void vscode.window.showInformationMessage(
+        t('Active project: {0}', target.projectName ?? path.basename(target.rootPath)),
+      );
+      return;
+    }
+
+    const activeKey = services.activeProject.currentCandidate?.key;
+    interface ProjectPickItem extends vscode.QuickPickItem {
+      auto?: boolean;
+      candidate?: (typeof candidates)[number];
+    }
+    const items: ProjectPickItem[] = [
+      {
+        label: `$(sync) ${t('Auto (follow active editor)')}`,
+        description: t('Clear the project pin'),
+        auto: true,
+      },
+      ...candidates.map((candidate) => ({
+        label: `${candidate.key === activeKey ? '$(check) ' : ''}${
+          candidate.projectName ?? path.basename(candidate.rootPath) ?? candidate.folderName
+        }`,
+        description: [candidate.projectId ?? t('Not registered'), candidate.rootPath]
+          .filter(Boolean)
+          .join(' · '),
+        detail: [candidate.folderName, candidate.isRoot ? t('Workspace root') : t('Nested project')]
+          .filter(Boolean)
+          .join(' · '),
+        candidate,
+      })),
+    ];
+    const picked = await vscode.window.showQuickPick(items, {
+      title: t('Switch Active Project'),
+      placeHolder: t('Choose the project for tasks, specs and project commands'),
+      matchOnDescription: true,
+      matchOnDetail: true,
+    });
     if (!picked) return;
-    const folder = picked.folderUri
-      ? vscode.workspace.workspaceFolders?.find((f) => f.uri.toString() === picked.folderUri)
-      : undefined;
-    await services.activeProject.pinFolder(folder);
-    void showDeduped('info', t('Active project: {0}', picked.label));
+    if (picked.auto) {
+      await services.activeProject.clearPin();
+      void vscode.window.showInformationMessage(
+        t('Active project: {0}', t('Auto (follow active editor)')),
+      );
+      return;
+    }
+    if (!picked.candidate) return;
+    await services.activeProject.pinProject(picked.candidate);
+    void vscode.window.showInformationMessage(
+      t(
+        'Active project: {0}',
+        picked.candidate.projectName ?? path.basename(picked.candidate.rootPath),
+      ),
+    );
   });
 }

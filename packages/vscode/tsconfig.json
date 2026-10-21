@@ -11,5 +11,5 @@
       "@qcqx/lattice-services": ["../services/src/index.ts"]
     }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "shared"]
 }

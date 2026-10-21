@@ -21,7 +21,10 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> | <b>简体中文</b>
+  <a href="./README.md">English</a> | <b>简体中文</b><br>
+  <a href="https://qxchuckle.github.io/lattice/zh-cn/">官网</a> ·
+  <a href="https://qxchuckle.github.io/lattice/demo/?lang=zh">在线 Demo</a> ·
+  <a href="https://qxchuckle.github.io/lattice/zh-cn/docs/">文档</a>
 </p>
 
 Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落在多个仓库、会话和 Agent 之间的规范、任务、决策、项目关系与经验，沉淀为结构化、可检索、可版本化的研发资产，再通过 CLI、编辑器扩展与 Web 工作台提供给人和 AI。
@@ -64,7 +67,7 @@ Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落�
 | **适合** | 自动化、脚本、AI Agent | 日常浏览与编辑 | 可视化探索 |
 | **安装** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `npm i -g @qcqx/lattice-web` |
 | **使用** | `ltc init` · `ltc scan` · `ltc context` | 活动栏 → Lattice（首次运行：**快速开始**，无需 CLI） | `ltc web` → 浏览器，或扩展内置 Webview |
-| **文档** | [packages/cli](./packages/cli/README.md) | [packages/vscode](./packages/vscode/README.md) | [packages/web](./packages/web/README.md) |
+| **文档** | [packages/cli](./packages/cli/README.zh-CN.md) | [packages/vscode](./packages/vscode/README.zh-CN.md) | [packages/web](./packages/web/README.zh-CN.md) |
 
 ## 包一览
 
@@ -108,13 +111,13 @@ ltc web               # 打开本地 Web UI
 
 ## 文档
 
-- [快速开始](./docs/quick-start.md)
-- [技术架构详解](./docs/architecture.md)
-- [目录与配置](./docs/directory-and-config.md)
-- [Spec 模板仓库结构](./docs/spec-template-registry.md)
-- [文档索引](./docs/README.md)
+- [快速开始](./docs/quick-start.zh-CN.md)
+- [技术架构详解](./docs/architecture.zh-CN.md)
+- [目录与配置](./docs/directory-and-config.zh-CN.md)
+- [Spec 模板仓库结构](./docs/spec-template-registry.zh-CN.md)
+- [文档索引](./docs/README.zh-CN.md)
 
-子包文档：[cli](./packages/cli/README.md) · [core](./packages/core/README.md) · [web](./packages/web/README.md) · [vscode](./packages/vscode/README.md)
+子包文档：[cli](./packages/cli/README.zh-CN.md) · [core](./packages/core/README.zh-CN.md) · [web](./packages/web/README.zh-CN.md) · [vscode](./packages/vscode/README.zh-CN.md)
 
 ### AI / Agent 工作流模板
 

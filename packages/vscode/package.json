@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -53,7 +53,11 @@
   "l10n": "./l10n",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:lattice.json"
+    "workspaceContains:lattice.json",
+    "onView:lattice.controlCenter",
+    "onCommand:lattice.config.open",
+    "onCommand:lattice.workspace.link",
+    "onCommand:lattice.workspace.scan"
   ],
   "scripts": {
     "build": "pnpm run build:webview && pnpm run build:extension",
@@ -119,6 +123,12 @@
         {
           "id": "lattice.search",
           "name": "%lattice.view.search.name%"
+        },
+        {
+          "id": "lattice.controlCenter",
+          "name": "%lattice.view.controlCenter.name%",
+          "icon": "$(settings-gear)",
+          "visibility": "visible"
         },
         {
           "id": "lattice.detail",
@@ -580,6 +590,15 @@
         "icon": "$(trash)"
       },
       {
+        "command": "lattice.config.open",
+        "title": "%lattice.command.config.open.title%",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "lattice.config.openSettings",
+        "title": "%lattice.command.config.openSettings.title%"
+      },
+      {
         "command": "lattice.web.open",
         "title": "%lattice.command.web.open.title%",
         "icon": "$(globe)"
@@ -1001,6 +1020,36 @@
           "when": "view == lattice.tasks || view == lattice.specs || view == lattice.projects || view == lattice.search",
           "group": "navigation@10",
           "icon": "$(globe)"
+        },
+        {
+          "command": "lattice.config.open",
+          "when": "view == lattice.tasks || view == lattice.specs || view == lattice.projects || view == lattice.search",
+          "group": "navigation@11",
+          "icon": "$(settings-gear)"
+        },
+        {
+          "command": "lattice.config.open",
+          "when": "view == lattice.controlCenter",
+          "group": "navigation@1",
+          "icon": "$(settings-gear)"
+        },
+        {
+          "command": "lattice.workspace.scan",
+          "when": "view == lattice.controlCenter",
+          "group": "navigation@2",
+          "icon": "$(telescope)"
+        },
+        {
+          "command": "lattice.workspace.link",
+          "when": "view == lattice.controlCenter",
+          "group": "navigation@3",
+          "icon": "$(link)"
+        },
+        {
+          "command": "lattice.config.openSettings",
+          "when": "view == lattice.controlCenter",
+          "group": "navigation@4",
+          "icon": "$(settings)"
         },
         {
           "command": "lattice.spec.create",
@@ -1651,7 +1700,8 @@
             "description": "%lattice.walkthrough.projects.description%",
             "completionEvents": [
               "onCommand:lattice.workspace.scan",
-              "onCommand:lattice.workspace.link"
+              "onCommand:lattice.workspace.link",
+              "onCommand:lattice.config.open"
             ]
           },
           {

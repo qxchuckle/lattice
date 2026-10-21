@@ -1,0 +1,96 @@
+name: Site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/site/**'
+      - 'docs/**'
+      - 'i18n-manifest.json'
+      - 'packages/web-ui/**'
+      - 'packages/core/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/site.yml'
+  pull_request:
+    paths:
+      - 'apps/site/**'
+      - 'docs/**'
+      - 'i18n-manifest.json'
+      - 'packages/web-ui/**'
+      - 'packages/core/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24
+  # GitHub redirects project pages to the account's custom domain; keep canonical URLs on it.
+  SITE_URL: https://www.qcqx.cn
+  SITE_BASE: /lattice
+
+jobs:
+  build:
+    name: build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: docs i18n gate
+        run: pnpm check:docs-i18n
+      - name: docs sync gate and unit tests
+        run: pnpm check:docs
+      - name: check types
+        run: pnpm check:site
+      - name: build site
+        run: pnpm build:site
+      - name: gate self-test
+        run: pnpm selftest:site-gates
+      - name: install chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: test site
+        run: pnpm --filter @qcqx/lattice-site test:e2e
+      - name: configure pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+      - name: upload pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/site/dist
+
+  deploy:
+    name: deploy GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

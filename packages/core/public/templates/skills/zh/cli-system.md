@@ -6,13 +6,19 @@
 
 初始化 Lattice（`~/.lattice/`）。
 
-- `-f, --force`：跳过确认
+- `-f, --force`：跳过确认、模型选择与交互输入（用户名沿用当前配置或系统用户；模型沿用当前配置或默认模型；模型下载默认确认，可用 `--no-download-model` 关闭）
 - `--username <name>`：指定用户名
 - `--git [boolean]`：启用 Git 管理（默认开启）
 - `--git-remote <url>`：Git 远程仓库
 - `--scan-dirs <dirs>`：扫描目录（逗号分隔）
 - `--registry-template <urls>`：拉取模板仓库
 - `--lang <lang>`：注入文档语言（`auto` | `zh` | `en`；默认读取 `config-local.json` 的 `language`，再按系统 locale）
+- `--model <id>`：指定 RAG embedding 模型（默认 `Xenova/bge-small-zh-v1.5`；内置 MiniLM / 多语言 E5 / BGE Base 预设）
+- `--dimension <n>`：自定义模型的向量维度（切换自定义模型时必填，配合 `--model` 使用）
+- `--query-prefix <text>`：自定义模型的查询前缀（默认清空，避免沿用旧模型前缀）
+- `--document-prefix <text>`：自定义模型的文档前缀（默认清空，避免沿用旧模型前缀）
+- `--download-model`：初始化后立即下载并预热 embedding 模型
+- `--no-download-model`：即使使用 `-f` 也跳过 embedding 模型下载
 
 ### `ltc init scan`
 
@@ -49,6 +55,8 @@
 | `set <key> <value> --json` | 强制整个 value 按 JSON 解析，解析失败即报错（纯字符串如 `alice` 必报错） |
 
 标量 JSON（`123` / `true` / `null`）需 `--json` 才按类型写入；对象 / 数组不带即可。
+
+`set rag.embedding.modelId` 会自动同步内置预设的 `dimension` / `dtype` / `pooling` / `queryPrefix` / `documentPrefix`；`unset rag.embedding.modelId` 会同步清理这些字段并回落到默认模型。保存后会报告模型是否已安装，并提示运行 `ltc rag rebuild`（未安装时会自动下载）。非预设模型需显式设置 `rag.embedding.dimension`；旧查询/文档前缀会自动清空。 `show` 会展示解析后的 embedding 默认值；`--diff-defaults` 仅显示显式差异。
 
 ## `ltc doctor`
 

@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { checkbox, confirm, input } from '@inquirer/prompts';
+import { checkbox, confirm, input, select } from '@inquirer/prompts';
 import { cp, rm } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import {
   getLatticeRoot,
@@ -33,10 +33,15 @@ import {
   getUsername,
   syncSpecTemplateRegistry,
   generateEmbedding,
+  getEmbeddingConfig,
+  getEmbeddingModelConfig,
+  getEmbeddingModelPreset,
   isModelInstalled,
   isModelLoadNetworkError,
   formatModelNetworkHint,
   removeInstalledModel,
+  DEFAULT_EMBEDDING_MODEL_ID,
+  EMBEDDING_MODEL_PRESETS,
   initLatticeGit,
   writeInitMeta,
   getAIToolConfigs,
@@ -46,6 +51,7 @@ import {
   isDocLanguageSetting,
   type DocLanguage,
   type DocLanguageSetting,
+  type RAGEmbeddingConfig,
 } from '@qcqx/lattice-core';
 import { logger } from '../utils';
 import { cliVersion } from '../version';
@@ -60,14 +66,19 @@ export function registerInitCommand(program: Command): void {
   const initCmd: Command = program.command('init');
   initCmd
     .description('初始化 Lattice（~/.lattice/）')
-    .option('-f, --force', '跳过确认')
+    .option('-f, --force', '跳过确认与交互（模型下载默认确认，可用 --no-download-model 关闭）')
     .option('--username <name>', '指定用户名')
     .option('--git [boolean]', '是否使用 git 管理', true)
     .option('--git-remote <url>', 'git 远程仓库地址')
     .option('--scan-dirs <dirs>', '初始扫描目录（逗号分隔）')
     .option('--registry-template <urls>', '自定义 spec 模板仓库地址（逗号分隔）')
     .option('--lang <lang>', '注入文档语言（auto | zh | en，默认读取配置或系统 locale）')
+    .option('--model <id>', `指定 RAG embedding 模型（默认 ${DEFAULT_EMBEDDING_MODEL_ID}）`)
+    .option('--dimension <n>', '自定义 embedding 模型的向量维度（配合 --model 使用）')
+    .option('--query-prefix <text>', '自定义 embedding 查询前缀（可用空字符串清除预设前缀）')
+    .option('--document-prefix <text>', '自定义 embedding 文档前缀')
     .option('--download-model', '初始化后立即下载并预热 embedding 模型')
+    .option('--no-download-model', '即使使用 -f 也跳过 embedding 模型下载')
     .option(
       '--builtin-spec-templates <names>',
       '初始化时导入内置 spec 模板（逗号分隔，默认 all）',
@@ -103,17 +114,30 @@ export function registerInitCommand(program: Command): void {
           logger.raw(chalk.yellow('Lattice 已初始化，接下来将重新初始化并更新配置。'));
         }
 
-        // 1. 获取用户名
+        // 1. 获取用户名（非交互场景回落到当前配置或系统用户，避免 AI/脚本调用卡在输入）
+        const skipInteractive = shouldSkipConfirm(opts) || !process.stdin.isTTY;
         let username = opts.username as string | undefined;
         const previousUsername = existingLocalConfig?.username?.trim();
         if (!username) {
-          username = await input({
-            message: '请输入你的用户名：',
-            default: previousUsername,
-            validate: (v) => (v.trim().length > 0 ? true : '用户名不能为空'),
-          });
+          if (skipInteractive) {
+            username = previousUsername ?? getSystemUsername();
+            logger.raw(chalk.dim(`使用用户名：${username}`));
+          } else {
+            username = await input({
+              message: '请输入你的用户名：',
+              default: previousUsername,
+              validate: (v) => (v.trim().length > 0 ? true : '用户名不能为空'),
+            });
+          }
         }
         username = username.trim();
+
+        // 1.5 选择 embedding 模型（非交互场景沿用现有配置或默认值）
+        const currentEmbeddingConfig = await getEmbeddingConfig();
+        const embeddingSelection = await resolveInitEmbeddingSelection(
+          opts,
+          currentEmbeddingConfig,
+        );
 
         const scanDirs = opts.scanDirs
           ? parseCommaSeparatedOption(opts.scanDirs as string)
@@ -124,6 +148,7 @@ export function registerInitCommand(program: Command): void {
         await ensureDir(root);
         const bundledSpecTemplateNames = await resolveBundledSpecTemplateNames(
           opts.builtinSpecTemplates as string | undefined,
+          docLanguage,
         );
         const gitOptionProvided = process.argv.some(
           (arg) => arg === '--git' || arg.startsWith('--git='),
@@ -163,7 +188,27 @@ export function registerInitCommand(program: Command): void {
           ...existingGlobalConfig,
           version: existingGlobalConfig.version ?? '0.1.0',
           registryTemplates,
+          ...(embeddingSelection
+            ? {
+                rag: {
+                  ...existingGlobalConfig.rag,
+                  embedding: {
+                    ...existingGlobalConfig.rag?.embedding,
+                    ...embeddingSelection,
+                  },
+                },
+              }
+            : {}),
         });
+
+        const embeddingConfig = await getEmbeddingConfig();
+        if (embeddingSelection?.modelId && embeddingConfig.modelId !== embeddingSelection.modelId) {
+          logger.raw(
+            chalk.yellow(
+              `本机配置中的 rag.embedding.modelId 覆盖了本次选择（当前生效：${embeddingConfig.modelId}）`,
+            ),
+          );
+        }
 
         await writeLocalConfig({
           ...existingLocalConfig,
@@ -182,6 +227,7 @@ export function registerInitCommand(program: Command): void {
           logger.raw(chalk.blue('正在安装内置 spec 模板...'));
           const result = await syncBundledSpecTemplatesWithPrompt(bundledSpecTemplateNames, {
             skipPrompt: shouldSkipConfirm(opts),
+            language: docLanguage,
           });
           logger.raw(chalk.green(`  ✓ 已安装 ${result.synced.length} 个内置模板`));
           if (result.skipped.length > 0) {
@@ -205,7 +251,7 @@ export function registerInitCommand(program: Command): void {
         // 7. 检测 AI 工具
         logger.raw(chalk.blue('正在检测已安装的 AI 工具...'));
         logger.raw(chalk.dim(`  注入文档语言：${docLanguage === 'zh' ? '中文' : 'English'}`));
-        await detectAndConfigureAITools(docLanguage);
+        await detectAndConfigureAITools(docLanguage, skipInteractive);
 
         // 8. 拉取模板仓库
         if (registryTemplates?.length) {
@@ -224,7 +270,7 @@ export function registerInitCommand(program: Command): void {
 
         // 10. 扫描项目
         if (scanDirs?.length) {
-          let doScan = shouldSkipConfirm(opts);
+          let doScan = skipInteractive;
           if (!doScan) {
             doScan = await confirm({
               message: `将扫描以下目录：\n${scanDirs.map((d) => `  ${d}`).join('\n')}\n确认开始扫描？`,
@@ -255,12 +301,15 @@ export function registerInitCommand(program: Command): void {
         }
 
         const modelInstalled = await isModelInstalled();
-        let shouldDownloadModel = opts.downloadModel === true || shouldSkipConfirm(opts);
-        if (!shouldDownloadModel) {
+        const downloadModelDisabled = opts.downloadModel === false;
+        let shouldDownloadModel = downloadModelDisabled
+          ? false
+          : opts.downloadModel === true || shouldSkipConfirm(opts);
+        if (!shouldDownloadModel && process.stdin.isTTY) {
           shouldDownloadModel = await confirm({
             message: modelInstalled
-              ? '检测到 embedding 模型已安装，是否重新下载并预热？'
-              : '是否现在下载 embedding 模型？如果跳过，将在首次搜索时再下载。',
+              ? `检测到 embedding 模型 ${embeddingConfig.modelId} 已安装，是否重新下载并预热？`
+              : `是否现在下载 embedding 模型 ${embeddingConfig.modelId}（${embeddingConfig.dimension} 维）并建立搜索索引？如果跳过，可稍后运行 ltc rag rebuild。`,
             default: false,
           });
         }
@@ -280,6 +329,14 @@ export function registerInitCommand(program: Command): void {
               logger.raw(chalk.yellow(formatModelNetworkHint()));
             }
           }
+        }
+
+        if (!shouldDownloadModel && !modelInstalled) {
+          logger.raw(
+            chalk.yellow(
+              `未安装 embedding 模型 ${embeddingConfig.modelId}；运行 ltc rag rebuild 可下载模型并建立搜索索引。`,
+            ),
+          );
         }
 
         // 11. 增量更新 RAG 索引（项目数据已回填，需同步索引）
@@ -324,6 +381,19 @@ export function registerInitCommand(program: Command): void {
         logger.raw(chalk.green(`\n✓ Lattice${initialized ? '重新' : ''}初始化完成！`));
         logger.raw(chalk.dim(`  用户名：${username}`));
         logger.raw(chalk.dim(`  目录：${root}`));
+        logger.raw(
+          chalk.dim(
+            `  Embedding 模型：${embeddingConfig.modelId}（${embeddingConfig.dimension} 维）`,
+          ),
+        );
+        const finalModelInstalled = await isModelInstalled();
+        logger.raw(
+          chalk.dim(
+            `  模型状态：${
+              finalModelInstalled ? '已安装' : '未安装（运行 ltc rag rebuild 下载模型并建立索引）'
+            }`,
+          ),
+        );
       } catch (err) {
         logger.stderr(chalk.red('初始化失败：'), (err as Error).message);
         process.exitCode = 1;
@@ -332,6 +402,174 @@ export function registerInitCommand(program: Command): void {
 
   // 注册 init scan 子命令
   registerInitScanSubcommand(initCmd);
+}
+
+function getSystemUsername(): string {
+  try {
+    return userInfo().username.trim() || 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+const CUSTOM_EMBEDDING_MODEL_CHOICE = '__custom_embedding_model__';
+
+/**
+ * 解析 init 时的 embedding 模型选择。
+ * - --model 优先，适合脚本 / AI 调用；
+ * - TTY 下提供预设菜单，默认选中当前模型或推荐模型；
+ * - 非 TTY 或 -f 不弹窗，沿用现有配置（未配置时由 core 使用默认模型）。
+ */
+async function resolveInitEmbeddingSelection(
+  opts: {
+    model?: string;
+    dimension?: string;
+    queryPrefix?: string;
+    documentPrefix?: string;
+    force?: boolean;
+  },
+  existing: RAGEmbeddingConfig,
+): Promise<Partial<RAGEmbeddingConfig> | null> {
+  const requestedModel = opts.model?.trim();
+  const hasModelOverrides =
+    opts.dimension !== undefined ||
+    opts.queryPrefix !== undefined ||
+    opts.documentPrefix !== undefined;
+  if (!requestedModel && hasModelOverrides) {
+    throw new Error('--dimension / --query-prefix / --document-prefix 需要与 --model 一起使用');
+  }
+
+  if (requestedModel) {
+    const preset = getEmbeddingModelPreset(requestedModel);
+    const modelChanged = existing.modelId?.trim() !== requestedModel;
+    const selection: Partial<RAGEmbeddingConfig> = preset
+      ? getEmbeddingModelConfig(requestedModel)
+      : { modelId: requestedModel };
+
+    if (opts.dimension !== undefined) {
+      const dimension = parsePositiveIntegerOption(opts.dimension, '--dimension');
+      if (preset && dimension !== preset.dimension) {
+        logger.raw(
+          chalk.yellow(
+            `--dimension ${dimension} 与 ${preset.id} 的预设维度 ${preset.dimension} 不一致，已按参数覆盖；请确认模型实际输出维度。`,
+          ),
+        );
+      }
+      selection.dimension = dimension;
+    } else if (!preset && modelChanged) {
+      throw new Error(
+        `自定义模型 ${requestedModel} 需要同时指定 --dimension（模型实际输出维度，例如 --dimension 768）`,
+      );
+    }
+
+    if (opts.queryPrefix !== undefined) {
+      selection.queryPrefix = opts.queryPrefix;
+    } else if (!preset && modelChanged) {
+      selection.queryPrefix = '';
+    }
+    if (opts.documentPrefix !== undefined) {
+      selection.documentPrefix = opts.documentPrefix;
+    } else if (!preset && modelChanged) {
+      selection.documentPrefix = '';
+    }
+
+    if (!preset) {
+      if (!modelChanged) {
+        logger.raw(chalk.dim(`沿用当前自定义模型参数：${requestedModel}`));
+      } else {
+        const clearedPrefixes: string[] = [];
+        if (opts.queryPrefix === undefined) clearedPrefixes.push('queryPrefix');
+        if (opts.documentPrefix === undefined) clearedPrefixes.push('documentPrefix');
+        if (clearedPrefixes.length > 0) {
+          logger.raw(
+            chalk.dim(
+              `未指定的 ${clearedPrefixes.join(' / ')} 已清空，可用 --query-prefix / --document-prefix 指定`,
+            ),
+          );
+        } else {
+          logger.raw(chalk.dim(`使用自定义模型参数：${requestedModel}`));
+        }
+      }
+    }
+    return selection;
+  }
+
+  if (!process.stdin.isTTY || shouldSkipConfirm(opts)) {
+    return null;
+  }
+
+  const existingModelId = existing.modelId?.trim();
+  const existingPreset = existingModelId ? getEmbeddingModelPreset(existingModelId) : undefined;
+  const choices = EMBEDDING_MODEL_PRESETS.map((preset) => ({
+    name: `${preset.label}  ${chalk.dim(`${preset.id} · ${preset.dimension} 维 · ${preset.description}`)}`,
+    value: preset.id,
+  }));
+
+  if (existingModelId && !existingPreset) {
+    choices.unshift({
+      name: `当前配置  ${chalk.dim(existingModelId)}`,
+      value: existingModelId,
+    });
+  }
+
+  choices.push({
+    name: '自定义模型 ID…',
+    value: CUSTOM_EMBEDDING_MODEL_CHOICE,
+  });
+
+  const selected = await select({
+    message: '选择 RAG embedding 模型（回车使用推荐项）：',
+    default: existingModelId ?? DEFAULT_EMBEDDING_MODEL_ID,
+    choices,
+  });
+
+  if (selected !== CUSTOM_EMBEDDING_MODEL_CHOICE) {
+    return getEmbeddingModelConfig(selected);
+  }
+
+  const modelId = (
+    await input({
+      message: '输入 Hugging Face 模型 ID：',
+      validate: (v) => (v.trim().length > 0 ? true : '模型 ID 不能为空'),
+    })
+  ).trim();
+
+  const preset = getEmbeddingModelPreset(modelId);
+  if (preset) {
+    return getEmbeddingModelConfig(modelId);
+  }
+
+  const dimensionInput = await input({
+    message: '输入向量维度（需与模型输出一致）：',
+    default: String(existing.dimension ?? 512),
+    validate: (v) => (/^\d+$/.test(v.trim()) && Number(v) > 0 ? true : '请输入正整数'),
+  });
+
+  const queryPrefix = await input({
+    message: '查询前缀（可选，E5 等模型可能需要，直接回车留空）：',
+    default: '',
+  });
+  const documentPrefix = await input({
+    message: '文档前缀（可选，E5 通常为 passage: ）：',
+    default: '',
+  });
+
+  return {
+    modelId,
+    dimension: Number(dimensionInput),
+    dtype: existing.dtype ?? 'q8',
+    pooling: existing.pooling ?? 'mean',
+    queryPrefix,
+    documentPrefix,
+  };
+}
+
+function parsePositiveIntegerOption(value: string, flag: string): number {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed) || Number(trimmed) <= 0) {
+    throw new Error(`无效的 ${flag}：${value}（需要正整数）`);
+  }
+  return Number(trimmed);
 }
 
 function parseCommaSeparatedOption(value: string): string[] {
@@ -345,7 +583,7 @@ function parseCommaSeparatedOption(value: string): string[] {
 // @qcqx/lattice-core 的 injection 模块（getAIToolConfigs / injectToToolRoot），
 // 与 ltc uninject 的清除逻辑共享同一真源，注入与清除永不脱节。
 
-async function detectAndConfigureAITools(language: DocLanguage): Promise<void> {
+async function detectAndConfigureAITools(language: DocLanguage, skipPrompt = false): Promise<void> {
   const home = homedir();
 
   const tools = getAIToolConfigs(home, language);
@@ -376,10 +614,10 @@ async function detectAndConfigureAITools(language: DocLanguage): Promise<void> {
     }
   }
 
-  // 非交互环境（CI / 脚本管道，stdin 非 TTY）不弹勾选：自动注入「已检测到」的工具，
+  // 非交互环境（CI / 脚本管道 / -f）不弹勾选：自动注入「已检测到」的工具，
   // 未检测到则走下方空选集分支跳过——避免机器环境下 init 永久挂起在勾选交互上。
   let selectedToolIds: string[];
-  if (process.stdin.isTTY) {
+  if (process.stdin.isTTY && !skipPrompt) {
     selectedToolIds = await checkbox({
       message: '请选择要注入的 AI 工具（可多选）：',
       choices: tools.map((tool) => {

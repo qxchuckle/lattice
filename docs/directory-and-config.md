@@ -1,107 +1,109 @@
-# 目录结构与配置
+# Directory & Configuration
 
-本文详细说明 Lattice 的数据目录结构和配置项，帮助你理解数据存储方式、进行备份迁移或自定义配置。
+> English | [简体中文](./directory-and-config.zh-CN.md)
 
-## 目录结构
+This document describes Lattice's data directory layout and configuration options, to help you understand storage, back up or migrate data, and customize configuration.
 
-Lattice 的所有数据都存储在 `~/.lattice/` 目录下。
+## Directory layout
 
-> 可以通过环境变量 `LATTICE_HOME` 覆盖根目录位置（详见 [LATTICE_HOME 环境变量](#lattice_home-环境变量)）。
+All Lattice data lives under `~/.lattice/`.
 
-### 完整目录树
+> Set the `LATTICE_HOME` environment variable to override the root directory (see [LATTICE_HOME](#lattice_home-environment-variable)).
+
+### Full directory tree
 
 ```
-~/.lattice/                              # Lattice 根目录
-├── config/                              # 配置文件
-│   ├── config.json                      # 全局配置（可纳入 git 管理）
-│   └── config-local.json                # 本机配置（已 gitignore，含用户名等）
-├── spec/                                # 全局级 spec（所有用户、所有项目通用）
-├── templates/                           # 模板目录
-│   ├── spec/                            # spec 模板（frontend / backend / api 等）
-│   └── registries/                      # 已拉取的远程模板仓库
-├── models/                              # RAG embedding 模型文件
-├── .cache/                              # 运行时缓存（已 gitignore）
-│   ├── lattice.db                       # SQLite 数据库（项目/任务索引）
-│   ├── lattice.db-wal                   # SQLite WAL 日志
-│   ├── lattice.db-shm                   # SQLite 共享内存
-│   ├── huggingface/                     # HuggingFace 模型下载缓存
-│   ├── last-scan.json                   # 最近一次扫描的结果
-│   ├── web-server.json                  # Web 服务器运行状态
-│   └── sensitive/                       # 敏感信息缓存（token/cookie/密钥等，文档正文不记录）
-├── .trash/                              # 软删除回收站（删除的任务/项目暂存于此）
-├── .sync-domains/                       # 域同步镜像（已 gitignore；每域一个独立 git 仓，目录名 = 域 hash）
-│   └── <domain-hash>/                   # 单个域（经验包）的本机只读物化视图，各机独立 clone
-├── .git/                                # Git 仓库（可选，用于版本管理 ~/.lattice）
-├── .gitignore                           # Git 忽略规则
-└── users/                               # 用户数据
-    └── <username>/                      # 按用户名隔离
-        ├── spec/                        # 用户级 spec（跨项目复用）
-        ├── projects/                    # 项目数据
-        │   └── <project-id>/            # 单个项目（目录名为带前缀的完整 ID）
-        │       ├── project.json         # 项目元数据（ID、名称、路径等）
-        │       └── spec/                # 项目级 spec（仅当前项目有效）
-        ├── tasks/                       # 任务数据
-        │   └── <task-id>/               # 单个任务
-        │       ├── task.json            # 任务元数据（状态、关联项目等）
-        │       ├── prd.md               # 需求文档（目标、方案、文件索引）
-        │       ├── progress.yaml        # 进度日志（checkpoint 记录）
-        │       └── design.md            # 方案讨论档案（可选）
-        └── relations.json               # 项目间关系记录
+~/.lattice/                              # Lattice root
+├── config/                              # Configuration files
+│   ├── config.json                      # Global config (can be committed to git)
+│   └── config-local.json                # Machine-local config (gitignored; contains username, etc.)
+├── spec/                                # Global specs (shared by all users and projects)
+├── templates/                           # Templates
+│   ├── spec/                            # Spec templates (frontend / backend / api, etc.)
+│   └── registries/                      # Pulled remote template repositories
+├── models/                              # RAG embedding model files
+├── .cache/                              # Runtime cache (gitignored)
+│   ├── lattice.db                       # SQLite database (project/task index)
+│   ├── lattice.db-wal                   # SQLite WAL log
+│   ├── lattice.db-shm                   # SQLite shared memory
+│   ├── huggingface/                     # Hugging Face model download cache
+│   ├── last-scan.json                   # Result of the most recent scan
+│   ├── web-server.json                  # Web server runtime state
+│   └── sensitive/                       # Sensitive cache (tokens/cookies/keys; never written into docs)
+├── .trash/                              # Soft-delete recycle bin (deleted tasks/projects)
+├── .sync-domains/                       # Domain sync mirrors (gitignored; one git repo per domain, directory name = domain hash)
+│   └── <domain-hash>/                   # Read-only local materialized view of one domain, cloned per machine
+├── .git/                                # Git repository (optional; versions ~/.lattice)
+├── .gitignore                           # Git ignore rules
+└── users/                               # User data
+    └── <username>/                      # Isolated by username
+        ├── spec/                        # User-level specs (reused across projects)
+        ├── projects/                    # Project data
+        │   └── <project-id>/            # One project (directory name is the full prefixed ID)
+        │       ├── project.json         # Project metadata (ID, name, paths, etc.)
+        │       └── spec/                # Project-level specs (this project only)
+        ├── tasks/                       # Task data
+        │   └── <task-id>/               # One task
+        │       ├── task.json            # Task metadata (status, associated projects, etc.)
+        │       ├── prd.md               # PRD (goals, plan, file index)
+        │       ├── progress.yaml        # Progress log (checkpoints)
+        │       └── design.md            # Design discussion archive (optional)
+        └── relations.json               # Project relation records
 ```
 
-### 目录说明
+### Directory reference
 
-| 目录/文件 | 用途 | 是否纳入 git |
+| Directory/file | Purpose | Tracked by git |
 |---|---|---|
-| `config/config.json` | 全局配置（RAG 模型、模板仓库等） | 是 |
-| `config/config-local.json` | 本机配置（用户名、扫描目录等） | 否（gitignore） |
-| `spec/` | 全局级 spec，多用户多项目通用 | 是 |
-| `templates/spec/` | spec 模板，`ltc spec template apply` 使用 | 是 |
-| `templates/registries/` | `ltc spec template pull` 拉取的远程仓库 | 是 |
-| `models/` | RAG embedding 模型文件 | 否（体积大） |
-| `.cache/` | SQLite 数据库、模型缓存、运行状态、敏感信息缓存 | 否（gitignore） |
-| `.trash/` | 软删除回收站 | 否 |
-| `.sync-domains/` | 域同步镜像（经验包的本机只读副本，各机独立 clone） | 否（gitignore） |
-| `.cache/sync-baseline/` | 域同步基线指纹（本机上次 push 的贡献路径集） | 否（随 .cache） |
-| `users/<user>/spec/` | 用户级 spec，跨项目复用 | 是 |
-| `users/<user>/projects/` | 项目注册数据 | 是 |
-| `users/<user>/tasks/` | 任务数据 | 是 |
-| `users/<user>/relations.json` | 项目间关系（fork / 依赖 / 共享组件等） | 是 |
+| `config/config.json` | Global config (RAG model, template repositories, etc.) | Yes |
+| `config/config-local.json` | Machine-local config (username, scan directories, etc.) | No (gitignored) |
+| `spec/` | Global specs, shared by all users and projects | Yes |
+| `templates/spec/` | Spec templates used by `ltc spec template apply`; built-in templates follow the `ltc init --lang` selection | Yes |
+| `templates/registries/` | Remote repositories pulled by `ltc spec template pull` | Yes |
+| `models/` | RAG embedding model files | No (large) |
+| `.cache/` | SQLite database, model cache, runtime state, sensitive cache | No (gitignored) |
+| `.trash/` | Soft-delete recycle bin | No |
+| `.sync-domains/` | Domain sync mirrors (read-only local copies of experience packs, cloned per machine) | No (gitignored) |
+| `.cache/sync-baseline/` | Domain sync baseline fingerprints (paths contributed by this machine at the last push) | No (under `.cache`) |
+| `users/<user>/spec/` | User-level specs, reused across projects | Yes |
+| `users/<user>/projects/` | Project registration data | Yes |
+| `users/<user>/tasks/` | Task data | Yes |
+| `users/<user>/relations.json` | Project relations (fork / dependency / shared component, etc.) | Yes |
 
-### 分层说明
+### Hierarchy
 
-Lattice 的数据按以下层级组织：
+Lattice organizes data into the following levels:
 
-- **根目录级**：配置、全局 spec、模板、模型、缓存——所有用户共享的基础设施
-- **用户级**（`users/<username>/`）：按用户名隔离，包含该用户的 spec、项目、任务和关系数据
-- **项目级**（`projects/<project-id>/`）：单个项目的元数据和项目级 spec
-- **任务级**（`tasks/<task-id>/`）：单个任务的元数据、PRD、进度日志和方案讨论
+- **Root level**: config, global specs, templates, models, cache — shared infrastructure for all users
+- **User level** (`users/<username>/`): isolated by username; contains that user's specs, projects, tasks and relations
+- **Project level** (`projects/<project-id>/`): metadata and project-level specs for one project
+- **Task level** (`tasks/<task-id>/`): metadata, PRD, progress log and design notes for one task
 
-### 域同步（双轨模型）
+### Domain sync (dual-track model)
 
-Lattice 的同步是双轨的，两轨长期并存、场景正交：
+Lattice has two long-lived sync tracks with orthogonal use cases:
 
-| | origin 单仓（`ltc sync`） | 域（经验包，`ltc sync domain join`） |
+| | origin single repo (`ltc sync`) | Domains (experience packs, `ltc sync domain join`) |
 |---|---|---|
-| 场景 | **一个用户多机器间**全量同步 | **多用户协作**，互相选择性提供经验 |
-| 范围 | 整个 `~/.lattice` 主数据 | routes 白名单（项目/任务/spec） |
-| 可见性 | 仅自己的机器 | 他人可见 |
-| 数据落地 | pull 回写主目录 | **pull 止步镜像**（`~/.lattice/.sync-domains/<hash>/`），读时经统一数据源 Provider 合并，永不落盘主数据 |
+| Use case | **One user, multiple machines**, full sync | **Multi-user collaboration**, selectively sharing experience |
+| Scope | The entire `~/.lattice` primary data | `routes` allowlist (projects / tasks / specs) |
+| Visibility | Your machines only | Visible to others |
+| Data landing | Pull writes back to the primary directory | **Pull stops at the mirror** (`~/.lattice/.sync-domains/<hash>/`); reads merge through the unified data-source Provider and never write to primary data |
 
-关键语义：
+Key semantics:
 
-- **域身份** = `sha256(remote#branch)` 前 16 位；一切身份运算恒用 hash，label 仅本机备注；
-- **消费策略**（域配置 `use`，默认 `trusted`）：`trusted` 读取+约束生效；`reference` 只读不注入约束；`off` 只同步镜像不读取；
-- **推送策略**（域配置 `routes`）：`"*"` 全量；`project:<glob>` / `user-spec:<glob>` / `global-spec:<glob>` 选择性；缺省 = 只读消费（join 陌生域的安全默认）；push 为白名单增量式（只覆盖自己的贡献集 + 基线指纹退出传播，别人的内容永不因我 push 被删）；
-- **遮蔽规则**（读时合并）：本地主数据 > 域（域间按配置数组顺序）；遮蔽键 spec = 同命名空间相对路径、任务 = 任务 id、项目 = 契约 ID；域数据一律只读；
-- **冲突裁决**（AI 工作流同样适用）：spec 生效优先级层级主序不变（project > user > global），同层级同路径冲突以**本地数据源、当前用户**为准；被遮蔽的域版本可用 `ltc spec show <name> --source <hash8>` 直读；
-- 配置位置：`config-local.json` 的 `sync.domains`（数组顺序即遮蔽优先级）。
+- **Domain identity** = first 16 chars of `sha256(remote#branch)`; all identity calculations use the hash, labels are local notes only.
+- **Consumption policy** (`use` in domain config, default `trusted`): `trusted` reads and applies constraints; `reference` reads without injecting constraints; `off` syncs the mirror without reading it.
+- **Push policy** (`routes` in domain config): `"*"` for everything; `project:<glob>` / `user-spec:<glob>` / `global-spec:<glob>` for selective pushes; the default is read-only consumption (the safe default when joining an unfamiliar domain). Pushes are allowlisted and incremental: only your own contribution set is overwritten, and a baseline fingerprint stops propagation, so nobody else's content is deleted because of your push.
+- **Shadowing rules** (read-time merge): local primary data > domains (domains ordered by the config array); shadowing keys are spec = relative path in the same namespace, task = task id, project = contract ID; domain data is always read-only.
+- **Conflict resolution** (also applies to AI workflows): the spec priority order is unchanged (project > user > global). Within the same level and path, local data and the current user win. A shadowed domain version can be read directly with `ltc spec show <name> --source <hash8>`.
+- Config location: `sync.domains` in `config-local.json` (array order is the shadowing priority).
 
-> **敏感信息存储约定**：spec、PRD、checkpoint 等文档中不记录 token、cookie、密钥等敏感信息。需要沉淀敏感信息时，写入 `~/.lattice/.cache/sensitive/` 下的独立 txt/md 文件（文件名标注来源任务或 spec），文档正文只引用文件路径。
+> **Sensitive information convention**: do not record tokens, cookies, keys or other secrets in specs, PRDs, checkpoints or other documents. When sensitive information must be captured, write it to a separate txt/md file under `~/.lattice/.cache/sensitive/` (name the file after the source task or spec) and reference only the file path from the document.
 
-### 项目根目录的 lattice.json
+### `lattice.json` in the project root
 
-在每个已注册项目的根目录下，Lattice 会生成一个 `lattice.json` 文件：
+For every registered project, Lattice creates a `lattice.json` file in the project root:
 
 ```json
 {
@@ -109,29 +111,33 @@ Lattice 的同步是双轨的，两轨长期并存、场景正交：
 }
 ```
 
-这个 `id` 是项目的 `legacy:` ID（优先级最高的身份标识）。Lattice 通过它以及 git 指纹（first commit SHA、git remotes）多重识别项目身份。
+This `id` is the project's `legacy:` ID (the highest-priority identity). Lattice uses it together with git fingerprints (first commit SHA, git remotes) to identify the project.
 
-> `ltc link` 生成此文件；`ltc scan` 注册的 Git 项目不生成此文件（通过 git 指纹识别）。
+> `ltc link` creates this file; Git projects registered by `ltc scan` do not get one (they are identified by git fingerprints).
 
-## 配置
+## Configuration
 
-Lattice 的配置分为两个文件，位于 `~/.lattice/config/` 目录下：
+Lattice has two configuration files under `~/.lattice/config/`:
 
-| 文件 | 作用 | 是否纳入 git |
+| File | Purpose | Tracked by git |
 |---|---|---|
-| `config.json` | 全局配置，可跨机器共享 | 是 |
-| `config-local.json` | 本机配置，含用户名等机器相关信息 | 否（gitignore） |
+| `config.json` | Global config, shareable across machines | Yes |
+| `config-local.json` | Machine-local config, including username and machine-specific data | No (gitignored) |
 
-两个文件合并后形成最终生效的配置：`config.json` 提供全局默认值，`config-local.json` 覆盖本机特定的值。
+The two files are merged into the effective config: `config.json` provides global defaults, and `config-local.json` overrides machine-specific values.
 
-### 全局配置（config.json）
+### Global config (`config.json`)
 
 ```json
 {
   "version": "0.1.0",
   "rag": {
     "embedding": {
-      "modelId": "Xenova/all-MiniLM-L6-v2",
+      "modelId": "Xenova/bge-small-zh-v1.5",
+      "dimension": 512,
+      "dtype": "q8",
+      "pooling": "mean",
+      "queryPrefix": "为这个句子生成表示以用于检索相关文章：",
       "remoteHost": "https://huggingface.co/",
       "remotePathTemplate": "{model}/resolve/{revision}/",
       "localModelPath": "~/.lattice/models",
@@ -144,24 +150,31 @@ Lattice 的配置分为两个文件，位于 `~/.lattice/config/` 目录下：
 }
 ```
 
-配置项说明：
+Configuration reference:
 
-| 配置项 | 默认值 | 说明 |
+| Option | Default | Description |
 |---|---|---|
-| `version` | `"0.1.0"` | 配置文件版本号 |
-| `registryTemplates` | — | 远程模板仓库 URL 列表 |
-| `rag.embedding.modelId` | `Xenova/all-MiniLM-L6-v2` | RAG 搜索使用的 embedding 模型 |
-| `rag.embedding.remoteHost` | `https://huggingface.co/` | 模型下载地址（可通过 `HF_ENDPOINT` 环境变量覆盖） |
-| `rag.embedding.remotePathTemplate` | `{model}/resolve/{revision}/` | 远程模型路径模板 |
-| `rag.embedding.localModelPath` | `~/.lattice/models` | 本地模型存储路径 |
-| `rag.embedding.cacheDir` | `~/.lattice/.cache/huggingface` | 模型下载缓存目录 |
-| `rag.embedding.allowRemoteModels` | `true` | 是否允许从远程下载模型 |
-| `rag.embedding.allowLocalModels` | `true` | 是否允许使用本地模型 |
-| `rag.embedding.proxy` | `""` | 下载模型时使用的代理地址 |
+| `version` | `"0.1.0"` | Config file version |
+| `registryTemplates` | — | List of remote template repository URLs |
+| `rag.embedding.modelId` | `Xenova/bge-small-zh-v1.5` | Embedding model used by RAG search |
+| `rag.embedding.dimension` | `512` | Vector dimension; inferred automatically for known models |
+| `rag.embedding.dtype` | `q8` | Model precision (`fp32` / `fp16` / `q8` / `int8`) |
+| `rag.embedding.pooling` | `mean` | Pooling strategy (`mean` / `cls`) |
+| `rag.embedding.queryPrefix` | Chinese BGE query prefix | Query-side prefix; depends on the selected model |
+| `rag.embedding.documentPrefix` | `""` | Document-side prefix; E5 models use `passage: ` |
+| `rag.embedding.remoteHost` | `https://huggingface.co/` | Model download host (can be overridden with `HF_ENDPOINT`) |
+| `rag.embedding.remotePathTemplate` | `{model}/resolve/{revision}/` | Remote model path template |
+| `rag.embedding.localModelPath` | `~/.lattice/models` | Local model storage path |
+| `rag.embedding.cacheDir` | `~/.lattice/.cache/huggingface` | Model download cache directory |
+| `rag.embedding.allowRemoteModels` | `true` | Allow downloading models remotely |
+| `rag.embedding.allowLocalModels` | `true` | Allow using local models |
+| `rag.embedding.proxy` | `""` | Proxy used when downloading models |
 
-> 如果在大陆网络环境下载模型失败，可以设置 `rag.embedding.proxy` 或通过 `HF_ENDPOINT` 环境变量切换镜像。
+`ltc init` offers the built-in embedding presets in interactive terminals; use `ltc init --model <id>` for non-interactive setup. The preset also sets `dimension`, `dtype`, `pooling` and the query/document prefixes. For custom models, switching models requires `--dimension`; `--query-prefix` / `--document-prefix` default to empty so old model prefixes are not reused. The same applies to `ltc config set` when the model ID is not a built-in preset; set `rag.embedding.dimension` explicitly before rebuilding. `ltc config set rag.embedding.modelId` applies the same preset fields automatically; `ltc config unset rag.embedding.modelId` clears them and falls back to the default model. After switching models, run `ltc rag rebuild` to rebuild the index. The Web configuration panel shows the effective embedding defaults and applies the same presets when you switch models. For custom models, it prompts for the vector dimension and query/document prefixes. After a model switch it shows whether the model is installed and reminds you to run `ltc rag rebuild`; the RAG admin tab also flags when the configured model differs from the indexed model. `ltc config set` reports the same install status after saving.
 
-### 本机配置（config-local.json）
+> If model downloads fail in mainland China, set `rag.embedding.proxy` or switch the mirror through the `HF_ENDPOINT` environment variable.
+
+### Machine-local config (`config-local.json`)
 
 ```json
 {
@@ -174,59 +187,61 @@ Lattice 的配置分为两个文件，位于 `~/.lattice/config/` 目录下：
 }
 ```
 
-配置项说明：
+Configuration reference:
 
-| 配置项 | 默认值 | 说明 |
+| Option | Default | Description |
 |---|---|---|
-| `username` | — | 当前用户名（`ltc init` 时设置，必填） |
-| `scanDirs` | — | `ltc scan` 默认扫描的目录列表 |
-| `gitEnabled` | `true` | 是否对 `~/.lattice/` 启用 git 管理 |
-| `gitRemote` | — | `~/.lattice/` git 仓库的远程地址 |
-| `language` | `auto` | 注入给 AI 客户端的文档语言：`auto`（按系统 locale）/ `zh` / `en`；切换后重新运行 `ltc init` |
-| `registryTemplates` | — | 本机级别的远程模板仓库 URL（覆盖全局） |
+| `username` | — | Current username (set by `ltc init`, required) |
+| `scanDirs` | — | Default directories scanned by `ltc scan` |
+| `gitEnabled` | `true` | Whether to enable git management for `~/.lattice/` |
+| `gitRemote` | — | Remote URL of the `~/.lattice/` git repository |
+| `language` | `auto` | Document language injected into AI clients: `auto` (system locale) / `zh` / `en`; re-run `ltc init` after changing it |
+| `registryTemplates` | — | Machine-level remote template repository URLs (override global) |
 
-> `config-local.json` 在 `.gitignore` 中被忽略，不会提交到 git。切换机器时需要重新运行 `ltc init` 生成。
+> `config-local.json` is ignored by `.gitignore` and is not committed. Re-run `ltc init` when switching machines.
 
-### LATTICE_HOME 环境变量
+### `LATTICE_HOME` environment variable
 
-默认情况下，Lattice 使用 `~/.lattice/` 作为根目录。可以通过设置 `LATTICE_HOME` 环境变量来覆盖：
+By default, Lattice uses `~/.lattice/` as its root. Set the `LATTICE_HOME` environment variable to override it:
 
 ```bash
-# 使用自定义目录
+# Use a custom directory
 export LATTICE_HOME=/data/my-lattice
 
-# 典型用途：测试 / CI / 多实例隔离
+# Typical uses: tests / CI / multiple isolated instances
 LATTICE_HOME=/tmp/test-lattice ltc init
 ```
 
-> 设置 `LATTICE_HOME` 后，所有路径（config / spec / users / cache 等）都会基于该目录。
+> When `LATTICE_HOME` is set, every path (config / spec / users / cache, etc.) is based on that directory.
 
-### 使用 ltc config 命令
+### Using the `ltc config` command
 
 ```bash
-# 查看完整配置（默认全局范围）
+# Show the full config (global scope by default)
 ltc config show
 
-# 查看本机配置
+# Show machine-local config
 ltc config show --scope local
 
-# 仅显示与默认值不同的配置项
+# Show only values that differ from defaults
 ltc config show --diff-defaults
 
-# 读取单个配置项（点路径）
+# Read a single value (dot path)
 ltc config get rag.embedding.modelId
 
-# 设置单个配置项
+# Set a single value
 ltc config set rag.embedding.proxy "http://127.0.0.1:7890"
 
-# 设置本机配置项
+# Set a machine-local value
 ltc config set scanDirs '["~/projects","~/work"]' --scope local
 
-# 移除单个配置项
+# Remove a single value
 ltc config unset rag.embedding.proxy
 ```
 
-`--scope` 参数：
+`ltc config show` includes resolved embedding defaults; `--diff-defaults` still shows only explicitly configured differences.
 
-- `global`（默认）：操作 `config.json`
-- `local`：操作 `config-local.json`
+`--scope` values:
+
+- `global` (default): operate on `config.json`
+- `local`: operate on `config-local.json`

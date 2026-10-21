@@ -1,0 +1,23 @@
+---
+interface Props {
+  items: Array<{ slug: string; text: string; children?: Array<{ slug: string; text: string; children?: unknown[] }> }>;
+  depth?: number;
+}
+
+const { items, depth = 0 } = Astro.props;
+---
+
+<ul>
+  {
+    items.map((item) => (
+      <li>
+        <a href={`#${item.slug}`} style={`--depth: ${depth}`}>
+          {item.text}
+        </a>
+        {item.children && item.children.length > 0 && (
+          <Astro.self items={item.children as Props['items']} depth={depth + 1} />
+        )}
+      </li>
+    ))
+  }
+</ul>

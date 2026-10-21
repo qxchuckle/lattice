@@ -1,0 +1,149 @@
+---
+import TocList from './TocList.astro';
+
+const { toc } = Astro.locals.starlightRoute;
+---
+
+{
+  toc && (
+    <lattice-toc data-min-h={toc.minHeadingLevel} data-max-h={toc.maxHeadingLevel}>
+      <nav aria-labelledby="starlight__on-this-page">
+        <h2 id="starlight__on-this-page">{Astro.locals.t('tableOfContents.onThisPage')}</h2>
+        <TocList items={toc.items} />
+      </nav>
+    </lattice-toc>
+  )
+}
+
+<script>
+  const PAGE_TITLE_ID = '_top';
+
+  const decodeHash = (hash: string) => {
+    try {
+      return decodeURIComponent(hash.replace(/^#/, ''));
+    } catch {
+      return hash.replace(/^#/, '');
+    }
+  };
+
+  class LatticeToc extends HTMLElement {
+    private links: HTMLAnchorElement[] = [];
+    private headings: HTMLElement[] = [];
+    private currentLink: HTMLAnchorElement | null = null;
+    private minH = 2;
+    private maxH = 3;
+    private scroller: HTMLElement | null = null;
+    private frame = 0;
+
+    connectedCallback() {
+      this.minH = Number.parseInt(this.dataset.minH ?? '2', 10);
+      this.maxH = Number.parseInt(this.dataset.maxH ?? '3', 10);
+      this.links = [...this.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
+      const levels = Array.from({ length: 1 + this.maxH - this.minH }, (_, index) => `h${this.minH + index}`);
+      const selector = `h1#${PAGE_TITLE_ID}, :where(${levels.join(',')})[id]`;
+      this.headings = [...document.querySelectorAll<HTMLElement>(`main ${selector}`)];
+      this.scroller = this.findScroller();
+
+      this.syncFromHash(true);
+      this.update();
+
+      window.addEventListener('scroll', this.schedule, { passive: true });
+      window.addEventListener('resize', this.schedule);
+      window.addEventListener('load', this.schedule);
+      window.addEventListener('hashchange', () => this.syncFromHash(true));
+      document.fonts?.ready.then(() => this.update()).catch(() => {});
+      for (const link of this.links) {
+        link.addEventListener('click', () => {
+          this.setCurrent(link);
+          this.keepVisible(link);
+        });
+      }
+    }
+
+    private schedule = () => {
+      if (this.frame) return;
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0;
+        this.update();
+      });
+    };
+
+    private findScroller() {
+      let node: HTMLElement | null = this.parentElement;
+      while (node && node !== document.body) {
+        const style = getComputedStyle(node);
+        if (
+          (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+          node.scrollHeight > node.clientHeight + 1
+        ) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    }
+
+    private linkFor(id: string) {
+      return this.links.find((link) => decodeHash(link.hash) === id) ?? null;
+    }
+
+    private setCurrent(link: HTMLAnchorElement | null) {
+      if (!link || link === this.currentLink) return;
+      this.currentLink?.removeAttribute('aria-current');
+      link.setAttribute('aria-current', 'true');
+      this.currentLink = link;
+      this.keepVisible(link);
+    }
+
+    private syncFromHash(force: boolean) {
+      const id = decodeHash(window.location.hash);
+      if (!id) {
+        if (force) this.setCurrent(this.linkFor(PAGE_TITLE_ID) ?? this.links[0] ?? null);
+        return;
+      }
+      const link = this.linkFor(id);
+      if (!link) return;
+      this.setCurrent(link);
+    }
+
+    private keepVisible(link: HTMLAnchorElement) {
+      const container = this.scroller;
+      if (!container) return;
+      const item = link.getBoundingClientRect();
+      const box = container.getBoundingClientRect();
+      const pad = 12;
+      if (item.top < box.top + pad) {
+        container.scrollTop -= box.top + pad - item.top;
+      } else if (item.bottom > box.bottom - pad) {
+        container.scrollTop += item.bottom - box.bottom + pad;
+      }
+    }
+
+    private update() {
+      if (!this.headings.length) return;
+      const header = document.querySelector('header');
+      const offset = (header?.getBoundingClientRect().height ?? 0) + 24;
+      let active = this.headings[0];
+      for (const heading of this.headings) {
+        if (heading.getBoundingClientRect().top <= offset + 1) active = heading;
+        else break;
+      }
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom) active = this.headings[this.headings.length - 1];
+      // An explicit hash wins until the user scrolls away from it.
+      const hashId = decodeHash(window.location.hash);
+      if (hashId) {
+        const hashHeading = this.headings.find((heading) => heading.id === hashId);
+        if (hashHeading && Math.abs(hashHeading.getBoundingClientRect().top - offset) < 160) {
+          active = hashHeading;
+        }
+      }
+      this.setCurrent(this.linkFor(active.id));
+    }
+  }
+
+  if (!customElements.get('lattice-toc')) {
+    customElements.define('lattice-toc', LatticeToc);
+  }
+</script>

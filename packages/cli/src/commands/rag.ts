@@ -185,6 +185,11 @@ export function registerRagCommand(program: Command): void {
         );
         logger.raw(`  距离阈值：${status.distanceThreshold}`);
         logger.raw(`  模型已安装：${status.modelInstalled ? '是' : '否'}`);
+        if (!status.modelInstalled) {
+          logger.raw(
+            chalk.yellow('  ⚠ 模型尚未安装，运行 `ltc rag update` 下载模型并建立搜索索引'),
+          );
+        }
         logger.raw(`  最后更新：${formatRagTimestamp(status.lastUpdated)}`);
         if (status.modelChanged) {
           logger.raw(

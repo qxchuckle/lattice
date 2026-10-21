@@ -15,6 +15,7 @@ import {
   closeMobileSidebar,
 } from '../store';
 import { getAdapter } from '../adapters';
+import { t } from '../i18n';
 import { useIsMobile } from '../hooks';
 import { CytoscapeGraph } from './CytoscapeGraph';
 import { DetailPanel } from './DetailPanel';
@@ -148,7 +149,7 @@ const MobileSidebarDrawer = memo(function MobileSidebarDrawer() {
   const { mobileOpen } = useSnapshot(sidebarStore);
   return (
     <Drawer
-      title='浏览器'
+      title={t('浏览器', 'Browser')}
       placement='left'
       open={mobileOpen}
       onClose={closeMobileSidebar}
@@ -166,7 +167,7 @@ const MobileDetailDrawer = memo(function MobileDetailDrawer() {
   const { open: detailOpen, collapsed: detailCollapsed } = useSnapshot(detailStore);
   return (
     <Drawer
-      title='详情'
+      title={t('详情', 'Details')}
       placement='bottom'
       open={detailOpen && !detailCollapsed}
       onClose={toggleDetailCollapse}
@@ -248,7 +249,7 @@ export function AppShell({
       {/* 桌面端组件（移动端不渲染，由 Drawer 承载）*/}
       {!isMobile && <TreeBrowserSidebar />}
       {/* 灵动岛：桌面+移动端均渲染 */}
-      <FloatingStatusBar />
+      <FloatingStatusBar showAdmin={showAdmin} showTerminal={showTerminal} />
       <GlobalSearchPanel />
       {!isMobile && <DetailPanelContainer />}
       {showAdmin && <AdminDrawer />}

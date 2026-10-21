@@ -1,6 +1,10 @@
 import chalk from 'chalk';
 import { checkbox } from '@inquirer/prompts';
-import { listBundledSpecTemplates, syncBundledSpecTemplates } from '@qcqx/lattice-core';
+import {
+  listBundledSpecTemplates,
+  syncBundledSpecTemplates,
+  type DocLanguage,
+} from '@qcqx/lattice-core';
 import { logger } from './logger';
 
 function normalizeTemplateNames(input: string): string[] {
@@ -14,8 +18,11 @@ function normalizeTemplateNames(input: string): string[] {
   ];
 }
 
-export async function resolveBundledSpecTemplateNames(input?: string): Promise<string[]> {
-  const bundledTemplates = await listBundledSpecTemplates();
+export async function resolveBundledSpecTemplateNames(
+  input?: string,
+  language?: DocLanguage,
+): Promise<string[]> {
+  const bundledTemplates = await listBundledSpecTemplates(language);
   const availableTemplateNames = bundledTemplates.map((template) => template.name);
 
   if (!input || input.trim() === '' || input.trim() === 'all') {
@@ -48,13 +55,18 @@ export interface BundledSpecSyncSummary {
 export interface BundledSpecSyncOptions {
   /** 跳过覆盖选择（`ltc init -f` 等非交互调用），保留已有模板。 */
   skipPrompt?: boolean;
+  /** 内置模板语言；缺省使用 languages.json 的 defaultLanguage。 */
+  language?: DocLanguage;
 }
 
 export async function syncBundledSpecTemplatesWithPrompt(
   templateNames: string[],
   options: BundledSpecSyncOptions = {},
 ): Promise<BundledSpecSyncSummary> {
-  const initialResult = await syncBundledSpecTemplates({ templateNames });
+  const initialResult = await syncBundledSpecTemplates({
+    templateNames,
+    language: options.language,
+  });
   let overwriteTemplateNames: string[] = [];
   let skippedTemplateNames: string[] = [];
 
@@ -92,6 +104,7 @@ export async function syncBundledSpecTemplatesWithPrompt(
     const overwriteResult = await syncBundledSpecTemplates({
       templateNames: overwriteTemplateNames,
       overwriteExistingNames: overwriteTemplateNames,
+      language: options.language,
     });
 
     if (overwriteResult.conflicts.length > 0) {

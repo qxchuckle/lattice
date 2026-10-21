@@ -1,0 +1,5 @@
+{
+  "description": "Backend development template (layering + database conventions)",
+  "defaultScope": "user",
+  "source": "built-in"
+}

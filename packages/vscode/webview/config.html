@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lattice Configuration</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #1d1d26;
+      }
+      [data-theme='dark'] {
+        --bg: #1d1d26;
+        --text: #e8e8e8;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/config-main.tsx"></script>
+  </body>
+</html>

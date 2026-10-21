@@ -111,6 +111,14 @@ describe('FloatingStatusBar', () => {
     expect(cy.animate).toHaveBeenCalledTimes(3);
   });
 
+  it('关闭 admin / terminal 时不渲染宿主侧无效入口', () => {
+    renderUi(<FloatingStatusBar showAdmin={false} showTerminal={false} />);
+    expect(document.querySelector('.anticon-code')).toBeNull();
+    expect(document.querySelector('.anticon-setting')).toBeNull();
+    expect(document.querySelector('.anticon-warning')).toBeNull();
+    expect(document.querySelector('.anticon-question-circle')).toBeTruthy();
+  });
+
   it('移动端渲染菜单按钮与换行布局；终端会话 badge', async () => {
     window.innerWidth = 500;
     makeCy();

@@ -1,0 +1,44 @@
+.demo-badge {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid rgba(125, 155, 200, 0.18);
+  border-radius: 999px;
+  background: rgba(10, 16, 28, 0.9);
+  color: #8b9bb0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  opacity: 0.74;
+  transform: translateX(-50%);
+  transition:
+    opacity 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.demo-badge:hover,
+.demo-badge:focus-visible {
+  border-color: rgba(88, 166, 255, 0.35);
+  color: #e6edf3;
+  opacity: 1;
+}
+
+.demo-badge span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #67e8f9;
+  box-shadow: 0 0 8px rgba(103, 232, 249, 0.7);
+}
+
+[data-theme='light'] .demo-badge {
+  background: rgba(255, 255, 255, 0.94);
+  color: #59636e;
+}

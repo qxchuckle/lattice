@@ -1,22 +1,24 @@
 # @qcqx/lattice-protocol
 
-**Lattice 跨端契约** —— 宿主 ⇄ 客户端共用的 DTO 与消息类型。**types-only**：零运行时代码，纯 TypeScript 类型。
+> English | [简体中文](./README.zh-CN.md)
 
-被以下消费方共用：
+**Lattice cross-host contract** — DTOs and message types shared by hosts ⇄ clients. **Types-only**: zero runtime code, pure TypeScript types.
 
-- web 客户端（`@qcqx/lattice-web` 前端）与 VS Code webview（`@qcqx/lattice-web-ui` 消费方）
-- 宿主桥层（web HTTP 绑定 / VS Code postMessage 桥）
+Shared by:
 
-## 内容
+- the web client (`@qcqx/lattice-web` frontend) and the VS Code webview (`@qcqx/lattice-web-ui` consumer)
+- host bridge layers (web HTTP binding / VS Code postMessage bridge)
 
-| 类别 | 代表导出 |
+## Contents
+
+| Category | Representative exports |
 |---|---|
-| 桥协议 | `BridgeRequest` / `BridgeResponse` / `BridgeAction` / `BridgeEvent`、`WebviewToExtension` / `ExtensionToWebview` |
-| 方法与动作白名单 | `BridgeRequestMethod`、`BridgeActionName` |
-| 快照 DTO | `SnapshotSpec`、`GraphSnapshot`、`TaskDetailPayload`、`ProjectDetailPayload`、`SpecDetailPayload` |
-| 参数/状态 DTO | `ContentParams`、`SearchBridgeParams`、`GlobalStatusPayload`、`StatsPayload`、`SpecScopeWire` |
+| Bridge protocol | `BridgeRequest` / `BridgeResponse` / `BridgeAction` / `BridgeEvent`, `WebviewToExtension` / `ExtensionToWebview` |
+| Method and action allowlists | `BridgeRequestMethod`, `BridgeActionName` |
+| Snapshot DTOs | `SnapshotSpec`, `GraphSnapshot`, `TaskDetailPayload`, `ProjectDetailPayload`, `SpecDetailPayload` |
+| Parameter/state DTOs | `ContentParams`, `SearchBridgeParams`, `GlobalStatusPayload`, `StatsPayload`, `SpecScopeWire` |
 
-## 使用
+## Usage
 
 ```bash
 pnpm add @qcqx/lattice-protocol
@@ -26,13 +28,13 @@ pnpm add @qcqx/lattice-protocol
 import type { BridgeRequestMethod, SnapshotSpec } from '@qcqx/lattice-protocol';
 ```
 
-> 本包 `main` / `types` 直指 `src/index.ts`（无构建产物），由消费方的 bundler / tsc 一并编译——仅适用于 TypeScript 工程。
+> This package's `main` / `types` point directly at `src/index.ts` (no build output); the consumer's bundler / tsc compiles it — intended for TypeScript projects only.
 
-## 约束
+## Constraints
 
-- 只放**类型与常量联合**；不放运行时代码、不放宿主实现。
-- 契约变更属跨端变更：请同步检查 web 客户端、webview 桥与契约测试（`pnpm test:contract`）。
+- Only **types and constant unions**; no runtime code, no host implementations.
+- Contract changes are cross-host changes: also check the web client, webview bridge and contract tests (`pnpm test:contract`).
 
 ## License
 
-[MIT](./LICENSE) © 2026 qcqx
+[MIT](https://github.com/qxchuckle/lattice/blob/master/LICENSE) © 2026 qcqx

@@ -51,6 +51,8 @@ jobs:
         run: pnpm check:skill-i18n
       - name: check CLI doc sync (zh/en)
         run: pnpm check:cli-doc
+      - name: check docs i18n parity and links
+        run: pnpm check:docs-i18n
       - name: build
         run: pnpm build
       - name: test with coverage

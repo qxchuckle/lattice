@@ -254,18 +254,21 @@ export async function scanForProjects(
   username: string,
   scanDirs: string[],
   onProgress?: ScanProgressCallback,
+  signal?: AbortSignal,
 ): Promise<ScanResult> {
   const added: string[] = [];
   const updated: string[] = [];
   const registeredProjects: { id: string; dir: string }[] = [];
 
   for (const dir of scanDirs) {
-    await scanDir(username, dir, added, updated, onProgress, registeredProjects);
+    signal?.throwIfAborted();
+    await scanDir(username, dir, added, updated, onProgress, registeredProjects, signal);
   }
 
   // 所有项目注册完成后，统一串行执行嵌套关系检测
   // （避免并行递归下多个 detectAndLinkNestedIn 同时写 relations.json 导致竞态）
   for (const { id, dir } of registeredProjects) {
+    signal?.throwIfAborted();
     await detectAndLinkNestedIn(username, id, dir);
   }
 
@@ -286,7 +289,9 @@ async function scanDir(
   updated: string[],
   onProgress: ScanProgressCallback | undefined,
   registeredProjects: { id: string; dir: string }[],
+  signal: AbortSignal | undefined,
 ): Promise<void> {
+  signal?.throwIfAborted();
   // 通知进度
   if (onProgress) {
     onProgress({
@@ -330,10 +335,12 @@ async function scanDir(
   // 如果是 git 仓库或有 lattice.json → 采集指纹
   // skipNestedIn=true：嵌套关系检测延迟到 scanForProjects 所有扫描完成后统一执行
   if (isGitRepo || legacyId) {
+    signal?.throwIfAborted();
     const { derived } = await collectFingerprint(dir);
     const ids = computeProjectIds(derived as FingerprintDerived, legacyId);
 
     if (ids.length > 0) {
+      signal?.throwIfAborted();
       const { meta, isNew } = await autoRegisterProject(username, ids, dir, derived, true);
       if (isNew) {
         added.push(dir);
@@ -350,10 +357,13 @@ async function scanDir(
   // 并行递归（并发数根据 CPU 核心数动态确定）
   const concurrency = CONCURRENCY;
   for (let i = 0; i < subDirs.length; i += concurrency) {
+    signal?.throwIfAborted();
     await Promise.all(
       subDirs
         .slice(i, i + concurrency)
-        .map((d: string) => scanDir(username, d, added, updated, onProgress, registeredProjects)),
+        .map((d: string) =>
+          scanDir(username, d, added, updated, onProgress, registeredProjects, signal),
+        ),
     );
   }
 }

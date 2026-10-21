@@ -1,0 +1,5 @@
+{
+  "description": "API specification template (overview + request/response conventions)",
+  "defaultScope": "project",
+  "source": "built-in"
+}

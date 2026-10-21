@@ -1,0 +1,65 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+
+const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
+const isZh = lang.toLowerCase().startsWith('zh');
+const isSplash = Astro.locals.starlightRoute?.entry?.data?.template === 'splash';
+const base = import.meta.env.BASE_URL;
+
+const copy = isZh
+  ? {
+      tagline: '仓库之上，会话之外。',
+      linksLabel: '页脚导航',
+      links: [
+        { label: '文档', href: `${base}docs/` },
+        { label: '在线 Demo', href: `${base}demo/` },
+        { label: 'GitHub', href: 'https://github.com/qxchuckle/lattice', external: true },
+        { label: 'npm', href: 'https://www.npmjs.com/package/@qcqx/lattice-cli', external: true },
+      ],
+      meta: ['MIT 开源', '数据在 ~/.lattice', '无遥测'],
+    }
+  : {
+      tagline: 'Above the repo. Beyond the session.',
+      linksLabel: 'Footer navigation',
+      links: [
+        { label: 'Docs', href: `${base}docs/` },
+        { label: 'Live demo', href: `${base}demo/` },
+        { label: 'GitHub', href: 'https://github.com/qxchuckle/lattice', external: true },
+        { label: 'npm', href: 'https://www.npmjs.com/package/@qcqx/lattice-cli', external: true },
+      ],
+      meta: ['MIT licensed', 'Data in ~/.lattice', 'No telemetry'],
+    };
+
+const year = new Date().getFullYear();
+---
+
+<footer class:list={['ll-footer', { 'll-footer--bleed': isSplash }]}>
+  <div class='ll-footer__inner'>
+    <div class='ll-footer__brand'>
+      <span class='ll-footer__mark' aria-hidden='true'>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </span>
+      <div>
+        <strong>Lattice</strong>
+        <p>{copy.tagline}</p>
+      </div>
+    </div>
+
+    <nav class='ll-footer__links' aria-label={copy.linksLabel}>
+      {copy.links.map((link) => (
+        <a href={link.href} target={link.external ? '_blank' : undefined} rel={link.external ? 'noreferrer' : undefined}>
+          {link.label}{link.external && <span aria-hidden='true'> ↗</span>}
+        </a>
+      ))}
+    </nav>
+  </div>
+
+  <div class='ll-footer__meta'>
+    <ul>
+      {copy.meta.map((item) => <li>{item}</li>)}
+    </ul>
+    <span>© {year} Lattice</span>
+  </div>
+</footer>
+
+{!isSplash && <Default />}

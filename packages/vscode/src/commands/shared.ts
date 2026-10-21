@@ -19,6 +19,14 @@ export interface GraphController {
   }): Promise<void>;
 }
 
+export interface ConfigController {
+  open(target?: {
+    section?: 'overview' | 'projects' | 'editor' | 'core' | 'users' | 'diagnostics' | 'advanced';
+    anchor?: string;
+  }): Promise<void>;
+  registerCurrent(): Promise<void>;
+}
+
 import type { BusyService } from '../busy';
 import type { RevealService } from '../views/reveal';
 import type { SpecDiagnosticsService } from '../editor/spec-diagnostics';
@@ -47,6 +55,7 @@ export interface CommandServices {
   viewSearch?: ViewSearchService;
   viewSearchPreview?: ViewSearchPreviewService;
   graph?: GraphController;
+  config?: ConfigController;
   watcher?: { start(): void; healthy: boolean };
   reveal?: RevealService;
   specDiagnostics?: SpecDiagnosticsService;
@@ -300,6 +309,6 @@ export async function confirmDanger(
 
 export function cwdForCli(services: CommandServices): string | undefined {
   return (
-    services.activeProject.currentAnchorRoot ?? services.activeProject.currentFolder?.uri.fsPath
+    services.activeProject.currentProjectRoot ?? services.activeProject.currentFolder?.uri.fsPath
   );
 }

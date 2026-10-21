@@ -2,6 +2,7 @@ import type {
   BridgeActionName,
   BridgeRequestMethod,
   BridgeResponse,
+  ConfigProgressEvent,
   ExtensionToWebview,
 } from '@qcqx/lattice-protocol';
 
@@ -68,6 +69,8 @@ export interface HostBridgeHandlers {
   onSnapshotChanged?: (payload?: { sections?: string[] }) => void;
   onThemeChanged?: (mode: 'light' | 'dark') => void;
   onRouteTo?: (path: string) => void;
+  onConfigProgress?: (payload: ConfigProgressEvent) => void;
+  onConfigStateChanged?: () => void;
 }
 
 let bridgeInitialized = false;
@@ -106,6 +109,12 @@ export function initHostBridge(handlers: HostBridgeHandlers = {}): void {
           if (path) handlers.onRouteTo?.(path);
           break;
         }
+        case 'configProgress':
+          handlers.onConfigProgress?.(message.payload as ConfigProgressEvent);
+          break;
+        case 'configStateChanged':
+          handlers.onConfigStateChanged?.();
+          break;
       }
     }
   });

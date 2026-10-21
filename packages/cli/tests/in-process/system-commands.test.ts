@@ -78,11 +78,113 @@ test('status --global --json：全局统计可解析', async () => {
 test('config：show --json / get / set / unset 全链路（global 层）', async () => {
   const shown = await runConfig(['config', 'show', '--json']);
   assert.equal(shown.exitCode, 0, shown.stderr);
-  parseCliJson(shown);
+  const shownConfig = parseCliJson(shown);
+  // show 也展示实际生效的 embedding 默认值，而不是只显示显式写入项
+  assert.match(JSON.stringify(shownConfig), /Xenova\/bge-small-zh-v1\.5/);
+  assert.match(JSON.stringify(shownConfig), /"dimension":512/);
 
   const got = await runConfig(['config', 'get', 'rag.embedding.allowRemoteModels', '--json']);
   assert.equal(got.exitCode, 0, got.stderr);
   assert.match(got.stdout, /false/);
+
+  // 未显式写入的 embedding 默认值也能读取，避免用户只能通过 rag status 才能看到默认模型
+  const defaultModel = await runConfig(['config', 'get', 'rag.embedding.modelId', '--json']);
+  assert.equal(defaultModel.exitCode, 0, defaultModel.stderr);
+  assert.match(defaultModel.stdout, /Xenova\/bge-small-zh-v1\.5/);
+  const defaultDimension = await runConfig(['config', 'get', 'rag.embedding.dimension', '--json']);
+  assert.equal(defaultDimension.exitCode, 0, defaultDimension.stderr);
+  assert.match(defaultDimension.stdout, /512/);
+
+  // 切换模型时自动同步 dimension/queryPrefix，避免只改 modelId 留下旧参数
+  const setModel = await runConfig([
+    'config',
+    'set',
+    'rag.embedding.modelId',
+    'Xenova/all-MiniLM-L6-v2',
+  ]);
+  assert.equal(setModel.exitCode, 0, setModel.stderr);
+  assert.match(setModel.stdout, /已同步模型预设/);
+  assert.match(setModel.stdout, /Xenova\/all-MiniLM-L6-v2 尚未安装/);
+  assert.match(setModel.stdout, /ltc rag rebuild 下载模型并重建索引/);
+  const modelDimension = await runConfig(['config', 'get', 'rag.embedding.dimension', '--json']);
+  assert.equal(modelDimension.exitCode, 0, modelDimension.stderr);
+  assert.match(modelDimension.stdout, /384/);
+  const modelPrefix = await runConfig(['config', 'get', 'rag.embedding.queryPrefix', '--json']);
+  assert.equal(modelPrefix.exitCode, 0, modelPrefix.stderr);
+  assert.match(modelPrefix.stdout, /""/);
+
+  // 重复设置同一模型时保留用户手动调整的 dtype，避免预设覆盖自定义参数
+  const setDtype = await runConfig(['config', 'set', 'rag.embedding.dtype', 'fp32']);
+  assert.equal(setDtype.exitCode, 0, setDtype.stderr);
+  assert.match(setDtype.stdout, /embedding 参数已变更/);
+  assert.match(setDtype.stdout, /ltc rag rebuild/);
+  const setSameModel = await runConfig([
+    'config',
+    'set',
+    'rag.embedding.modelId',
+    'Xenova/all-MiniLM-L6-v2',
+  ]);
+  assert.equal(setSameModel.exitCode, 0, setSameModel.stderr);
+  assert.match(setSameModel.stdout, /模型未变化/);
+  const preservedDtype = await runConfig(['config', 'get', 'rag.embedding.dtype', '--json']);
+  assert.equal(preservedDtype.exitCode, 0, preservedDtype.stderr);
+  assert.match(preservedDtype.stdout, /fp32/);
+
+  const unsetModel = await runConfig([
+    'config',
+    'unset',
+    'rag.embedding.modelId',
+    '--scope',
+    'global',
+  ]);
+  assert.equal(unsetModel.exitCode, 0, unsetModel.stderr);
+  assert.match(unsetModel.stdout, /回落到默认模型参数/);
+  assert.match(unsetModel.stdout, /Xenova\/bge-small-zh-v1\.5 尚未安装/);
+  assert.match(unsetModel.stdout, /ltc rag rebuild 下载模型并重建索引/);
+  const resetDimension = await runConfig(['config', 'get', 'rag.embedding.dimension', '--json']);
+  assert.equal(resetDimension.exitCode, 0, resetDimension.stderr);
+  assert.match(resetDimension.stdout, /512/);
+
+  // 手写配置只改了 modelId 时，再次 set 同一模型会补齐缺失的预设参数
+  await putFile(
+    join(env.latticeHome, 'config', 'config.json'),
+    JSON.stringify({ rag: { embedding: { modelId: 'Xenova/all-MiniLM-L6-v2' } } }),
+  );
+  const repair = await runConfig([
+    'config',
+    'set',
+    'rag.embedding.modelId',
+    'Xenova/all-MiniLM-L6-v2',
+  ]);
+  assert.equal(repair.exitCode, 0, repair.stderr);
+  assert.match(repair.stdout, /已补齐缺失参数/);
+  const repairedDimension = await runConfig(['config', 'get', 'rag.embedding.dimension', '--json']);
+  assert.equal(repairedDimension.exitCode, 0, repairedDimension.stderr);
+  assert.match(repairedDimension.stdout, /384/);
+  const repairedPrefix = await runConfig(['config', 'get', 'rag.embedding.queryPrefix', '--json']);
+  assert.equal(repairedPrefix.exitCode, 0, repairedPrefix.stderr);
+  assert.match(repairedPrefix.stdout, /""/);
+
+  // 切换到未知自定义模型时清空旧模型前缀，避免继续沿用 BGE/MiniLM 前缀
+  const setCustomModel = await runConfig([
+    'config',
+    'set',
+    'rag.embedding.modelId',
+    'custom/model',
+  ]);
+  assert.equal(setCustomModel.exitCode, 0, setCustomModel.stderr);
+  assert.match(setCustomModel.stdout, /清空旧模型前后缀/);
+  const customPrefix = await runConfig(['config', 'get', 'rag.embedding.queryPrefix', '--json']);
+  assert.equal(customPrefix.exitCode, 0, customPrefix.stderr);
+  assert.match(customPrefix.stdout, /""/);
+
+  const emptyModel = await runConfig(['config', 'set', 'rag.embedding.modelId', '']);
+  assert.equal(emptyModel.exitCode, 1);
+  assert.match(emptyModel.stderr, /模型 ID 不能为空/);
+
+  const nonStringModel = await runConfig(['config', 'set', 'rag.embedding.modelId', '123']);
+  assert.equal(nonStringModel.exitCode, 1);
+  assert.match(nonStringModel.stderr, /模型 ID 不能为空/);
 
   const set = await runConfig([
     'config',
@@ -106,6 +208,22 @@ test('config：show --json / get / set / unset 全链路（global 层）', async
   assert.equal(unset.exitCode, 0, unset.stderr);
   const after = await readFile(configPath, 'utf-8');
   assert.ok(!after.includes('allowRemoteModels'), `unset 后不应包含该键：${after}`);
+});
+
+test('config set 模型：本机覆盖时提示实际生效模型', async () => {
+  await putFile(
+    join(env.latticeHome, 'config', 'config-local.json'),
+    JSON.stringify({
+      username: U,
+      rag: { embedding: { modelId: 'Xenova/bge-small-zh-v1.5', dimension: 512 } },
+    }),
+  );
+
+  const r = await runConfig(['config', 'set', 'rag.embedding.modelId', 'Xenova/all-MiniLM-L6-v2']);
+  assert.equal(r.exitCode, 0, r.stderr);
+  assert.match(r.stdout, /本机配置中的 rag.embedding.modelId 覆盖了本次设置/);
+  assert.match(r.stdout, /当前生效：Xenova\/bge-small-zh-v1\.5/);
+  assert.match(r.stdout, /模型 Xenova\/bge-small-zh-v1\.5 尚未安装/);
 });
 
 test('trash：list --json 可见 / restore 恢复 / purge -f 彻底删除', async () => {

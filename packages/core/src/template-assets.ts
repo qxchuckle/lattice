@@ -52,6 +52,8 @@ export interface BundledSpecTemplateConflict {
 export interface SyncBundledSpecTemplatesOptions {
   templateNames?: string[];
   overwriteExistingNames?: string[];
+  /** 选择内置模板语言；缺省使用 languages.json 的 defaultLanguage。 */
+  language?: DocLanguage;
 }
 
 export interface SyncBundledSpecTemplatesResult {
@@ -120,13 +122,19 @@ export function getDefaultDocLanguage(): DocLanguage {
   return getDocLanguageManifest().defaultLanguage;
 }
 
-const LANGUAGE_SCOPED_TEMPLATE_KINDS = new Set(['skills', 'platforms', 'commands', 'agents']);
+const LANGUAGE_SCOPED_TEMPLATE_KINDS = new Set([
+  'skills',
+  'platforms',
+  'commands',
+  'agents',
+  'spec',
+]);
 
 /**
  * 解析 bundled 模板目录。
  *
- * `skills` / `platforms` / `commands` / `agents` 是语言相关资产，按 `<kind>/<lang>/` 路由；
- * 未传 `language` 时使用 `languages.json` 的 defaultLanguage。`spec` 等其余资产保持原路径。
+ * `skills` / `platforms` / `commands` / `agents` / `spec` 是语言相关资产，按 `<kind>/<lang>/` 路由；
+ * 未传 `language` 时使用 `languages.json` 的 defaultLanguage。
  */
 export function getBundledTemplateDir(relativePath: string, language?: DocLanguage): string {
   const [kind, ...rest] = relativePath.split('/');
@@ -200,8 +208,8 @@ export function renderKiroSteering(data?: TemplateData, language?: DocLanguage):
 
 // ─── Spec 模板 ───
 
-function getBundledSpecTemplatesDir(): string {
-  return getBundledTemplateDir('spec');
+function getBundledSpecTemplatesDir(language?: DocLanguage): string {
+  return getBundledTemplateDir('spec', language);
 }
 
 async function listMarkdownFiles(dir: string): Promise<string[]> {
@@ -281,8 +289,8 @@ async function readSpecTemplatesFromDir(rootDir: string): Promise<SpecTemplate[]
   return templates;
 }
 
-export async function listBundledSpecTemplates(): Promise<SpecTemplate[]> {
-  return readSpecTemplatesFromDir(getBundledSpecTemplatesDir());
+export async function listBundledSpecTemplates(language?: DocLanguage): Promise<SpecTemplate[]> {
+  return readSpecTemplatesFromDir(getBundledSpecTemplatesDir(language));
 }
 
 export async function listSpecTemplates(): Promise<SpecTemplate[]> {
@@ -337,7 +345,7 @@ function normalizeTemplateNames(templateNames: string[]): string[] {
 export async function syncBundledSpecTemplates(
   options: SyncBundledSpecTemplatesOptions = {},
 ): Promise<SyncBundledSpecTemplatesResult> {
-  const bundledTemplates = await listBundledSpecTemplates();
+  const bundledTemplates = await listBundledSpecTemplates(options.language);
   const bundledTemplateMap = new Map(bundledTemplates.map((template) => [template.name, template]));
   const requestedTemplateNames = options.templateNames?.length
     ? normalizeTemplateNames(options.templateNames)
@@ -347,7 +355,7 @@ export async function syncBundledSpecTemplates(
   const synced: string[] = [];
   const conflicts: BundledSpecTemplateConflict[] = [];
   const missing: string[] = [];
-  const bundledSpecRoot = getBundledSpecTemplatesDir();
+  const bundledSpecRoot = getBundledSpecTemplatesDir(options.language);
   const targetRoot = getSpecTemplatesDir();
 
   await mkdir(targetRoot, { recursive: true });

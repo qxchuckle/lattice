@@ -29,6 +29,9 @@ const WEBVIEW_ALLOWED_COMMANDS = new Set([
   'lattice.task.openCheckpoint',
   'lattice.spec.openById',
   'lattice.project.open',
+  'lattice.project.revealInGraph',
+  'lattice.logs.show',
+  'workbench.action.reloadWindow',
 ]);
 
 /** 请求入口：注入宿主依赖（快照缓存）后委托给 vscode-free 处理器。 */

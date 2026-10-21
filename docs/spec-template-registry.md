@@ -1,29 +1,35 @@
-# Spec 模板仓库结构说明
+# Spec Template Repository Layout
 
-本文档说明 Lattice 如何从 Git 仓库拉取并导入自定义 spec 模板，以及模板仓库应该如何组织目录。
+> English | [简体中文](./spec-template-registry.zh-CN.md)
 
-## 支持的命令
+This document explains how Lattice pulls and imports custom spec templates from Git repositories, and how a template repository should be organized.
+
+## Supported commands
 
 ```bash
-# 初始化时直接拉取模板仓库
+# Pull a template repository during initialization
 lattice init --registry-template <git-url>
 
-# 拉取一个新的模板仓库
+# Pull a new template repository
 lattice spec template pull <git-url>
 
-# 同步已注册的模板仓库
+# Sync registered template repositories
 lattice spec template sync
 
-# 查看已注册的模板仓库
+# List registered template repositories
 lattice spec template registry list
 
-# 删除一个已注册的模板仓库
+# Remove a registered template repository
 lattice spec template registry remove <git-url>
 ```
 
-`lattice init --registry-template <git-url>` 会在初始化时拉取模板仓库，并将仓库地址写入全局配置 `~/.lattice/config/config.json` 的 `registryTemplates` 字段。
+`lattice init --registry-template <git-url>` pulls the template repository during initialization and writes its URL to the `registryTemplates` field in the global config `~/.lattice/config/config.json`.
 
-## 仓库目录结构约定
+## Built-in templates
+
+`ltc init` installs the built-in templates in the document language selected by `--lang` / `config-local.language` (`zh` or `en`) into `~/.lattice/templates/spec/<template>/`. `ltc spec template sync-builtins` uses the same setting. Existing templates are preserved unless you choose to overwrite them; `-f` / non-interactive runs skip conflicts.
+
+## Repository layout convention
 
 ```text
 my-spec-templates/
@@ -46,11 +52,11 @@ my-spec-templates/
         └── navigation.md
 ```
 
-- Lattice 会检测仓库中的 `spec/` 目录，并将其作为模板根目录，提取其中第一层文件夹作为模板名
+- Lattice looks for the `spec/` directory in the repository, uses it as the template root, and treats each first-level directory as a template name.
 
-## 单个模板目录应该怎么写
+## How to write a single template directory
 
-每个模板目录推荐长这样：
+A template directory should look like this:
 
 ```text
 frontend/
@@ -64,119 +70,119 @@ frontend/
 └── type-safety.md
 ```
 
-注意：
+Notes:
 
-- 最外层 `frontend/` 是“模板名”
-- 模板目录下所有 `*.md` 都会被递归导入
-- 不需要再额外套一层同名目录
+- The outermost `frontend/` is the template name.
+- Every `*.md` file under the template directory is imported recursively.
+- Do not add another same-named directory inside it.
 
-## `template.json` 规范
+## `template.json` specification
 
-`template.json` 是可选文件，目前支持两个字段：
+`template.json` is optional and currently supports two fields:
 
 ```json
 {
-  "description": "前端开发规范模板（适用于 React / Vue 项目）",
+  "description": "Frontend conventions template (for React / Vue projects)",
   "defaultScope": "user"
 }
 ```
 
-字段说明：
+Field reference:
 
 - `description`
-  - 模板说明
-  - 会展示在 `lattice spec template list` 中
+  - Template description.
+  - Shown by `lattice spec template list`.
 - `defaultScope`
-  - 可选值：`project`、`user`、`global`
-  - 控制模板默认应用到哪一层
+  - Allowed values: `project`, `user`, `global`.
+  - Controls the default scope the template is applied to.
 
-如果不提供：
+If omitted:
 
-- `description` 默认会退化成 `自定义模板 <模板名>`
-- `defaultScope` 默认是 `project`
+- `description` falls back to `Custom template <template-name>`.
+- `defaultScope` defaults to `project`.
 
-## Markdown 文件内容规范
+## Markdown content convention
 
-每个 markdown 文件建议使用 frontmatter：
+Each Markdown file should use frontmatter:
 
 ```md
 ---
-title: 组件规范
+title: Component conventions
 tags: [frontend, components]
 ---
 
-# 组件规范
+# Component conventions
 
-## 组件职责
+## Component responsibilities
 
-<!-- 这里写规范内容 -->
+<!-- Write the conventions here -->
 ```
 
-建议：
+Recommendations:
 
-- 使用 `title`
-- 使用 `tags`
-- 一个文件聚焦一个主题
-- 不要把多种无关规则塞进同一个 markdown
+- Use `title`.
+- Use `tags`.
+- Keep one topic per file.
+- Do not pack unrelated rules into one Markdown file.
 
-## 模板应用后的落地位置
+## Where templates land after application
 
-### 如果模板默认是 `project`
+### If the template defaults to `project`
 
-会写入：
+It is written to:
 
 ```text
 ~/.lattice/users/<username>/projects/<project-id>/spec/
 ```
 
-例如：
+For example:
 
 ```text
 ~/.lattice/users/alice/projects/p123/spec/frontend/index.md
 ~/.lattice/users/alice/projects/p123/spec/frontend/component-guidelines.md
 ```
 
-### 如果模板默认是 `user`
+### If the template defaults to `user`
 
-会写入：
+It is written to:
 
 ```text
 ~/.lattice/users/<username>/spec/
 ```
 
-例如：
+For example:
 
 ```text
 ~/.lattice/users/alice/spec/frontend/index.md
 ~/.lattice/users/alice/spec/frontend/component-guidelines.md
 ```
 
-## 最佳实践
+## Best practices
 
-### 1. 用 `spec/` 作为仓库模板根目录
+### 1. Use `spec/` as the repository template root
 
-推荐使用：
+Recommended:
 
 ```text
 repo/spec/<template-name>/...
 ```
 
-这样仓库更清晰，也方便以后扩展 README、示例和脚本。
+This keeps the repository clear and leaves room for READMEs, examples and scripts later.
 
-### 2. 模板名稳定，不要频繁改名
+### 2. Keep template names stable; avoid renaming
 
-模板名会直接成为用户使用的名字：
+The template name is what users type:
 
 ```bash
 lattice spec template apply frontend
 lattice link --template frontend,backend
 ```
 
-所以模板名一旦发布，尽量保持稳定。
+Once published, keep the name stable.
 
-### 3. 一个模板一个主题域
+### 3. One template, one topic domain
 
-建议：
+Recommended:
 
 - `frontend`
 - `backend`
@@ -184,15 +190,15 @@ lattice link --template frontend,backend
 - `observability`
 - `security`
 
-不建议：
+Not recommended:
 
 - `all-in-one-enterprise-template`
 
-### 4. 用多个小文件，而不是一个超大 markdown
+### 4. Prefer several small files over one huge Markdown file
 
-推荐把模板拆成：
+Split the template into:
 
 - `index.md`
-- 专题子文档
+- Topic-specific subdocuments
 
-这样更适合 AI 渐进式读取。
+This works better with progressive AI reading.

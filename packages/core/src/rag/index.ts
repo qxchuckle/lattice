@@ -60,6 +60,7 @@ export {
   generateEmbeddings,
   contentHash,
   getEmbeddingConfig,
+  getDefaultEmbeddingConfig,
   isModelInstalled,
   isModelLoaded,
   isModelLoadNetworkError,
@@ -68,6 +69,20 @@ export {
   removeInstalledModel,
   resolveEmbeddingProxy,
 } from './embeddings';
+export {
+  DEFAULT_EMBEDDING_MODEL_ID,
+  EMBEDDING_MODEL_PRESETS,
+  EMBEDDING_MODEL_RELATED_KEYS,
+  getEmbeddingModelPreset,
+  getEmbeddingModelConfig,
+  applyEmbeddingModelPreset,
+  clearEmbeddingModelPresetFields,
+} from './model-presets';
+export type {
+  EmbeddingModelPreset,
+  ApplyEmbeddingModelPresetOptions,
+  ApplyEmbeddingModelPresetResult,
+} from './model-presets';
 
 import { collectAllSearchDocuments } from './collector';
 export { collectAllSearchDocuments };

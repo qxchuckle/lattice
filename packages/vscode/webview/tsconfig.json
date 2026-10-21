@@ -19,5 +19,5 @@
       "@qcqx/lattice-core": ["../../core/src/index.ts"]
     }
   },
-  "include": ["src", "../../web-ui/src/types", "../../../types"]
+  "include": ["src", "../shared", "../../web-ui/src/types", "../../../types"]
 }

@@ -1,0 +1,206 @@
+---
+const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
+const isZh = lang.toLowerCase().startsWith('zh');
+const base = import.meta.env.BASE_URL;
+const demoHref = `${base}demo/`;
+const docsHref = `${base}docs/`;
+
+const copy = isZh
+  ? {
+      eyebrow: '本地优先的研发记忆与工作流层',
+      titleA: '代码库之上，',
+      titleBPrefix: '',
+      accent: '会话之外。',
+      lede:
+        'Lattice 把规范、任务、决策和经验沉淀在本地，让它们在项目、会话和 Agent 之间持续复用。',
+      demo: '打开在线 Demo',
+      docs: '快速开始',
+      install: 'npm i -g @qcqx/lattice-cli',
+      proof: ['MIT', '本地优先', '无遥测', 'Agent 无关'],
+      local: '本地 · ~/.lattice',
+      live: '实时格栅 · 模拟数据',
+      pause: '暂停动效',
+      play: '继续动效',
+      motionOff: '动效已关闭',
+      legend: ['规范', '任务', '决策', '检查点'],
+      cardHint: '一条跨越会话的记忆',
+    }
+  : {
+      eyebrow: 'LOCAL-FIRST ENGINEERING MEMORY',
+      titleA: 'Above the repo.',
+      titleBPrefix: 'Beyond the ',
+      accent: 'session.',
+      lede:
+        'Lattice is a local-first engineering memory and workflow layer for AI-assisted development. Specs, tasks, decisions and experience are captured once in ~/.lattice and reused across projects, sessions and agents.',
+      demo: 'Try the live demo',
+      docs: 'Get started',
+      install: 'npm i -g @qcqx/lattice-cli',
+      proof: ['MIT', 'Local-first', 'No telemetry', 'Agent-agnostic'],
+      local: 'LOCAL · ~/.lattice',
+      live: 'Live lattice · mock artifacts',
+      pause: 'Pause motion',
+      play: 'Play motion',
+      motionOff: 'Motion off',
+      legend: ['spec', 'task', 'decision', 'checkpoint'],
+      cardHint: 'A memory that survives the session',
+    };
+---
+
+<section class='ll-hero not-content' aria-labelledby='_top'>
+  <div class='ll-hero__copy'>
+    <p class='ll-eyebrow'><span aria-hidden='true'></span>{copy.eyebrow}</p>
+
+    <h1 id='_top'>
+      <span>{copy.titleA}</span>
+      <span>{copy.titleBPrefix}<span class='ll-accent'>{copy.accent}</span></span>
+    </h1>
+
+    <p class='ll-lede'>{copy.lede}</p>
+
+    <div class='ll-actions'>
+      <a class='ll-button ll-button--primary' href={demoHref}>{copy.demo} <span aria-hidden='true'>→</span></a>
+      <a class='ll-button ll-button--ghost' href={docsHref}>{copy.docs}</a>
+    </div>
+
+    <div class='ll-install'>
+      <span aria-hidden='true'>$</span>
+      <code>{copy.install}</code>
+      <button type='button' class='ll-copy' data-copy-install aria-label={isZh ? '复制安装命令' : 'Copy install command'}>{isZh ? '复制' : 'Copy'}</button>
+    </div>
+
+    <ul class='ll-proof' aria-label={isZh ? '产品信息' : 'Product facts'}>
+      {copy.proof.map((item) => <li>{item}</li>)}
+    </ul>
+  </div>
+
+  <div class='ll-visual'>
+    <div class='ll-visual__frame' aria-hidden='true'></div>
+    <div class='ll-local-badge'><i aria-hidden='true'></i>{copy.local}</div>
+
+    <div class='ll-legend' aria-hidden='true'>
+      <span><i class='ll-legend-spec'></i>{copy.legend[0]}</span>
+      <span><i class='ll-legend-task'></i>{copy.legend[1]}</span>
+      <span><i class='ll-legend-decision'></i>{copy.legend[2]}</span>
+      <span><i class='ll-legend-checkpoint'></i>{copy.legend[3]}</span>
+    </div>
+
+    <div id='lattice-stage' class='ll-stage' aria-hidden='true'></div>
+
+    <div id='node-card' class='ll-node-card' hidden>
+      <div class='ll-node-card__kind' id='node-card-kind'>SPEC</div>
+      <div class='ll-node-card__title' id='node-card-title'>API envelope &amp; error codes</div>
+      <div class='ll-node-card__meta' id='node-card-meta'>acme-api · ~/.lattice</div>
+      <div class='ll-node-card__rule'></div>
+      <div class='ll-node-card__hint'>{copy.cardHint}</div>
+    </div>
+
+    <div class='ll-stage-footer'>
+      <span class='ll-stage-live'><i aria-hidden='true'></i>{copy.live}</span>
+      <button class='ll-motion' id='motion-toggle' type='button' aria-pressed='false' disabled>{copy.pause}</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { initHeroLattice } from '../../scripts/hero-lattice';
+
+  const lang = document.documentElement.lang === 'zh-CN' ? 'zh' : 'en';
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function setupCopy(): void {
+    const button = document.querySelector<HTMLButtonElement>('[data-copy-install]');
+    if (!button) return;
+    button.addEventListener('click', async () => {
+      const command = 'npm i -g @qcqx/lattice-cli';
+      try {
+        await navigator.clipboard.writeText(command);
+      } catch {
+        const input = document.createElement('textarea');
+        input.value = command;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      const original = button.textContent;
+      button.textContent = lang === 'zh' ? '已复制' : 'Copied';
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 1500);
+    });
+  }
+
+  function setupMotionToggle(): void {
+    const button = document.querySelector<HTMLButtonElement>('#motion-toggle');
+    if (!button) return;
+    if (!('__latticeScene' in window)) {
+      button.disabled = true;
+      return;
+    }
+    const scene = (window as Window & { __latticeScene?: { setPaused(value: boolean): void; isPaused(): boolean } })
+      .__latticeScene;
+    if (!scene) return;
+    button.disabled = reducedMotion;
+    button.textContent = reducedMotion
+      ? (lang === 'zh' ? '动效已关闭' : 'Motion off')
+      : (lang === 'zh' ? '暂停动效' : 'Pause motion');
+    button.addEventListener('click', () => {
+      const next = !scene.isPaused();
+      scene.setPaused(next);
+      button.textContent = next
+        ? (lang === 'zh' ? '继续动效' : 'Play motion')
+        : (lang === 'zh' ? '暂停动效' : 'Pause motion');
+      button.setAttribute('aria-pressed', String(next));
+    });
+  }
+
+  function setupReveals(): void {
+    const items = [...document.querySelectorAll<HTMLElement>('[data-reveal]')];
+    if (!items.length) return;
+    if (reducedMotion || !('IntersectionObserver' in window)) return;
+
+    // Only hide blocks that are still below the fold when the script runs; hiding them
+    // later would make an already painted block blink.
+    const viewport = window.innerHeight;
+    const pending = items.filter((item) => item.getBoundingClientRect().top > viewport);
+    if (!pending.length) return;
+    pending.forEach((item) => item.classList.add('ll-reveal'));
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: '0px 0px -10% 0px', threshold: 0.04 },
+    );
+    pending.forEach((item) => observer.observe(item));
+  }
+
+  async function startHero(): Promise<void> {
+    const stage = document.getElementById('lattice-stage');
+    if (!stage) return;
+    try {
+      await document.fonts.ready;
+      const [{ gsap }] = await Promise.all([import('gsap')]);
+      const scene = await initHeroLattice(stage, { gsap, reducedMotion });
+      (window as Window & { __latticeScene?: typeof scene }).__latticeScene = scene;
+      stage.dataset.ready = 'true';
+      setupMotionToggle();
+    } catch (error) {
+      console.error('[lattice] hero scene failed to start', error);
+    }
+  }
+
+  setupCopy();
+  setupReveals();
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(() => void startHero(), { timeout: 1200 });
+  } else {
+    setTimeout(() => void startHero(), 250);
+  }
+</script>

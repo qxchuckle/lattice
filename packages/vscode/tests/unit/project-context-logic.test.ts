@@ -1,0 +1,149 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import {
+  buildCandidates,
+  compareCandidates,
+  deepestCandidateForPath,
+  isPathInsideOrEqual,
+  makeCandidate,
+  resolveActiveCandidate,
+  type FolderProjectInfo,
+  type WorkspaceFolderInput,
+} from '../../src/state/project-context-logic';
+
+const root = '/repo';
+const folderA: WorkspaceFolderInput = {
+  uri: 'file:///repo',
+  name: 'repo',
+  fsPath: root,
+};
+const folderB: WorkspaceFolderInput = {
+  uri: 'file:///other',
+  name: 'other',
+  fsPath: '/other',
+};
+const info = new Map<string, FolderProjectInfo>([
+  [folderA.uri, { anchorRoot: root, gitRoot: root, declaredId: 'root-id' }],
+  [folderB.uri, { anchorRoot: null, gitRoot: '/other', declaredId: null }],
+]);
+
+const registered = [
+  { id: 'legacy:root', name: 'Root', localPaths: [root] },
+  { id: 'legacy:a', name: 'Package A', localPaths: [`${root}/packages/a`] },
+  { id: 'legacy:b', name: 'Package B', localPaths: [`${root}/packages/b`] },
+  { id: 'legacy:other', name: 'Other', localPaths: ['/other'] },
+  { id: 'legacy:outside', name: 'Outside', localPaths: ['/elsewhere'] },
+];
+
+test('路径包含按路径段判断，不让 /repo 命中 /repository', () => {
+  assert.equal(isPathInsideOrEqual('/repo', '/repo/packages/a'), true);
+  assert.equal(isPathInsideOrEqual('/repo', '/repo'), true);
+  assert.equal(isPathInsideOrEqual('/repo', '/repository'), false);
+});
+
+test('候选构建：每个 folder 根 + folder 内注册项目，去重根项目', () => {
+  const candidates = buildCandidates([folderA, folderB], info, registered);
+  const a = candidates.filter((candidate) => candidate.folderUri === folderA.uri);
+  assert.equal(a.length, 3);
+  assert.ok(a.some((candidate) => candidate.isRoot));
+  assert.ok(a.some((candidate) => candidate.projectId === 'legacy:a'));
+  assert.ok(a.some((candidate) => candidate.projectId === 'legacy:b'));
+  assert.equal(a.filter((candidate) => candidate.isRoot).length, 1);
+  assert.equal(candidates.filter((candidate) => candidate.folderUri === folderB.uri).length, 1);
+});
+
+test('最深路径：/repo/packages/a/src 命中 a，而不是根项目', () => {
+  const candidates = buildCandidates([folderA], info, registered);
+  const picked = deepestCandidateForPath(candidates, `${root}/packages/a/src/index.ts`);
+  assert.equal(picked?.projectId, 'legacy:a');
+});
+
+test('活动项目：未 pin 时跟随活动文件所属的最深项目', () => {
+  const candidates = buildCandidates([folderA], info, registered);
+  const picked = resolveActiveCandidate({
+    candidates,
+    folders: [folderA],
+    activeFilePath: `${root}/packages/b/src/index.ts`,
+  });
+  assert.equal(picked?.projectId, 'legacy:b');
+});
+
+test('活动项目：pin 项目优先于活动文件', () => {
+  const candidates = buildCandidates([folderA], info, registered);
+  const pinned = candidates.find((candidate) => candidate.projectId === 'legacy:a');
+  assert.ok(pinned);
+  const picked = resolveActiveCandidate({
+    candidates,
+    folders: [folderA],
+    activeFilePath: `${root}/packages/b/src/index.ts`,
+    pinned: { folderUri: folderA.uri, rootPath: `${root}/packages/a` },
+  });
+  assert.equal(picked?.projectId, 'legacy:a');
+});
+
+test('活动项目：多根 folder 下 pin folder 作为无活动文件回退', () => {
+  const candidates = buildCandidates([folderA, folderB], info, registered);
+  const picked = resolveActiveCandidate({
+    candidates,
+    folders: [folderA, folderB],
+    pinnedFolderUri: folderB.uri,
+  });
+  assert.equal(picked?.folderUri, folderB.uri);
+  assert.equal(picked?.isRoot, true);
+});
+
+test('旧 pin folder 仍优先于活动文件（兼容旧语义）', () => {
+  const candidates = buildCandidates([folderA, folderB], info, registered);
+  const picked = resolveActiveCandidate({
+    candidates,
+    folders: [folderA, folderB],
+    activeFilePath: `${root}/packages/a/src/index.ts`,
+    pinnedFolderUri: folderB.uri,
+  });
+  assert.equal(picked?.folderUri, folderB.uri);
+  assert.equal(picked?.isRoot, true);
+});
+
+test('folder 根在父级 Git 根时，根候选保留父项目根路径', () => {
+  const nestedFolder: WorkspaceFolderInput = {
+    uri: 'file:///repo/packages/a',
+    name: 'a',
+    fsPath: `${root}/packages/a`,
+  };
+  const nestedInfo = new Map<string, FolderProjectInfo>([
+    [nestedFolder.uri, { anchorRoot: null, gitRoot: root, declaredId: null }],
+  ]);
+  const candidates = buildCandidates([nestedFolder], nestedInfo, registered);
+  const rootCandidate = candidates.find((candidate) => candidate.isRoot);
+  assert.equal(rootCandidate?.rootPath, root);
+  assert.equal(rootCandidate?.folderUri, nestedFolder.uri);
+});
+
+test('嵌套未注册候选：动态锚点加入后按最深路径选中', () => {
+  const candidates = buildCandidates([folderA], info, registered);
+  const nested = makeCandidate({
+    folder: folderA,
+    rootPath: `${root}/packages/c`,
+    anchorRoot: `${root}/packages/c`,
+    gitRoot: root,
+    source: 'anchor',
+  });
+  candidates.push(nested);
+  const picked = resolveActiveCandidate({
+    candidates,
+    folders: [folderA],
+    activeFilePath: `${root}/packages/c/src/index.ts`,
+  });
+  assert.equal(picked?.rootPath, `${root}/packages/c`);
+  assert.equal(picked?.source, 'anchor');
+});
+
+test('排序：按 folder 顺序、根项目优先、再按路径', () => {
+  const candidates = buildCandidates([folderA, folderB], info, registered);
+  const sorted = [...candidates].sort((a, b) =>
+    compareCandidates(a, b, [folderA.uri, folderB.uri]),
+  );
+  assert.equal(sorted[0].folderUri, folderA.uri);
+  assert.equal(sorted[0].isRoot, true);
+  assert.equal(sorted[sorted.length - 1].folderUri, folderB.uri);
+});

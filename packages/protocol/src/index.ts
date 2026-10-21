@@ -10,10 +10,13 @@
  */
 import type {
   CheckpointEntry,
+  GitRemoteInfo,
   GitStatus,
+  LatticeGitStatus,
   ParsedSpec,
   ProjectMeta,
   ProjectRelation,
+  RAGStatus,
   TaskMeta,
   TaskTreeNode,
 } from '@qcqx/lattice-core';
@@ -22,10 +25,13 @@ import type {
 
 export type {
   CheckpointEntry,
+  GitRemoteInfo,
   GitStatus,
+  LatticeGitStatus,
   ParsedSpec,
   ProjectMeta,
   ProjectRelation,
+  RAGStatus,
   TaskMeta,
   TaskTreeNode,
 };
@@ -44,7 +50,26 @@ export type BridgeRequestMethod =
   | 'getContent'
   | 'search'
   | 'getStats'
-  | 'getDomainsData';
+  | 'getDomainsData'
+  // 配置中心（VSCode WebviewPanel）
+  | 'getConfigState'
+  | 'saveConfig'
+  | 'scanProjects'
+  | 'cancelScan'
+  | 'registerProject'
+  | 'updateProject'
+  | 'runDoctor'
+  | 'runRag'
+  | 'gitOperation'
+  | 'syncOperation'
+  | 'userOperation'
+  | 'pickDirectory'
+  | 'copyDiagnostics'
+  | 'openConfigFile'
+  | 'openVscodeSettings'
+  | 'getConfigDraft'
+  | 'saveConfigDraft'
+  | 'clearConfigDraft';
 
 export interface BridgeRequest {
   kind: 'request';
@@ -82,7 +107,7 @@ export type WebviewToExtension = BridgeRequest | BridgeAction | BridgeReady;
 
 export interface BridgeEvent {
   kind: 'event';
-  event: 'snapshotChanged' | 'themeChanged' | 'routeTo';
+  event: 'snapshotChanged' | 'themeChanged' | 'routeTo' | 'configProgress' | 'configStateChanged';
   payload?: unknown;
 }
 
@@ -160,4 +185,285 @@ export interface StatsPayload {
   taskCount: number;
   activeTaskCount: number;
   relationCount: number;
+}
+
+// ── VSCode 配置中心 ──
+
+export type ConfigSectionId =
+  | 'overview'
+  | 'projects'
+  | 'editor'
+  | 'core'
+  | 'users'
+  | 'diagnostics'
+  | 'advanced';
+
+export type ConfigSettingsTarget = 'user' | 'workspace';
+
+export interface ConfigRuntimeInfo {
+  extensionVersion: string;
+  coreVersion: string;
+  vscodeVersion: string;
+  nodeVersion: string;
+  platform: string;
+  root: string;
+  initialized: boolean;
+  configPaths: { global: string; local: string };
+  db: {
+    driver: string;
+    available: boolean;
+    error: string | null;
+    path: string;
+    sizeKB: number;
+  };
+  watcher: {
+    healthy: boolean;
+    autoRefresh: boolean;
+    fallbackPollMs: number;
+  };
+}
+
+export interface ConfigStats {
+  projectCount: number;
+  taskCount: number;
+  activeTaskCount: number;
+  specCount: number;
+  relationCount: number;
+}
+
+export type ConfigSettingSource = 'user' | 'workspace' | 'workspaceFolder' | 'default';
+
+export interface ConfigSettingsState {
+  target: ConfigSettingsTarget;
+  values: Record<string, unknown>;
+  defaults: Record<string, unknown>;
+  sources: Record<string, ConfigSettingSource>;
+}
+
+export interface ConfigCoreState {
+  /** 文件中的全局配置，保留未在表单中暴露的键。 */
+  global: Record<string, unknown>;
+  local: Record<string, unknown>;
+  globalDefaults: Record<string, unknown>;
+  localDefaults: Record<string, unknown>;
+  /** 合并 local / 内置默认值后的实际生效全局配置（用于表单展示）。 */
+  globalEffective?: Record<string, unknown>;
+}
+
+export interface ConfigProjectRow {
+  id: string;
+  ids: string[];
+  name: string;
+  description: string | null;
+  localPaths: string[];
+  gitRemotes: string[];
+  groups: string[];
+  groupIds: string[];
+  tags: string[];
+  updated: string | null;
+}
+
+export type ConfigWorkspaceStateKind =
+  | 'registered'
+  | 'registered-via-git'
+  | 'unregistered-git'
+  | 'unregistered-anchor'
+  | 'unregistered-no-anchor'
+  | 'nested';
+
+export interface ConfigWorkspaceProject {
+  /** 所属 workspace folder 路径。 */
+  folder: string;
+  /** 展示名称（项目名优先，否则目录名）。 */
+  name: string;
+  /** 候选项目根 / 注册目标路径。 */
+  path: string;
+  anchorRoot: string | null;
+  gitRoot: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  state: ConfigWorkspaceStateKind;
+  targetPath: string;
+  isRoot: boolean;
+  active: boolean;
+}
+
+export interface ConfigWorkspaceState {
+  folder: string;
+  name: string;
+  anchorRoot: string | null;
+  gitRoot: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  state: ConfigWorkspaceStateKind;
+  /** 根候选的注册目标路径（锚点/Git 根/项目根）。 */
+  targetPath: string;
+  /** 该 workspace folder 内的项目候选（根项目 + 已注册嵌套项目）。 */
+  projects: ConfigWorkspaceProject[];
+}
+
+export interface ConfigDomainLastSync {
+  status: 'ok' | 'error';
+  message: string;
+  at: string;
+}
+
+export interface ConfigDomainStats {
+  users: number;
+  projects: number;
+  specs: number;
+  tasks: number;
+}
+
+export interface ConfigDomainInfo {
+  hash: string;
+  remote: string;
+  branch: string;
+  label?: string;
+  use: 'trusted' | 'reference' | 'off';
+  routes?: string[];
+  pushState: string;
+  mirrorExists: boolean;
+  lastPushAt: string | null;
+  priority: number;
+  lastSync: ConfigDomainLastSync | null;
+  stats: ConfigDomainStats | null;
+}
+
+export interface ConfigGitState {
+  status: LatticeGitStatus;
+  remotes: GitRemoteInfo[];
+}
+
+export interface ConfigStatePayload {
+  initialized: boolean;
+  runtime: ConfigRuntimeInfo;
+  user: string;
+  users: string[];
+  stats: ConfigStats;
+  rag: RAGStatus | null;
+  settings: ConfigSettingsState;
+  core: ConfigCoreState;
+  workspace: ConfigWorkspaceState[];
+  projects: ConfigProjectRow[];
+  groupPaths: string[];
+  git: ConfigGitState;
+  domains: ConfigDomainInfo[];
+  errors: Record<string, string>;
+}
+
+export interface ConfigSavePayload {
+  vscode?: {
+    target: ConfigSettingsTarget;
+    set?: Record<string, unknown>;
+    unset?: string[];
+  };
+  global?: {
+    set?: Record<string, unknown>;
+    unset?: string[];
+  };
+  local?: {
+    set?: Record<string, unknown>;
+    unset?: string[];
+  };
+}
+
+export interface ConfigSaveResult {
+  changedKeys: string[];
+  warnings: string[];
+  requiresReload: boolean;
+  requiresRagRebuild: boolean;
+}
+
+export interface ConfigDraftSnapshot {
+  draft: unknown;
+  settingsTarget: ConfigSettingsTarget;
+  savedAt: string;
+}
+
+export interface ConfigScanPayload {
+  dirs: string[];
+  saveAsDefault?: boolean;
+}
+
+export interface ConfigScanResult {
+  added: string[];
+  updated: string[];
+  canceled?: boolean;
+}
+
+export interface ConfigRegisterPayload {
+  path: string;
+  target?: 'git-root' | 'folder';
+  createAnchor?: boolean;
+  name?: string;
+}
+
+export interface ConfigRegisterResult {
+  projectId: string;
+  projectName: string;
+  created: boolean;
+  anchorPath?: string;
+  ids: string[];
+}
+
+export interface ConfigUpdateProjectPayload {
+  id: string;
+  name?: string;
+  description?: string;
+  tags?: string[];
+  groups?: string[];
+}
+
+export interface ConfigRagPayload {
+  action: 'update' | 'rebuild';
+}
+
+export interface ConfigDoctorPayload {
+  fix?: boolean;
+}
+
+export type ConfigGitOperation =
+  | { op: 'commit'; message?: string }
+  | { op: 'pull' }
+  | { op: 'push' }
+  | { op: 'sync' }
+  | { op: 'init'; remote?: string }
+  | { op: 'remote-add'; name: string; url: string }
+  | { op: 'remote-set'; name: string; url: string }
+  | { op: 'remote-remove'; name: string };
+
+export type ConfigSyncOperation =
+  | { op: 'join'; remote: string; branch?: string; label?: string; use?: string; routes?: string[] }
+  | {
+      op: 'update';
+      hash: string;
+      remote?: string;
+      branch?: string;
+      label?: string;
+      use?: string;
+      routes?: string[];
+    }
+  | { op: 'unlink'; hash: string }
+  | { op: 'reorder'; hashes: string[] }
+  | { op: 'sync' }
+  | { op: 'preview'; hash: string; routes?: string[] };
+
+export type ConfigUserOperation =
+  | { op: 'switch'; username: string }
+  | { op: 'create'; username: string }
+  | { op: 'rename'; username: string; force?: boolean };
+
+export type ConfigOperationKind = 'scan' | 'rag' | 'doctor' | 'git' | 'sync';
+
+export interface ConfigProgressEvent {
+  kind: ConfigOperationKind;
+  phase: 'start' | 'progress' | 'done' | 'error' | 'canceled';
+  message?: string;
+  current?: number;
+  total?: number;
+  currentDir?: string;
+  added?: number;
+  updated?: number;
+  found?: number;
 }

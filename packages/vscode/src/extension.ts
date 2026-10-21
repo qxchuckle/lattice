@@ -34,6 +34,7 @@ import {
 } from './commands/view-filter';
 import { StatusBarController } from './status-bar';
 import { GraphPanelManager } from './webview/panel';
+import { ConfigPanelManager } from './webview/config-panel';
 import {
   DetailViewProvider,
   DETAIL_VIEW_TYPE,
@@ -48,6 +49,7 @@ import { SpecsProvider } from './views/specs';
 import { TasksProvider } from './views/tasks';
 import { ProjectsProvider } from './views/projects';
 import { ViewSearchPreviewService } from './views/view-search-preview';
+import { CONTROL_CENTER_VIEW_ID, ControlCenterProvider } from './views/control-center';
 import { t } from './t';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -62,11 +64,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const activeProjectRef: { current?: ActiveProjectService } = {};
   const userScope = new UserScopeService();
-  const data = new LatticeDataService(() => activeProjectRef.current?.currentAnchorRoot, userScope);
+  const data = new LatticeDataService(
+    () => activeProjectRef.current?.currentProjectRoot,
+    userScope,
+  );
   void data.warmDb();
   const snapshot = new SnapshotStore({
     data,
-    getConflictsCwd: () => activeProjectRef.current?.currentAnchorRoot,
+    getConflictsCwd: () => activeProjectRef.current?.currentProjectRoot,
     onError: (section, error) => {
       warnLog(`snapshot[${section}] failed: ${error.message}`);
     },
@@ -124,6 +129,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const searchView = vscode.window.createTreeView('lattice.search', {
     treeDataProvider: searchProvider,
+  });
+  const controlCenterView = vscode.window.createTreeView(CONTROL_CENTER_VIEW_ID, {
+    treeDataProvider: new ControlCenterProvider(),
   });
 
   // ── 视图过滤 / 搜索：view/title 图标态 + 视图消息行（单一组合函数，错误 > 过滤 > 搜索） ──
@@ -262,6 +270,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   const graphPanel = new GraphPanelManager(context, services);
   services.graph = graphPanel;
+  const configPanel = new ConfigPanelManager(context, services);
+  services.config = configPanel;
   registerAllCommands(services);
 
   // ── 侧栏「详情」WebviewView（点哪看哪：任务/规范/项目；默认跟随活动任务） ──
@@ -482,6 +492,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     specsView,
     projectsView,
     searchView,
+    controlCenterView,
     tasksProvider,
     specsProvider,
     projectsProvider,
@@ -492,6 +503,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     activeTask,
     searchState,
     statusBar,
+    configPanel,
     busy,
     decorations,
     codeLensProvider,

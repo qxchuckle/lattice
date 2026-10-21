@@ -6,6 +6,9 @@ import { installDomStubs, renderUi } from './helpers/component';
 
 const ragStatus = {
   modelId: 'Xenova/test',
+  lastModelId: 'Xenova/test',
+  modelInstalled: true,
+  modelChanged: false,
   vectorDimension: 512,
   dtype: 'q8',
   pooling: 'mean',
@@ -121,6 +124,32 @@ describe('RagModelTab', () => {
     fireEvent.click(confirm!);
     await waitFor(() => expect(adapter.removeModel).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText('模型已删除')).toBeTruthy());
+  });
+
+  it('模型未安装或索引模型不一致时展示 rebuild 联动提示', async () => {
+    adapter.getRagStatus.mockResolvedValueOnce({
+      ...ragStatus,
+      modelInstalled: false,
+      modelChanged: true,
+      lastModelId: 'Xenova/old',
+    });
+    renderUi(<RagModelTab />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/当前配置模型 Xenova\/test 与索引模型 Xenova\/old 不一致.*新模型尚未安装/),
+      ).toBeTruthy(),
+    );
+
+    cleanup();
+    adapter.getRagStatus.mockResolvedValueOnce({
+      ...ragStatus,
+      modelInstalled: false,
+      modelChanged: false,
+    });
+    renderUi(<RagModelTab />);
+    await waitFor(() =>
+      expect(screen.getByText(/当前模型 Xenova\/test 尚未安装.*全量重建/)).toBeTruthy(),
+    );
   });
 
   it('未安装模型显示下载、已加载禁用删除；下载失败分支', async () => {

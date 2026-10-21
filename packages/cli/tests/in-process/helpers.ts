@@ -39,7 +39,17 @@ export async function createCliEnv(): Promise<CliEnv> {
   );
   await writeFile(
     join(latticeHome, 'config', 'config.json'),
-    JSON.stringify({ rag: { embedding: { allowRemoteModels: false } } }),
+    JSON.stringify({
+      rag: {
+        embedding: {
+          allowRemoteModels: false,
+          // 显式固定到临时目录：core 的 DEFAULT_GLOBAL_CONFIG 在模块加载时求值，
+          // 若不覆盖会把模型探测/清理指向真实 ~/.lattice 缓存。
+          localModelPath: join(latticeHome, 'models'),
+          cacheDir: join(latticeHome, '.cache', 'huggingface'),
+        },
+      },
+    }),
     'utf-8',
   );
   process.env.LATTICE_HOME = latticeHome;

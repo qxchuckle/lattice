@@ -110,6 +110,10 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     for (const id of [
       'lattice.refresh',
       'lattice.graph.open',
+      'lattice.config.open',
+      'lattice.config.openSettings',
+      'lattice.workspace.scan',
+      'lattice.workspace.link',
       'lattice.task.create',
       'lattice.task.openDoc',
       'lattice.task.checkpoint.add',
@@ -151,6 +155,18 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
       webviewTab,
       `expected a webview tab; tabs: ${tabs.map((tab) => tab.label).join(', ') || '(none)'}`,
     );
+  });
+
+  test('config configuration-center panel opens in the editor area', async () => {
+    await vscode.commands.executeCommand('lattice.config.open', { section: 'overview' });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs);
+    const configTab = tabs.find((tab) => /Lattice Configuration|Lattice 配置/.test(tab.label));
+    assert.ok(
+      configTab,
+      `expected a config webview tab; tabs: ${tabs.map((tab) => tab.label).join(', ') || '(none)'}`,
+    );
+    assert.match(configTab.label, /Lattice|配置/);
   });
 
   test('refresh loads the fixture snapshot from disk (in-process core)', async () => {

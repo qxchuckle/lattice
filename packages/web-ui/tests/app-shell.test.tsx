@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { useLocation, useNavigate } from 'react-router';
 import { AppShell } from '../src/components/AppShell';
 import { setAdapter } from '../src/adapters';
+import { setLanguage } from '../src/i18n';
 import { authStore, canvasStore, detailStore, sidebarStore } from '../src/store';
 import { installDomStubs, renderUi } from './helpers/component';
 
@@ -77,6 +78,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  setLanguage('zh-cn');
   authStore.initialized = false;
   authStore.authEnabled = false;
   authStore.token = null;
@@ -147,6 +149,18 @@ describe('AppShell', () => {
     expect(screen.getAllByText('详情').length).toBeGreaterThan(0);
     expect(container.querySelector('.app-root > [data-testid="sidebar"]')).toBeNull();
     expect(screen.queryByTestId('detail')).toBeTruthy();
+  });
+
+  it('english host uses translated mobile drawer titles', async () => {
+    setLanguage('en');
+    authStore.initialized = true;
+    detailStore.open = true;
+    sidebarStore.mobileOpen = true;
+    window.innerWidth = 500;
+    setAdapter(makeAdapter() as never);
+    renderUi(<AppShell features={{ login: false, admin: false, terminal: false }} />);
+    await waitFor(() => expect(screen.getAllByText('Browser').length).toBeGreaterThan(0));
+    expect(screen.getAllByText('Details').length).toBeGreaterThan(0);
   });
 
   it('启用鉴权且无 token 时跳转 /login；登录页独立渲染', async () => {
