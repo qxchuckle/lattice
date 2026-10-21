@@ -70,7 +70,7 @@ Deep links open the same detail panel as clicking a node.
 
 ## Public demo
 
-The [live demo](https://qxchuckle.github.io/lattice/demo/) runs the real workbench UI with mocked data. It is a static build: no login, no backend and no network requests. Refreshing resets all writes.
+The [live demo](https://lattice.qcqx.cn/demo/) runs the real workbench UI with mocked data. It is a static build: no login, no backend and no network requests. Refreshing resets all writes.
 
 ## Next
 

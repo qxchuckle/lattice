@@ -22,9 +22,9 @@
 
 <p align="center">
   <a href="./README.md">English</a> | <b>简体中文</b><br>
-  <a href="https://qxchuckle.github.io/lattice/zh-cn/">官网</a> ·
-  <a href="https://qxchuckle.github.io/lattice/demo/?lang=zh">在线 Demo</a> ·
-  <a href="https://qxchuckle.github.io/lattice/zh-cn/docs/">文档</a>
+  <a href="https://lattice.qcqx.cn/zh-cn/">官网</a> ·
+  <a href="https://lattice.qcqx.cn/demo/?lang=zh">在线 Demo</a> ·
+  <a href="https://lattice.qcqx.cn/zh-cn/docs/">文档</a>
 </p>
 
 Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落在多个仓库、会话和 Agent 之间的规范、任务、决策、项目关系与经验，沉淀为结构化、可检索、可版本化的研发资产，再通过 CLI、编辑器扩展与 Web 工作台提供给人和 AI。

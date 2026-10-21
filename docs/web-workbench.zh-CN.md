@@ -70,7 +70,7 @@ ltc web --no-open
 
 ## 在线 Demo
 
-[在线 Demo](https://qxchuckle.github.io/lattice/demo/) 用模拟数据运行真实的工作台 UI。它是纯静态构建：没有登录、没有后端、不发网络请求。刷新会重置所有写入。
+[在线 Demo](https://lattice.qcqx.cn/demo/) 用模拟数据运行真实的工作台 UI。它是纯静态构建：没有登录、没有后端、不发网络请求。刷新会重置所有写入。
 
 ## 下一步
 

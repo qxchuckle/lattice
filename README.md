@@ -22,9 +22,9 @@
 
 <p align="center">
   <b>English</b> | <a href="./README.zh-CN.md">简体中文</a><br>
-  <a href="https://qxchuckle.github.io/lattice/">Website</a> ·
-  <a href="https://qxchuckle.github.io/lattice/demo/">Live demo</a> ·
-  <a href="https://qxchuckle.github.io/lattice/docs/">Docs</a>
+  <a href="https://lattice.qcqx.cn/">Website</a> ·
+  <a href="https://lattice.qcqx.cn/demo/">Live demo</a> ·
+  <a href="https://lattice.qcqx.cn/docs/">Docs</a>
 </p>
 
 Lattice is a local-first **engineering memory and workflow layer**. It turns specs, tasks, decisions, project relations and experience — usually lost between repos, sessions and agents — into structured, searchable, versionable engineering assets, and serves them to people and AI through a CLI, an editor extension and a web workbench.
