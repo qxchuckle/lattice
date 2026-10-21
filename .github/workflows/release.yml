@@ -61,11 +61,11 @@ jobs:
           for i in $(seq 1 40); do
             STATE=$(gh run list --workflow=ci.yml --commit "$SHA" --event push --limit 1 \
               --json status,conclusion \
-              --jq 'if length == 0 then "none" else .[0] | "\(.status)/\(.conclusion // "running")" end')
+              --jq 'if length == 0 then "none" else .[0] | if .status == "completed" then (if .conclusion == "success" then "ok" else "fail:" + (.conclusion // "unknown") end) else "running" end end')
             echo "CI: $STATE（第 $i 次）"
             case "$STATE" in
-              completed/success) echo "CI 已通过"; exit 0 ;;
-              completed/*) echo "::error::该提交的 CI 未通过（$STATE），先修 CI 再发版"; exit 1 ;;
+              ok) echo "CI 已通过"; exit 0 ;;
+              fail:*) echo "::error::该提交的 CI 未通过（$STATE），先修 CI 再发版"; exit 1 ;;
               *) sleep 20 ;;
             esac
           done

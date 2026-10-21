@@ -91,6 +91,42 @@ if (!isContinue) {
       '⚠ 工作区不干净：release 提交只会包含 package.json 与 CHANGELOG.md，其余改动不会进 tag',
     );
   }
+  assertCiGreenBeforePublish();
+}
+
+// 发布前确认当前 HEAD 的 CI 是绿的：否则 npm 发出去了，tag 上的 GitHub Release 会被 CI 门禁卡住
+function assertCiGreenBeforePublish() {
+  if (args.includes('--allow-red-ci')) {
+    console.warn('⚠ 已指定 --allow-red-ci，跳过 CI 检查');
+    return;
+  }
+
+  let state;
+  try {
+    const sha = git('git rev-parse HEAD');
+    const jq =
+      'if length == 0 then "none" else .[0] | if .status == "completed" then (if .conclusion == "success" then "ok" else "fail:" + (.conclusion // "unknown") end) else "running" end end';
+    state = execSync(
+      `gh run list --workflow=ci.yml --commit ${sha} --event push --limit 1 --json status,conclusion --jq '${jq}'`,
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    ).trim();
+  } catch {
+    console.warn('⚠ 查不到 CI 状态（gh 未安装或未登录），跳过检查');
+    return;
+  }
+
+  if (state === 'ok') {
+    console.log('✔ 当前 HEAD 的 CI 已通过');
+    return;
+  }
+
+  const reason = state === 'none' ? 'HEAD 还没有 CI 记录（是否没推送？）' : `CI 状态 ${state}`;
+  if (dryRun) {
+    console.warn(`⚠ ${reason}；正式发布会中止（可用 --allow-red-ci 跳过）`);
+    return;
+  }
+  console.error(`❌ ${reason}：先让 CI 变绿再发布（或用 --allow-red-ci 强行发版）`);
+  process.exit(1);
 }
 
 // --- 工具函数 ---
