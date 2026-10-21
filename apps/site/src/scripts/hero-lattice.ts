@@ -316,8 +316,11 @@ export async function initHeroLattice(
   }
 
   function layout(): void {
-    const width = app.renderer.width / app.renderer.resolution;
-    const height = app.renderer.height / app.renderer.resolution;
+    // app.screen is already in CSS pixels; renderer.width includes the device-pixel
+    // resolution on some backends, so dividing it by resolution halves the scene on
+    // HiDPI screens.
+    const width = app.screen.width;
+    const height = app.screen.height;
     const scale = Math.min(width / 720, height / 530, 1.08);
     world.scale.set(scale);
     baseX = width / 2 + (stage.clientWidth >= 520 ? 34 : 0);

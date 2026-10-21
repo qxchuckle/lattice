@@ -49,6 +49,7 @@ const copy = isZh
       prev: '上一步',
       next: '下一步',
       step: '步骤',
+      scrollHint: '↕ 滚动加速',
       reduced: '动效已关闭',
       readDocs: '查看快速开始',
       statusLabels: {
@@ -246,6 +247,7 @@ const copy = isZh
       prev: 'Previous',
       next: 'Next',
       step: 'Step',
+      scrollHint: '↕ scroll to advance',
       reduced: 'Motion off',
       readDocs: 'Read the quick start',
       statusLabels: {
@@ -422,6 +424,42 @@ const copy = isZh
     };
 
 const steps = copy.steps as Step[];
+
+type TimelineEntry = {
+  kind: 'user' | 'command' | 'agent' | 'checkpoint';
+  step: number;
+  at: number;
+  user?: string;
+  userCommand?: string;
+  command?: string;
+  output?: string;
+  line?: string;
+  checkpoint?: { type: string; title: string; message: string };
+};
+
+const timeline: TimelineEntry[] = steps.flatMap((step, stepIndex) => {
+  const entries: Omit<TimelineEntry, 'step' | 'at'>[] = [];
+
+  if (step.user) {
+    entries.push({ kind: 'user', user: step.user, userCommand: step.userCommand });
+  }
+  if (step.command) {
+    entries.push({ kind: 'command', command: step.command, output: step.output });
+  }
+  for (const line of step.agent) {
+    entries.push({ kind: 'agent', line });
+  }
+  if (step.checkpoint) {
+    entries.push({ kind: 'checkpoint', checkpoint: step.checkpoint });
+  }
+
+  const span = 1 / steps.length;
+  return entries.map((entry, entryIndex) => ({
+    ...entry,
+    step: stepIndex,
+    at: (stepIndex + entryIndex / entries.length) * span,
+  }));
+});
 ---
 
 <section class='ll-section ll-workflow' id='workflow' aria-labelledby='ll-workflow-title'>
@@ -467,103 +505,140 @@ const steps = copy.steps as Step[];
       <span class='ll-flow-window-status'><i aria-hidden='true'></i>{copy.windowStatus}</span>
     </div>
 
-    {steps.map((step, index) => (
-      <div class='ll-flow-scene' data-flow-scene={index} hidden={index !== 0}>
-        <div class='ll-flow-feed' data-flow-feed aria-label={isZh ? 'Agent 对话' : 'Agent conversation'}>
-          {steps.slice(0, index + 1).map((entry) => (
-            <>
-              {entry.user && (
-                <div class='ll-flow-message ll-flow-message--user'>
-                  <div class='ll-flow-bubble'>
-                    <p>
-                      {entry.userCommand && (
-                        <span class='ll-flow-command-chip'>
-                          <Zap size={12} aria-hidden='true' />
-                          {entry.userCommand}
-                        </span>
+    <div class='ll-flow-body'>
+      <div
+        class='ll-flow-feed'
+        data-flow-feed
+        tabindex='0'
+        aria-label={isZh ? 'Agent 对话，滚动可加速演示' : 'Agent conversation, scroll to advance the demo'}
+      >
+        {timeline.map((entry) => (
+          <div
+            class:list={[
+              'll-flow-entry',
+              `ll-flow-entry--${entry.kind}`,
+              { 'is-visible': entry.at === 0 },
+            ]}
+            data-flow-entry
+            data-flow-kind={entry.kind}
+            data-flow-step={entry.step}
+            data-flow-at={entry.at}
+            aria-hidden={entry.at === 0 ? undefined : 'true'}
+          >
+            {entry.kind === 'user' && (
+              <div class='ll-flow-message ll-flow-message--user'>
+                <div class='ll-flow-bubble'>
+                  <p>
+                    {entry.userCommand && (
+                      <span class='ll-flow-command-chip'>
+                        <Zap size={12} aria-hidden='true' />
+                        {entry.userCommand}
+                      </span>
+                    )}
+                    <span class='ll-flow-text'>{entry.user}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+            {entry.kind !== 'user' && (
+              <div class='ll-flow-message ll-flow-message--agent'>
+                <span class='ll-flow-avatar' aria-hidden='true'>L</span>
+                <div class='ll-flow-bubble'>
+                  <span class='ll-flow-who'>Lattice agent</span>
+                  {entry.kind === 'agent' && <p>{entry.line}</p>}
+                  {entry.kind === 'command' && (
+                    <div class='ll-flow-agent-tool'>
+                      <div class='ll-flow-command'>
+                        <span class='ll-flow-command-prompt' aria-hidden='true'>$</span>
+                        <code>{entry.command}</code>
+                      </div>
+                      {entry.output && (
+                        <div class='ll-flow-output'>
+                          <span aria-hidden='true'>↳</span>
+                          {entry.output}
+                        </div>
                       )}
-                      <span class='ll-flow-text'>{entry.user}</span>
-                    </p>
-                  </div>
+                    </div>
+                  )}
+                  {entry.kind === 'checkpoint' && entry.checkpoint && (
+                    <div class={`ll-flow-agent-checkpoint ll-flow-checkpoint--${entry.checkpoint.type}`}>
+                      <span class='ll-flow-checkpoint-type'>{entry.checkpoint.type}</span>
+                      <div>
+                        <strong>{entry.checkpoint.title}</strong>
+                        <p>{entry.checkpoint.message}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {entry.command && (
-                <div class='ll-flow-command'>
-                  <span class='ll-flow-command-prompt' aria-hidden='true'>$</span>
-                  <code>{entry.command}</code>
-                </div>
-              )}
-              {entry.output && <div class='ll-flow-output'><span aria-hidden='true'>↳</span>{entry.output}</div>}
-              {entry.agent.map((line) => (
-                <div class='ll-flow-message ll-flow-message--agent'>
-                  <span class='ll-flow-avatar' aria-hidden='true'>L</span>
-                  <div class='ll-flow-bubble'>
-                    <span class='ll-flow-who'>Lattice agent</span>
-                    <p>{line}</p>
-                  </div>
-                </div>
-              ))}
-              {entry.checkpoint && (
-                <div class={`ll-flow-checkpoint ll-flow-checkpoint--${entry.checkpoint.type}`}>
-                  <span class='ll-flow-checkpoint-type'>{entry.checkpoint.type}</span>
-                  <div>
-                    <strong>{entry.checkpoint.title}</strong>
-                    <p>{entry.checkpoint.message}</p>
-                  </div>
-                </div>
-              )}
-            </>
-          ))}
+              </div>
+            )}
+          </div>
+        ))}
+        <div class='ll-flow-typing' data-flow-typing hidden aria-hidden='true'>
+          <span class='ll-flow-avatar'>L</span>
+          <span class='ll-flow-typing-dots'><i></i><i></i><i></i></span>
         </div>
+      </div>
 
-        <aside class='ll-flow-memory' aria-label={copy.memoryTitle}>
-          <div class='ll-flow-memory-head'>
-            <span class='ll-flow-label'>{copy.memoryTitle}</span>
-            <span class={`ll-flow-status ll-flow-status--${step.memory.status}`}>{copy.statusLabels[step.memory.status]}</span>
-          </div>
-          <div class='ll-flow-memory-section'>
-            <span class='ll-flow-memory-label'>{copy.memorySpecs}</span>
-            <ul class='ll-flow-specs'>
-              {step.memory.specs.map((spec) => (
-                <li class={spec === 'session-auth' ? 'is-new' : ''}>
-                  <span aria-hidden='true'>↳</span>
-                  <code>{spec}</code>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div class='ll-flow-memory-section'>
-            <span class='ll-flow-memory-label'>{copy.memoryCheckpoints} <em>{step.memory.checkpoints.length}</em></span>
-            {step.memory.checkpoints.length ? (
-              <ul class='ll-flow-checkpoints'>
-                {step.memory.checkpoints.map((checkpoint) => (
-                  <li class={`ll-flow-cp ll-flow-cp--${checkpoint.type}`}>
-                    <span>{checkpoint.type}</span>
-                    <strong>{checkpoint.title}</strong>
+      <aside class='ll-flow-memory' aria-label={copy.memoryTitle}>
+        {steps.map((step, stepIndex) => (
+          <div
+            class='ll-flow-memory-panel'
+            data-flow-memory-panel={stepIndex}
+            hidden={stepIndex !== 0}
+          >
+            <div class='ll-flow-memory-head'>
+              <span class='ll-flow-label'>{copy.memoryTitle}</span>
+              <span class={`ll-flow-status ll-flow-status--${step.memory.status}`}>{copy.statusLabels[step.memory.status]}</span>
+            </div>
+            <div class='ll-flow-memory-section'>
+              <span class='ll-flow-memory-label'>{copy.memorySpecs}</span>
+              <ul class='ll-flow-specs'>
+                {step.memory.specs.map((spec) => (
+                  <li class={spec === 'session-auth' ? 'is-new' : ''}>
+                    <span aria-hidden='true'>↳</span>
+                    <code>{spec}</code>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p class='ll-flow-empty'>{copy.memoryEmpty}</p>
+            </div>
+            <div class='ll-flow-memory-section'>
+              <span class='ll-flow-memory-label'>{copy.memoryCheckpoints} <em>{step.memory.checkpoints.length}</em></span>
+              {step.memory.checkpoints.length ? (
+                <ul class='ll-flow-checkpoints'>
+                  {step.memory.checkpoints.map((checkpoint) => (
+                    <li class={`ll-flow-cp ll-flow-cp--${checkpoint.type}`}>
+                      <span>{checkpoint.type}</span>
+                      <strong>{checkpoint.title}</strong>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p class='ll-flow-empty'>{copy.memoryEmpty}</p>
+              )}
+            </div>
+            {step.memory.distilled && (
+              <div class='ll-flow-distilled'>
+                <span>{copy.memoryDistilled}</span>
+                <code>spec/{step.memory.distilled.replace('.md', '')}</code>
+                <small>{isZh ? '下一个任务会自动引用' : 'Available to the next task'}</small>
+              </div>
             )}
           </div>
-          {step.memory.distilled && (
-            <div class='ll-flow-distilled'>
-              <span>{copy.memoryDistilled}</span>
-              <code>spec/{step.memory.distilled.replace('.md', '')}</code>
-              <small>{isZh ? '下一个任务会自动引用' : 'Available to the next task'}</small>
-            </div>
-          )}
-        </aside>
-      </div>
-    ))}
+        ))}
+      </aside>
+    </div>
 
     <div class='ll-flow-footer'>
       <div
         class='ll-flow-progress'
         data-flow-progress-track
-        role='presentation'
-        title={isZh ? '点击跳转步骤' : 'Click to jump to a step'}
+        role='progressbar'
+        aria-label={isZh ? '工作流进度' : 'Workflow progress'}
+        aria-valuemin='0'
+        aria-valuemax='100'
+        aria-valuenow='0'
+        title={isZh ? '点击跳转进度' : 'Click to scrub'}
       ><span data-flow-progress></span></div>
       <div class='ll-flow-nav'>
         <div class='ll-flow-steps' role='group' aria-label={isZh ? '工作流步骤' : 'Workflow steps'}>
@@ -585,6 +660,7 @@ const steps = copy.steps as Step[];
           <button class='ll-flow-play' type='button' data-flow-play>{copy.pause}</button>
           <button class='ll-flow-action' type='button' data-flow-next aria-label={copy.next}>→</button>
           <span class='ll-flow-counter' data-flow-counter>01 / 07</span>
+          <span class='ll-flow-scrollhint is-active' data-flow-hint aria-hidden='true'>{copy.scrollHint}</span>
         </div>
       </div>
     </div>
@@ -599,7 +675,18 @@ const steps = copy.steps as Step[];
 <script>
   const root = document.querySelector<HTMLElement>('[data-workflow]');
   if (root) {
-    const scenes = [...root.querySelectorAll<HTMLElement>('[data-flow-scene]')];
+    const feed = root.querySelector<HTMLElement>('[data-flow-feed]');
+    const timelineEntries = [...root.querySelectorAll<HTMLElement>('[data-flow-entry]')].map(
+      (element) => ({
+        element,
+        at: Number(element.dataset.flowAt ?? '0'),
+        kind: element.dataset.flowKind ?? '',
+        step: Number(element.dataset.flowStep ?? '0'),
+      }),
+    );
+    const memoryPanels = [
+      ...root.querySelectorAll<HTMLElement>('[data-flow-memory-panel]'),
+    ];
     const jumps = [...root.querySelectorAll<HTMLButtonElement>('[data-flow-jump]')];
     const progress = root.querySelector<HTMLElement>('[data-flow-progress]');
     const progressTrack = root.querySelector<HTMLElement>('[data-flow-progress-track]');
@@ -607,16 +694,42 @@ const steps = copy.steps as Step[];
     const prevButton = root.querySelector<HTMLButtonElement>('[data-flow-prev]');
     const nextButton = root.querySelector<HTMLButtonElement>('[data-flow-next]');
     const counter = root.querySelector<HTMLElement>('[data-flow-counter]');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const duration = 4800;
+    const typing = root.querySelector<HTMLElement>('[data-flow-typing]');
 
-    let index = 0;
-    let elapsed = 0;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const stepCount = jumps.length || 7;
+    const stepDuration = 2_000;
+    const totalDuration = stepCount * stepDuration;
+    const wheelScrub = 0.00045;
+    const minWheelStep = 0.02;
+    const touchScrub = 0.0006;
+
+    let progressValue = 0;
+    let targetProgress = 0;
     let playing = false;
     let started = false;
+    let userInteracted = false;
     let inView = false;
-    let timer: number | undefined;
-    let last = 0;
+    let frameId: number | undefined;
+    let lastFrame = 0;
+    let activeStep = -1;
+    let activeMemoryStep = -1;
+    let lastVisibleCount = 0;
+    let feedPinned = true;
+    let feedAutoScrolling = false;
+    let feedScrollFrame: number | undefined;
+    let lastFeedFrame = 0;
+    let touchY: number | null = null;
+    let lastWheelAt = 0;
+    let lastPlayLabel = '';
+
+    const memoryAt = memoryPanels.map((_, stepIndex) => {
+      if (stepIndex === 0) return 0;
+      const checkpoint = timelineEntries.find(
+        (entry) => entry.step === stepIndex && entry.kind === 'checkpoint',
+      );
+      return checkpoint ? checkpoint.at : stepIndex / stepCount;
+    });
 
     const isZh = document.documentElement.lang.toLowerCase().startsWith('zh');
     const labels = {
@@ -625,111 +738,360 @@ const steps = copy.steps as Step[];
       replay: isZh ? '重播' : 'Replay',
     };
 
-    function setProgress(value: number): void {
-      if (progress) progress.style.width = `${Math.max(0, Math.min(100, value))}%`;
+    const pad = (value: number): string => String(value).padStart(2, '0');
+    const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+
+    function stepForProgress(value: number): number {
+      return Math.min(stepCount - 1, Math.max(0, Math.floor(value * stepCount + 1e-9)));
     }
 
-    function updateControls(): void {
+    function stepEnd(stepIndex: number): number {
+      return stepIndex >= stepCount - 1 ? 1 : (stepIndex + 1) / stepCount - 0.001;
+    }
+
+    function cancelFeedScroll(): void {
+      if (feedScrollFrame !== undefined) cancelAnimationFrame(feedScrollFrame);
+      feedScrollFrame = undefined;
+      lastFeedFrame = 0;
+      feedAutoScrolling = false;
+    }
+
+    function scrollFeedToBottom(): void {
+      if (!feed) return;
+      if (reducedMotion) {
+        cancelFeedScroll();
+        feed.scrollTop = feed.scrollHeight;
+        return;
+      }
+      if (feedScrollFrame !== undefined) return;
+
+      feedAutoScrolling = true;
+      let lastTarget = -1;
+      let stableFrames = 0;
+      const step = (now: number): void => {
+        const delta = lastFeedFrame ? Math.min(64, now - lastFeedFrame) : 16;
+        lastFeedFrame = now;
+        const target = Math.max(0, feed.scrollHeight - feed.clientHeight);
+        if (Math.abs(target - lastTarget) > 0.5) {
+          lastTarget = target;
+          stableFrames = 0;
+        } else {
+          stableFrames += 1;
+        }
+        const remaining = target - feed.scrollTop;
+
+        if (Math.abs(remaining) < 1 && stableFrames >= 2) {
+          feed.scrollTop = feed.scrollHeight;
+          feedScrollFrame = undefined;
+          lastFeedFrame = 0;
+          feedAutoScrolling = false;
+          return;
+        }
+
+        feed.scrollTop += remaining * Math.min(1, delta / 45);
+        feedScrollFrame = requestAnimationFrame(step);
+      };
+
+      feedScrollFrame = requestAnimationFrame(step);
+    }
+
+    function updatePlayButton(): void {
+      if (!playButton) return;
+      const atEnd = targetProgress >= 0.9999;
+      const label = playing ? labels.pause : atEnd ? labels.replay : labels.play;
+      if (label !== lastPlayLabel) {
+        playButton.textContent = label;
+        lastPlayLabel = label;
+      }
+      playButton.setAttribute('aria-pressed', String(playing));
+    }
+
+    function updateStepUI(stepIndex: number): void {
       if (counter) {
-        counter.textContent = `${String(index + 1).padStart(2, '0')} / ${String(scenes.length).padStart(2, '0')}`;
+        counter.textContent = `${pad(stepIndex + 1)} / ${pad(stepCount)}`;
       }
-      if (playButton) {
-        playButton.textContent = playing ? labels.pause : index === scenes.length - 1 ? labels.replay : labels.play;
-        playButton.setAttribute('aria-pressed', String(playing));
-      }
-      prevButton?.toggleAttribute('disabled', index === 0);
-      nextButton?.toggleAttribute('disabled', index === scenes.length - 1);
       jumps.forEach((button, buttonIndex) => {
-        const active = buttonIndex === index;
+        const active = buttonIndex === stepIndex;
         button.classList.toggle('is-active', active);
         if (active) button.setAttribute('aria-current', 'step');
         else button.removeAttribute('aria-current');
       });
+      prevButton?.toggleAttribute('disabled', stepIndex <= 0);
+      nextButton?.toggleAttribute('disabled', stepIndex >= stepCount - 1);
     }
 
-    function syncScene(scroll = true): void {
-      scenes.forEach((scene, sceneIndex) => {
-        scene.hidden = sceneIndex !== index;
+    function updateMemory(stepIndex: number, animate: boolean): void {
+      memoryPanels.forEach((panel, panelIndex) => {
+        const active = panelIndex === stepIndex;
+        panel.hidden = !active;
+        if (!active) return;
+        panel.scrollTop = 0;
+        if (!animate || reducedMotion) return;
+        panel.classList.remove('is-entering');
+        void panel.offsetWidth;
+        panel.classList.add('is-entering');
+        panel.addEventListener(
+          'animationend',
+          () => panel.classList.remove('is-entering'),
+          { once: true },
+        );
       });
-      updateControls();
-      setProgress(((index + elapsed / duration) / scenes.length) * 100);
-      if (scroll) {
-        const feed = scenes[index]?.querySelector<HTMLElement>('[data-flow-feed]');
-        if (feed) feed.scrollTop = feed.scrollHeight;
-      }
     }
 
-    function stopTimer(): void {
-      if (timer !== undefined) {
-        window.clearInterval(timer);
-        timer = undefined;
+    function updateTyping(nextEntry: (typeof timelineEntries)[number] | undefined): void {
+      if (!typing) return;
+      const show =
+        playing && targetProgress < 0.9999 && nextEntry !== undefined && nextEntry.kind !== 'user';
+      if (show === !typing.hidden) {
+        if (show && feedPinned) scrollFeedToBottom();
+        return;
       }
+      typing.hidden = !show;
+      if (show && feedPinned) scrollFeedToBottom();
     }
 
-    function startTimer(): void {
-      if (timer !== undefined) return;
-      last = performance.now();
-      timer = window.setInterval(() => {
-        if (!playing || !inView) return;
-        const now = performance.now();
-        elapsed += now - last;
-        last = now;
-        if (elapsed >= duration) {
-          if (index < scenes.length - 1) {
-            index += 1;
-            elapsed = 0;
-            syncScene();
-          } else {
-            elapsed = duration;
-            setPlaying(false);
-            setProgress(100);
-          }
-        } else {
-          setProgress(((index + elapsed / duration) / scenes.length) * 100);
+    function render(): void {
+      const value = progressValue;
+      if (progress) progress.style.width = `${(value * 100).toFixed(2)}%`;
+      progressTrack?.setAttribute('aria-valuenow', String(Math.round(value * 1000) / 10));
+      progressTrack?.setAttribute('data-flow-value', value.toFixed(4));
+
+      const step = stepForProgress(value);
+      if (step !== activeStep) {
+        activeStep = step;
+        updateStepUI(step);
+      }
+
+      let memoryStep = 0;
+      for (let index = 0; index < memoryAt.length; index += 1) {
+        if (value + 1e-6 >= memoryAt[index]) memoryStep = index;
+      }
+      if (memoryStep !== activeMemoryStep) {
+        const firstRender = activeMemoryStep === -1;
+        activeMemoryStep = memoryStep;
+        updateMemory(memoryStep, !firstRender);
+      }
+
+      let visibleCount = 0;
+      let nextEntry: (typeof timelineEntries)[number] | undefined;
+      for (const entry of timelineEntries) {
+        const show = value + 0.0002 >= entry.at;
+        if (show) visibleCount += 1;
+        if (entry.element.classList.contains('is-visible') !== show) {
+          entry.element.classList.toggle('is-visible', show);
+          entry.element.setAttribute('aria-hidden', String(!show));
+          entry.element.toggleAttribute('inert', !show);
         }
-      }, 60);
+        if (!show && nextEntry === undefined) nextEntry = entry;
+      }
+
+      updateTyping(nextEntry);
+      updatePlayButton();
+
+      if (visibleCount < lastVisibleCount && !feedPinned) cancelFeedScroll();
+      if (visibleCount !== lastVisibleCount && feedPinned) {
+        scrollFeedToBottom();
+      }
+      lastVisibleCount = visibleCount;
     }
 
-    function setPlaying(next: boolean, restart = false): void {
-      if (restart && index === scenes.length - 1) {
-        index = 0;
-        elapsed = 0;
-        syncScene();
+    function frame(now: number): void {
+      frameId = undefined;
+      const delta = lastFrame ? Math.min(64, now - lastFrame) : 16;
+      lastFrame = now;
+
+      if (playing && inView && !document.hidden) {
+        targetProgress = clamp01(targetProgress + delta / totalDuration);
       }
-      playing = next;
-      if (restart) elapsed = 0;
-      if (playing) {
-        startTimer();
+      if (targetProgress >= 0.9999) {
+        targetProgress = 1;
+        if (playing) {
+          playing = false;
+          updatePlayButton();
+        }
+      }
+
+      const diff = targetProgress - progressValue;
+      if (reducedMotion) {
+        progressValue = targetProgress;
       } else {
-        stopTimer();
+        progressValue += diff * Math.min(1, delta / 120);
+        if (Math.abs(targetProgress - progressValue) < 0.00015) {
+          progressValue = targetProgress;
+        }
       }
-      updateControls();
+
+      render();
+
+      const easing = Math.abs(targetProgress - progressValue) > 0.0001;
+      const advancing = playing && inView && !document.hidden;
+      if (easing || advancing) {
+        frameId = requestAnimationFrame(frame);
+      } else {
+        lastFrame = 0;
+      }
     }
 
-    function goTo(nextIndex: number, pause = true): void {
-      index = Math.max(0, Math.min(scenes.length - 1, nextIndex));
-      elapsed = 0;
-      if (pause) setPlaying(false);
-      syncScene();
-      if (pause) setProgress(((index + 1) / scenes.length) * 100);
+    function startAnimation(): void {
+      if (frameId !== undefined) return;
+      lastFrame = 0;
+      frameId = requestAnimationFrame(frame);
+    }
+
+    function setPlaying(next: boolean, auto = false): void {
+      if (!auto) userInteracted = true;
+      if (next) {
+        if (targetProgress >= 0.9999) {
+          targetProgress = 0;
+          progressValue = 0;
+          activeStep = -1;
+          activeMemoryStep = -1;
+          lastVisibleCount = 0;
+          feedPinned = true;
+          cancelFeedScroll();
+          if (feed) feed.scrollTop = 0;
+          render();
+        }
+        playing = true;
+        feedPinned = true;
+        updatePlayButton();
+        startAnimation();
+        return;
+      }
+
+      playing = false;
+      updatePlayButton();
+      updateTyping(undefined);
+      if (Math.abs(targetProgress - progressValue) > 0.0001) startAnimation();
+    }
+
+    function jumpToStep(stepIndex: number): void {
+      const clamped = Math.max(0, Math.min(stepCount - 1, stepIndex));
+      setPlaying(false);
+      targetProgress = stepEnd(clamped);
+      feedPinned = true;
+      startAnimation();
+    }
+
+    function wheelDelta(event: WheelEvent): number {
+      if (event.deltaMode === 1) return event.deltaY * 16;
+      if (event.deltaMode === 2) return event.deltaY * window.innerHeight;
+      return event.deltaY;
+    }
+
+    function handleWheel(event: WheelEvent): void {
+      const delta = wheelDelta(event);
+      if (Math.abs(delta) < 0.5) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const targetFeed = target?.closest<HTMLElement>('[data-flow-feed]');
+      if (!targetFeed || targetFeed !== feed) return;
+
+      userInteracted = true;
+      const now = performance.now();
+      const isDiscrete = now - lastWheelAt > 80;
+      lastWheelAt = now;
+
+      event.preventDefault();
+
+      if (targetProgress <= 0.0001 && delta < 0) {
+        if (progressValue <= 0.0001) window.scrollBy(0, delta);
+        return;
+      }
+      if (targetProgress >= 0.9999 && delta > 0) {
+        if (progressValue >= 0.9999) window.scrollBy(0, delta);
+        return;
+      }
+
+      // A high-resolution wheel can send only a few pixels per notch. Give a
+      // discrete notch a visible minimum step, while dense trackpad events keep
+      // the proportional scrub.
+      const amount = isDiscrete
+        ? Math.max(Math.abs(delta) * wheelScrub, minWheelStep)
+        : Math.abs(delta) * wheelScrub;
+      targetProgress = clamp01(targetProgress + Math.sign(delta) * amount);
+      feedPinned = true;
+      startAnimation();
+    }
+
+    function handleTouchStart(event: TouchEvent): void {
+      const target = event.target instanceof Element ? event.target : null;
+      const targetFeed = target?.closest<HTMLElement>('[data-flow-feed]');
+      touchY = targetFeed === feed ? (event.touches[0]?.clientY ?? null) : null;
+    }
+
+    function handleTouchMove(event: TouchEvent): void {
+      if (touchY === null) return;
+      const currentY = event.touches[0]?.clientY ?? touchY;
+      const delta = touchY - currentY;
+      touchY = currentY;
+      if (Math.abs(delta) < 0.5) return;
+
+      userInteracted = true;
+      event.preventDefault();
+
+      if (targetProgress <= 0.0001 && delta < 0) {
+        if (progressValue <= 0.0001) window.scrollBy(0, delta);
+        return;
+      }
+      if (targetProgress >= 0.9999 && delta > 0) {
+        if (progressValue >= 0.9999) window.scrollBy(0, delta);
+        return;
+      }
+
+      targetProgress = clamp01(targetProgress + delta * touchScrub);
+      feedPinned = true;
+      startAnimation();
+    }
+
+    function handleTouchEnd(): void {
+      touchY = null;
     }
 
     jumps.forEach((button) => {
-      button.addEventListener('click', () => goTo(Number(button.dataset.flowJump)));
+      button.addEventListener('click', () => jumpToStep(Number(button.dataset.flowJump ?? '0')));
     });
-    prevButton?.addEventListener('click', () => goTo(index - 1));
-    nextButton?.addEventListener('click', () => goTo(index + 1));
+    prevButton?.addEventListener('click', () => jumpToStep(activeStep - 1));
+    nextButton?.addEventListener('click', () => jumpToStep(activeStep + 1));
+    root.addEventListener('wheel', handleWheel, { passive: false });
+    root.addEventListener('touchstart', handleTouchStart, { passive: true });
+    root.addEventListener('touchmove', handleTouchMove, { passive: false });
+    root.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    feed?.addEventListener(
+      'scroll',
+      () => {
+        if (feedAutoScrolling) return;
+        feedPinned = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 24;
+      },
+      { passive: true },
+    );
+    feed?.addEventListener('transitionend', (event) => {
+      if (!feedPinned || event.propertyName !== 'grid-template-rows') return;
+      if (event.target instanceof HTMLElement && event.target.classList.contains('ll-flow-entry')) {
+        scrollFeedToBottom();
+      }
+    });
+    if (typeof ResizeObserver !== 'undefined') {
+      const feedResizeObserver = new ResizeObserver(() => {
+        if (feedPinned) scrollFeedToBottom();
+      });
+      timelineEntries.forEach((entry) => feedResizeObserver.observe(entry.element));
+    }
+    feed?.addEventListener('pointerdown', cancelFeedScroll);
+    feed?.addEventListener('keydown', cancelFeedScroll);
+
     progressTrack?.addEventListener('click', (event) => {
       const rect = progressTrack.getBoundingClientRect();
-      const ratio = (event.clientX - rect.left) / Math.max(rect.width, 1);
-      goTo(Math.floor(ratio * scenes.length));
+      const ratio = clamp01((event.clientX - rect.left) / Math.max(rect.width, 1));
+      setPlaying(false);
+      targetProgress = ratio;
+      feedPinned = true;
+      startAnimation();
     });
+
     playButton?.addEventListener('click', () => {
-      if (playing) {
-        setPlaying(false);
-      } else {
-        setPlaying(true, index === scenes.length - 1);
-      }
+      if (playing) setPlaying(false);
+      else setPlaying(true);
     });
 
     const copyButton = document.querySelector<HTMLButtonElement>('[data-workflow-copy]');
@@ -756,16 +1118,14 @@ const steps = copy.steps as Step[];
     }
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        inView = entries.some((entry) => entry.isIntersecting);
+      (records) => {
+        inView = records.some((record) => record.isIntersecting);
         if (!started && inView) {
           started = true;
-          if (!reducedMotion) setPlaying(true);
-          else syncScene();
-        } else if (!inView) {
-          stopTimer();
-        } else if (playing) {
-          startTimer();
+          if (!reducedMotion && !userInteracted) setPlaying(true, true);
+          else render();
+        } else if (inView && playing) {
+          startAnimation();
         }
       },
       { threshold: 0.18 },
@@ -773,13 +1133,9 @@ const steps = copy.steps as Step[];
     observer.observe(root);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        stopTimer();
-      } else if (playing && inView) {
-        startTimer();
-      }
+      if (!document.hidden && playing && inView) startAnimation();
     });
 
-    syncScene();
+    render();
   }
 </script>
