@@ -47,6 +47,19 @@ function assetSection(version, assetPath) {
   ].join('\n');
 }
 
+/**
+ * 包版本表：直接读各包 package.json，而不是假定三个包都是该 tag 的版本——
+ * 局部发布（release.mjs --core/--cli/--web）时未发布的包要能看出来。
+ */
+function packageRows(version) {
+  return ['cli', 'core', 'web'].map((name) => {
+    const pkg = JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf-8'));
+    const released = pkg.version === version;
+    const label = released ? pkg.version : `${pkg.version}（本次未发布 · not released）`;
+    return `| [@qcqx/lattice-${name}](https://www.npmjs.com/package/@qcqx/lattice-${name}) | ${label} |`;
+  });
+}
+
 /** 拼出完整 release 正文 */
 export function buildReleaseBody(tagOrVersion, assetPath) {
   const version = normalizeVersion(tagOrVersion);
@@ -65,9 +78,7 @@ export function buildReleaseBody(tagOrVersion, assetPath) {
     '',
     '| Package | Version |',
     '|---|---|',
-    `| [@qcqx/lattice-cli](https://www.npmjs.com/package/@qcqx/lattice-cli) | ${version} |`,
-    `| [@qcqx/lattice-core](https://www.npmjs.com/package/@qcqx/lattice-core) | ${version} |`,
-    `| [@qcqx/lattice-web](https://www.npmjs.com/package/@qcqx/lattice-web) | ${version} |`,
+    ...packageRows(version),
     '',
     '**官网** https://lattice.qcqx.cn · **文档** https://lattice.qcqx.cn/docs · **在线 Demo** https://lattice.qcqx.cn/demo/',
     '',
