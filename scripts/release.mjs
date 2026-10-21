@@ -21,7 +21,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,6 +53,24 @@ if (!versionArg) {
 }
 
 const isContinue = versionArg === 'continue';
+
+// --- 发布前置检查（先验证再动版本号，避免半途留下已 bump 的 package.json） ---
+if (!isContinue) {
+  if (!existsSync(CHANGELOG_PATH)) {
+    console.error('❌ 缺少 CHANGELOG.md：请先创建（格式见仓库根 CHANGELOG.md）');
+    process.exit(1);
+  }
+  if (!readFileSync(CHANGELOG_PATH, 'utf-8').includes('## [Unreleased]')) {
+    console.error('❌ CHANGELOG.md 缺少 `## [Unreleased]` 段落，无法写入新版本');
+    process.exit(1);
+  }
+  const dirty = execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }).trim();
+  if (dirty) {
+    console.warn(
+      '⚠ 工作区不干净：release 提交只会包含 package.json 与 CHANGELOG.md，其余改动不会进 tag',
+    );
+  }
+}
 
 // --- 工具函数 ---
 function readPkg(path) {
@@ -115,6 +133,13 @@ function previousTag() {
   }
 }
 
+// 用本地日期，避免凌晨发布时 UTC 与本地差一天
+function today() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 // 上一个 tag → HEAD 的非 merge 提交，按 Conventional Commits 类型归组
 function collectEntries(fromTag) {
   const range = fromTag ? `${fromTag}..HEAD` : 'HEAD';
@@ -162,7 +187,7 @@ function readUnreleased(text) {
 
 // 优先搬 [Unreleased] 里手写的条目；没写则从 commit 生成（并提示去润色）
 function updateChangelog(version) {
-  const date = new Date().toISOString().slice(0, 10);
+  const date = today();
   const text = readFileSync(CHANGELOG_PATH, 'utf-8');
   const { start, end, body } = readUnreleased(text);
   if (start < 0) throw new Error('CHANGELOG.md 缺少 `## [Unreleased]` 段落');
@@ -272,7 +297,8 @@ for (const name of targets) {
 console.log(`\n🏷️  创建 git tag: v${newVersion}`);
 const pkgPaths = `${targets.map((name) => `packages/${name}/package.json`).join(' ')} CHANGELOG.md`;
 run(`git add ${pkgPaths}`);
-run(`git commit -m "release: v${newVersion}"`);
+// --only：只提交这些路径的最新内容，不把工作区其他已暂存改动卷进 release 提交
+run(`git commit --only -m "release: v${newVersion}" -- ${pkgPaths}`);
 run(`git tag v${newVersion}`);
 
 if (skipPush) {
