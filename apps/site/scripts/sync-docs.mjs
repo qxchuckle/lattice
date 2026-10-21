@@ -347,10 +347,15 @@ export function verifySync() {
   const errors = checkCoverage();
   if (errors.length) return { errors, warnings: [] };
   const { outputs, warnings } = buildExpectedOutputs();
+  // Generated pages are build artifacts: a clean checkout has none. Absence is only a failure
+  // when the output tree exists but is incomplete (e.g. a page was deleted after generation).
+  const hasGeneratedOutput = [...outputs.keys()].some((rel) => existsSync(join(contentRoot, rel)));
   for (const [rel, content] of outputs) {
     const target = join(contentRoot, rel);
     if (!existsSync(target)) {
-      errors.push(`[docs-sync:E5] generated page is missing: ${rel}`);
+      if (hasGeneratedOutput) {
+        errors.push(`[docs-sync:E5] generated page is missing: ${rel}`);
+      }
       continue;
     }
     if (!sameContent(read(target), content)) {
