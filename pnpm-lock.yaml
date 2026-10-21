@@ -74,6 +74,9 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: ^5.3.0
         version: 5.3.0
+      '@pagefind/default-ui':
+        specifier: 1.5.2
+        version: 1.5.2
       '@qcqx/lattice-core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -129,6 +132,9 @@ importers:
       less:
         specifier: ^4.2.0
         version: 4.6.7
+      pagefind:
+        specifier: 1.5.2
+        version: 1.5.2
       typescript:
         specifier: ^5.8.0
         version: 5.9.3

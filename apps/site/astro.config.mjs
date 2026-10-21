@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import starlight from '@astrojs/starlight';
 import { navGroups } from './scripts/docs-nav.mjs';
+import { devSearchPlugin } from './scripts/dev-search-plugin.mjs';
 
 const site = process.env.SITE_URL ?? 'https://qxchuckle.github.io';
 const base = process.env.SITE_BASE ?? '/lattice';
@@ -81,12 +82,18 @@ export default defineConfig({
         TableOfContents: './src/components/overrides/TableOfContents.astro',
         ThemeSelect: './src/components/overrides/ThemeSelect.astro',
         LanguageSelect: './src/components/overrides/LanguageSelect.astro',
+        Search: './src/components/overrides/Search.astro',
       },
       pagefind: true,
       credits: false,
     }),
   ],
   vite: {
+    plugins: [devSearchPlugin()],
+    optimizeDeps: {
+      // Pre-bundle the search UI so the first dev request never hits a stale optimizer hash.
+      include: ['@pagefind/default-ui'],
+    },
     resolve: {
       alias: {
         '@qcqx/lattice-core': fileURLToPath(

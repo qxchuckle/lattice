@@ -55,7 +55,7 @@ Press <kbd>F5</kbd> inside `packages/vscode` to launch an Extension Development 
 
 Public docs use English as the default entry (`docs/foo.md`) and Simplified Chinese as `docs/foo.zh-CN.md`. When you change either side, update both and keep headings, internal links and command tokens aligned. Add new pairs to `i18n-manifest.json` and run `pnpm check:docs-i18n` (CI runs the same gate).
 
-The website renders the repository docs — it does not keep a second copy. `apps/site/scripts/sync-docs.mjs` derives the site pages from `docs/*.md` at build time, and `apps/site/scripts/docs-nav.mjs` owns the sidebar order and labels. Never edit files under `apps/site/src/content/docs/docs/` or `apps/site/src/content/docs/zh-cn/docs/` (they are generated and git-ignored). After changing `docs/`, register any new page in `docs-nav.mjs`, then run `pnpm sync:docs` and `pnpm check:docs`. A `docs/*.md` file without a nav entry, a missing translation, a stale generated page or an orphan page fails the gate.
+The website renders the repository docs — it does not keep a second copy. `apps/site/scripts/sync-docs.mjs` derives the site pages from `docs/*.md` at build time, and `apps/site/scripts/docs-nav.mjs` owns the sidebar order and labels. Never edit files under `apps/site/src/content/docs/docs/` or `apps/site/src/content/docs/zh-cn/docs/` (they are generated and git-ignored). After changing `docs/`, register any new page in `docs-nav.mjs`, then run `pnpm sync:docs` and `pnpm check:docs`. A `docs/*.md` file without a nav entry, a missing translation, a stale generated page or an orphan page fails the gate. `pnpm dev:site` generates a development Pagefind index from the same docs, so search works locally without a production build; production keeps using Starlight's HTML index.
 
 ## Pull requests
 
@@ -90,5 +90,5 @@ Use the [issue templates](https://github.com/qxchuckle/lattice/issues/new/choose
 - 提交规范：Conventional Commits（commitlint 强制）；提交前跑 `pnpm lint` 与相关测试。
 - 分层约定：宿主（CLI / Web / 扩展）只调用 `@qcqx/lattice-services`；领域逻辑放 `@qcqx/lattice-core`；扩展数据面必须进程内直连 core，不得起 CLI 子进程。
 - 文案：面向用户的文案必须走 l10n（扩展内 `t()` + `packages/vscode/l10n/`），中英双语。
-- 文档：公开文档英文为默认入口（`docs/foo.md`），中文为 `docs/foo.zh-CN.md`；两边同轮更新，新增文档对登记到 `i18n-manifest.json`，并跑 `pnpm check:docs-i18n`。官网直接渲染仓库文档、不维护第二套：新增页面须在 `apps/site/scripts/docs-nav.mjs` 登记，改完 `docs/` 后跑 `pnpm sync:docs` 与 `pnpm check:docs`；`apps/site/src/content/docs/{,zh-cn/}docs/` 是生成物（已 gitignore），不要手改。
+- 文档：公开文档英文为默认入口（`docs/foo.md`），中文为 `docs/foo.zh-CN.md`；两边同轮更新，新增文档对登记到 `i18n-manifest.json`，并跑 `pnpm check:docs-i18n`。官网直接渲染仓库文档、不维护第二套：新增页面须在 `apps/site/scripts/docs-nav.mjs` 登记，改完 `docs/` 后跑 `pnpm sync:docs` 与 `pnpm check:docs`；`apps/site/src/content/docs/{,zh-cn/}docs/` 是生成物（已 gitignore），不要手改。`pnpm dev:site` 会基于同一份文档生成开发用 Pagefind 索引，本地不构建生产包也能搜索；生产环境仍使用 Starlight 的 HTML 索引。
 - PR：小改动直接提；大改动先开 Issue 讨论设计。描述里写清动机与验证方式。

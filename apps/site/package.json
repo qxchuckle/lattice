@@ -15,7 +15,7 @@
     "preview": "astro preview",
     "precheck": "pnpm sync:docs",
     "check": "astro check",
-    "check:docs": "node scripts/sync-docs.mjs --check && node --test scripts/__tests__/sync-docs.test.mjs",
+    "check:docs": "node scripts/sync-docs.mjs --check && node --test scripts/__tests__/sync-docs.test.mjs scripts/__tests__/dev-search.test.mjs",
     "selftest:gates": "node scripts/selftest-gates.mjs",
     "test:e2e": "playwright test"
   },
@@ -24,6 +24,7 @@
     "@astrojs/starlight": "^0.42.6",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@pagefind/default-ui": "1.5.2",
     "@qcqx/lattice-core": "workspace:*",
     "@qcqx/lattice-web-ui": "workspace:*",
     "@tanstack/react-query": "^5.0.0",
@@ -44,6 +45,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "less": "^4.2.0",
+    "pagefind": "1.5.2",
     "typescript": "^5.8.0"
   }
 }

@@ -25,3 +25,15 @@ declare module 'virtual:starlight/user-config' {
 
   export default config;
 }
+
+declare module 'virtual:starlight/project-context' {
+  const project: {
+    trailingSlash?: 'always' | 'never' | 'ignore';
+  };
+
+  export default project;
+}
+
+declare module 'virtual:starlight/pagefind-config' {
+  export const pagefindUserConfig: Record<string, unknown>;
+}
