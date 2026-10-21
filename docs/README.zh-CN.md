@@ -8,12 +8,12 @@ Lattice 是本地优先的研发记忆与工作流层。主入口见根目录 [R
 
 | 文档 | 内容 | 适合 |
 |---|---|---|
-| [quick-start.md](./quick-start.md) | 安装、初始化、扫描项目、第一个任务与规范 | 首次上手 |
-| [concepts.md](./concepts.md) | 规范、任务、检查点、项目关系、搜索与同步 | 建立整体模型 |
-| [web-workbench.md](./web-workbench.md) | 四种视角、画布筛选、详情面板、搜索与在线 Demo | Web 工作台用户 |
-| [architecture.md](./architecture.md) | 分层架构（core → services → 宿主 → 客户端）、多端演进（M1–M6 / P1–P3）、契约测试 | 想理解内部设计 |
-| [directory-and-config.md](./directory-and-config.md) | `~/.lattice` 目录结构、配置文件、层级约定 | 排查数据/配置 |
-| [spec-template-registry.md](./spec-template-registry.md) | Spec 模板仓库结构（内置 / 远程模板） | 编写自定义模板 |
+| [quick-start.md](./quick-start.zh-CN.md) | 安装、初始化、扫描项目、第一个任务与规范 | 首次上手 |
+| [concepts.md](./concepts.zh-CN.md) | 规范、任务、检查点、项目关系、搜索与同步 | 建立整体模型 |
+| [web-workbench.md](./web-workbench.zh-CN.md) | 四种视角、画布筛选、详情面板、搜索与在线 Demo | Web 工作台用户 |
+| [architecture.md](./architecture.zh-CN.md) | 分层架构（core → services → 宿主 → 客户端）、多端演进（M1–M6 / P1–P3）、契约测试 | 想理解内部设计 |
+| [directory-and-config.md](./directory-and-config.zh-CN.md) | `~/.lattice` 目录结构、配置文件、层级约定 | 排查数据/配置 |
+| [spec-template-registry.md](./spec-template-registry.zh-CN.md) | Spec 模板仓库结构（内置 / 远程模板） | 编写自定义模板 |
 
 ## 子包文档
 
