@@ -44,6 +44,9 @@ playwright-report/
 # 发布凭据（本地私有；模板 .env.release.example 入库）
 .env.release
 
+# release.mjs 生成后即删除的 GitHub Release 正文临时文件
+.release-notes-*.md
+
 # vscode extension build artifacts
 packages/vscode/media/
 packages/vscode/dist-vsix/
