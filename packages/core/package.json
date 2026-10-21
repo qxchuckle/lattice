@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-core",
   "version": "1.29.0",
   "description": "Lattice 共享核心库",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

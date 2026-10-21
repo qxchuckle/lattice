@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-web",
   "version": "1.29.0",
   "description": "Lattice Web 工作台 —— 任务 / 项目 / Spec / 知识图谱",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/web"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "type": "module",
   "main": "./dist/server/index.js",
   "types": "./dist/server/index.d.ts",

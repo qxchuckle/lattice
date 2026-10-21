@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-protocol",
   "version": "0.1.0",
   "description": "Lattice 跨端契约：宿主 ⇄ 客户端共用的 DTO 与消息类型（types-only，无运行时代码）",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/protocol"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "license": "MIT",
   "publishConfig": { "access": "public" },
   "type": "module",

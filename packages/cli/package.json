@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-cli",
   "version": "1.29.0",
   "description": "Lattice CLI — 研发记忆与工作流入口",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "type": "module",
   "bin": {
     "lattice": "./dist/index.js",

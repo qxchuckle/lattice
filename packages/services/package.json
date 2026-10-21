@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-services",
   "version": "0.1.2",
   "description": "Lattice 应用服务层：跨宿主共用的用例实现（web server / VSCode 扩展 / 未来客户端）",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/services"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "license": "MIT",
   "publishConfig": {
     "access": "public"

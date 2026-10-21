@@ -2,6 +2,15 @@
   "name": "@qcqx/lattice-web-ui",
   "version": "0.1.2",
   "description": "Lattice 共享 UI（React 组件 + 客户端状态 + LatticeDataAdapter 端口）；web 与 VSCode Webview 共用",
+  "homepage": "https://lattice.qcqx.cn/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qxchuckle/lattice.git",
+    "directory": "packages/web-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/qxchuckle/lattice/issues"
+  },
   "license": "MIT",
   "publishConfig": {
     "access": "public"
