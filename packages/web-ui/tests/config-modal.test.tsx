@@ -229,7 +229,9 @@ describe('ConfigModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('本机配置字段与 Web 密码区：校验、设置、清除', { timeout: 15000 }, async () => {
+  // 本文件最重的一条（本机配置全字段 + 密码四分支 + 两次 Modal.confirm + 保存确认）：
+  // 本地 ~3.7s，CI 满载（六 projects 抢 CPU + v8 coverage）实测 >15s，故显式抬到 30s。
+  it('本机配置字段与 Web 密码区：校验、设置、清除', { timeout: 30000 }, async () => {
     const onClose = vi.fn();
     renderUi(<ConfigModal open onClose={onClose} />);
     await waitFor(() => expect(screen.getByText('全局配置')).toBeTruthy());
