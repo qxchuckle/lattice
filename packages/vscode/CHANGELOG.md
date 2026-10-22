@@ -5,6 +5,26 @@ All notable changes to the Lattice VS Code extension are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2026-10-22
+
+### Added
+
+- **Project actions on the tasks view header**: the current-project header row now carries the same context menu as a project node in the projects view (open in file manager / current window / new window / terminal, rename, edit description, edit metadata, assign groups, copy id / path, show in graph, reveal in sidebar). The payload (`currentProject`) is understood by every project command; unregistered anchors use a dedicated context value so no project action shows up where it cannot work.
+- The tasks view title shows the active project name again (scope = current project); the header row keeps the full identity (name + colour, id and root path on hover).
+
+## [0.4.5] - 2026-10-22
+
+### Added
+
+- **Current project header in the tasks view**: with the task scope set to **current project**, the task list now starts with a header row showing the active project's name in its project color, with `(Not registered)` for unregistered anchors; hover reveals the project id and root path. The view title stays a short scope label (it gets truncated in narrow sidebars).
+- **Project switching from the tasks view**: the header row switches the active project on click whenever the workspace holds more than one Lattice project (folder roots, nested `lattice.json` anchors, registered nested paths) — same candidates + **Auto** picker as the projects view. Plain folders without any anchor or registration do not count as projects. The title bar keeps a **Switch Active Project** button for the same picker.
+
+## [0.4.4] - 2026-10-22
+
+### Added
+
+- Current project name in the tasks view title, plus a title-bar **Switch Active Project** button for multi-project workspaces. Superseded by the header row in 0.4.5 (the title is truncated in narrow sidebars).
+
 ## [0.4.3] - 2026-10-21
 
 ### Added

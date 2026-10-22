@@ -4,9 +4,12 @@ import {
   buildCandidates,
   compareCandidates,
   deepestCandidateForPath,
+  hasMultipleProjectCandidates,
   isPathInsideOrEqual,
   makeCandidate,
+  projectDisplayName,
   resolveActiveCandidate,
+  tasksProjectHeader,
   type FolderProjectInfo,
   type WorkspaceFolderInput,
 } from '../../src/state/project-context-logic';
@@ -146,4 +149,85 @@ test('排序：按 folder 顺序、根项目优先、再按路径', () => {
   assert.equal(sorted[0].folderUri, folderA.uri);
   assert.equal(sorted[0].isRoot, true);
   assert.equal(sorted[sorted.length - 1].folderUri, folderB.uri);
+});
+
+test('项目短名：项目名 > 候选名 > 根目录名', () => {
+  assert.equal(
+    projectDisplayName({ projectName: 'Root', candidateName: 'Candidate', rootPath: '/repo/x' }),
+    'Root',
+  );
+  assert.equal(
+    projectDisplayName({ projectName: '  ', candidateName: 'Nested', rootPath: '/repo/x' }),
+    'Nested',
+  );
+  assert.equal(projectDisplayName({ rootPath: '/repo/packages/a' }), 'a');
+  assert.equal(projectDisplayName({}), undefined);
+});
+
+test('多项目判定：无候选 / 单个 folder 项目 → false', () => {
+  assert.equal(hasMultipleProjectCandidates([]), false);
+  const single = buildCandidates([folderA], info, [
+    { id: 'legacy:root', name: 'Root', localPaths: [root] },
+  ]);
+  // folder 根 + 同根已注册候选是同一个项目（根目录对齐），不能算两个
+  assert.equal(hasMultipleProjectCandidates(single), false);
+});
+
+test('多项目判定：根项目 + 已注册子项目 → true', () => {
+  const candidates = buildCandidates([folderA], info, [
+    { id: 'legacy:root', name: 'Root', localPaths: [root] },
+    { id: 'legacy:a', name: 'Package A', localPaths: [`${root}/packages/a`] },
+  ]);
+  assert.equal(hasMultipleProjectCandidates(candidates), true);
+});
+
+test('多项目判定：未注册嵌套锚点 + 根锚点 → true', () => {
+  const candidates = buildCandidates([folderA], info, []);
+  candidates.push(
+    makeCandidate({
+      folder: folderA,
+      rootPath: `${root}/packages/c`,
+      anchorRoot: `${root}/packages/c`,
+      gitRoot: root,
+      source: 'anchor',
+    }),
+  );
+  assert.equal(hasMultipleProjectCandidates(candidates), true);
+});
+
+test('多项目判定：无锚点 folder + 仅嵌套已注册项目 → false', () => {
+  const bare: WorkspaceFolderInput = { uri: 'file:///plain', name: 'plain', fsPath: '/plain' };
+  const bareInfo = new Map<string, FolderProjectInfo>([
+    [bare.uri, { anchorRoot: null, gitRoot: '/plain', declaredId: null }],
+  ]);
+  const candidates = buildCandidates([bare], bareInfo, [
+    { id: 'legacy:n', name: 'Nested', localPaths: ['/plain/pkg'] },
+  ]);
+  assert.equal(hasMultipleProjectCandidates(candidates), false);
+});
+
+test('面板顶部当前项目条目：仅当前项目范围产出', () => {
+  assert.equal(
+    tasksProjectHeader({ scope: 'all', projectId: 'legacy:a', projectName: 'A' }),
+    undefined,
+  );
+  assert.equal(tasksProjectHeader({ scope: 'project' }), undefined);
+  assert.deepEqual(
+    tasksProjectHeader({
+      scope: 'project',
+      projectId: 'legacy:a',
+      projectName: 'Package A',
+      canSwitch: true,
+    }),
+    { name: 'Package A', projectId: 'legacy:a', unregistered: false, canSwitch: true },
+  );
+});
+
+test('面板顶部当前项目条目：未注册锚点用目录名并标记未注册', () => {
+  assert.deepEqual(tasksProjectHeader({ scope: 'project', rootPath: '/repo/packages/c' }), {
+    name: 'c',
+    projectId: undefined,
+    unregistered: true,
+    canSwitch: false,
+  });
 });

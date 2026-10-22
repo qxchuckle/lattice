@@ -8,6 +8,7 @@ import { ActiveTaskService } from '../state/active-task';
 import { ViewFilterService } from '../state/view-filter';
 import { taskMatchesFilter } from '../state/task-filter-logic';
 import { TasksScopeService } from '../state/tasks-scope';
+import { tasksProjectHeader } from '../state/project-context-logic';
 import { TaskGroupService } from '../state/task-group';
 import { ViewSearchService } from '../state/view-search';
 import {
@@ -149,6 +150,8 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
         return this.getSubtasksChildren(payload.taskId, base);
       case 'taskProjectsGroup':
         return this.getProjectsChildren(payload.taskId, base);
+      case 'currentProject':
+        return [];
       default:
         return [];
     }
@@ -158,9 +161,13 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
 
   private async getRootChildren(): Promise<LatticeTreeItem[]> {
     await this.snapshot.ensure(['tasks', 'projects', 'user']);
-    if (this.taskGroup.mode !== 'status') return this.getTimeRootChildren();
+    const header = this.projectHeaderItem();
+    if (this.taskGroup.mode !== 'status') {
+      const items = this.getTimeRootChildren();
+      return header ? [header, ...items] : items;
+    }
     const groups = this.computeGroups();
-    return groups.map((group) =>
+    const items = groups.map((group) =>
       makeItem({
         label: `${group.label} (${group.tasks.length})`,
         id: `g/${group.id}`,
@@ -172,6 +179,50 @@ export class TasksProvider implements vscode.TreeDataProvider<LatticeTreeItem> {
             : vscode.TreeItemCollapsibleState.Expanded,
       }),
     );
+    return header ? [header, ...items] : items;
+  }
+
+  /**
+   * 面板内容顶部的当前项目条目（范围为当前项目时）：
+   * 标题行宽度有限会被截断，项目身份放在列表首行；工作区多项目时点击切换活动项目。
+   */
+  private projectHeaderItem(): LatticeTreeItem | undefined {
+    const candidate = this.activeProject.currentCandidate;
+    const project = this.activeProject.currentProject;
+    const header = tasksProjectHeader({
+      scope: this.tasksScope.effective,
+      projectId: project?.id ?? candidate?.projectId,
+      projectName: project?.name || project?.id,
+      candidateName: candidate?.projectName,
+      rootPath: candidate?.rootPath,
+      canSwitch: this.activeProject.hasMultipleProjects,
+    });
+    if (!header) return undefined;
+    const rootPath = candidate?.rootPath ?? project?.localPaths[0];
+    return makeItem({
+      label: header.name,
+      id: 'g/current-project',
+      payload: { kind: 'currentProject', projectId: header.projectId },
+      // 未注册锚点没有可执行的项目操作：单独的 contextValue 不挂项目菜单
+      contextValue: header.unregistered
+        ? 'currentProjectHeaderUnregistered'
+        : 'currentProjectHeader',
+      icon: header.projectId
+        ? new vscode.ThemeIcon('project', new vscode.ThemeColor(projectIconColor(header.projectId)))
+        : new vscode.ThemeIcon('project'),
+      description: header.unregistered
+        ? `${t('current project')} · ${t('Not registered')}`
+        : t('current project'),
+      tooltip: tooltipMarkdown([
+        `**${header.name}**`,
+        header.projectId ?? t('Not registered'),
+        rootPath,
+        header.canSwitch ? t('Click to switch the active project') : undefined,
+      ]),
+      command: header.canSwitch
+        ? { command: 'lattice.project.switchActive', title: '' }
+        : undefined,
+    });
   }
 
   /** 时间分组根层：活动任务置顶组（内部同层级）+ 层级树 + 未知时间。 */

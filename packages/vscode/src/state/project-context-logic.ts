@@ -238,6 +238,71 @@ export function resolveActiveCandidate(input: ResolveCandidateInput): ProjectCan
   );
 }
 
+/** 活动项目的展示短名：项目名 > 候选名 > 根目录名（任务视图标题与状态栏共用同一口径）。 */
+export function projectDisplayName(input: {
+  projectName?: string | null;
+  candidateName?: string | null;
+  rootPath?: string | null;
+}): string | undefined {
+  const named = input.projectName?.trim() || input.candidateName?.trim();
+  if (named) return named;
+  const rootPath = input.rootPath?.trim();
+  return rootPath ? path.basename(rootPath) : undefined;
+}
+
+/**
+ * 任务面板顶部「当前项目」条目（面板内容顶部而非标题行——标题行宽度有限会被截断）。
+ * 仅任务范围为当前项目且存在活动项目时产出。
+ */
+export interface TasksProjectHeader {
+  name: string;
+  projectId?: string;
+  /** 有锚点但尚未注册：图标保持中性、描述标注未注册。 */
+  unregistered: boolean;
+  /** 工作区内多个项目时才允许点击切换。 */
+  canSwitch: boolean;
+}
+
+export function tasksProjectHeader(input: {
+  scope: 'all' | 'project';
+  projectId?: string | null;
+  projectName?: string | null;
+  candidateName?: string | null;
+  rootPath?: string | null;
+  canSwitch?: boolean;
+}): TasksProjectHeader | undefined {
+  if (input.scope !== 'project') return undefined;
+  const name = projectDisplayName(input);
+  if (!name) return undefined;
+  const projectId = input.projectId ?? undefined;
+  return {
+    name,
+    projectId,
+    unregistered: !projectId,
+    canSwitch: Boolean(input.canSwitch),
+  };
+}
+
+/**
+ * 工作区内是否存在多个可切换的 Lattice 项目。
+ * 只统计有项目身份证据的候选（已注册 projectId / lattice.json 锚点 / 声明的 legacy ID），
+ * 纯 folder 根（没有任何锚点与注册）不算项目；同一根目录的多种候选（folder 根 + 已注册）
+ * 合并为同一项目——folder 根候选的 projectId 是懒解析的，这里以根目录对齐。
+ */
+export function hasMultipleProjectCandidates(candidates: readonly ProjectCandidate[]): boolean {
+  const projectByRoot = new Map<string, string>();
+  const roots = new Set<string>();
+  for (const candidate of candidates) {
+    if (!candidate.projectId && !candidate.anchorRoot && !candidate.declaredId) continue;
+    const rootKey = comparablePath(candidate.rootPath);
+    roots.add(rootKey);
+    if (candidate.projectId) projectByRoot.set(rootKey, candidate.projectId);
+  }
+  const projectKeys = new Set<string>();
+  for (const rootKey of roots) projectKeys.add(projectByRoot.get(rootKey) ?? rootKey);
+  return projectKeys.size > 1;
+}
+
 /** Stable sort key for switch pickers: folder order, root before nested, then path. */
 export function compareCandidates(
   a: ProjectCandidate,

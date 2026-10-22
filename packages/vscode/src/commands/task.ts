@@ -549,6 +549,11 @@ export function registerTaskCommands(services: CommandServices, register: Regist
       await services.graph?.open({ view: 'project', anchorId: payload.projectId });
       return;
     }
+    if (payload?.kind === 'currentProject') {
+      if (payload.projectId)
+        await services.graph?.open({ view: 'project', anchorId: payload.projectId });
+      return;
+    }
     if (payload?.kind === 'specProjectGroup') {
       await services.graph?.open({ view: 'project', anchorId: payload.projectId });
       return;

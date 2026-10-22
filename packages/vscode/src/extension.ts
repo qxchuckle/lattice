@@ -5,6 +5,7 @@ import { getConfig, getLatticeRoot, onConfigChanged } from './config';
 import { disposeLogging, log, warnLog } from './logging';
 import { LatticeDataService } from './data/service';
 import { ActiveProjectService } from './state/active-project';
+import { projectDisplayName } from './state/project-context-logic';
 import { ActiveTaskService } from './state/active-task';
 import { ReportStore } from './state/report-store';
 import { SearchStateService } from './state/search-state';
@@ -347,6 +348,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       'lattice.hasWorkspaceProject',
       Boolean(activeProject.currentProjectId),
     );
+    // 任务视图范围与「工作区内有多个项目」：标题描述与切换按钮显隐的 when 条件
+    void vscode.commands.executeCommand('setContext', 'lattice.tasksScope', tasksScope.effective);
+    void vscode.commands.executeCommand(
+      'setContext',
+      'lattice.hasMultipleProjects',
+      activeProject.hasMultipleProjects,
+    );
     void vscode.commands.executeCommand(
       'setContext',
       'lattice.hasActiveTask',
@@ -371,8 +379,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   const updateViewDecorations = () => {
-    tasksView.description =
-      tasksScope.effective === 'project' ? t('current project') : t('all projects');
+    // 标题行：当前项目范围直接显示项目名（完整信息在任务列表首行「当前项目」条目）
+    if (tasksScope.effective === 'project') {
+      const candidate = activeProject.currentCandidate;
+      const project = activeProject.currentProject;
+      tasksView.description =
+        projectDisplayName({
+          projectName: project?.name || project?.id,
+          candidateName: candidate?.projectName,
+          rootPath: candidate?.rootPath,
+        }) ?? t('current project');
+    } else {
+      tasksView.description = t('all projects');
+    }
     const activeCount = activeProject.currentProjectId
       ? snapshot.activeTasksForProject(activeProject.currentProjectId).length
       : 0;
@@ -416,8 +435,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     activeTask.onDidChange(() => updateContextKeys()),
   );
-  // 任务范围（workspaceState 覆盖）变化：刷新视图描述
-  context.subscriptions.push(tasksScope.onDidChange(() => updateViewDecorations()));
+  // 任务范围（workspaceState 覆盖）变化：刷新视图描述与切换按钮上下文键
+  context.subscriptions.push(
+    tasksScope.onDidChange(() => {
+      updateContextKeys();
+      updateViewDecorations();
+    }),
+  );
 
   // ── autoRefresh / 轮询兜底 ──
   let pollTimer: ReturnType<typeof setInterval> | undefined;

@@ -253,7 +253,10 @@ export function registerProjectGroupCommands(
   register('lattice.project.assignGroup', async (arg?: unknown) => {
     const payload = extractPayload(arg);
     const obj = extractArgObject<{ projectId?: unknown; set?: unknown }>(arg);
-    let projectId: string | undefined = payload?.kind === 'project' ? payload.projectId : undefined;
+    let projectId: string | undefined =
+      payload?.kind === 'project' || payload?.kind === 'currentProject'
+        ? payload.projectId
+        : undefined;
     if (!projectId && obj && typeof obj.projectId === 'string') projectId = obj.projectId;
     await services.snapshot.ensure(['projects']);
     let project = projectId ? services.snapshot.findProject(projectId) : undefined;

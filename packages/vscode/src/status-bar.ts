@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { getConfig, onConfigChanged } from './config';
 import { ActiveProjectService } from './state/active-project';
+import { projectDisplayName } from './state/project-context-logic';
 import { ActiveTaskService } from './state/active-task';
 import { SnapshotStore } from './state/snapshot';
 import { UserScopeService } from './state/user-scope';
@@ -46,11 +47,11 @@ export class StatusBarController implements vscode.Disposable {
     const candidate = this.activeProject.currentCandidate;
 
     if (config.statusBarProject) {
-      const label = project
-        ? project.name || project.id
-        : candidate
-          ? candidate.projectName || path.basename(candidate.rootPath)
-          : undefined;
+      const label = projectDisplayName({
+        projectName: project?.name || project?.id,
+        candidateName: candidate?.projectName,
+        rootPath: candidate?.rootPath,
+      });
       this.projectItem.text = label ? `$(library) ${label}` : '$(library) Lattice';
       const tooltip = new vscode.MarkdownString();
       if (project) {

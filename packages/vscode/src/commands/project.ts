@@ -25,6 +25,7 @@ const RELATION_TYPES: Array<{ type: string; label: string }> = [
 function projectIdFrom(services: CommandServices, arg: unknown): string | undefined {
   const payload = extractPayload(arg);
   if (payload?.kind === 'project') return payload.projectId;
+  if (payload?.kind === 'currentProject') return payload.projectId;
   if (payload?.kind === 'specProjectGroup') return payload.projectId;
   if (payload?.kind === 'relation') return payload.projectId;
   if (payload?.kind === 'searchResult') return payload.row.projectIds[0];

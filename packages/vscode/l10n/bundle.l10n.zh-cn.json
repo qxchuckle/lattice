@@ -73,6 +73,7 @@
   "Clear Search History": "清除搜索历史",
   "Clear the project pin": "清除项目固定",
   "Cleared {0} scope path(s) of \"{1}\".": "已清空「{1}」的 {0} 条关联路径。",
+  "Click to switch the active project": "点击切换活动项目",
   "Commas are not allowed": "不能包含逗号（, 或 ，）",
   "Commit Draft": "提交草稿",
   "Complete": "完成",

@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.4.3",
+  "version": "0.4.6",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -856,6 +856,12 @@
       ],
       "view/title": [
         {
+          "command": "lattice.project.switchActive",
+          "when": "view == lattice.tasks && lattice.tasksScope == 'project' && lattice.hasMultipleProjects",
+          "group": "navigation@0",
+          "icon": "$(arrow-swap)"
+        },
+        {
           "command": "lattice.task.create",
           "when": "view == lattice.tasks",
           "group": "navigation@1",
@@ -1215,7 +1221,7 @@
         },
         {
           "command": "lattice.task.revealInGraph",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "5_view@1"
         },
         {
@@ -1260,37 +1266,37 @@
         },
         {
           "command": "lattice.project.open",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "inline@1"
         },
         {
           "command": "lattice.project.openInCurrentWindow",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "1_open@1"
         },
         {
           "command": "lattice.project.openFolder",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "1_open@2"
         },
         {
           "command": "lattice.project.openInTerminal",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "1_open@3"
         },
         {
           "command": "lattice.project.copyId",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "4_copy@1"
         },
         {
           "command": "lattice.project.copyPath",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "4_copy@2"
         },
         {
           "command": "lattice.project.relation.add",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "2_associate@1"
         },
         {
@@ -1300,27 +1306,27 @@
         },
         {
           "command": "lattice.project.rename",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "3_manage@1"
         },
         {
           "command": "lattice.project.editDescription",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "3_manage@2"
         },
         {
           "command": "lattice.project.update",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "3_manage@3"
         },
         {
           "command": "lattice.project.editMeta",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "3_manage@4"
         },
         {
           "command": "lattice.project.assignGroup",
-          "when": "viewItem == project",
+          "when": "viewItem == project || viewItem == currentProjectHeader",
           "group": "3_manage@5"
         },
         {
@@ -1470,7 +1476,7 @@
         },
         {
           "command": "lattice.revealInSidebar",
-          "when": "viewItem == project || viewItem == relation",
+          "when": "viewItem == project || viewItem == currentProjectHeader || viewItem == relation",
           "group": "5_view@2"
         },
         {

@@ -10,6 +10,7 @@ import {
   buildCandidates,
   compareCandidates,
   folderForPath,
+  hasMultipleProjectCandidates,
   makeCandidate,
   resolveActiveCandidate,
   upsertCandidate,
@@ -89,6 +90,11 @@ export class ActiveProjectService implements vscode.Disposable {
 
   get currentProject(): ProjectRow | undefined {
     return this.snapshot.findProject(this.projectId);
+  }
+
+  /** 工作区内有多个可切换的 Lattice 项目（标题栏切换入口的显隐条件）。 */
+  get hasMultipleProjects(): boolean {
+    return hasMultipleProjectCandidates(this.candidates);
   }
 
   /** 所有工作区根（含未检测到锚点的）。 */
