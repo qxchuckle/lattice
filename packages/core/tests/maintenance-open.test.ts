@@ -8,6 +8,19 @@ const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 
 vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 
+/** 与 src/maintenance/open.ts 的平台映射保持一致（CI 跑 Linux，本地多为 macOS） */
+function expectedOpen(mode: 'finder' | 'terminal', target: string) {
+  if (mode === 'terminal') {
+    if (process.platform === 'darwin') return { cmd: 'open', args: ['-a', 'Terminal', target] };
+    if (process.platform === 'win32')
+      return { cmd: 'cmd', args: ['/c', 'start', 'cmd', '/K', `cd /d ${target}`] };
+    return { cmd: 'x-terminal-emulator', args: [`--working-directory=${target}`] };
+  }
+  if (process.platform === 'darwin') return { cmd: 'open', args: [target] };
+  if (process.platform === 'win32') return { cmd: 'explorer', args: [target] };
+  return { cmd: 'xdg-open', args: [target] };
+}
+
 let env: Awaited<ReturnType<typeof createTempLatticeHome>>;
 
 beforeEach(async () => {
@@ -25,11 +38,14 @@ test('openDirectory：finder/terminal 命令映射与成功回调', async () => 
     success: true,
     message: '已打开：/work/proj',
   });
-  assert.equal(execFileMock.mock.calls[0][0], 'open');
-  assert.deepEqual(execFileMock.mock.calls[0][1], ['/work/proj']);
+  const finderCall = expectedOpen('finder', '/work/proj');
+  assert.equal(execFileMock.mock.calls[0][0], finderCall.cmd);
+  assert.deepEqual(execFileMock.mock.calls[0][1], finderCall.args);
 
   await openDirectory('/work/proj', 'terminal');
-  assert.deepEqual(execFileMock.mock.calls[1][1], ['-a', 'Terminal', '/work/proj']);
+  const terminalCall = expectedOpen('terminal', '/work/proj');
+  assert.equal(execFileMock.mock.calls[1][0], terminalCall.cmd);
+  assert.deepEqual(execFileMock.mock.calls[1][1], terminalCall.args);
 });
 
 test('openDirectory：执行错误返回失败信息', async () => {
@@ -63,5 +79,7 @@ test('openLatticeRoot：指向隔离的 LATTICE_HOME', async () => {
   execFileMock.mockImplementation((_cmd, _args, cb) => cb(null));
   const result = await openLatticeRoot('terminal');
   assert.equal(result.success, true);
-  assert.equal(execFileMock.mock.calls[0][1][2], join(env.latticeHome));
+  const expected = expectedOpen('terminal', join(env.latticeHome));
+  assert.equal(execFileMock.mock.calls[0][0], expected.cmd);
+  assert.deepEqual(execFileMock.mock.calls[0][1], expected.args);
 });

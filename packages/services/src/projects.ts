@@ -34,15 +34,19 @@ import { canonicalKey, idMatches, projectIdSet, type SpecWithScope } from './sha
 import { listSpecs } from './specs';
 
 /**
- * 项目元数据全集：虚拟合并优先（DB），失败回退磁盘扫描。
+ * 项目元数据全集：虚拟合并优先（DB），失败或缓存为空时回退磁盘扫描。
  * 多宿主共享：CLI/web 有 DB 时获得虚拟合并视图；扩展宿主 DB 不可用时仍能列出磁盘项目。
+ * 空缓存也要回退：DB 只是缓存，建库可能早于项目文件落盘（如扩展激活期 warmDb 先于
+ * fixture/外部写入），此时读 DB 会得到 0 条而磁盘有项目——不得让缓存遮蔽真源。
  */
 export async function listProjects(username: string): Promise<ProjectMeta[]> {
   try {
-    return await listVirtualProjectMetas(username);
+    const merged = await listVirtualProjectMetas(username);
+    if (merged.length > 0) return merged;
   } catch {
-    return listProjectMetas(username);
+    // DB 不可用 → 磁盘回退
   }
+  return listProjectMetas(username);
 }
 
 /** 单个项目（虚拟合并 → 磁盘回退）。 */
