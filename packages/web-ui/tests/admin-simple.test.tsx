@@ -216,11 +216,15 @@ describe('admin RAG / Doctor', () => {
     expect(screen.getByText('load failed')).toBeTruthy();
     expect(screen.getByText('check network')).toBeTruthy();
 
+    // 各 SSE 操作串行 await 完成信号后再点下一个：组件里「删除」按钮 disabled={running || loaded}，
+    // 不等前一个操作 running 回落就点删除，CI 满载（微任务未及时 flush）下确认弹窗永不出现（真竞态，非等待余量）。
     fireEvent.click(screen.getByText('增量更新'));
+    await waitFor(() => expect(screen.getByText('增量更新完成')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('模型管理')).toBeTruthy());
     fireEvent.click(screen.getByText('全量重建'));
+    await waitFor(() => expect(screen.getByText('全量重建完成')).toBeTruthy());
     fireEvent.click(screen.getByText('重装'));
-    await waitFor(() => expect(adapter.removeModel).not.toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('模型下载完成')).toBeTruthy());
     fireEvent.click(screen.getByText('删除'));
     await waitFor(() => expect(document.querySelector('.ant-modal-confirm')).toBeTruthy());
     clickConfirm();
