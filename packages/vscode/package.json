@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -19,7 +19,6 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Productivity",
     "Other",
     "Machine Learning",
     "Data Science"

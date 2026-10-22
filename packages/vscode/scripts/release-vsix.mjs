@@ -53,6 +53,15 @@ function mask(secret) {
   return secret.length <= 8 ? '****' : `${secret.slice(0, 4)}…${secret.slice(-4)}`;
 }
 
+/**
+ * 失败输出脱敏：execSync 失败时 error.message 会带上完整命令行（含 -p <PAT>），
+ * 直接打印就是把凭据写进终端/CI 日志。
+ */
+function redact(text, secret) {
+  if (!secret) return String(text);
+  return String(text).split(secret).join('****');
+}
+
 // 防呆：凭据文件不得进入 git 索引
 function assertNotGitTracked() {
   const file = join(repoRoot, '.env.release');
@@ -140,7 +149,7 @@ function publishOpenVsx(vsixPath) {
     );
     return true;
   } catch (error) {
-    const text = `${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`;
+    const text = redact(`${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`, pat);
     if (isAlreadyPublished(text)) {
       console.log('  ℹ Open VSX：该版本已发布，跳过');
       return true;
@@ -166,7 +175,7 @@ function publishMarketplace(vsixPath) {
     console.log('  ✔ VS Marketplace 已发布');
     return true;
   } catch (error) {
-    const text = `${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`;
+    const text = redact(`${error.stdout ?? ''}${error.stderr ?? ''}${error.message ?? ''}`, pat);
     if (isAlreadyPublished(text)) {
       console.log('  ℹ VS Marketplace：该版本已发布，跳过');
       return true;
