@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 describe('DetailPanel 项目详情', () => {
-  it('Git/关联任务/项目关系/Spec Tab、筛选、搜索与路径选择', { timeout: 20000 }, async () => {
+  it('Git/关联任务/项目关系/Spec Tab、筛选、搜索与路径选择', async () => {
     renderUi(
       <>
         <DetailPanel />
@@ -169,7 +169,7 @@ describe('DetailPanel 项目详情', () => {
     await waitFor(() => expect(screen.getByText('无匹配 Spec')).toBeTruthy());
   });
 
-  it('项目不存在与 git 干净分支', { timeout: 15000 }, async () => {
+  it('项目不存在与 git 干净分支', async () => {
     adapter.getProject.mockResolvedValueOnce({ error: 'not_found' } as never);
     renderUi(<DetailPanel />);
     await waitFor(() => expect(screen.getByText('加载失败')).toBeTruthy());

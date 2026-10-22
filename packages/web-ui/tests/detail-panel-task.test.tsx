@@ -102,7 +102,7 @@ function openHeaderMenu() {
 }
 
 describe('DetailPanel 任务详情', () => {
-  it('项目/Spec/范围路径/文档/Checkpoint Tab、搜索与导航', { timeout: 15000 }, async () => {
+  it('项目/Spec/范围路径/文档/Checkpoint Tab、搜索与导航', async () => {
     renderUi(
       <>
         <DetailPanel />
@@ -163,7 +163,7 @@ describe('DetailPanel 任务详情', () => {
     await waitFor(() => expect(screen.getByText('无匹配 Checkpoint')).toBeTruthy());
   });
 
-  it('状态下拉、添加 Checkpoint、归档与删除', { timeout: 15000 }, async () => {
+  it('状态下拉、添加 Checkpoint、归档与删除', async () => {
     renderUi(<DetailPanel />);
     await waitFor(() => expect(screen.getByText('任务详情')).toBeTruthy());
 
@@ -221,7 +221,7 @@ describe('DetailPanel 任务详情', () => {
     expect(detailStore.open).toBe(false);
   });
 
-  it('状态更新/归档/删除失败：提示错误、保持详情与确认框', { timeout: 20000 }, async () => {
+  it('状态更新/归档/删除失败：提示错误、保持详情与确认框', async () => {
     renderUi(<DetailPanel />);
     await waitFor(() => expect(screen.getByText('任务详情')).toBeTruthy());
 

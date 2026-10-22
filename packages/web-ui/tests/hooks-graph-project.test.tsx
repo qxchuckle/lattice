@@ -86,7 +86,7 @@ describe('useProjectGraph', () => {
     expect(edge).toMatchObject({ source: 'p1', target: 'p2', label: 'depends-on', animated: true });
   });
 
-  it('项目锚点：Spec 覆盖链/引用、任务父子、scope、关系项目递归', { timeout: 15000 }, async () => {
+  it('项目锚点：Spec 覆盖链/引用、任务父子、scope、关系项目递归', async () => {
     const adapter = fullAdapter();
     setAdapter(adapter as never);
     const { result } = renderHook(() => useProjectGraph('p1'), { wrapper: makeWrapper() });
