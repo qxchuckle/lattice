@@ -378,6 +378,10 @@ test('terminal WebSocket：pty/spawn 降级/init/input/resize/非法路径/坏�
   ws.terminate();
 
   // pty.spawn 抛错 → spawn 降级
+  // 降级路径会 spawn 真实 $SHELL -i：固定为 /bin/sh，消除本地 zsh+powerlevel10k
+  // 交互式启动慢（首屏渲染吞输入）导致的环境性超时；CI ubuntu 同为 /bin/sh 秒就绪
+  const prevShell = process.env.SHELL;
+  process.env.SHELL = '/bin/sh';
   ptyState.failNext = true;
   const fallback = await app.injectWS('/api/terminal/ws');
   await new Promise((r) => setTimeout(r, 50));
@@ -385,6 +389,8 @@ test('terminal WebSocket：pty/spawn 降级/init/input/resize/非法路径/坏�
   fallback.send(JSON.stringify({ type: 'init', cwd: fixture.home }));
   const fallbackMsg = await fallbackMode;
   assert.equal(fallbackMsg.mode, 'spawn');
+  // 软等待 shell 首帧输出（pipe stdio 下 prompt 可能不落 stdout，不阻塞断言）
+  await waitForMessage(fallback, (m) => m.type === 'output', 1500).catch(() => {});
   const spawnOutput = waitForMessage(
     fallback,
     (m) => m.type === 'output' && String(m.data).includes('spawn-deep'),
@@ -393,6 +399,8 @@ test('terminal WebSocket：pty/spawn 降级/init/input/resize/非法路径/坏�
   fallback.send(JSON.stringify({ type: 'input', data: 'echo spawn-deep\n' }));
   assert.match(String((await spawnOutput).data), /spawn-deep/);
   fallback.terminate();
+  if (prevShell === undefined) delete process.env.SHELL;
+  else process.env.SHELL = prevShell;
 
   const bad = await app.injectWS('/api/terminal/ws');
   await new Promise((r) => setTimeout(r, 50));
