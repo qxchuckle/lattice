@@ -27,7 +27,7 @@ function run(executable, args, options) {
         ' ' +
         args.join(' ') +
         '\n' +
-        (result.error ? result.error.message : result.stderr || result.stdout),
+        [result.error?.message, result.stderr, result.stdout].filter(Boolean).join('\n'),
     );
   return result.stdout;
 }
