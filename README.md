@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm cli" src="https://img.shields.io/npm/v/@qcqx/lattice-cli?label=cli"></a>
   <a href="https://www.npmjs.com/package/@qcqx/lattice-core"><img alt="npm core" src="https://img.shields.io/npm/v/@qcqx/lattice-core?label=core"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-web"><img alt="npm web" src="https://img.shields.io/npm/v/@qcqx/lattice-web?label=web"></a>
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
@@ -65,7 +64,7 @@ Lattice is a local-first **engineering memory and workflow layer**. It turns spe
 | | CLI | VS Code extension | Web workbench |
 |---|---|---|---|
 | **For** | Automation, scripts, AI agents | Day-to-day browsing and editing | Visual exploration |
-| **Install** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `npm i -g @qcqx/lattice-web` |
+| **Install** | [Installation methods](./docs/quick-start.md#1-install) | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `ltc web` |
 | **Run** | `ltc init` · `ltc scan` · `ltc context` | Activity bar → Lattice (first run: **Quick Start** — no CLI needed) | `ltc web` → browser, or the extension's built-in webview |
 | **Docs** | [packages/cli](./packages/cli/README.md) | [packages/vscode](./packages/vscode/README.md) | [packages/web](./packages/web/README.md) |
 
@@ -77,15 +76,48 @@ Lattice is a local-first **engineering memory and workflow layer**. It turns spe
 | [`@qcqx/lattice-protocol`](./packages/protocol) | Cross-host contracts (types-only DTOs & messages) | [![protocol](https://img.shields.io/npm/v/@qcqx/lattice-protocol?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-protocol) |
 | [`@qcqx/lattice-services`](./packages/services) | Use-case layer shared by CLI / web / extension | [![services](https://img.shields.io/npm/v/@qcqx/lattice-services?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-services) |
 | [`@qcqx/lattice-cli`](./packages/cli) | Command line (`lattice` / `ltc`) | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
-| [`@qcqx/lattice-web`](./packages/web) | Web server (HTTP API + static assets) | [![web](https://img.shields.io/npm/v/@qcqx/lattice-web?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web) |
+| [`@qcqx/lattice-web`](./packages/web) | Web server (HTTP API + static assets) | — |
 | [`@qcqx/lattice-web-ui`](./packages/web-ui) | Shared React UI (web client & extension webview) | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
-| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | 0.1.1 (VSIX) |
+| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | [View releases](https://github.com/qxchuckle/lattice/releases) |
 
 ## Quick start
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · Coming soon</summary>
+
+Homebrew installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
-# CLI — installs `lattice` and `ltc`
 npm install -g @qcqx/lattice-cli
+```
+
+The current public release v1.29.0 requires Node.js 18+ and uses the installation Node environment. Switching Node may require reinstalling. The bundled Web workbench ships with the upcoming platform release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · Coming soon</summary>
+
+curl installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
+
+```bash
 ltc init          # create ~/.lattice, pick a username, inject the Lattice workflow
 ltc scan          # register local projects (or `ltc link` inside a non-git repo)
 ltc context       # every spec / active task / related project for the current repo
@@ -97,16 +129,17 @@ pnpm install
 pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
 
+After installing a CLI platform release that includes the workbench, run:
+
 ```bash
 # Web workbench
-npm install -g @qcqx/lattice-web
 ltc web               # opens the local web UI
 ```
 
 ## Data & privacy
 
 - Everything lives in `~/.lattice` on your machine — projects, specs, tasks, checkpoints, the search index.
-- No telemetry, no network calls from the tooling itself. Sync (origin / domains) only touches the Git remotes **you** configure.
+- No telemetry. Model downloads, template pulls and Git sync access model sources, template repositories and configured Git remotes as needed.
 - The VS Code extension reads and writes the same data root **in-process** (no CLI subprocess, no local HTTP server required).
 
 ## Documentation

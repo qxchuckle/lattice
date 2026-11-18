@@ -1,0 +1,142 @@
+.ll-install-tabs {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  margin-top: 22px;
+  border: 1px solid var(--ll-line);
+  border-radius: 10px;
+  background: var(--ll-control);
+  color: var(--ll-text);
+  font-family: var(--sl-font);
+  text-align: left;
+}
+.ll-install-tabs [hidden] {
+  display: none !important;
+}
+.ll-install-tablist {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--ll-line);
+}
+.ll-install-tablist button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ll-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ll-install-tablist button[aria-selected='true'] {
+  border-color: var(--ll-line);
+  background: var(--ll-surface);
+  color: var(--ll-text);
+  font-weight: 600;
+}
+.ll-install-tabs [data-install-panel] {
+  padding: 16px;
+  min-height: 154px;
+}
+.ll-install-channel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+}
+.ll-install-pending {
+  padding: 2px 7px;
+  border: 1px solid var(--ll-line);
+  border-radius: 4px;
+  color: var(--ll-muted);
+  font-size: 13px;
+}
+.ll-install-tabs .ll-install {
+  display: flex;
+  width: 100%;
+  margin-top: 12px;
+  padding: 0;
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 15px;
+  color: var(--ll-text);
+}
+.ll-install-tabs .ll-install code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+  text-overflow: clip;
+  padding: 4px 0;
+  font-size: inherit;
+}
+.ll-install-tabs [data-install-panel='curl'] .ll-install code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ll-install-tabs .ll-install .ll-copy {
+  min-height: 40px;
+  color: var(--ll-muted);
+}
+.ll-install-note {
+  margin: 12px 0 0;
+  color: var(--ll-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.ll-install-tabs .ll-install-alternative {
+  margin: 10px 12px 0 0;
+  padding: 0;
+  min-height: 36px;
+  border: 0;
+  background: none;
+  color: var(--sl-color-accent-high);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ll-install-tabs .ll-install-release {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--sl-color-accent-high);
+  font-size: 13px;
+}
+.ll-install-feedback {
+  display: block;
+  min-height: 20px;
+  padding: 0 16px 5px;
+  color: var(--ll-muted);
+  font-size: 13px;
+}
+.ll-install-tabs button:focus-visible,
+.ll-install-tabs a:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 3px;
+}
+@media (max-width: 640px) {
+  .ll-install-tablist button {
+    min-height: 44px;
+    padding-inline: 6px;
+  }
+  .ll-install-tabs [data-install-panel] {
+    padding: 14px;
+    min-height: 172px;
+  }
+  .ll-install-tabs .ll-install {
+    font-size: 13.5px;
+    flex-wrap: nowrap;
+  }
+  .ll-install-tabs .ll-install code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

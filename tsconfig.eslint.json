@@ -34,6 +34,7 @@
     "coverage/**",
     "packages/vscode/media/**",
     "packages/vscode/dist/**",
-    "packages/vscode/dist-vsix/**"
+    "packages/vscode/dist-vsix/**",
+    "dist-cli/**"
   ]
 }

@@ -6,6 +6,8 @@ The web workbench is a browser UI over the same `~/.lattice` data as the CLI. It
 
 ## Start the workbench
 
+The CLI platform package includes the workbench and runs it with the same bundled Node runtime. See [installation methods](./quick-start.md#1-install) for availability.
+
 ```bash
 # Start the workbench (default port 14527)
 ltc web

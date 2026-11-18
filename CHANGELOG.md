@@ -16,6 +16,9 @@ whose body is the matching section of this file.
 
 ## [Unreleased]
 
+- CLI 平台包内置 Web 工作台，安装后运行 `ltc web`。 · CLI platform packages include the Web workbench. Open it with `ltc web`.
+- 私有 Node 启动隔离项目的 NODE_OPTIONS 与 NODE_PATH。 · The bundled Node runtime ignores project NODE_OPTIONS and NODE_PATH.
+
 ### Changed
 
 - Published packages now declare `homepage` (https://lattice.qcqx.cn/), `repository` (with

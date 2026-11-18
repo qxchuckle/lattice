@@ -27,6 +27,8 @@ test('buildReleaseBody：含安装命令、包表与站点链接', () => {
   const body = buildReleaseBody('v1.29.0');
 
   assert.match(body, /npm i -g @qcqx\/lattice-cli/);
+  assert.match(body, /ltc web/);
+  assert.doesNotMatch(body, /@qcqx\/lattice-web/);
   assert.match(
     body,
     /@qcqx\/lattice-cli\]\(https:\/\/www\.npmjs\.com\/package\/@qcqx\/lattice-cli\) \| 1\.29\.0/,
@@ -39,7 +41,8 @@ test('buildReleaseBody：CHANGELOG 缺段时写占位，并把未发布的包标
   const body = buildReleaseBody('9.9.9');
 
   assert.match(body, /No curated notes for this tag/);
-  assert.equal(body.match(/not released/g)?.length, 3, '三个包都不该声称是 9.9.9');
+  assert.doesNotMatch(body, /ltc web/);
+  assert.equal(body.match(/not released/g)?.length, 2, '两个包都不该声称是 9.9.9');
 });
 
 test('buildReleaseBody：带附件时给出文件名、大小与 sha256', () => {

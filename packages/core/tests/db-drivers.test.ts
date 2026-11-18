@@ -142,8 +142,12 @@ test('node:sqlite 驱动：pragma 回退/事务提交与回滚/extension/close',
     static last: FakeDatabase;
     enableCalls: boolean[] = [];
     loadExtensionCalls: string[] = [];
-    constructor(readonly file: string) {
+    constructor(
+      readonly file: string,
+      options: unknown,
+    ) {
       FakeDatabase.last = this;
+      assert.deepEqual(options, { allowExtension: true });
     }
     exec(sql: string) {
       events.push(sql);

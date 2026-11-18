@@ -162,7 +162,7 @@ class NodeSqliteDatabase implements DatabasePort {
   private readonly db: any;
 
   constructor(DatabaseSync: any, file: string) {
-    this.db = new DatabaseSync(file);
+    this.db = new DatabaseSync(file, { allowExtension: true });
     try {
       this.db.exec('PRAGMA busy_timeout = 5000');
     } catch {

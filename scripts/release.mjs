@@ -3,17 +3,15 @@
  * Lattice 统一发布脚本
  *
  * 用法:
- *   pnpm release patch          # 三个包同时 patch 升级
- *   pnpm release minor          # 三个包同时 minor 升级
- *   pnpm release major          # 三个包同时 major 升级
- *   pnpm release 1.2.3          # 三个包同时设为指定版本
+ *   pnpm release patch          # core 和 CLI 同时 patch 升级
+ *   pnpm release minor          # core 和 CLI 同时 minor 升级
+ *   pnpm release major          # core 和 CLI 同时 major 升级
+ *   pnpm release 1.2.3          # core 和 CLI 同时设为指定版本
  *   pnpm release patch --core   # 只发布 core
  *   pnpm release patch --cli    # 只发布 cli
- *   pnpm release patch --web    # 只发布 web
- *   pnpm release patch --core --web  # 发布 core 和 web
  *   pnpm release patch --dry-run # 只打印将执行的操作，不实际执行
  *   pnpm release continue        # 发布失败后继续（跳过版本bump和构建，重试发布+git）
- *   pnpm release patch --no-push # 不推送到远端（tag 不上去，CI 也就不会建 Release）
+ *   pnpm release patch --no-push # 只准备本地提交和 tag，不发布 npm、不推送
  *   pnpm release patch --allow-red-ci # 跳过发布前“HEAD 的 CI 必须绿”检查
  *
  * 完整流程：bump → 写入 CHANGELOG → 构建 → npm 发布 → 提交 + tag → 推送。
@@ -21,7 +19,7 @@
  * （正文 = CHANGELOG 对应版本段 + 安装/包表/链接，附件 = 同一 tag 构建的 VSIX）。
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,7 +37,6 @@ const root = resolve(__dirname, '..');
 const PACKAGES = {
   core: resolve(root, 'packages/core/package.json'),
   cli: resolve(root, 'packages/cli/package.json'),
-  web: resolve(root, 'packages/web/package.json'),
 };
 
 const CHANGELOG_PATH = resolve(root, 'CHANGELOG.md');
@@ -50,12 +47,15 @@ const dryRun = args.includes('--dry-run');
 const skipPush = args.includes('--no-push');
 const onlyCore = args.includes('--core');
 const onlyCli = args.includes('--cli');
-const onlyWeb = args.includes('--web');
+if (args.includes('--web')) {
+  console.error('Web 随 CLI 发布，请使用 --cli');
+  process.exit(1);
+}
 const versionArg = args.find((a) => !a.startsWith('--'));
 
 if (!versionArg) {
   console.error(
-    '❌ 请指定版本: pnpm release <patch|minor|major|x.y.z|continue> [--core|--cli|--web] [--dry-run]',
+    '❌ 请指定版本: pnpm release <patch|minor|major|x.y.z|continue> [--core|--cli] [--dry-run]',
   );
   process.exit(1);
 }
@@ -92,11 +92,11 @@ if (!isContinue) {
       '⚠ 工作区不干净：release 提交只会包含 package.json 与 CHANGELOG.md，其余改动不会进 tag',
     );
   }
-  assertCiGreenBeforePublish();
+  if (!skipPush) assertCiGreenBeforePublish();
 }
 
 // 发布前确认当前 HEAD 的 CI 是绿的：否则 npm 发出去了，tag 上的 GitHub Release 会被 CI 门禁卡住
-function assertCiGreenBeforePublish() {
+function assertCiGreenBeforePublish(ref = 'HEAD') {
   if (args.includes('--allow-red-ci')) {
     console.warn('⚠ 已指定 --allow-red-ci，跳过 CI 检查');
     return;
@@ -104,7 +104,7 @@ function assertCiGreenBeforePublish() {
 
   let state;
   try {
-    const sha = git('git rev-parse HEAD');
+    const sha = git(`git rev-parse ${ref}`);
     const jq =
       'if length == 0 then "none" else .[0] | if .status == "completed" then (if .conclusion == "success" then "ok" else "fail:" + (.conclusion // "unknown") end) else "running" end end';
     state = execSync(
@@ -112,8 +112,7 @@ function assertCiGreenBeforePublish() {
       { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     ).trim();
   } catch {
-    console.warn('⚠ 查不到 CI 状态（gh 未安装或未登录），跳过检查');
-    return;
+    state = 'unavailable';
   }
 
   if (state === 'ok') {
@@ -121,7 +120,12 @@ function assertCiGreenBeforePublish() {
     return;
   }
 
-  const reason = state === 'none' ? 'HEAD 还没有 CI 记录（是否没推送？）' : `CI 状态 ${state}`;
+  const reason =
+    state === 'unavailable'
+      ? '查不到 CI 状态，请检查 gh 登录和网络'
+      : state === 'none'
+        ? 'HEAD 还没有 CI 记录（是否没推送？）'
+        : `CI 状态 ${state}`;
   if (dryRun) {
     console.warn(`⚠ ${reason}；正式发布会中止（可用 --allow-red-ci 跳过）`);
     return;
@@ -161,6 +165,19 @@ function run(cmd, opts = {}) {
   console.log(`  $ ${cmd}`);
   if (!dryRun) {
     execSync(cmd, { stdio: 'inherit', cwd: root, ...opts });
+  }
+}
+
+function isExactVersionPublished(packageName, version) {
+  try {
+    const output = execFileSync(
+      'npm',
+      ['view', `${packageName}@${version}`, 'version', '--json', '--prefer-online'],
+      { cwd: root, encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    return JSON.parse(output) === version;
+  } catch {
+    return false;
   }
 }
 
@@ -219,29 +236,37 @@ function updateChangelog(version) {
 
 // --- 确定要发布的包 ---
 const targets = [];
-const hasFlag = onlyCore || onlyCli || onlyWeb;
+const hasFlag = onlyCore || onlyCli;
 if (!hasFlag) {
-  targets.push('core', 'cli', 'web');
+  targets.push('core', 'cli');
 } else {
   if (onlyCore) targets.push('core');
   if (onlyCli) targets.push('cli');
-  if (onlyWeb) targets.push('web');
 }
 
 // --- 升版本（continue 模式跳过） ---
-const corePkg = readPkg(PACKAGES.core);
+const releaseBase = readPkg(PACKAGES[onlyCli && !onlyCore ? 'cli' : 'core']);
 let newVersion;
 
 if (isContinue) {
-  newVersion = corePkg.version;
+  newVersion = releaseBase.version;
+  if (targets.some((name) => readPkg(PACKAGES[name]).version !== newVersion)) {
+    console.error('❌ 待重试的包版本不同，请使用 --core 或 --cli 选择原发布目标');
+    process.exit(1);
+  }
+  if (!skipPush) {
+    // A locally prepared version commit has no CI run yet. Check its source commit.
+    const prepared = git('git log -1 --format=%s') === `release: v${newVersion}`;
+    assertCiGreenBeforePublish(prepared ? 'HEAD^' : 'HEAD');
+  }
   console.log(`\n📦 Lattice Release --continue ${dryRun ? '(dry-run)' : ''}`);
   console.log(`   版本: ${newVersion}（沿用当前 package.json）`);
   console.log(`   包:   ${targets.join(', ')}\n`);
 } else {
-  newVersion = bumpVersion(corePkg.version, versionArg);
+  newVersion = bumpVersion(releaseBase.version, versionArg);
 
   console.log(`\n📦 Lattice Release ${dryRun ? '(dry-run)' : ''}`);
-  console.log(`   版本: ${corePkg.version} → ${newVersion}`);
+  console.log(`   版本: ${releaseBase.version} → ${newVersion}`);
   console.log(`   包:   ${targets.join(', ')}\n`);
 
   for (const name of targets) {
@@ -260,26 +285,21 @@ if (isContinue) {
 
   // --- 构建 ---
   console.log('\n🔨 构建...');
-  // core 是 cli 和 web 的共同依赖，有任一在 targets 中就需要先构建 core
-  if (targets.includes('cli') || targets.includes('web')) {
-    if (!targets.includes('core')) {
-      run('pnpm run build:core');
-    }
-  }
-  if (targets.includes('core')) {
-    run('pnpm run build:core');
-  }
-  if (targets.includes('cli')) {
-    run('pnpm run build:cli');
-  }
-  if (targets.includes('web')) {
-    run('pnpm run build:web');
-  }
+  if (targets.includes('cli')) run('pnpm run build:cli');
+  else run('pnpm run build:core');
 }
 
 // --- 发布 ---
 console.log('\n🚀 发布...');
 for (const name of targets) {
+  if (skipPush) {
+    console.log(`  --no-push：跳过 ${name} 的发布`);
+    continue;
+  }
+  if (name === 'cli') {
+    console.log('  CLI平台包与薄入口由tag CI构建，验证后按拓扑发布');
+    continue;
+  }
   const cmd = `pnpm --filter @qcqx/lattice-${name} publish --no-git-checks`;
   if (dryRun) {
     run(cmd);
@@ -287,12 +307,13 @@ for (const name of targets) {
   }
   try {
     run(cmd);
-  } catch {
-    // continue 模式下容忍"已发布过"错误，跳过该包继续
-    if (isContinue) {
-      console.log(`⚠️  @qcqx/lattice-${name} 发布失败（可能已发布过），跳过继续`);
+  } catch (error) {
+    if (isContinue && isExactVersionPublished(`@qcqx/lattice-${name}`, newVersion)) {
+      console.log(`✔ npm 已有 @qcqx/lattice-${name}@${newVersion}，继续当前发布`);
     } else {
-      throw new Error(`发布 @qcqx/lattice-${name} 失败，可运行 pnpm release continue 重试`);
+      throw new Error(`发布 @qcqx/lattice-${name} 失败，可运行 pnpm release continue 重试`, {
+        cause: error,
+      });
     }
   }
 }
@@ -315,15 +336,15 @@ if (!dryRun && git(`git tag -l v${newVersion}`)) {
 }
 
 if (skipPush) {
-  console.log(`\nℹ 未推送：推上去后由 Actions 构建 VSIX 并建 Release`);
-  console.log(`   git push origin HEAD && git push origin v${newVersion}\n`);
+  const flag = onlyCore === onlyCli ? '' : onlyCore ? ' --core' : ' --cli';
+  console.log(`\nℹ 已准备本地提交和 tag。继续正式发布时运行 pnpm release continue${flag}\n`);
 } else {
   console.log('\n📤 推送...');
   run('git push origin HEAD');
   run(`git push origin v${newVersion}`);
 }
 
-console.log(`\n✅ 发布完成! v${newVersion}`);
+console.log(`\n✅ ${skipPush ? '本地发布准备完成' : '已提交发布'} v${newVersion}`);
 if (dryRun) {
   console.log('   (dry-run 模式，以上命令未实际执行)');
 } else if (!skipPush) {

@@ -1,4 +1,15 @@
 import { defineConfig } from 'vitest/config';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Isolate BEFORE workers import config: its default cache paths are computed at module load.
+// Per-test LATTICE_HOME changes alone cannot protect the original model cache.
+const suiteHome = mkdtempSync(join(tmpdir(), 'lattice-vitest-home-'));
+process.env.HOME = suiteHome;
+process.env.USERPROFILE = suiteHome;
+process.env.LATTICE_HOME = join(suiteHome, '.lattice');
+process.once('exit', () => rmSync(suiteHome, { recursive: true, force: true }));
 
 /**
  * 全仓统一测试入口（vitest projects）。

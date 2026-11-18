@@ -13,8 +13,8 @@
   },
   "type": "module",
   "bin": {
-    "lattice": "./dist/index.js",
-    "ltc": "./dist/index.js"
+    "lattice": "./bin/ltc.cjs",
+    "ltc": "./bin/ltc.cjs"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,12 +23,12 @@
     "build": "tsup",
     "check-types": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "tsup",
-    "postinstall": "node scripts/postinstall.mjs"
+    "prepublishOnly": "node ../../scripts/cli-distribution.cjs refuse-workspace-publish"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.10.1",
     "@qcqx/lattice-core": "workspace:*",
+    "@qcqx/lattice-web": "workspace:*",
     "better-sqlite3": "^11.10.0",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
@@ -39,11 +39,11 @@
     "undici": "^6.24.1"
   },
   "devDependencies": {
-    "@qcqx/lattice-web": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3"
   },
   "files": [
+    "bin",
     "dist",
     "scripts"
   ],

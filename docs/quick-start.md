@@ -8,15 +8,45 @@ This guide walks you through installing, initializing and using Lattice from scr
 
 ## Prerequisites
 
-- **Node.js** >= 18
+- Choose an available installation method below; its panel lists the current Node.js requirement.
 - **Git** (Lattice identifies projects through git fingerprints)
 
 ## 1. Install
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · Coming soon</summary>
+
+Homebrew installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
-# Global install; provides the lattice and ltc commands
 npm install -g @qcqx/lattice-cli
 ```
+
+The current public release v1.29.0 requires Node.js 18+ and uses the installation Node environment. Switching Node may require reinstalling. The bundled Web workbench ships with the upcoming platform release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · Coming soon</summary>
+
+curl installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
 
 Verify the installation:
 
@@ -25,6 +55,10 @@ ltc --version
 ```
 
 > `lattice` and `ltc` are two aliases of the same command. This guide uses `ltc` throughout.
+
+### Projects using other Node versions
+
+The npm global command lives in its npm prefix. If switching Node removes `ltc` from PATH, restore that prefix or choose an available standalone installation method above. Model caches and knowledge data live outside the installation.
 
 ## 2. Initialize Lattice
 
@@ -404,10 +438,9 @@ ltc search "authentication" --users myname
 
 ### Web UI
 
-```bash
-# Install the web package
-npm install -g @qcqx/lattice-web
+CLI platform packages include the workbench. See the installation panel above for availability and [Web Workbench](./web-workbench.md) for usage.
 
+```bash
 # Start the web UI (default port 14527)
 ltc web
 

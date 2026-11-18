@@ -308,8 +308,6 @@ function checkAndMigrateDbSchema(driver: DatabaseDriverPort): SchemaCheckResult 
   let tempDb: DatabasePort | null = null;
   try {
     tempDb = driver.open(dbPath);
-
-    // 检查 lattice_meta 表是否存在
     const hasMetaTable = tempDb
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='lattice_meta'")
       .get() as { name: string } | undefined;
@@ -318,58 +316,33 @@ function checkAndMigrateDbSchema(driver: DatabaseDriverPort): SchemaCheckResult 
       const row = tempDb
         .prepare(`SELECT value FROM lattice_meta WHERE key = ?`)
         .get(DB_SCHEMA_VERSION_KEY) as { value: string } | undefined;
-      const currentVersion = row ? Number.parseInt(row.value, 10) : 0;
-      if (currentVersion >= DB_SCHEMA_VERSION) {
-        tempDb.close();
-        tempDb = null;
-        return false; // 版本已是最新
+      const currentVersion = row ? Number(row.value) : 0;
+      if (row && (!/^\d+$/.test(row.value) || !Number.isSafeInteger(currentVersion))) {
+        throw new Error('数据库 schema 版本无效，无法安全迁移；数据库已保留');
       }
-      // 版本号低于当前版本 → 重建
-    }
-    // 没有 lattice_meta 表 或 版本号过低 → 重建
-    tempDb.close();
-    tempDb = null;
-    unlinkSync(dbPath);
-    // 同时删除 WAL/SHM 文件
-    try {
-      unlinkSync(`${dbPath}-wal`);
-    } catch {
-      /* ignore */
-    }
-    try {
-      unlinkSync(`${dbPath}-shm`);
-    } catch {
-      /* ignore */
-    }
-    // 已存在的旧版本库被删除重建：历史索引丢失
-    return 'upgraded';
-  } catch {
-    // 数据库损坏或其他错误，直接删除重建
-    if (tempDb) {
-      try {
-        tempDb.close();
-      } catch {
-        /* ignore */
+      if (currentVersion > DB_SCHEMA_VERSION) {
+        throw new Error(
+          `数据库 schema v${currentVersion} 高于当前支持的 v${DB_SCHEMA_VERSION}，请使用新版 Lattice；数据库已保留`,
+        );
       }
+      if (currentVersion === DB_SCHEMA_VERSION) return false;
     }
-    try {
-      unlinkSync(dbPath);
-    } catch {
-      /* ignore */
-    }
-    try {
-      unlinkSync(`${dbPath}-wal`);
-    } catch {
-      /* ignore */
-    }
-    try {
-      unlinkSync(`${dbPath}-shm`);
-    } catch {
-      /* ignore */
-    }
-    // 已有库被删除重建（损坏场景同样丢历史索引）
-    return 'upgraded';
+  } finally {
+    // ABI、锁、权限、IO 或 SQL 读取错误不说明 schema 过期，必须原样失败并保留索引。
+    // 即使 close 失败也不能进入后面的删除路径。
+    tempDb?.close();
   }
+
+  // 只有成功读取并确认旧 schema 后，才执行既有缓存迁移。
+  unlinkSync(dbPath);
+  for (const suffix of ['-wal', '-shm']) {
+    try {
+      unlinkSync(`${dbPath}${suffix}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+  return 'upgraded';
 }
 
 /**

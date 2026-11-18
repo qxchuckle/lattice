@@ -2,6 +2,7 @@ out
 dist
 dist-types
 node_modules
+.lattice-runtime.json
 *.tsbuildinfo
 .pnpm-store/
 
@@ -51,3 +52,6 @@ playwright-report/
 packages/vscode/media/
 packages/vscode/dist-vsix/
 packages/vscode/.vscode-test/
+
+# Generated CLI platform artifacts
+dist-cli/

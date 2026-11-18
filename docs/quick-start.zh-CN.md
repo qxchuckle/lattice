@@ -8,15 +8,45 @@ Lattice 是本地优先的研发记忆与工作流层。它把规范、任务、
 
 ## 前置条件
 
-- **Node.js** >= 18
+- 请在下方选择已发布的安装方式，各面板列出当前 Node.js 要求。
 - **Git**（Lattice 通过 git 指纹识别项目）
 
 ## 1. 安装
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · 即将提供</summary>
+
+Homebrew 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
-# 全局安装，提供 lattice 和 ltc 两个命令
 npm install -g @qcqx/lattice-cli
 ```
+
+当前公开版本 v1.29.0 需要 Node.js 18+，使用安装时的 Node 环境。切换 Node 后可能需要重装。内置 Web 工作台随下一版平台包提供。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · 即将提供</summary>
+
+curl 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
 
 验证安装：
 
@@ -25,6 +55,10 @@ ltc --version
 ```
 
 > `lattice` 和 `ltc` 是同一个命令的两个别名，本指南统一使用 `ltc`。
+
+### 项目使用其他 Node 版本
+
+npm 全局入口由当前 npm prefix 管理。切换 Node 时如果找不到 `ltc`，请确认安装用的 prefix 仍在 PATH，或选择上方已发布的独立安装方式。模型缓存和知识数据保存在安装包之外。
 
 ## 2. 初始化 Lattice
 
@@ -404,10 +438,9 @@ ltc search "认证" --users myname
 
 ### Web 可视化
 
-```bash
-# 安装 web 包
-npm install -g @qcqx/lattice-web
+CLI 平台包自带 Web 工作台。各渠道的实际可用状态见上方安装面板，启动说明见 [Web 工作台](./web-workbench.zh-CN.md)。
 
+```bash
 # 启动可视化服务（默认端口 14527）
 ltc web
 

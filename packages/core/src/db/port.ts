@@ -55,17 +55,36 @@ export function getBoundDatabaseDriver(): DatabaseDriverPort | null {
 export async function resolveDatabaseDriver(): Promise<DatabaseDriverPort> {
   if (_driver) return _driver;
   const { createBetterSqlite3Driver, createNodeSqliteDriver } = await import('./drivers');
+  let betterSqliteError: unknown;
   try {
     const mod = (await import('better-sqlite3')) as { default?: unknown };
-    const Database = mod.default ?? mod;
-    _driver = createBetterSqlite3Driver(Database);
-    return _driver;
-  } catch {
-    // better-sqlite3 不可用（如 VSCode 扩展宿主），继续探测
+    const candidate = createBetterSqlite3Driver(mod.default ?? mod);
+    probeDatabaseDriver(candidate);
+    _driver = candidate;
+    return candidate;
+  } catch (error) {
+    betterSqliteError = error;
   }
-  const mod = await import(NODE_SQLITE_SPECIFIER);
-  _driver = createNodeSqliteDriver(mod);
-  return _driver;
+  try {
+    const mod = await import(NODE_SQLITE_SPECIFIER);
+    const candidate = createNodeSqliteDriver(mod);
+    probeDatabaseDriver(candidate);
+    _driver = candidate;
+    return candidate;
+  } catch {
+    // 保留真正的原生绑定错误（含 ABI 和安装路径），而不是用 node:sqlite 不存在掩盖它。
+    throw betterSqliteError;
+  }
+}
+
+/** 原生绑定通常在构造时才加载；只导入 JS 不足以证明驱动可用。 */
+function probeDatabaseDriver(driver: DatabaseDriverPort): void {
+  const probe = driver.open(':memory:');
+  try {
+    probe.prepare('SELECT 1').get();
+  } finally {
+    probe.close();
+  }
 }
 
 /**
@@ -77,7 +96,9 @@ export async function useNodeSqliteDriver(): Promise<boolean> {
   try {
     const mod = await import(NODE_SQLITE_SPECIFIER);
     const { createNodeSqliteDriver } = await import('./drivers');
-    _driver = createNodeSqliteDriver(mod);
+    const candidate = createNodeSqliteDriver(mod);
+    probeDatabaseDriver(candidate);
+    _driver = candidate;
     return true;
   } catch {
     return false;

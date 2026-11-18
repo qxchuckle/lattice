@@ -48,15 +48,14 @@ function assetSection(version, assetPath) {
 }
 
 /**
- * 包版本表：直接读各包 package.json，而不是假定三个包都是该 tag 的版本——
- * 局部发布（release.mjs --core/--cli/--web）时未发布的包要能看出来。
+ * 包版本表：直接读各包 package.json，而不是假定两个包都是该 tag 的版本——
+ * 局部发布（release.mjs --core/--cli）时未发布的包要能看出来。
  */
-function packageRows(version) {
-  return ['cli', 'core', 'web'].map((name) => {
-    const pkg = JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf-8'));
+function packageRows(version, packages) {
+  return packages.map((pkg) => {
     const released = pkg.version === version;
     const label = released ? pkg.version : `${pkg.version}（本次未发布 · not released）`;
-    return `| [@qcqx/lattice-${name}](https://www.npmjs.com/package/@qcqx/lattice-${name}) | ${label} |`;
+    return `| [${pkg.name}](https://www.npmjs.com/package/${pkg.name}) | ${label} |`;
   });
 }
 
@@ -64,6 +63,10 @@ function packageRows(version) {
 export function buildReleaseBody(tagOrVersion, assetPath) {
   const version = normalizeVersion(tagOrVersion);
   const section = readChangelogSection(version);
+  const packages = ['cli', 'core'].map((name) =>
+    JSON.parse(readFileSync(resolve(root, 'packages', name, 'package.json'), 'utf-8')),
+  );
+  const [cli] = packages;
   const lines = [
     section || `## [${version}]\n\n- No curated notes for this tag; see the commit history.`,
     '',
@@ -71,14 +74,16 @@ export function buildReleaseBody(tagOrVersion, assetPath) {
     '',
     '```bash',
     'npm i -g @qcqx/lattice-cli',
-    'npm i -g @qcqx/lattice-web    # Web 工作台',
+    ...(cli.version === version
+      ? ['ltc web    # 打开内置 Web 工作台 · Open the bundled workbench']
+      : []),
     '```',
     '',
     '## 包 · Packages',
     '',
     '| Package | Version |',
     '|---|---|',
-    ...packageRows(version),
+    ...packageRows(version, packages),
     '',
     '**官网** https://lattice.qcqx.cn · **文档** https://lattice.qcqx.cn/docs · **在线 Demo** https://lattice.qcqx.cn/demo/',
     '',
