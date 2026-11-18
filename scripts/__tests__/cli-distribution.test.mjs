@@ -19,7 +19,7 @@ const {
 } = require('../cli-distribution/build.cjs');
 const { integrity } = require('../cli-distribution/verify.cjs');
 const { PLATFORMS, NODE_VERSION } = require('../cli-distribution/config.cjs');
-const { assemble } = require('../cli-distribution/release.cjs');
+const { assemble, waitForPublishedPackages } = require('../cli-distribution/release.cjs');
 const { materialize, compatible, keepFile } = require('../cli-distribution/dependencies.cjs');
 const { repairPlatformArchive } = require('../cli-distribution/repair-platform-metadata.cjs');
 const repo = path.resolve(
@@ -86,6 +86,30 @@ test('npm recovery adds provenance information only to the platform archive meta
   assert.equal(updated.npmSha256, sha(path.join(root, npmFile)));
   assert.equal(repairPlatformArchive(root, updated, cli), updated);
   assert.throws(() => repairPlatformArchive(root, original, cli), /original checksum/);
+});
+test('npm publication waits for metadata and downloadable platform archives', async () => {
+  const platforms = [{ name: 'first' }, { name: 'second' }];
+  const attempts = [];
+  let poll = 0;
+  await waitForPublishedPackages(
+    platforms,
+    (pkg) => (pkg.name === 'second' && poll === 0 ? null : { tarball: pkg.name }),
+    {
+      request: (url, options) => {
+        assert.equal(options.method, 'HEAD');
+        attempts.push([url, poll]);
+        return { ok: url === 'first' || poll === 2 };
+      },
+      wait: () => {
+        poll++;
+      },
+    },
+  );
+  assert.deepEqual(attempts, [
+    ['first', 0],
+    ['second', 1],
+    ['second', 2],
+  ]);
 });
 test('integrity rejects corruption, missing/unlisted files, traversal, duplicates and links', (t) => {
   const root = temporary(t);

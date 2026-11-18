@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { setTimeout: delay } = require('node:timers/promises');
 const { NODE_VERSION, PLATFORMS } = require('./config.cjs');
 const { read, write, sha, bootstrap, run } = require('./build.cjs');
 
@@ -133,36 +134,80 @@ function assemble(output, options = {}) {
   );
   return manifest;
 }
-function publish(output, options = {}) {
+async function waitForPublishedPackages(packages, inspect, { request = fetch, wait = delay } = {}) {
+  const deadline = Date.now() + 18 * 60 * 1000;
+  let pending = packages;
+  do {
+    const available = await Promise.all(
+      pending.map(async (pkg) => {
+        const dist = inspect(pkg);
+        if (!dist) return false;
+        return (await request(dist.tarball, { method: 'HEAD', signal: AbortSignal.timeout(15000) }))
+          .ok;
+      }),
+    );
+    pending = pending.filter((_, index) => !available[index]);
+    if (!pending.length) return;
+    console.log('Waiting for npm registry downloads: ' + pending.map((pkg) => pkg.name).join(', '));
+    await wait(20000);
+  } while (Date.now() < deadline);
+  throw new Error(
+    'Published npm archives are still unavailable: ' + pending.map((pkg) => pkg.name).join(', '),
+  );
+}
+
+async function publish(output, options = {}) {
   // Always regenerate and validate the entire catalog. Partial/development builds never publish.
   const manifest = assemble(output);
   const npm = options.npm || 'npm';
-  const packages = manifest.platforms
-    .map((r) => ({ name: r.packageName, file: r.npmFile }))
-    .concat([{ name: '@qcqx/lattice-cli', file: manifest.bootstrap.filename }]);
-  for (const pkg of packages) {
-    const file = path.resolve(output, pkg.file);
+  const packageFromFile = (name, filename) => {
+    const file = path.resolve(output, filename);
     // npm dist.integrity describes exact compressed bytes. A retry may skip only identical content.
     const integrity =
       'sha512-' +
       require('crypto').createHash('sha512').update(fs.readFileSync(file)).digest('base64');
+    return { name, file, integrity };
+  };
+  const platforms = manifest.platforms.map((record) =>
+    packageFromFile(record.packageName, record.npmFile),
+  );
+  const entry = packageFromFile('@qcqx/lattice-cli', manifest.bootstrap.filename);
+  function inspect(pkg) {
     const view = require('child_process').spawnSync(
       npm,
-      ['view', pkg.name + '@' + manifest.version, 'dist.integrity', '--json'],
-      { encoding: 'utf8', shell: process.platform === 'win32' },
+      [
+        'view',
+        pkg.name + '@' + manifest.version,
+        'dist',
+        '--json',
+        '--prefer-online',
+        '--fetch-retries=0',
+      ],
+      { encoding: 'utf8', shell: process.platform === 'win32', timeout: 20000 },
     );
     if (view.error) throw view.error;
-    if (view.status === 0) {
-      if (JSON.parse(view.stdout) !== integrity)
-        throw new Error('Registry version already exists with different content: ' + pkg.name);
-      continue;
+    if (view.status !== 0) {
+      if (/E404/.test(view.stderr)) return null;
+      throw new Error('Cannot inspect registry: ' + view.stderr);
     }
-    if (!/E404/.test(view.stderr)) throw new Error('Cannot inspect registry: ' + view.stderr);
-    run(npm, ['publish', file, '--access', 'public', '--provenance'], {
+    if (!view.stdout.trim()) return null;
+    const dist = JSON.parse(view.stdout);
+    if (dist.integrity !== pkg.integrity || !dist.tarball)
+      throw new Error('Registry version already exists with different content: ' + pkg.name);
+    return dist;
+  }
+  function publishPackage(pkg) {
+    if (inspect(pkg)) return;
+    run(npm, ['publish', pkg.file, '--access', 'public', '--provenance'], {
       stdio: 'inherit',
       shell: process.platform === 'win32',
     });
   }
+  platforms.forEach(publishPackage);
+  // Registry publish-time scans can expose metadata before the tarball is downloadable.
+  await waitForPublishedPackages(platforms, inspect);
+  publishPackage(entry);
+  await waitForPublishedPackages([entry], inspect);
   return manifest;
 }
-module.exports = { assemble, formula, publish };
+module.exports = { assemble, formula, publish, waitForPublishedPackages };
