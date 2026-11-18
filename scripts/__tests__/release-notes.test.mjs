@@ -24,22 +24,30 @@ test('readChangelogSection：只取当前版本段，不吃掉下一段', () => 
 });
 
 test('buildReleaseBody：含安装命令、包表与站点链接', () => {
-  const body = buildReleaseBody('v1.29.0');
+  const packageVersion = (pkg) =>
+    JSON.parse(readFileSync(join(root, 'packages', pkg, 'package.json'), 'utf8')).version;
+  const cliVersion = packageVersion('cli');
+  const coreVersion = packageVersion('core');
+  const body = buildReleaseBody(cliVersion);
 
   assert.match(body, /npm i -g @qcqx\/lattice-cli/);
-  assert.match(
-    body,
-    /@qcqx\/lattice-cli\]\(https:\/\/www\.npmjs\.com\/package\/@qcqx\/lattice-cli\) \| 1\.29\.0/,
+  assert.match(body, /ltc web/);
+  assert.doesNotMatch(body, /@qcqx\/lattice-web/);
+  assert.ok(
+    body.includes(
+      `| [@qcqx/lattice-cli](https://www.npmjs.com/package/@qcqx/lattice-cli) | ${cliVersion} |`,
+    ),
   );
   assert.match(body, /lattice\.qcqx\.cn\/demo/);
-  assert.doesNotMatch(body, /not released/);
+  assert.equal(body.match(/not released/g)?.length ?? 0, coreVersion === cliVersion ? 0 : 1);
 });
 
 test('buildReleaseBody：CHANGELOG 缺段时写占位，并把未发布的包标出来', () => {
   const body = buildReleaseBody('9.9.9');
 
   assert.match(body, /No curated notes for this tag/);
-  assert.equal(body.match(/not released/g)?.length, 3, '三个包都不该声称是 9.9.9');
+  assert.doesNotMatch(body, /ltc web/);
+  assert.equal(body.match(/not released/g)?.length, 2, '两个包都不该声称是 9.9.9');
 });
 
 test('buildReleaseBody：带附件时给出文件名、大小与 sha256', () => {

@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import type { ProjectMeta } from '../types';
 
 /** 项目 git 状态信息 */

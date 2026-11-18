@@ -7,6 +7,15 @@ on:
       - 'apps/site/**'
       - 'docs/**'
       - 'i18n-manifest.json'
+      - 'scripts/install-content.mjs'
+      - 'scripts/verify-install-publication.mjs'
+      - 'scripts/cli-distribution/config.cjs'
+      - 'scripts/installation-channels.json'
+      - 'scripts/sync-install-docs.mjs'
+      - 'scripts/__tests__/install-content.test.mjs'
+      - 'scripts/__tests__/verify-install-publication.test.mjs'
+      - 'README*.md'
+      - 'packages/cli/README*.md'
       - 'packages/web-ui/**'
       - 'packages/core/**'
       - 'pnpm-lock.yaml'
@@ -18,6 +27,15 @@ on:
       - 'apps/site/**'
       - 'docs/**'
       - 'i18n-manifest.json'
+      - 'scripts/install-content.mjs'
+      - 'scripts/verify-install-publication.mjs'
+      - 'scripts/cli-distribution/config.cjs'
+      - 'scripts/installation-channels.json'
+      - 'scripts/sync-install-docs.mjs'
+      - 'scripts/__tests__/install-content.test.mjs'
+      - 'scripts/__tests__/verify-install-publication.test.mjs'
+      - 'README*.md'
+      - 'packages/cli/README*.md'
       - 'packages/web-ui/**'
       - 'packages/core/**'
       - 'pnpm-lock.yaml'
@@ -35,6 +53,7 @@ concurrency:
 
 env:
   NODE_VERSION: 24
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
   SITE_URL: https://lattice.qcqx.cn
   # CI builds and tests at the project sub-path; the deploy artifact is rebuilt at the domain root.
   SITE_BASE: /lattice
@@ -55,6 +74,8 @@ jobs:
           cache: pnpm
       - name: install
         run: pnpm install --frozen-lockfile
+      - name: installation catalog gate and injection tests
+        run: pnpm check:install
       - name: docs i18n gate
         run: pnpm check:docs-i18n
       - name: docs sync gate and unit tests
@@ -73,6 +94,13 @@ jobs:
         run: pnpm build:site
         env:
           SITE_BASE: /
+      - name: test installation and docs at custom-domain root
+        run: pnpm --filter @qcqx/lattice-site exec playwright test install.spec.ts docs.spec.ts
+        env:
+          SITE_BASE: /
+      - name: verify public installation channels
+        if: github.event_name != 'pull_request'
+        run: node scripts/verify-install-publication.mjs
       - name: configure pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v6

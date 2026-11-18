@@ -17,10 +17,7 @@ Lattice Web 工作台 —— 任务 / 项目 / Spec 关系图与知识图谱浏�
 
 ## 安装
 
-```bash
-# 全局安装
-npm i -g @qcqx/lattice-web
-```
+Web 工作台随 CLI 平台包一起交付。请查看 [快速开始](../../docs/quick-start.zh-CN.md#1-安装) 的渠道状态。此 workspace 模块用于构建 CLI 成品。
 
 ## 使用
 

@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
+import { siteUrl } from './tests/base';
 
 const port = 4321;
 const origin = `http://127.0.0.1:${port}`;
-const previewURL = `${origin}/lattice/`;
+const previewURL = `${origin}${siteUrl('/')}`;
 
 export default defineConfig({
   testDir: './tests',

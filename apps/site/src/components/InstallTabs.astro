@@ -1,0 +1,6 @@
+---
+import { renderInstallTabs } from '../../../../scripts/install-content.mjs';
+interface Props { id: string; locale?: string; }
+const { id, locale = 'en' } = Astro.props;
+---
+<Fragment set:html={renderInstallTabs(id, locale)} />

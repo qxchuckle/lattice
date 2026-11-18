@@ -2,7 +2,7 @@
   "name": "lattice-context",
   "displayName": "%lattice.displayName%",
   "description": "%lattice.description%",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "publisher": "qcqx",
   "license": "MIT",
   "icon": "resources/lattice-icon.png",
@@ -16,7 +16,7 @@
     "url": "https://github.com/qxchuckle/lattice/issues"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Other",
@@ -65,6 +65,7 @@
     "dev": "tsup --watch",
     "check-types": "tsc --noEmit && tsc --noEmit -p webview/tsconfig.json",
     "test:integration": "vscode-test",
+    "test:vsix": "node tests/vsix/run.mjs",
     "test:smoke": "vite build --config webview/vite.smoke.config.ts && node tests/smoke/run.mjs",
     "package": "node scripts/package.mjs",
     "release": "node scripts/release-vsix.mjs",
@@ -90,7 +91,7 @@
     "less": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^8.0.0",
+    "react-router": "^8.5.1",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3",
     "valtio": "^2.0.0",
@@ -628,6 +629,11 @@
         "command": "lattice.cli.check",
         "title": "%lattice.command.cli.check.title%",
         "icon": "$(pulse)"
+      },
+      {
+        "command": "lattice.cli.checkTerminal",
+        "title": "%lattice.command.cli.checkTerminal.title%",
+        "icon": "$(terminal)"
       },
       {
         "command": "lattice.logs.show",

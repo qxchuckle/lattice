@@ -17,10 +17,7 @@ Lattice Web Workbench — a task / project / spec relation graph and knowledge g
 
 ## Install
 
-```bash
-# Global install
-npm i -g @qcqx/lattice-web
-```
+The workbench ships in the CLI platform package. See [Quick Start](../../docs/quick-start.md#1-install) for channel availability. This workspace module builds the components included in the CLI.
 
 ## Usage
 

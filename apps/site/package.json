@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=22.23.4"
   },
   "scripts": {
-    "sync:docs": "node scripts/sync-docs.mjs",
+    "sync:docs": "node ../../scripts/sync-install-docs.mjs && node scripts/sync-docs.mjs",
     "predev": "pnpm sync:docs",
     "dev": "astro dev",
     "prebuild": "pnpm sync:docs",
@@ -15,7 +15,7 @@
     "preview": "astro preview",
     "precheck": "pnpm sync:docs",
     "check": "astro check",
-    "check:docs": "node scripts/sync-docs.mjs --check && node --test scripts/__tests__/sync-docs.test.mjs scripts/__tests__/dev-search.test.mjs",
+    "check:docs": "node ../../scripts/sync-install-docs.mjs --check && node scripts/sync-docs.mjs --check && node --test scripts/__tests__/sync-docs.test.mjs scripts/__tests__/dev-search.test.mjs",
     "selftest:gates": "node scripts/selftest-gates.mjs",
     "test:e2e": "playwright test"
   },
@@ -29,14 +29,14 @@
     "@qcqx/lattice-web-ui": "workspace:*",
     "@tanstack/react-query": "^5.0.0",
     "antd": "^6.0.0",
-    "astro": "^7.4.1",
+    "astro": "^7.4.12",
     "glightbox": "^3.3.1",
     "gsap": "^3.15.0",
     "lucide-astro": "^0.556.0",
     "pixi.js": "^8.22.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^8.0.0",
+    "react-router": "^8.5.1",
     "valtio": "^2.0.0"
   },
   "devDependencies": {

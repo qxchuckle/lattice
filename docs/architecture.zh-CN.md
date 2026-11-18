@@ -537,7 +537,7 @@ React 组件 → hooks → adapters/http → Express API → core 函数
 
 - **P1（已落地）**：`protocol`/`services` 独立成包；VSCode 扩展全量迁入（删除 `ltc` 数据面）；冒烟/集成/单测全绿。
 - **P2（已落地）**：web server 路由迁移为 services 的 HTTP 绑定（projects / tasks / specs / search / stats / trash / users / doctor / 内容与路径解析；sync-domains 域数据回退保留在 web 层）；**三路契约测试**落地——`pnpm test:contract`，同一 fixture 数据根分别跑 services 直调 / web HTTP（fastify inject）/ vscode bridge，任一绑定的形状漂移都会被断言捕获（含历史崩溃点守卫：spec 行必须带 frontmatter/fileName）。
-- **P3（已落地 2026-10-18）**：`web-ui` 包化——`packages/web/src/client` → `packages/web-ui`（`@qcqx/lattice-web-ui`：唯一出口 `ui.ts` + 浏览器 boot `./boot`；web 仅保留入口薄壳与 vite 装配，vscode webview 改引新包）；`packages/foundation`、`packages/e2e`、`packages/core/dist-types` 残骸清理；发布策略——三新包去掉 `private` 并补 `files`，新增 `publish:protocol/services/web-ui` 脚本，发布顺序约定：core → protocol/services → web-ui → web/cli（web 依赖 services + web-ui，需先发布）。
+- **P3（已落地 2026-10-18）**：`web-ui` 包化——`packages/web/src/client` → `packages/web-ui`（`@qcqx/lattice-web-ui`：唯一出口 `ui.ts` + 浏览器 boot `./boot`；web 仅保留入口薄壳与 vite 装配，vscode webview 改引新包）；`packages/foundation`、`packages/e2e`、`packages/core/dist-types` 残骸清理；发布策略——三新包去掉 `private` 并补 `files`，新增 `publish:protocol/services/web-ui` 脚本，当时发布顺序为 core → protocol/services → web-ui → web/cli。当前 Web 作为私有工作区模块随 CLI 平台包构建和交付。
 - **P4（已落地 2026-10-18）**：开源门面——根 README 双语重构（英文主 + `README.zh-CN.md`，徽章/三入口矩阵/7 包表格）、根 LICENSE、社区健康文件（CONTRIBUTING / SECURITY / CODE_OF_CONDUCT / ISSUE 模板 / PR 模板）、
   protocol·services·web-ui 三个包 README、`docs/` 索引、真实产品截图与社交预览资产（`docs/assets/`）。
 - **P5（已落地 2026-10-18）**：VS Code 宿主深度演进——多用户（切换/新建/重命名 + 只读浏览数据面拦截）、三视图按内容搜索（名称字段 + FTS 并集）、spec 体检入 Problems、

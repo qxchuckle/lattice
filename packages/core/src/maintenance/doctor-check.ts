@@ -56,7 +56,7 @@ import { closeDb, deleteProject, initDb } from '../db';
 import { FTS_INDEX_VERSION, getFtsIndexVersion } from '../db';
 import { getRAGStatus } from '../rag';
 import { readInitMeta } from '../cache/init-meta';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { isGitInitialized } from './git-ops';
 import {
   GITIGNORE_SECTIONS,

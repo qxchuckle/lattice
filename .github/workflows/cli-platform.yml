@@ -1,0 +1,75 @@
+name: CLI platform artifacts
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.catalog.outputs.matrix }}
+      node: ${{ steps.catalog.outputs.node }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: catalog
+        shell: bash
+        run: |
+          node -e 'const c=require("./scripts/cli-distribution/config.cjs");const fs=require("fs");fs.appendFileSync(process.env.GITHUB_OUTPUT,"matrix="+JSON.stringify({include:c.PLATFORMS})+"\nnode="+c.NODE_VERSION+"\n")'
+  build:
+    needs: catalog
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.catalog.outputs.matrix) }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.catalog.outputs.node }}
+          cache: pnpm
+      - name: install and build under the fixed interpreter
+        run: pnpm install --frozen-lockfile && pnpm build:cli
+      - name: remember build interpreter and modern npm
+        shell: bash
+        run: |
+          node -e 'const fs=require("fs"),p=require("path");fs.appendFileSync(process.env.GITHUB_ENV,"LATTICE_TEST_INSTALL_NODE="+process.execPath+"\nLATTICE_TEST_NPM="+p.resolve(process.env.npm_execpath||p.join(p.dirname(process.execPath),process.platform==="win32"?"node_modules/npm/bin/npm-cli.js":"../lib/node_modules/npm/bin/npm-cli.js"))+"\n")'
+      - name: package native closure and verify FTS5 / sqlite-vec
+        run: node scripts/cli-distribution.cjs build --target ${{ matrix.id }}
+      - name: relocate, install with modern npm and verify search / incremental RAG
+        shell: bash
+        run: node scripts/cli-distribution.cjs smoke --npm "$LATTICE_TEST_NPM"
+      # Official Node14 has no macOS arm64 binary. Other targets exercise npm6;
+      # the arm64 artifact still tests Node18 and modern npm on native architecture.
+      - uses: actions/setup-node@v4
+        if: matrix.id != 'darwin-arm64'
+        with:
+          node-version: 14
+      - name: npm6 install ignores scripts and enforces engines
+        if: matrix.id != 'darwin-arm64'
+        shell: bash
+        run: |
+          export LATTICE_TEST_NPM="$(node -p 'require("path").resolve(require("path").dirname(process.execPath),process.platform==="win32"?"node_modules/npm/bin/npm-cli.js":"../lib/node_modules/npm/bin/npm-cli.js")')"
+          node scripts/ci-cli-runtime-smoke.cjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: older caller hands off to private runtime
+        shell: bash
+        run: |
+          unset LATTICE_TEST_NPM
+          node scripts/ci-cli-runtime-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-cli-${{ matrix.id }}
+          path: |
+            dist-cli/*.tgz
+            dist-cli/*.tar.gz
+            dist-cli/${{ matrix.id }}.json
+          if-no-files-found: error
+          retention-days: 7

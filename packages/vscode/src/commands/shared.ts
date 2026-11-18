@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliError } from '../cli/errors';
-import { LatticeDataService } from '../data/service';
+import type { LatticeDataService, RagIndexUnavailableError } from '../data/service';
 import { TaskRow } from '../cli/types';
 import { errorLog } from '../logging';
 import { ActiveProjectService } from '../state/active-project';
@@ -133,6 +133,14 @@ export function showDeduped(
   if (kind === 'error') return vscode.window.showErrorMessage(message, ...actions);
   if (kind === 'warn') return vscode.window.showWarningMessage(message, ...actions);
   return vscode.window.showInformationMessage(message, ...actions);
+}
+
+export function ragIndexUnavailableMessage(error: RagIndexUnavailableError): string {
+  return t(
+    'RAG indexing requires model inference and vector storage. Open "Check ltc in Terminal" and run {0} for this data home ({1}).',
+    `ltc rag ${error.action}`,
+    error.dataHome,
+  );
 }
 
 /** CLI 错误统一出口：按分类给引导（可操作按钮），取消静默。 */

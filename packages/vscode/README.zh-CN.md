@@ -1,6 +1,6 @@
 # Lattice — 研发记忆与工作流
 
-把 [Lattice](https://github.com/qxchuckle/lattice) 的研发记忆带进编辑器：规范、任务（PRD / 设计档案 / 进展）、决策、RAG 检索、知识图谱，以及一条龙维护 AI 助手所依赖的元数据。
+在编辑器里使用 [Lattice](https://github.com/qxchuckle/lattice) 的规范、任务（PRD / 设计档案 / 进展）、决策、搜索和知识图谱。
 
 > English docs: [README.md](./README.md)
 
@@ -15,10 +15,10 @@
 
 ## 环境要求
 
-- VS Code `^1.85.0`（同样适用于 VS Code 衍生编辑器：Cursor、Qoder、VSCodium，走 Open VSX）。
+- VS Code 1.90.0 或更新版本。兼容编辑器可通过 Open VSX 安装。SQLite 和全文搜索依赖编辑器扩展宿主。
 - 一个 Lattice 数据根（`~/.lattice`）。若你用过 Lattice CLI 或 Web 客户端，则已具备，无需其他准备。
 - **数据面完全进程内**：扩展直接读写你的 Lattice 数据根（Electron 内置 SQLite + FTS5，降级时走文件真源）。无 HTTP、不打包任何原生二进制、每个视图不再起 CLI 子进程。
-- `ltc` CLI **仅是可选项**：完整初始化（`ltc init`：AI 客户端注入、git、模板）仍在终端执行；项目扫描、当前项目注册、配置编辑、用户、同步域、Git 操作与维护均已收进编辑器内的 **Lattice 配置中心**。仅在需要完整 CLI 初始化时安装：`npm i -g @qcqx/lattice-cli`。
+- 完整初始化（`ltc init`）和模型驱动的 RAG 索引由 CLI 完成。通过「在终端检查 ltc」可在编辑器的 shell 中执行 `ltc --version`，终端会沿用扩展的数据根。[CLI 安装指南](https://lattice.qcqx.cn/zh-cn/docs/quick-start/#1-安装)
 
 ## 功能
 
@@ -67,14 +67,16 @@ Webview 复用 web 客户端的 Cytoscape 画布：全局 / 任务 / 项目 / �
 - **编辑器设置** — 全部 `lattice.*` 设置分组展示，含默认值、来源 scope、重置与「打开原生设置」。
 - **Lattice 配置** — 全局 `config.json` 与本机 `config-local.json`：RAG 模型预设、维度、前缀、下载选项、模板、扫描目录、语言、主数据仓 Git remote；模型变更会提示重建索引。
 - **用户与同步** — 切换 / 新建 / 重命名用户；同步域添加、编辑、排序、解除与同步；主数据仓 Git 状态 + 提交 / 拉取 / 推送 / 同步与 remote 管理。
-- **诊断** — 完整 RAG 详情、增量更新 / 重建、doctor 体检（可修复）、快照错误、诊断复制、日志、数据目录与配置文件。
+- **诊断** — RAG 状态与维护指引、doctor 体检（可修复）、快照错误、诊断复制、日志、数据目录与配置文件。
 - **高级** — 原始 JSON 查看（表单保存保留未知键）与配置文件快捷入口。
 
 所有写入都经扩展宿主与 core/services；Webview 零网络访问（`connect-src 'none'`）。数据根、模型、用户、同步域移除等高风险变更需确认；不提供项目 / 用户删除，也不在扩展内编辑 Web 面板密码。
 
 ### 维护与引导
 
-RAG 状态 / 增量更新 / 重建（可取消、带进度）、doctor 体检（可修复）、垃圾桶浏览（恢复 / 彻底删除）、**打开 Web 工作台**（在编辑器内嵌 webview 中打开完整 Web UI，与图谱同源，无需外部服务）、诊断信息复制、"Lattice 入门" walkthrough 与各视图欢迎页。
+编辑器具备 SQLite 支持时，扩展可以读取索引状态。使用发布版 VSIX 时，请在 Lattice 终端运行 `ltc rag update` 或 `ltc rag rebuild` 维护语义索引。CLI 会使用该数据根的模型配置。
+
+扩展还提供 doctor 体检、垃圾桶、诊断信息复制和「打开 Web 工作台」（与图谱共用内置 webview）。
 
 ### i18n
 

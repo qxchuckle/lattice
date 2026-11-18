@@ -28,6 +28,22 @@
     "monorepo"
   ],
   "pnpm": {
+    "packageExtensions": {
+      "@astrojs/astro2tsx@0.1.3": {
+        "dependencies": {
+          "@emnapi/runtime": "1.11.3"
+        }
+      }
+    },
+    "overrides": {
+      "@azure/identity@^4.0.0": "^4.14.1",
+      "@huggingface/transformers>sharp": "0.35.5",
+      "fast-uri@^3.0.0": "^3.1.9",
+      "postcss@^8.0.0": "^8.5.33",
+      "protobufjs@^7.0.0": "^7.6.5",
+      "source-map-js@^1.0.0": "^1.2.2",
+      "tar@^7.0.0": "^7.5.23"
+    },
     "onlyBuiltDependencies": [
       "@homebridge/node-pty-prebuilt-multiarch",
       "esbuild",
@@ -42,13 +58,13 @@
     "build": "pnpm --filter './packages/**' run build",
     "build:core": "pnpm --filter @qcqx/lattice-core run build",
     "build:services": "pnpm --filter @qcqx/lattice-services run build",
-    "build:cli": "pnpm --filter @qcqx/lattice-cli run build",
-    "build:web": "pnpm --filter @qcqx/lattice-web run build",
+    "build:cli": "pnpm --filter @qcqx/lattice-cli... run build",
+    "build:web": "pnpm --filter @qcqx/lattice-web... run build",
     "build:site": "pnpm --filter @qcqx/lattice-site run build",
     "sync:docs": "pnpm --filter @qcqx/lattice-site run sync:docs",
     "check:docs": "pnpm --filter @qcqx/lattice-site run check:docs",
     "selftest:site-gates": "pnpm --filter @qcqx/lattice-site run selftest:gates",
-    "check:release": "node --test scripts/__tests__/",
+    "check:release": "node scripts/check-release.mjs",
     "check:site": "pnpm --filter @qcqx/lattice-site run check",
     "build:vscode": "pnpm --filter lattice-context run build",
     "package:vscode": "pnpm build:vscode && pnpm --filter lattice-context run package",
@@ -57,8 +73,7 @@
     "dev:web": "pnpm --filter @qcqx/lattice-web run dev",
     "dev:site": "pnpm --filter @qcqx/lattice-site run dev",
     "publish:core": "pnpm --filter @qcqx/lattice-core publish --no-git-checks",
-    "publish:cli": "pnpm --filter @qcqx/lattice-cli publish --no-git-checks",
-    "publish:web": "pnpm --filter @qcqx/lattice-web publish --no-git-checks",
+    "publish:cli": "node scripts/cli-distribution.cjs publish",
     "release": "node scripts/release.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -73,8 +88,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "pnpm build:core && pnpm build:cli && vitest run --project cli",
-    "e2e": "pnpm build:core && pnpm build:services && pnpm build:web && pnpm --filter @qcqx/lattice-e2e run test",
+    "test:e2e": "pnpm build:cli && vitest run --project cli",
+    "e2e": "pnpm build:web && pnpm --filter @qcqx/lattice-e2e run test",
     "e2e:headed": "pnpm --filter @qcqx/lattice-e2e run test:headed",
     "test:report": "open coverage/index.html",
     "ci:assert-tests": "node scripts/ci-assert-tests.mjs",
@@ -83,7 +98,14 @@
     "test:contract": "vitest run --project services --project web --project vscode",
     "publish:protocol": "pnpm --filter @qcqx/lattice-protocol publish --no-git-checks",
     "publish:services": "pnpm --filter @qcqx/lattice-services publish --no-git-checks",
-    "publish:web-ui": "pnpm --filter @qcqx/lattice-web-ui publish --no-git-checks"
+    "publish:web-ui": "pnpm --filter @qcqx/lattice-web-ui publish --no-git-checks",
+    "cli:distribution:build": "node scripts/cli-distribution.cjs build",
+    "cli:distribution:verify": "node scripts/cli-distribution.cjs verify",
+    "cli:distribution:smoke": "node scripts/cli-distribution.cjs smoke",
+    "cli:distribution:benchmark": "node scripts/cli-distribution.cjs benchmark",
+    "cli:distribution:assemble": "node scripts/cli-distribution.cjs assemble",
+    "sync:install": "node scripts/sync-install-docs.mjs",
+    "check:install": "node scripts/sync-install-docs.mjs --check && node --test scripts/__tests__/install-content.test.mjs scripts/__tests__/verify-install-publication.test.mjs"
   },
   "engines": {
     "node": ">=18",

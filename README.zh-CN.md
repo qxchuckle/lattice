@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm cli" src="https://img.shields.io/npm/v/@qcqx/lattice-cli?label=cli"></a>
   <a href="https://www.npmjs.com/package/@qcqx/lattice-core"><img alt="npm core" src="https://img.shields.io/npm/v/@qcqx/lattice-core?label=core"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-web"><img alt="npm web" src="https://img.shields.io/npm/v/@qcqx/lattice-web?label=web"></a>
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
@@ -65,7 +64,7 @@ Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落�
 | | CLI | VS Code 扩展 | Web 工作台 |
 |---|---|---|---|
 | **适合** | 自动化、脚本、AI Agent | 日常浏览与编辑 | 可视化探索 |
-| **安装** | `npm i -g @qcqx/lattice-cli` | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `npm i -g @qcqx/lattice-web` |
+| **安装** | [安装方式](./docs/quick-start.zh-CN.md#1-安装) | [Open VSX](https://open-vsx.org/extension/qcqx/lattice-context) · [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context) | `ltc web` |
 | **使用** | `ltc init` · `ltc scan` · `ltc context` | 活动栏 → Lattice（首次运行：**快速开始**，无需 CLI） | `ltc web` → 浏览器，或扩展内置 Webview |
 | **文档** | [packages/cli](./packages/cli/README.zh-CN.md) | [packages/vscode](./packages/vscode/README.zh-CN.md) | [packages/web](./packages/web/README.zh-CN.md) |
 
@@ -77,15 +76,48 @@ Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落�
 | [`@qcqx/lattice-protocol`](./packages/protocol) | 跨端契约（types-only DTO / 消息） | [![protocol](https://img.shields.io/npm/v/@qcqx/lattice-protocol?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-protocol) |
 | [`@qcqx/lattice-services`](./packages/services) | 用例层：CLI / Web / 扩展共享 | [![services](https://img.shields.io/npm/v/@qcqx/lattice-services?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-services) |
 | [`@qcqx/lattice-cli`](./packages/cli) | 命令行（`lattice` / `ltc`） | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
-| [`@qcqx/lattice-web`](./packages/web) | Web 服务端（HTTP API + 静态资源） | [![web](https://img.shields.io/npm/v/@qcqx/lattice-web?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web) |
+| [`@qcqx/lattice-web`](./packages/web) | Web 服务端（HTTP API + 静态资源） | — |
 | [`@qcqx/lattice-web-ui`](./packages/web-ui) | 共享 React UI（web 客户端与扩展 Webview 共用） | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
 | [`lattice`（VS Code）](./packages/vscode) | VS Code 扩展（进程内 core + Webview） | 0.1.1（VSIX） |
 
 ## 快速开始
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · 即将提供</summary>
+
+Homebrew 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
-# CLI —— 安装后提供 `lattice` 与 `ltc` 两个命令
 npm install -g @qcqx/lattice-cli
+```
+
+当前公开版本 v1.29.0 需要 Node.js 18+，使用安装时的 Node 环境。切换 Node 后可能需要重装。内置 Web 工作台随下一版平台包提供。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · 即将提供</summary>
+
+curl 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
+
+```bash
 ltc init          # 创建 ~/.lattice、选择用户名、注入 AI 客户端工作流
 ltc scan          # 扫描并注册本地项目（非 git 项目可在目录内 `ltc link`）
 ltc context       # 当前仓库的全部规范 / 活跃任务 / 关联项目
@@ -97,16 +129,17 @@ pnpm install
 pnpm package:vscode   # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
 
+安装包含工作台的 CLI 平台版后，运行以下命令。
+
 ```bash
 # Web 工作台
-npm install -g @qcqx/lattice-web
 ltc web               # 打开本地 Web UI
 ```
 
 ## 数据与隐私
 
 - 一切都在你本机的 `~/.lattice` —— 项目、规范、任务、checkpoint、搜索索引。
-- 无遥测；工具本身不发任何网络请求。同步（origin / 域）只访问**你自己配置**的 Git 远端。
+- 无遥测。模型下载、模板拉取和 Git 同步会按需访问模型源、模板仓库及配置的 Git 远端。
 - VS Code 扩展以**进程内**方式读写同一数据根（不起 CLI 子进程、不需要本地 HTTP 服务）。
 
 ## 文档

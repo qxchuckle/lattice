@@ -5,8 +5,8 @@ All notable changes to Lattice are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`@qcqx/lattice-cli`, `@qcqx/lattice-core` and `@qcqx/lattice-web` share one version and are released
-together. The VS Code extension is versioned separately — see
+`@qcqx/lattice-cli` and `@qcqx/lattice-core` share a release version. The CLI ships the Web
+workbench with its platform packages. The VS Code extension is versioned separately. See
 [`packages/vscode/CHANGELOG.md`](packages/vscode/CHANGELOG.md).
 
 Releases before `1.28.0` are recorded as git tags only (`git tag --list 'v*'`); they were not
@@ -15,6 +15,18 @@ backfilled here. New entries are appended by `pnpm release`; pushing the tag tri
 whose body is the matching section of this file.
 
 ## [Unreleased]
+
+## [1.30.0] - 2026-11-18
+
+### Added
+
+- CLI platform packages include a private Node runtime and the Web workbench. Run `ltc web` after installing the CLI. Standalone archives ship with checksums, a shell installer and a Homebrew tap formula.
+
+### Fixed
+
+- Switching a project's Node version leaves the CLI runtime and its native dependencies unchanged. The bundled runtime also isolates the app from the project's `NODE_OPTIONS` and `NODE_PATH`.
+- SQLite driver and schema read failures preserve the existing RAG index. VS Code rejects RAG maintenance when the host lacks model inference or vector storage.
+- Updated the bundled Node LTS runtime and the affected Git, HTTP, and image-processing dependencies for security fixes.
 
 ### Changed
 

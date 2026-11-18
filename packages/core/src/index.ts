@@ -1,3 +1,5 @@
+import { version } from '../package.json';
+
 // 类型定义
 export type {
   ProjectMeta,
@@ -49,11 +51,8 @@ export type {
   SyncDomainsConfig,
 } from './types';
 
-/**
- * core 版本（与 packages/core/package.json 保持同步；core 测试校验防漂移）。
- * 扩展宿主用它替代旧的 `ltc --version` 检查。
- */
-export const CORE_VERSION = '1.28.0';
+/** Bundled core version reported by each host. */
+export const CORE_VERSION = version;
 
 // 路径与文件工具
 export {
@@ -179,6 +178,7 @@ export {
   upsertVecEmbedding,
   searchVec,
   countEmbeddings,
+  isVecStoreReady,
   ensureVecStoreDimension,
   getEmbeddingsByFilePath,
   getEmbeddingRowsByIds,

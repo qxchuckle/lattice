@@ -7,7 +7,7 @@
  * - 离线：init 前预置 allowRemoteModels=false（init -f 会走模型预热路径，
  *   离线配置让其快速降级，不产生网络下载）
  *
- * 用法：node scripts/ci-cli-smoke.mjs（前置：pnpm build:core && pnpm build:cli）
+ * 用法：node scripts/ci-cli-smoke.mjs（前置：pnpm build:cli）
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -19,7 +19,7 @@ const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const cliEntry = join(root, 'packages', 'cli', 'dist', 'index.js');
 
 if (!existsSync(cliEntry)) {
-  console.error('✗ 缺少 CLI 构建产物：请先运行 pnpm build:core && pnpm build:cli');
+  console.error('✗ 缺少 CLI 构建产物：请先运行 pnpm build:cli');
   process.exit(1);
 }
 

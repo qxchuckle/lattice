@@ -1,6 +1,6 @@
 name: CI
 
-# 全量 CI 四线（D1）：quality / vscode 集成矩阵 / node 兼容 / playwright e2e
+# 全量 CI 四线（D1）：quality / vscode 集成矩阵 / CLI 平台分发 / playwright e2e
 # - 文档类变更跳过（paths-ignore）
 # - 并发取消旧 run；全部 job 最小权限
 on:
@@ -24,7 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: 20 # dev 基线（vitest 4 要求 ≥20）；发布包 engines>=18 由 node-compat 线验证
+  NODE_VERSION: 20 # 常规构建；CLI 平台包使用固定运行时并测试低版本 Node 调用者
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
   # ── 线 1：静态检查 + 构建 + 全量测试 + 覆盖率门槛 ──
@@ -45,8 +46,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: lint
         run: pnpm lint
-      # build 先于 check-types：cli 动态 import 可选包 @qcqx/lattice-web，其类型解析走
-      # 该包 dist 产物（跨包契约是 dist），干净检出未构建时 check-types 会 TS2307。
+      - name: check release and installer recovery
+        run: pnpm check:release
+      # CLI 类型检查需要内置 Web 模块的构建产物。
       - name: build
         run: pnpm build
       - name: check-types
@@ -92,8 +94,8 @@ jobs:
           cache: pnpm
       - name: install
         run: pnpm install --frozen-lockfile
-      - name: build extension
-        run: pnpm build:vscode
+      - name: build and package extension
+        run: pnpm build:core && pnpm --filter lattice-context run package
       - name: install xvfb (linux)
         if: runner.os == 'Linux'
         run: |
@@ -114,31 +116,18 @@ jobs:
           timeout_minutes: 30
           max_attempts: 3
           command: pnpm --filter lattice-context run test:integration
+      - name: installed VSIX (minimum and stable, linux)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a pnpm --filter lattice-context run test:vsix minimum
+          xvfb-run -a pnpm --filter lattice-context run test:vsix stable
+      - name: installed VSIX (stable, windows)
+        if: runner.os == 'Windows'
+        run: pnpm --filter lattice-context run test:vsix stable
 
-  # ── 线 3：node 兼容（低版本 Node 上验证发布产物 CLI；不用 vitest）──
-  node-compat:
-    name: node ${{ matrix.node }} compat (built artifacts)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [18, 20]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          cache: pnpm
-      - name: install
-        run: pnpm install --frozen-lockfile
-      - name: build artifacts
-        run: pnpm build:core && pnpm build:cli
-      - name: CLI smoke on built artifacts
-        run: node scripts/ci-cli-smoke.mjs
+  # ── 线 3：固定运行时平台产物与旧 Node/npm 入口验收 ──
+  cli-platform:
+    uses: ./.github/workflows/cli-platform.yml
 
   # ── 线 4：playwright 浏览器 E2E（构建产物 webServer + 隔离 fixture 数据根）──
   e2e:

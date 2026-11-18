@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startMarker, replaceInstallBlock } from '../../../scripts/install-content.mjs';
 import {
   contentDir,
   defaultBranch,
@@ -222,6 +223,9 @@ function yamlString(value) {
  * Exported for unit tests.
  */
 export function transformDoc(text, { locale, item }) {
+  // One controlled source block supplies both GitHub details and the site's shared tabs.
+  if (text.includes(startMarker))
+    text = replaceInstallBlock(text, locale === 'zh-cn' ? 'zh' : 'en', { html: true });
   const { body } = splitFrontmatter(text);
   let lines = body.split('\n');
   const heading = extractTitle(lines);

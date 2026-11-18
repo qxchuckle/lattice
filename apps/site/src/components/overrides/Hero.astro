@@ -1,9 +1,10 @@
 ---
+import InstallTabs from '../InstallTabs.astro';
 const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
 const isZh = lang.toLowerCase().startsWith('zh');
 const base = import.meta.env.BASE_URL;
 const demoHref = `${base}demo/`;
-const docsHref = `${base}docs/`;
+const docsHref = `${base}${isZh ? 'zh-cn/' : ''}docs/quick-start/`;
 
 const copy = isZh
   ? {
@@ -15,7 +16,6 @@ const copy = isZh
         'Lattice 把规范、任务、决策和经验沉淀在本地，让它们在项目、会话和 Agent 之间持续复用。',
       demo: '打开在线 Demo',
       docs: '快速开始',
-      install: 'npm i -g @qcqx/lattice-cli',
       proof: ['MIT', '本地优先', '无遥测', 'Agent 无关'],
       local: '本地 · ~/.lattice',
       live: '实时格栅 · 模拟数据',
@@ -34,7 +34,6 @@ const copy = isZh
         'Lattice is a local-first engineering memory and workflow layer for AI-assisted development. Specs, tasks, decisions and experience are captured once in ~/.lattice and reused across projects, sessions and agents.',
       demo: 'Try the live demo',
       docs: 'Get started',
-      install: 'npm i -g @qcqx/lattice-cli',
       proof: ['MIT', 'Local-first', 'No telemetry', 'Agent-agnostic'],
       local: 'LOCAL · ~/.lattice',
       live: 'Live lattice · mock artifacts',
@@ -62,11 +61,7 @@ const copy = isZh
       <a class='ll-button ll-button--ghost' href={docsHref}>{copy.docs}</a>
     </div>
 
-    <div class='ll-install'>
-      <span aria-hidden='true'>$</span>
-      <code>{copy.install}</code>
-      <button type='button' class='ll-copy' data-copy-install aria-label={isZh ? '复制安装命令' : 'Copy install command'}>{isZh ? '复制' : 'Copy'}</button>
-    </div>
+    <InstallTabs id='hero-install' locale={isZh ? 'zh' : 'en'} />
 
     <ul class='ll-proof' aria-label={isZh ? '产品信息' : 'Product facts'}>
       {copy.proof.map((item) => <li>{item}</li>)}
@@ -106,31 +101,6 @@ const copy = isZh
 
   const lang = document.documentElement.lang === 'zh-CN' ? 'zh' : 'en';
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function setupCopy(): void {
-    const button = document.querySelector<HTMLButtonElement>('[data-copy-install]');
-    if (!button) return;
-    button.addEventListener('click', async () => {
-      const command = 'npm i -g @qcqx/lattice-cli';
-      try {
-        await navigator.clipboard.writeText(command);
-      } catch {
-        const input = document.createElement('textarea');
-        input.value = command;
-        input.style.position = 'fixed';
-        input.style.opacity = '0';
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        input.remove();
-      }
-      const original = button.textContent;
-      button.textContent = lang === 'zh' ? '已复制' : 'Copied';
-      window.setTimeout(() => {
-        button.textContent = original;
-      }, 1500);
-    });
-  }
 
   function setupMotionToggle(): void {
     const button = document.querySelector<HTMLButtonElement>('#motion-toggle');
@@ -196,7 +166,6 @@ const copy = isZh
     }
   }
 
-  setupCopy();
   setupReveals();
   if ('requestIdleCallback' in window) {
     window.requestIdleCallback(() => void startHero(), { timeout: 1200 });

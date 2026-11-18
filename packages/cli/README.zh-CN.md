@@ -6,11 +6,54 @@ Lattice 是本地优先的研发记忆与工作流层；CLI 是它在终端和 A
 
 ## 安装/更新
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · 即将提供</summary>
+
+Homebrew 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
 npm install -g @qcqx/lattice-cli
 ```
 
+当前公开版本 v1.29.0 需要 Node.js 18+，使用安装时的 Node 环境。切换 Node 后可能需要重装。内置 Web 工作台随下一版平台包提供。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · 即将提供</summary>
+
+curl 安装渠道正在准备中，当前请使用 npm。
+
+[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
+
 安装后可通过 `lattice` 或 `ltc` 调用。
+
+### 运行时隔离
+
+平台包包含固定 Node、匹配的原生依赖和 Web 工作台。安装后用 `ltc web` 启动，和 CLI 使用同一套运行时。RAG 需要下载或提供所选 embedding 模型，支持自定义本地模型路径，模型缓存保存在安装包之外。各安装方式的发布状态以上方选择器为准。
+
+npm 全局命令位于 npm prefix 内。Node 版本管理器切换后，原 prefix 可能不在 PATH 中。需要稳定入口时可选择已发布的独立渠道。
+
+### 独立安装
+
+独立安装器校验 SHA-256、完整文件及原生依赖，通过后切换入口。默认应用目录 `~/.local/share/lattice`，命令目录 `~/.local/bin`。安装中断后可重跑原命令，安装器会清理本机已退出进程留下的锁，并保留已安装版本以便回滚。安装器支持 `--prefix`、`--bin`、`--version` 和 `--from`。已发布版本可以用 `--version` 重装以回滚。卸载时先确认命令目录中的 `ltc` 和 `lattice` 是指向该安装目录的符号链接，再删除这些链接及安装目录。知识和模型保存在独立的数据目录 `~/.lattice` 中。
+
+计划目标见 [config.cjs](../../scripts/cli-distribution/config.cjs)：macOS arm64/x64、Linux glibc arm64/x64、Windows x64。平台目录不含 Linux musl 或 Windows ARM64。
 
 ## 快速开始
 

@@ -17,7 +17,7 @@ interface ITerminalProcess {
 }
 
 // ── node-pty 动态加载（失败降级 spawn）──
-// 使用 optionalDependencies，加载失败不阻断 lattice-web 安装
+// 平台包仅携带兼容的可选 PTY，加载失败时使用子进程终端
 // 运行时动态 import，有则 PTY 完整体验，无则降级 spawn
 
 let ptyModule: any = null;

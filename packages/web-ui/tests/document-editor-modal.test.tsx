@@ -132,9 +132,9 @@ describe('DocumentEditorModal', () => {
     expect(screen.getByText(/域数据只读/)).toBeTruthy();
     expect(screen.queryByTestId('cm-editor')).toBeNull();
     expect(screen.queryByRole('button', { name: /保\s*存/ })).toBeNull();
+    await waitFor(() => expect(document.querySelector('.markdown-body')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: /关\s*闭/ }));
     expect(onClose).toHaveBeenCalled();
-    expect(document.querySelector('.markdown-body')).toBeTruthy();
 
     fireEvent.click(screen.getByText('原始'));
     await waitFor(() => expect(screen.getByTestId('cm-editor')).toBeTruthy());

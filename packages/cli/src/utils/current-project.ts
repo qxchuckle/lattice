@@ -1,4 +1,4 @@
-import { resolve as pathResolve, dirname, sep, join } from 'node:path';
+import { resolve as pathResolve, dirname, join } from 'node:path';
 import {
   readJSON,
   fileExists,
@@ -94,12 +94,14 @@ export async function resolveAndRegisterUpwards(
   const idSourceDirs: { dir: string; ids: string[]; hasLatticeJson: boolean }[] = [];
   let currentDir = pathResolve(startDir);
 
-  while (currentDir && currentDir !== sep && currentDir !== '.') {
+  while (true) {
+    const parent = dirname(currentDir);
+    if (parent === currentDir) break;
     const { ids, hasLatticeJson } = await generateIdsForDir(currentDir);
     if (ids.length > 0) {
       idSourceDirs.push({ dir: currentDir, ids, hasLatticeJson });
     }
-    currentDir = dirname(currentDir);
+    currentDir = parent;
   }
 
   if (idSourceDirs.length === 0) {

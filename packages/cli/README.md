@@ -6,11 +6,54 @@ Lattice is a local-first engineering memory and workflow layer; the CLI is its e
 
 ## Install / update
 
+<!-- lattice-install:start -->
+
+<details open>
+<summary>Homebrew · Coming soon</summary>
+
+Homebrew installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>npm</summary>
+
 ```bash
 npm install -g @qcqx/lattice-cli
 ```
 
+The current public release v1.29.0 requires Node.js 18+ and uses the installation Node environment. Switching Node may require reinstalling. The bundled Web workbench ships with the upcoming platform release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<details>
+<summary>curl · Coming soon</summary>
+
+curl installation is being prepared. Use npm for the current release.
+
+[View releases](https://github.com/qxchuckle/lattice/releases)
+
+</details>
+
+<!-- lattice-install:end -->
+
 After installation, invoke it through `lattice` or `ltc`.
+
+### Runtime isolation
+
+The platform package contains a fixed Node runtime, matching native dependencies and the Web workbench. Run `ltc web` to open the workbench with the same runtime. RAG requires the selected embedding model, downloaded or supplied locally. Custom model paths are supported and the model cache lives outside the installation. The selector above reports channel availability.
+
+npm global commands live in the npm prefix. A version-manager switch may remove that prefix from PATH. Choose an available standalone channel for a stable entry point.
+
+### Standalone installation
+
+The installer verifies the SHA-256 checksum, file inventory and native dependencies before switching the entry point. The default application and command directories are `~/.local/share/lattice` and `~/.local/bin`. Retry the same command after an interrupted installation. The installer clears its own stale local locks and preserves installed versions for rollback. The installer accepts `--prefix`, `--bin`, `--version` and `--from`. To roll back to a published version, run the installer with `--version`. To uninstall, confirm that `ltc` and `lattice` in the command directory point into the installation directory, then remove those symlinks and that installation directory. Knowledge and models live in the separate `~/.lattice` data directory.
+
+Planned targets are listed in [config.cjs](../../scripts/cli-distribution/config.cjs): macOS arm64/x64, Linux glibc arm64/x64 and Windows x64. The platform catalog excludes Linux musl and Windows ARM64.
 
 ## Quick start
 

@@ -5,6 +5,17 @@ All notable changes to the Lattice VS Code extension are documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] - 2026-11-18
+
+### Changed
+
+- VS Code 1.90.0 or newer is required by the updated dependencies.
+
+### Fixed
+
+- Protect existing RAG indexes when the editor host cannot run model inference or access vector storage. The extension points to the CLI for maintenance of the same data home.
+- Run terminal commands with the extension's data home. **Check ltc in Terminal** checks the CLI available to the editor's shell.
+
 ## [0.4.7] - 2026-10-22
 
 ### Fixed

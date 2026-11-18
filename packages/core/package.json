@@ -38,17 +38,17 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": "20 || >=22"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.4.1",
     "better-sqlite3": "^11.9.1",
-    "glob": "^13.0.6",
+    "glob": "^14.0.6",
     "ignore": "^7.0.5",
-    "minimatch": "^10.2.5",
-    "simple-git": "^3.27.0",
+    "minimatch": "^11.0.9",
+    "simple-git": "^4.1.0",
     "sqlite-vec": "^0.1.9",
-    "undici": "^6.24.1",
+    "undici": "^6.29.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

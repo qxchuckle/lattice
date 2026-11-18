@@ -45,6 +45,7 @@ function runInTerminal(services: CommandServices, name: string, command: string)
     name,
     cwd:
       services.activeProject.currentProjectRoot ?? services.activeProject.currentFolder?.uri.fsPath,
+    env: { LATTICE_HOME: getLatticeRoot() },
   });
   terminal.show();
   terminal.sendText(command);
@@ -439,6 +440,10 @@ export function registerSystemCommands(services: CommandServices, register: Regi
       return;
     }
     runInTerminal(services, 'Lattice Link', 'ltc link');
+  });
+
+  register('lattice.cli.checkTerminal', () => {
+    runInTerminal(services, 'Lattice CLI', 'ltc --version');
   });
 
   register('lattice.cli.check', async () => {

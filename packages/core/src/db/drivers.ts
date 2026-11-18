@@ -10,12 +10,14 @@
  */
 import type { DatabaseDriverPort, DatabasePort, PreparedStatementPort } from './port';
 
+function normalizeParam(param: unknown): unknown {
+  if (param === undefined) return null;
+  if (typeof param === 'boolean') return param ? 1 : 0;
+  return param;
+}
+
 function normalizeParams(params: unknown[]): unknown[] {
-  return params.map((param) => {
-    if (param === undefined) return null;
-    if (typeof param === 'boolean') return param ? 1 : 0;
-    return param;
-  });
+  return params.map(normalizeParam);
 }
 
 function toRunResult(result: { changes?: unknown; lastInsertRowid?: unknown }): {
@@ -138,7 +140,7 @@ class NodeSqliteStatement implements PreparedStatementPort {
       const filtered: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(params[0])) {
         const bare = /^[@$:]/.test(key) ? key.slice(1) : key;
-        if (this.namedParams.has(bare)) filtered[key] = value;
+        if (this.namedParams.has(bare)) filtered[key] = normalizeParam(value);
       }
       return [filtered];
     }
@@ -162,7 +164,7 @@ class NodeSqliteDatabase implements DatabasePort {
   private readonly db: any;
 
   constructor(DatabaseSync: any, file: string) {
-    this.db = new DatabaseSync(file);
+    this.db = new DatabaseSync(file, { allowExtension: true });
     try {
       this.db.exec('PRAGMA busy_timeout = 5000');
     } catch {

@@ -1,4 +1,5 @@
 ---
+import InstallTabs from '../InstallTabs.astro';
 import { ArrowRight, Zap } from 'lucide-astro';
 
 const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
@@ -33,7 +34,7 @@ const copy = isZh
         '安装一次 CLI，然后在 Agent 里完成从开始、读取上下文、记录决策，到归档和沉淀规范的完整流程。下一次会话，记忆已经在这里。',
       installLabel: '01 / 安装一次',
       agentLabel: '02 / 在 Agent 输入框调用',
-      installNote: 'Node.js 18+ · 无需账号 · 数据在本地',
+      installNote: '无需账号 · 数据在本地',
       userInput: '用户输入',
       exampleCommand: 'lattice:task:start',
       windowTitle: 'agent · acme-portal',
@@ -231,7 +232,7 @@ const copy = isZh
         'Install the CLI once. Then run the whole workflow from your agent — start, load context, record decisions, archive, and distill a spec. The next session starts with the memory already in place.',
       installLabel: '01 / INSTALL ONCE',
       agentLabel: '02 / CALL IT FROM YOUR AGENT',
-      installNote: 'Node.js 18+ · no account · local files',
+      installNote: 'no account · local files',
       userInput: 'Ask your agent…',
       exampleCommand: 'lattice:task:start',
       windowTitle: 'agent · acme-portal',
@@ -472,13 +473,7 @@ const timeline: TimelineEntry[] = steps.flatMap((step, stepIndex) => {
   <div class='ll-flow-setup' data-reveal>
     <div class='ll-flow-setup-block'>
       <p class='ll-flow-label'>{copy.installLabel}</p>
-      <div class='ll-install'>
-        <span aria-hidden='true'>$</span>
-        <code>npm i -g @qcqx/lattice-cli</code>
-        <button class='ll-copy' type='button' data-workflow-copy aria-label={isZh ? '复制安装命令' : 'Copy install command'}>
-          {isZh ? '复制' : 'Copy'}
-        </button>
-      </div>
+      <InstallTabs id='workflow-install' locale={isZh ? 'zh' : 'en'} />
       <p class='ll-flow-note'>{copy.installNote}</p>
     </div>
     <div class='ll-flow-setup-block'>
@@ -1093,29 +1088,6 @@ const timeline: TimelineEntry[] = steps.flatMap((step, stepIndex) => {
       if (playing) setPlaying(false);
       else setPlaying(true);
     });
-
-    const copyButton = document.querySelector<HTMLButtonElement>('[data-workflow-copy]');
-    if (copyButton) {
-      const original = copyButton.textContent;
-      copyButton.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText('npm i -g @qcqx/lattice-cli');
-        } catch {
-          const input = document.createElement('textarea');
-          input.value = 'npm i -g @qcqx/lattice-cli';
-          input.style.position = 'fixed';
-          input.style.opacity = '0';
-          document.body.appendChild(input);
-          input.select();
-          document.execCommand('copy');
-          input.remove();
-        }
-        copyButton.textContent = isZh ? '已复制' : 'Copied';
-        window.setTimeout(() => {
-          copyButton.textContent = original;
-        }, 1400);
-      });
-    }
 
     const observer = new IntersectionObserver(
       (records) => {

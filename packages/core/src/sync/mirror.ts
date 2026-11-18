@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { readdir } from 'node:fs/promises';
-import simpleGit, { type SimpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import type { SyncDomainConfig } from '../types';
 import { dirExists } from '../paths';
 import { mirrorDirOf, normalizeDomainConfig } from './domain-config';
