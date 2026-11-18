@@ -19,6 +19,7 @@ concurrency:
 
 env:
   NODE_VERSION: 20
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
   release:

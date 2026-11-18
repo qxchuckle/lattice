@@ -25,6 +25,7 @@ concurrency:
 
 env:
   NODE_VERSION: 20 # 常规构建；CLI 平台包使用固定运行时并测试低版本 Node 调用者
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
   # ── 线 1：静态检查 + 构建 + 全量测试 + 覆盖率门槛 ──

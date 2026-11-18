@@ -53,6 +53,7 @@ concurrency:
 
 env:
   NODE_VERSION: 24
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
   SITE_URL: https://lattice.qcqx.cn
   # CI builds and tests at the project sub-path; the deploy artifact is rebuilt at the domain root.
   SITE_BASE: /lattice
