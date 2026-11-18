@@ -137,6 +137,25 @@ function bootstrap(repo, output, version) {
   return { directory, filename, sha256: sha(path.join(output, filename)) };
 }
 
+function platformNpmManifest(target, version, cliPackage) {
+  if (!cliPackage.repository?.url)
+    throw new Error('CLI repository URL is required for npm provenance');
+  return {
+    name: target.packageName,
+    version,
+    os: [target.os],
+    cpu: [target.arch],
+    ...(target.libc ? { libc: [target.libc] } : {}),
+    license: cliPackage.license,
+    description: cliPackage.description,
+    homepage: cliPackage.homepage,
+    repository: cliPackage.repository,
+    bugs: cliPackage.bugs,
+    files: ['payload'],
+    publishConfig: { access: 'public' },
+  };
+}
+
 function build(options = {}) {
   const repo = path.resolve(options.repo || path.join(__dirname, '../..'));
   const output = path.resolve(options.output || path.join(repo, 'dist-cli'));
@@ -222,16 +241,7 @@ function build(options = {}) {
     files,
   };
   write(path.join(payload, 'manifest.json'), manifest);
-  write(path.join(packageDir, 'package.json'), {
-    name: target.packageName,
-    version,
-    os: [target.os],
-    cpu: [target.arch],
-    ...(target.libc ? { libc: [target.libc] } : {}),
-    license: 'MIT',
-    files: ['payload'],
-    publishConfig: { access: 'public' },
-  });
+  write(path.join(packageDir, 'package.json'), platformNpmManifest(target, version, cliPkg));
   const { verify } = require('./verify.cjs');
   verify(payload);
   const npmFile = 'qcqx-lattice-cli-' + target.id + '-' + version + '.tgz';
@@ -260,4 +270,4 @@ function build(options = {}) {
   return { payload, record };
 }
 
-module.exports = { build, bootstrap, run, info, sha, inventory, read, write };
+module.exports = { build, bootstrap, platformNpmManifest, run, info, sha, inventory, read, write };

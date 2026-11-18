@@ -9,11 +9,19 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 const require = createRequire(import.meta.url);
 const { pack } = require('../cli-distribution/archive.cjs');
-const { sha, write, read, inventory, bootstrap } = require('../cli-distribution/build.cjs');
+const {
+  sha,
+  write,
+  read,
+  inventory,
+  bootstrap,
+  platformNpmManifest,
+} = require('../cli-distribution/build.cjs');
 const { integrity } = require('../cli-distribution/verify.cjs');
 const { PLATFORMS, NODE_VERSION } = require('../cli-distribution/config.cjs');
 const { assemble } = require('../cli-distribution/release.cjs');
 const { materialize, compatible, keepFile } = require('../cli-distribution/dependencies.cjs');
+const { repairPlatformArchive } = require('../cli-distribution/repair-platform-metadata.cjs');
 const repo = path.resolve(
   import.meta.dirname || path.dirname(new URL(import.meta.url).pathname),
   '../..',
@@ -37,6 +45,47 @@ test('deterministic archives ignore timestamps; no links escape the payload', (t
   assert.equal(sha(path.join(root, 'a.tgz')), sha(path.join(root, 'b.tgz')));
   fs.symlinkSync(path.join(root, 'a.tgz'), path.join(root, 'package/link'));
   assert.throws(() => pack(root, 'package', path.join(root, 'c.tgz')), /unsupported/);
+});
+test('npm recovery adds provenance information only to the platform archive metadata', (t) => {
+  const root = temporary(t);
+  const target = PLATFORMS[0];
+  const version = '1.30.0';
+  const cli = read(path.join(repo, 'packages/cli/package.json'));
+  const expected = platformNpmManifest(target, version, cli);
+  assert.equal(expected.repository.url, 'git+https://github.com/qxchuckle/lattice.git');
+  assert.equal(expected.homepage, cli.homepage);
+  assert.throws(() => platformNpmManifest(target, version, {}), /repository URL/);
+
+  const legacy = {
+    name: target.packageName,
+    version,
+    os: [target.os],
+    cpu: [target.arch],
+    license: 'MIT',
+    files: ['payload'],
+    publishConfig: { access: 'public' },
+  };
+  write(path.join(root, 'package/package.json'), legacy);
+  fs.mkdirSync(path.join(root, 'package/payload'));
+  fs.writeFileSync(path.join(root, 'package/payload/ltc'), 'original runtime', { mode: 0o755 });
+  const archive = `lattice-${version}-${target.id}.tar.gz`;
+  const npmFile = `qcqx-lattice-cli-${target.id}-${version}.tgz`;
+  pack(root, 'package/payload', path.join(root, archive));
+  pack(root, 'package', path.join(root, npmFile));
+  const original = {
+    ...target,
+    version,
+    archive,
+    archiveSha256: sha(path.join(root, archive)),
+    npmFile,
+    npmSha256: sha(path.join(root, npmFile)),
+  };
+  const updated = repairPlatformArchive(root, original, cli);
+  assert.equal(updated.archiveSha256, sha(path.join(root, archive)));
+  assert.notEqual(updated.npmSha256, original.npmSha256);
+  assert.equal(updated.npmSha256, sha(path.join(root, npmFile)));
+  assert.equal(repairPlatformArchive(root, updated, cli), updated);
+  assert.throws(() => repairPlatformArchive(root, original, cli), /original checksum/);
 });
 test('integrity rejects corruption, missing/unlisted files, traversal, duplicates and links', (t) => {
   const root = temporary(t);

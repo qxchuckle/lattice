@@ -8,13 +8,23 @@ on:
   push:
     tags:
       - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to resume
+        required: true
+        type: string
+      build_run:
+        description: Failed Release workflow run with the complete tagged platform artifacts
+        required: true
+        type: string
 
 permissions:
   contents: write
   actions: read # 等 CI 结果需要读 workflow run
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -24,6 +34,7 @@ env:
 jobs:
   release:
     name: release ${{ github.ref_name }}
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -160,14 +171,40 @@ jobs:
 
   cli-publish:
     needs: [release, cli-platform]
+    if: >-
+      ${{ !cancelled() && ((needs.release.result == 'success' && needs.cli-platform.result == 'success')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: write
       actions: read
       id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
+      - name: verify recovery tag, failed run and draft release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$BUILD_RUN" =~ ^[1-9][0-9]*$ ]]
+          sha=$(git rev-parse HEAD)
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" |
+            jq -e --arg tag "$RELEASE_TAG" --arg sha "$sha" '
+              .event == "push" and .path == ".github/workflows/release.yml" and
+              .head_branch == $tag and .head_sha == $sha and
+              .status == "completed" and .conclusion == "failure"'
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+      - uses: actions/checkout@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          path: release-tools
       - name: read fixed runtime from the catalog
         id: runtime
         run: node -e 'require("fs").appendFileSync(process.env.GITHUB_OUTPUT,"node="+require("./scripts/cli-distribution/config.cjs").NODE_VERSION+"\n")'
@@ -180,10 +217,17 @@ jobs:
           pattern: lattice-cli-*
           path: dist-cli
           merge-multiple: true
+          run-id: ${{ inputs.build_run || github.run_id }}
+          github-token: ${{ inputs.build_run && github.token || '' }}
       - name: verify the complete release and source identity
         run: |
           node scripts/cli-distribution.cjs assemble
-          node -e 'const m=require("./dist-cli/release-manifest.json");if("v"+m.version!==process.env.GITHUB_REF_NAME||m.sourceCommit!==process.env.GITHUB_SHA)throw Error("Release tag/source mismatch")'
+          RELEASE_COMMIT="$(git rev-parse HEAD)" node -e 'const m=require("./dist-cli/release-manifest.json");if("v"+m.version!==process.env.RELEASE_TAG||m.sourceCommit!==process.env.RELEASE_COMMIT)throw Error("Release tag/source mismatch")'
+      - name: repair provenance metadata on the verified tagged packages
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          node release-tools/scripts/cli-distribution/repair-platform-metadata.cjs dist-cli packages/cli/package.json
+          node scripts/cli-distribution.cjs assemble
       - name: publish platforms first, bootstrap last
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -192,5 +236,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "$GITHUB_REF_NAME" dist-cli/*.tar.gz dist-cli/release-manifest.json dist-cli/release-version.txt dist-cli/SHA256SUMS dist-cli/install.sh dist-cli/lattice.rb --clobber
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          gh release upload "$RELEASE_TAG" dist-cli/*.tar.gz dist-cli/release-manifest.json dist-cli/release-version.txt dist-cli/SHA256SUMS dist-cli/install.sh dist-cli/lattice.rb --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest
