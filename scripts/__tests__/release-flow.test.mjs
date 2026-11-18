@@ -156,3 +156,25 @@ test('an unavailable CI status stops release before the npm or git writes', { sk
   assert.equal(f.git('tag', '-l'), '');
   assert.equal(f.remoteRefs(), '');
 });
+
+test('release blocks uncommitted source before preparing a tag', { skip }, (t) => {
+  const f = fixture(t);
+  const repo = f.git('rev-parse', '--show-toplevel');
+  fs.writeFileSync(path.join(repo, 'uncommitted.txt'), 'source not in HEAD');
+  const result = f.run(['patch', '--no-push']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /工作区有未提交的变更/);
+  assert.equal(f.git('tag', '-l'), '');
+  assert.equal(f.calls(), '');
+});
+
+test('release continue rejects a tag that points to an older commit', { skip }, (t) => {
+  const f = fixture(t);
+  f.git('tag', `v${version}`);
+  f.git('commit', '--allow-empty', '-m', 'fix: change release source');
+  const result = f.run(['continue', '--core']);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /tag v1\.29\.1 已存在/);
+  assert.equal(f.calls(), '');
+  assert.equal(f.remoteRefs(), '');
+});

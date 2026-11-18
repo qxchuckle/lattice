@@ -65,7 +65,7 @@ test('better-sqlite3 驱动：参数归一化/事务/extension/close', () => {
   assert.deepEqual(calls.at(-1), ['close']);
 });
 
-test('node:sqlite 驱动：命名参数过滤/bare 开关/定位参数归一化', () => {
+test('node:sqlite 驱动：命名参数过滤/bare 开关/参数归一化', () => {
   class FakeStmt {
     params: unknown[] = [];
     allowBare: boolean | undefined;
@@ -115,6 +115,9 @@ test('node:sqlite 驱动：命名参数过滤/bare 开关/定位参数归一化'
   assert.equal(prepared[0].allowBare, true);
   stmt.all({ a: 1, '@a': 2, b: 3, c: 4, d: 5 });
   assert.deepEqual(prepared[0].params, [{ a: 1, '@a': 2, b: 3, c: 4 }]);
+
+  stmt.run({ a: undefined, b: true, c: false });
+  assert.deepEqual(prepared[0].params, [{ a: null, b: 1, c: 0 }]);
 
   stmt.all(undefined, true, false);
   assert.deepEqual(prepared[0].params, [null, 1, 0]);

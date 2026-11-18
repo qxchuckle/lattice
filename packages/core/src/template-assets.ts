@@ -1,4 +1,4 @@
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { existsSync, readFileSync } from 'node:fs';
 import { cp, mkdir, rm, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';

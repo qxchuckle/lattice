@@ -14,7 +14,8 @@
  *   pnpm release patch --no-push # 只准备本地提交和 tag，不发布 npm、不推送
  *   pnpm release patch --allow-red-ci # 跳过发布前“HEAD 的 CI 必须绿”检查
  *
- * 完整流程：bump → 写入 CHANGELOG → 构建 → npm 发布 → 提交 + tag → 推送。
+ * 完整流程：bump → 写入 CHANGELOG → 构建 → 发布 core → 提交 + tag → 推送。
+ * CLI 平台包和薄入口由 tag 对应的 CI 发布。
  * 推送后由 `.github/workflows/release.yml` 在 tag 上构建 VSIX 并建 GitHub Release
  * （正文 = CHANGELOG 对应版本段 + 安装/包表/链接，附件 = 同一 tag 构建的 VSIX）。
  */
@@ -61,12 +62,17 @@ if (!versionArg) {
 }
 
 const isContinue = versionArg === 'continue';
+const targets = ['core', 'cli'].filter(
+  (name) => (!onlyCore && !onlyCli) || (name === 'core' && onlyCore) || (name === 'cli' && onlyCli),
+);
+const releasePaths = [...targets.map((name) => `packages/${name}/package.json`), 'CHANGELOG.md'];
+assertReleaseSource();
 
 // --- 发布前置检查（先验证再动版本号，避免半途留下已 bump 的 package.json） ---
 if (!isContinue) {
   // 单测先过：CHANGELOG 写入 / Release 正文逻辑坏了就别开始
   try {
-    execSync('node --test scripts/__tests__/', { cwd: root, stdio: 'pipe', encoding: 'utf8' });
+    execSync('pnpm check:release', { cwd: root, stdio: 'pipe', encoding: 'utf8' });
     console.log('✔ release 脚本单测通过');
   } catch (error) {
     console.error('❌ release 脚本单测失败，先修 scripts/ 再发版：');
@@ -86,13 +92,27 @@ if (!isContinue) {
     console.error('❌ CHANGELOG.md 缺少 `## [Unreleased]` 段落，无法写入新版本');
     process.exit(1);
   }
-  const dirty = execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }).trim();
-  if (dirty) {
-    console.warn(
-      '⚠ 工作区不干净：release 提交只会包含 package.json 与 CHANGELOG.md，其余改动不会进 tag',
-    );
-  }
   if (!skipPush) assertCiGreenBeforePublish();
+}
+
+function assertReleaseSource() {
+  const ignored = isContinue ? releasePaths.map((file) => `:(exclude)${file}`) : [];
+  const status = execFileSync('git', ['status', '--porcelain', '--', '.', ...ignored], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
+  const reason = status
+    ? '工作区有未提交的变更。请先把发布源码纳入提交，再准备版本或打 tag。'
+    : !skipPush && git('git branch --show-current') !== 'master'
+      ? '正式发布必须在 master 上执行。'
+      : null;
+  if (!reason) return;
+  if (dryRun) {
+    console.warn('⚠ ' + reason);
+    return;
+  }
+  console.error('❌ ' + reason);
+  process.exit(1);
 }
 
 // 发布前确认当前 HEAD 的 CI 是绿的：否则 npm 发出去了，tag 上的 GitHub Release 会被 CI 门禁卡住
@@ -144,8 +164,7 @@ function writePkg(path, pkg) {
 }
 
 function bumpVersion(current, bump) {
-  // 如果是具体版本号则直接使用
-  if (/^\d+\.\d+\.\d+/.test(bump)) return bump;
+  if (/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(bump)) return bump;
 
   const [major, minor, patch] = current.split('.').map(Number);
   switch (bump) {
@@ -159,6 +178,21 @@ function bumpVersion(current, bump) {
       console.error(`❌ 无效的版本参数: ${bump}`);
       process.exit(1);
   }
+}
+
+function assertReleaseTag(version, resume) {
+  if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(version)) {
+    throw new Error('无效的发布版本：' + version);
+  }
+  const tag = `v${version}`;
+  if (!git(`git tag -l ${tag}`)) return;
+  if (
+    resume &&
+    git(`git rev-list -n 1 ${tag}`) === git('git rev-parse HEAD') &&
+    !git(`git status --porcelain -- ${releasePaths.join(' ')}`)
+  )
+    return;
+  throw new Error(`tag ${tag} 已存在。请核对 tag 对应的提交和版本文件后重试。`);
 }
 
 function run(cmd, opts = {}) {
@@ -234,16 +268,6 @@ function updateChangelog(version) {
   writeFileSync(CHANGELOG_PATH, next);
 }
 
-// --- 确定要发布的包 ---
-const targets = [];
-const hasFlag = onlyCore || onlyCli;
-if (!hasFlag) {
-  targets.push('core', 'cli');
-} else {
-  if (onlyCore) targets.push('core');
-  if (onlyCli) targets.push('cli');
-}
-
 // --- 升版本（continue 模式跳过） ---
 const releaseBase = readPkg(PACKAGES[onlyCli && !onlyCore ? 'cli' : 'core']);
 let newVersion;
@@ -254,6 +278,7 @@ if (isContinue) {
     console.error('❌ 待重试的包版本不同，请使用 --core 或 --cli 选择原发布目标');
     process.exit(1);
   }
+  assertReleaseTag(newVersion, true);
   if (!skipPush) {
     // A locally prepared version commit has no CI run yet. Check its source commit.
     const prepared = git('git log -1 --format=%s') === `release: v${newVersion}`;
@@ -264,6 +289,7 @@ if (isContinue) {
   console.log(`   包:   ${targets.join(', ')}\n`);
 } else {
   newVersion = bumpVersion(releaseBase.version, versionArg);
+  assertReleaseTag(newVersion, false);
 
   console.log(`\n📦 Lattice Release ${dryRun ? '(dry-run)' : ''}`);
   console.log(`   版本: ${releaseBase.version} → ${newVersion}`);
@@ -320,7 +346,7 @@ for (const name of targets) {
 
 // --- Git tag + 推送 ---
 console.log(`\n🏷️  创建 git tag: v${newVersion}`);
-const pkgPaths = `${targets.map((name) => `packages/${name}/package.json`).join(' ')} CHANGELOG.md`;
+const pkgPaths = releasePaths.join(' ');
 // continue 重试时可能已经提交过 / 打过 tag，两者都要容忍"已存在"
 if (dryRun || git(`git status --porcelain -- ${pkgPaths}`)) {
   run(`git add ${pkgPaths}`);

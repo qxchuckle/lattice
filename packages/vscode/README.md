@@ -1,6 +1,6 @@
 # Lattice — Engineering Memory & Workflow
 
-Bring [Lattice](https://github.com/qxchuckle/lattice)'s engineering memory into your editor: specs, tasks with PRD / design / progress, decisions, RAG-powered search, a knowledge graph, and one-click maintenance of the metadata your AI assistants rely on.
+Bring [Lattice](https://github.com/qxchuckle/lattice)'s engineering memory into your editor: specs, tasks with PRD / design / progress, decisions, search, and a knowledge graph.
 
 > 中文说明见 [README.zh-CN.md](./README.zh-CN.md)。
 
@@ -15,10 +15,10 @@ Bring [Lattice](https://github.com/qxchuckle/lattice)'s engineering memory into 
 
 ## Requirements
 
-- VS Code `^1.85.0` (also works in VS Code forks: Cursor, Qoder, VSCodium — via Open VSX).
+- VS Code 1.90.0 or newer. Compatible editors can install the extension via Open VSX. SQLite and full-text search depend on the editor's extension host.
 - A Lattice data home (`~/.lattice`). If you have used the Lattice CLI or web client before, you already have one — the extension needs nothing else. If you don't, run **Lattice: Quick Start** — it bootstraps one in-process (no CLI required).
 - **The data plane is in-process.** The extension reads and writes your Lattice home directly (Electron's built-in SQLite with FTS5, plus file sources as fallback). No HTTP, no bundled native binaries, no CLI process per view.
-- The `ltc` CLI is **optional**: full initialization (`ltc init`: AI-client injection, git, templates) still runs in a terminal, but project scanning, current-project registration, configuration editing, users, sync domains, Git operations and maintenance are available in the in-editor **Lattice Configuration Center**. Install with `npm i -g @qcqx/lattice-cli` only if you want the full CLI setup.
+- Use the CLI for full initialization (`ltc init`) and model-backed RAG indexing. **Check ltc in Terminal** runs `ltc --version` in your editor's shell with the extension's data home. Follow the [CLI installation guide](https://lattice.qcqx.cn/docs/quick-start/#1-install).
 
 ## Features
 
@@ -67,14 +67,16 @@ Open **Lattice: Open Configuration Center** (editor-area WebviewPanel, singleton
 - **Editor settings** — all `lattice.*` settings grouped, with defaults, source scope, reset and "open native settings".
 - **Lattice config** — global `config.json` and local `config-local.json`: RAG model presets, dimensions, prefixes, download options, templates, scan directories, language, data-repo Git remote. Model changes prompt for an index rebuild.
 - **Users & sync** — switch / create / rename users; add, edit, reorder, unlink and sync knowledge-pack domains; Git status with commit / pull / push / sync and remote management.
-- **Diagnostics** — full RAG details, update / rebuild, doctor health check (with fix), snapshot errors, diagnostics copy, logs, data folder and config files.
+- **Diagnostics** — RAG status and maintenance guidance, doctor health check (with fix), snapshot errors, diagnostics copy, logs, data folder and config files.
 - **Advanced** — raw JSON view (form saves preserve unknown keys) and config-file shortcuts.
 
 All writes go through the extension host and core/services; the webview has no network access (`connect-src 'none'`). High-risk changes (data root, model, user, sync domain removal) are confirmed. No project/user deletion, and no web-password editing in the extension.
 
 ### Maintenance & onboarding
 
-RAG status / incremental update / rebuild (cancellable, progress in the notification), doctor health check (with fix), recycle bin browser (restore / purge), **Open Web Workbench** (opens the in-editor web workbench — the built-in webview running the same UI as the graph panel; no external server needed), diagnostics copy, and a "Get Started with Lattice" walkthrough with per-view welcome states.
+The extension can display index status on editors with SQLite support. To update or rebuild the semantic index with a published VSIX, use `ltc rag update` or `ltc rag rebuild` in the Lattice terminal. The CLI uses the model configured in that data home.
+
+Other tools include doctor, recycle bin, diagnostics copy, and **Open Web Workbench** (the built-in webview shared with the graph panel).
 
 ### i18n
 

@@ -80,7 +80,7 @@ jobs:
       - name: verify tag matches package versions
         id: versions
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="$GITHUB_REF_NAME"
           CORE=$(node -p "require('./packages/core/package.json').version")
           CLI=$(node -p "require('./packages/cli/package.json').version")
           echo "tag=$TAG core=$CORE cli=$CLI"
@@ -116,8 +116,9 @@ jobs:
           echo "ext=$EXT" >> "$GITHUB_OUTPUT"
 
       - name: write release notes
-        run: >-
-          node scripts/release-notes.mjs "${{ github.ref_name }}" --out .release-notes.md --asset "${{ steps.vsix.outputs.file }}"
+        env:
+          VSIX_ASSET: ${{ steps.vsix.outputs.file }}
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" --out .release-notes.md --asset "$VSIX_ASSET"
 
 
       # 幂等：已存在就改正文，不存在才创建；附件始终覆盖，便于重跑
@@ -125,7 +126,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="$GITHUB_REF_NAME"
           if [ "${{ steps.versions.outputs.cli-release }}" = true ]; then
             # Keep the previous complete CLI release as latest until all platform assets exist.
             if gh release view "$TAG" >/dev/null 2>&1; then

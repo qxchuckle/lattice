@@ -1,5 +1,4 @@
-import simpleGit from 'simple-git';
-import type { SimpleGit } from 'simple-git';
+import { simpleGit, type SimpleGit } from 'simple-git';
 import { join } from 'node:path';
 import { getLatticeRoot, dirExists } from '../paths';
 

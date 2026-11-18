@@ -2,7 +2,7 @@
  * 项目画像模块 — 管理 profile/ 目录下的 summary.md、tags.json、cache.json
  */
 import { createHash } from 'node:crypto';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import type { ProjectMeta } from '../types';
 import {
   getProjectProfileDir,

@@ -71,6 +71,8 @@ import type {
   ConfigWorkspaceState,
 } from '@qcqx/lattice-protocol';
 import type { CommandServices } from '../commands/shared';
+import { ragIndexUnavailableMessage } from '../commands/shared';
+import { RagIndexUnavailableError } from '../data/service';
 import { t } from '../t';
 import { findGitRoot } from '../util/git-root';
 import { findLatticeAnchor } from '../util/paths';
@@ -739,12 +741,16 @@ export class ConfigService implements vscode.Disposable {
       });
       return count;
     } catch (error) {
+      const failure =
+        error instanceof RagIndexUnavailableError
+          ? new Error(ragIndexUnavailableMessage(error), { cause: error })
+          : error;
       this.emitProgress({
         kind: 'rag',
         phase: 'error',
-        message: error instanceof Error ? error.message : String(error),
+        message: failure instanceof Error ? failure.message : String(failure),
       });
-      throw error;
+      throw failure;
     }
   }
 

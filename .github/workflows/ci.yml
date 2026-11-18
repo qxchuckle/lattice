@@ -94,8 +94,8 @@ jobs:
           cache: pnpm
       - name: install
         run: pnpm install --frozen-lockfile
-      - name: build extension
-        run: pnpm build:vscode
+      - name: build and package extension
+        run: pnpm build:core && pnpm --filter lattice-context run package
       - name: install xvfb (linux)
         if: runner.os == 'Linux'
         run: |
@@ -116,6 +116,14 @@ jobs:
           timeout_minutes: 30
           max_attempts: 3
           command: pnpm --filter lattice-context run test:integration
+      - name: installed VSIX (minimum and stable, linux)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a pnpm --filter lattice-context run test:vsix minimum
+          xvfb-run -a pnpm --filter lattice-context run test:vsix stable
+      - name: installed VSIX (stable, windows)
+        if: runner.os == 'Windows'
+        run: pnpm --filter lattice-context run test:vsix stable
 
   # ── 线 3：固定运行时平台产物与旧 Node/npm 入口验收 ──
   cli-platform:

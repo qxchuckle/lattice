@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import type { SyncDomainConfig } from '../types';
 import {
   getSyncBaselinePath,

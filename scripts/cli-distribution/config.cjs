@@ -1,5 +1,5 @@
 // One catalog drives build targets, npm platform packages, release verification and CI matrices.
-const NODE_VERSION = '24.22.2';
+const NODE_VERSION = '24.22.3';
 const PLATFORMS = [
   { id: 'darwin-arm64', os: 'darwin', arch: 'arm64', runner: 'macos-15' },
   { id: 'darwin-x64', os: 'darwin', arch: 'x64', runner: 'macos-15-intel' },

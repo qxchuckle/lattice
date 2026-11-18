@@ -1,5 +1,5 @@
 import { resolve as pathResolve, sep } from 'node:path';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { glob } from 'glob';
 import { fileExists, readJSON, readText, dirExists, join } from '../paths';
 import { normalizeGitRemote } from './identity';

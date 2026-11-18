@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { RagIndexUnavailableError } from '../data/service';
 import { t } from '../t';
 import {
   CommandServices,
@@ -7,6 +8,7 @@ import {
   extractPayload,
   handleCliError,
   pickSpecId,
+  ragIndexUnavailableMessage,
   resolveTask,
   showDeduped,
   withNotificationProgress,
@@ -205,6 +207,17 @@ export async function runRagCommand(
       );
       void showDeduped('info', t('RAG {0} finished.', action));
     } catch (error) {
+      if (error instanceof RagIndexUnavailableError) {
+        const openTerminal = t('Check ltc in Terminal');
+        void vscode.window
+          .showWarningMessage(ragIndexUnavailableMessage(error), openTerminal)
+          .then((choice) => {
+            if (choice === openTerminal) {
+              void vscode.commands.executeCommand('lattice.cli.checkTerminal');
+            }
+          });
+        return;
+      }
       await handleCliError(error, t('RAG {0} failed', action));
     }
   };

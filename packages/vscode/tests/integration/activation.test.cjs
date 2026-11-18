@@ -206,9 +206,10 @@ suite('Lattice extension (fixture data root, in-process core)', function () {
     await vscode.commands.executeCommand('lattice.refresh');
     await vscode.commands.executeCommand('lattice.utility.copyDiagnostics');
     const diagnostics = await vscode.env.clipboard.readText();
+    const coreManifest = path.resolve(__dirname, '../../../core/package.json');
+    const { version } = JSON.parse(readFileSync(coreManifest, 'utf8'));
     assert.match(diagnostics, /projects=1 tasks=1/);
-    assert.match(diagnostics, /core: 1\.28\.0/);
-    assert.match(diagnostics, /in-process core/);
+    assert.ok(diagnostics.includes(`\ncore: ${version} (in-process core`), diagnostics);
   });
 
   test('opens the fixture PRD via lattice.task.openDoc', async () => {

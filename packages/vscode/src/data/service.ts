@@ -15,8 +15,11 @@ import type { ProjectGroupTree, SpecWithScope, TaskDetail } from '@qcqx/lattice-
 import {
   CORE_VERSION,
   closeDb,
+  generateEmbedding,
   getBoundDatabaseDriver,
+  getLatticeRoot,
   initDb,
+  isVecStoreReady,
   readGroupRegistrySync,
   resolveGroupPathsForIds,
   resolveDatabaseDriver,
@@ -177,6 +180,15 @@ export interface TaskDetailBundle {
   lineage: TaskRow[];
 }
 
+export class RagIndexUnavailableError extends Error {
+  constructor(
+    readonly action: 'update' | 'rebuild',
+    readonly dataHome: string,
+  ) {
+    super('RAG indexing requires model inference and vector storage');
+  }
+}
+
 /**
  * 宿主数据服务：委托 @qcqx/lattice-services，附加扩展行模型与 DB 生命周期。
  */
@@ -241,7 +253,7 @@ export class LatticeDataService {
   dbStatus(): { driver: string; available: boolean; error: string | null } {
     return {
       driver: getBoundDatabaseDriver()?.name ?? 'unresolved',
-      available: this.dbReady !== null,
+      available: this.dbReady !== null && this.dbError === null,
       error: this.dbError,
     };
   }
@@ -682,7 +694,15 @@ export class LatticeDataService {
     opts: { onProgress?: Parameters<typeof lattice.updateRag>[1]; signal?: AbortSignal } = {},
   ): Promise<number> {
     this.assertWritable();
-    if (!(await this.ensureDb())) throw new Error(`数据库不可用: ${this.dbError ?? 'unknown'}`);
+    opts.signal?.throwIfAborted();
+    if (
+      !(await this.ensureDb()) ||
+      !isVecStoreReady() ||
+      !(await generateEmbedding('Lattice RAG index readiness check'))
+    ) {
+      throw new RagIndexUnavailableError(action, getLatticeRoot());
+    }
+    opts.signal?.throwIfAborted();
     return lattice.updateRag(action, opts.onProgress);
   }
 

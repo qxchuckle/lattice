@@ -1,5 +1,5 @@
 import { basename as pathBasename } from 'node:path';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import type { ProjectMeta, ProjectRow } from '../types';
 import {
   getProjectDir,

@@ -1,6 +1,6 @@
 {
   "name": "@qcqx/lattice-cli",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "description": "Lattice CLI — 研发记忆与工作流入口",
   "homepage": "https://lattice.qcqx.cn/",
   "repository": {
@@ -36,7 +36,7 @@
     "light-date": "^1.2.0",
     "ora": "^8.2.0",
     "sqlite-vec": "^0.1.9",
-    "undici": "^6.24.1"
+    "undici": "^6.29.1"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

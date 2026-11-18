@@ -4,11 +4,16 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { closeDb, DB_SCHEMA_VERSION, getDb, initDb, setLatticeMeta } from '../src/db';
 import { bindDatabaseDriver, resolveDatabaseDriver } from '../src/db/port';
-import type { DatabaseDriverPort } from '../src/db/port';
+import type { DatabaseDriverPort, DatabasePort } from '../src/db/port';
 import { createTempLatticeHome } from './helpers';
 
 let env: Awaited<ReturnType<typeof createTempLatticeHome>>;
 let driver: DatabaseDriverPort;
+
+function readValue(db: DatabasePort, query: string): string | undefined {
+  const row = db.prepare(query).get() as { value: string } | undefined;
+  return row?.value;
+}
 
 beforeEach(async () => {
   env = await createTempLatticeHome();
@@ -73,9 +78,7 @@ test('schema 查询失败：关闭临时连接、保留索引，可恢复后重�
   assert.equal(closed, true);
   bindDatabaseDriver(driver);
   await initDb();
-  assert.deepEqual(getDb().prepare('SELECT value FROM runtime_marker').get(), {
-    value: 'keep-index',
-  });
+  assert.equal(readValue(getDb(), 'SELECT value FROM runtime_marker'), 'keep-index');
 });
 
 test('未来 schema 拒绝降写，不删除现有索引', async () => {
@@ -85,10 +88,10 @@ test('未来 schema 拒绝降写，不删除现有索引', async () => {
   await assert.rejects(initDb(), /高于当前支持/);
   const db = driver.open(join(env.latticeHome, '.cache', 'lattice.db'));
   try {
-    assert.deepEqual(db.prepare('SELECT value FROM runtime_marker').get(), { value: 'keep-index' });
-    assert.deepEqual(
-      db.prepare("SELECT value FROM lattice_meta WHERE key='db_schema_version'").get(),
-      { value: String(DB_SCHEMA_VERSION + 1) },
+    assert.equal(readValue(db, 'SELECT value FROM runtime_marker'), 'keep-index');
+    assert.equal(
+      readValue(db, "SELECT value FROM lattice_meta WHERE key='db_schema_version'"),
+      String(DB_SCHEMA_VERSION + 1),
     );
   } finally {
     db.close();
@@ -104,9 +107,9 @@ test('明确读取到旧 schema 才保留原有迁移行为', async () => {
     getDb().prepare("SELECT name FROM sqlite_master WHERE name='runtime_marker'").get(),
     undefined,
   );
-  assert.deepEqual(
-    getDb().prepare("SELECT value FROM lattice_meta WHERE key='db_schema_version'").get(),
-    { value: String(DB_SCHEMA_VERSION) },
+  assert.equal(
+    readValue(getDb(), "SELECT value FROM lattice_meta WHERE key='db_schema_version'"),
+    String(DB_SCHEMA_VERSION),
   );
 });
 

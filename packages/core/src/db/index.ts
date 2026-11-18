@@ -1396,10 +1396,10 @@ export function countVectorEmbeddings(): number {
 
 export function isVecStoreReady(): boolean {
   try {
-    const row = getDb()
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vec_embeddings'")
-      .get() as { name?: string } | undefined;
-    return row?.name === 'vec_embeddings';
+    // The schema entry can survive from another process that loaded vec0.
+    // Query the virtual table to verify this connection loaded the module.
+    getDb().prepare('SELECT id FROM vec_embeddings LIMIT 1').get();
+    return true;
   } catch {
     return false;
   }
