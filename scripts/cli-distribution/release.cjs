@@ -5,10 +5,56 @@ const { read, write, sha, bootstrap, run } = require('./build.cjs');
 
 function formula(records, version) {
   const stanza = (r) =>
-    `      url "https://github.com/qxchuckle/lattice/releases/download/v${version}/${r.archive}"\n      sha256 "${r.archiveSha256}"`;
+    `      url "https://github.com/qxchuckle/lattice/releases/download/v${version}/${r.archive}", using: :nounzip\n      sha256 "${r.archiveSha256}"`;
   const platform = (os) =>
     `  on_${os === 'darwin' ? 'macos' : 'linux'} do\n    on_arm do\n${stanza(records.find((r) => r.id === os + '-arm64'))}\n    end\n    on_intel do\n${stanza(records.find((r) => r.id === os + '-x64'))}\n    end\n  end`;
-  return `# Generated for the Lattice-owned tap; not a homebrew/core formula.\nclass Lattice < Formula\n  desc "Local-first engineering memory and workflow"\n  homepage "https://lattice.qcqx.cn"\n  version "${version}"\n  license "MIT"\n${platform('darwin')}\n${platform('linux')}\n  def install\n    libexec.install Dir["*"]\n    bin.install_symlink libexec/"bin/ltc", libexec/"bin/lattice"\n  end\n  test do\n    assert_equal version.to_s, shell_output("#{bin}/ltc --version").strip\n    assert_match "--no-open", shell_output("#{bin}/ltc web --help")\n    ENV.delete("NODE_OPTIONS")\n    ENV.delete("NODE_PATH")\n    system libexec/"runtime/node", libexec/"scripts/payload.cjs", version.to_s\n  end\nend\n`;
+  return `# Generated for the Lattice-owned tap.
+require "tmpdir"
+
+class Lattice < Formula
+  desc "Local-first engineering memory and workflow"
+  homepage "https://lattice.qcqx.cn"
+  version "${version}"
+  license "MIT"
+${platform('darwin')}
+${platform('linux')}
+
+  def install
+    libexec.install Dir["*.tar.gz"].fetch(0) => "payload.tar.gz"
+    bin.write_exec_script libexec/"payload/bin/ltc", libexec/"payload/bin/lattice"
+  end
+
+  # Homebrew fixes Mach-O linkage before post_install. Keep native files inside
+  # the archive until that step has finished so their checksums stay intact.
+  def post_install
+    archive = libexec/"payload.tar.gz"
+    destination = libexec/"payload"
+    if destination.directory?
+      verify_payload(destination)
+    else
+      Dir.mktmpdir(".lattice-payload-", libexec.to_s) do |stage|
+        system "tar", "-xzf", archive, "-C", stage
+        payload = Pathname(stage)/"payload"
+        verify_payload(payload)
+        payload.rename(destination)
+      end
+    end
+    archive.unlink if archive.file?
+  end
+
+  def verify_payload(payload)
+    with_env(NODE_OPTIONS: nil, NODE_PATH: nil) do
+      system payload/"runtime/node", payload/"scripts/payload.cjs", version.to_s
+    end
+  end
+
+  test do
+    assert_equal version.to_s, shell_output("#{bin}/ltc --version").strip
+    assert_match "--no-open", shell_output("#{bin}/ltc web --help")
+    verify_payload(libexec/"payload")
+  end
+end
+`;
 }
 function assemble(output, options = {}) {
   output = path.resolve(output);
