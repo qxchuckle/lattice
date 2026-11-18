@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { siteUrl } from './base';
+import catalog from '../../../scripts/installation-channels.json' with { type: 'json' };
+
+const brewChannel = catalog.channels.find(({ id }) => id === 'brew')!;
+const curlChannel = catalog.channels.find(({ id }) => id === 'curl')!;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -20,24 +24,32 @@ for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-st
   }) => {
     await page.goto(siteUrl(route));
     const widget = page.locator('lattice-install-tabs').first();
+    const command = widget.locator('[data-install-command]:visible');
+    const copy = widget.locator('[data-install-copy]:visible');
+    const pendingLabel = route.includes('zh-cn') ? '即将提供' : 'Coming soon';
     await expect(widget).toHaveAttribute('data-active-method', 'brew');
     const brew = widget.getByRole('tab', { name: 'Homebrew', exact: true });
     await expect(brew).toHaveAttribute('aria-selected', 'true');
     await expect(widget.getByRole('tabpanel')).toHaveCount(1);
-    await expect(widget.getByRole('tabpanel')).toContainText(
-      route.includes('zh-cn') ? '即将提供' : 'Coming soon',
-    );
-    await expect(widget.locator('[data-install-copy]:visible')).toHaveCount(0);
     await brew.focus();
     await expect(brew).toHaveCSS('outline-style', 'solid');
+    if (brewChannel.available) {
+      await expect(command).toHaveText(`brew install ${brewChannel.tap}/lattice`);
+      await copy.click();
+      expect(await page.evaluate(() => (window as any).__installClipboard)).toBe(
+        `brew install ${brewChannel.tap}/lattice`,
+      );
+    } else {
+      await expect(widget.getByRole('tabpanel')).toContainText(pendingLabel);
+      await expect(copy).toHaveCount(0);
+    }
+    await brew.focus();
     await page.keyboard.press('ArrowRight');
     const npm = widget.getByRole('tab', { name: 'npm', exact: true });
     await expect(npm).toBeFocused();
     await expect(npm).toHaveAttribute('aria-selected', 'true');
-    await expect(widget.locator('[data-install-command]:visible')).toHaveText(
-      'npm install -g @qcqx/lattice-cli',
-    );
-    await widget.locator('[data-install-copy]:visible').click();
+    await expect(command).toHaveText('npm install -g @qcqx/lattice-cli');
+    await copy.click();
     expect(await page.evaluate(() => (window as any).__installClipboard)).toBe(
       'npm install -g @qcqx/lattice-cli',
     );
@@ -47,7 +59,14 @@ for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-st
     await npm.focus();
     await page.keyboard.press('End');
     await expect(widget.getByRole('tab', { name: 'curl', exact: true })).toBeFocused();
-    await expect(widget.locator('[data-install-copy]:visible')).toHaveCount(0);
+    if (curlChannel.available) {
+      await expect(command).toContainText(`/download/v${catalog.publishedVersion}/install.sh`);
+      await expect(command).toContainText(`--version ${catalog.publishedVersion}`);
+      await expect(copy).toHaveCount(1);
+    } else {
+      await expect(widget.getByRole('tabpanel')).toContainText(pendingLabel);
+      await expect(copy).toHaveCount(0);
+    }
     await page.keyboard.press('Home');
     await expect(brew).toBeFocused();
     await page.keyboard.press('ArrowLeft');
@@ -96,8 +115,9 @@ test('no-JavaScript pages keep every method readable in both languages', async (
   try {
     for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-start/']) {
       await page.goto(siteUrl(route));
-      await expect(page.locator('[data-install-panel="npm"]').first()).toBeVisible();
-      await expect(page.locator('[data-install-command]').first()).toContainText(
+      const npmPanel = page.locator('[data-install-panel="npm"]').first();
+      await expect(npmPanel).toBeVisible();
+      await expect(npmPanel.locator('[data-install-command]')).toHaveText(
         'npm install -g @qcqx/lattice-cli',
       );
     }

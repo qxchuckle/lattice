@@ -16,36 +16,47 @@ import {
   validateChannels,
 } from '../install-content.mjs';
 import { syncInstallDocs } from '../sync-install-docs.mjs';
-const clone = () => structuredClone(installation);
+function unpublishedCatalog() {
+  const config = structuredClone(installation);
+  config.npmRuntime = 'host';
+  config.channels = [
+    { id: 'brew', available: false },
+    { id: 'npm', available: true },
+    { id: 'curl', available: false },
+  ];
+  return config;
+}
 
-test('default Homebrew is honest about unpublished channels and npm reflects the public runtime', () => {
+test('default Homebrew indicates unpublished channels and npm describes its host runtime', () => {
+  const config = unpublishedCatalog();
   for (const locale of ['en', 'zh']) {
-    const entries = methods(locale);
+    const entries = methods(locale, config);
     assert.deepEqual(
       entries.map((m) => m.id),
       ['brew', 'npm', 'curl'],
     );
     for (const entry of entries) assert.equal(!!entry.command, entry.available);
-    const html = renderInstallTabs('installation-test', locale);
+    const html = renderInstallTabs('installation-test', locale, config);
     assert.match(html, /data-default-method="brew"/);
     assert.match(html, /id="installation-test-tab-brew"[^>]*aria-selected="true"/);
     assert.match(html, /data-install-command>npm install -g @qcqx\/lattice-cli/);
     assert.doesNotMatch(html, /data-install-command>brew install|latest\/download\/install\.sh/);
     assert.match(html, /Node.js 18\+/);
-    const markdown = renderInstallMarkdown(locale);
+    const markdown = renderInstallMarkdown(locale, config);
     assert.match(markdown, /^<details open>\n<summary>Homebrew/);
     assert.match(markdown, /npm install -g @qcqx\/lattice-cli/);
   }
 });
 test('published platform commands derive from one catalog rather than page literals', () => {
-  const config = clone();
+  const config = unpublishedCatalog();
+  config.publishedVersion = '2.3.4';
   config.npmRuntime = 'bundled';
   config.channels[0] = { id: 'brew', available: true, tap: 'qxchuckle/tap' };
   config.channels[2].available = true;
   const entries = methods('en', config);
   assert.equal(entries[0].command, 'brew install qxchuckle/tap/lattice');
   assert.match(entries[1].note, /14.14/);
-  assert.match(entries[2].command, /\/download\/v1\.29\.0\/install\.sh/);
+  assert.match(entries[2].command, /\/download\/v2\.3\.4\/install\.sh/);
   assert.match(
     renderInstallTabs('future-install', 'en', config),
     /data-install-command>brew install/,
@@ -58,7 +69,8 @@ test(
   () => {
     const root = mkdtempSync(join(tmpdir(), 'lattice-curl-command-'));
     try {
-      const config = clone();
+      const config = unpublishedCatalog();
+      config.publishedVersion = '2.3.4';
       config.npmRuntime = 'bundled';
       config.channels.find((channel) => channel.id === 'curl').available = true;
       const command = methods('en', config).find((method) => method.id === 'curl').command;
@@ -78,7 +90,7 @@ test(
           encoding: 'utf8',
         });
         assert.equal(result.status, status, result.stderr);
-        assert.equal(result.stdout.trim(), status ? '' : 'installer: --version 1.29.0');
+        assert.equal(result.stdout.trim(), status ? '' : 'installer: --version 2.3.4');
         assert.deepEqual(readdirSync(root), ['curl']);
       }
     } finally {
@@ -144,10 +156,10 @@ test('catalog gate rejects every invalid class and restores the clean configurat
     ],
   ];
   for (const [code, mutate] of cases) {
-    const config = clone();
+    const config = unpublishedCatalog();
     mutate(config);
     assert.throws(() => validateChannels(config), new RegExp(code));
-    validateChannels(clone());
+    validateChannels(unpublishedCatalog());
   }
   assert.throws(() => renderInstallTabs('bad"id'), /I6/);
 });

@@ -9,9 +9,13 @@ Lattice 是本地优先的研发记忆与工作流层；CLI 是它在终端和 A
 <!-- lattice-install:start -->
 
 <details open>
-<summary>Homebrew · 即将提供</summary>
+<summary>Homebrew</summary>
 
-Homebrew 安装渠道正在准备中，当前请使用 npm。
+```bash
+brew install qxchuckle/lattice/lattice
+```
+
+macOS / Linux。无需单独安装 Node.js。
 
 [查看发布版本](https://github.com/qxchuckle/lattice/releases)
 
@@ -24,16 +28,26 @@ Homebrew 安装渠道正在准备中，当前请使用 npm。
 npm install -g @qcqx/lattice-cli
 ```
 
-当前公开版本 v1.29.0 需要 Node.js 18+，使用安装时的 Node 环境。切换 Node 后可能需要重装。内置 Web 工作台随下一版平台包提供。
+npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。请保留 optional dependencies。
 
 [查看发布版本](https://github.com/qxchuckle/lattice/releases)
 
 </details>
 
 <details>
-<summary>curl · 即将提供</summary>
+<summary>curl</summary>
 
-curl 安装渠道正在准备中，当前请使用 npm。
+```bash
+(
+  set -e
+  installer=$(mktemp)
+  trap 'rm -f "$installer"' 0
+  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
+  sh "$installer" --version 1.30.0
+)
+```
+
+macOS / Linux。下载后运行安装器；无需系统 Node.js。请将 ~/.local/bin 加入 PATH。
 
 [查看发布版本](https://github.com/qxchuckle/lattice/releases)
 

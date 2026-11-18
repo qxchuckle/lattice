@@ -5,7 +5,7 @@ All notable changes to Lattice are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`@qcqx/lattice-cli` and `@qcqx/lattice-core` share a release version. The CLI ships the Web
+`@qcqx/lattice-cli` and `@qcqx/lattice-core` can be released independently. The CLI ships the Web
 workbench with its platform packages. The VS Code extension is versioned separately. See
 [`packages/vscode/CHANGELOG.md`](packages/vscode/CHANGELOG.md).
 

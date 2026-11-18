@@ -1,11 +1,11 @@
 {
   "defaultMethod": "brew",
-  "publishedVersion": "1.29.0",
-  "npmRuntime": "host",
+  "publishedVersion": "1.30.0",
+  "npmRuntime": "bundled",
   "verifiedAt": "2026-11-18",
   "channels": [
-    { "id": "brew", "available": false, "tap": null },
+    { "id": "brew", "available": true, "tap": "qxchuckle/lattice" },
     { "id": "npm", "available": true },
-    { "id": "curl", "available": false }
+    { "id": "curl", "available": true }
   ]
 }
