@@ -42,9 +42,17 @@ export interface GitRemoteInfo {
   pushUrl: string;
 }
 
-/** 获取 git 实例（指向 ~/.lattice） */
-function git(): SimpleGit {
-  return simpleGit(getLatticeRoot());
+/** 获取 Git 实例。保留已显式配置的提交身份，继续使用其余环境守卫。 */
+function git(root = getLatticeRoot()): SimpleGit {
+  return simpleGit({
+    baseDir: root,
+    allowEnvironment: [
+      'GIT_AUTHOR_NAME',
+      'GIT_AUTHOR_EMAIL',
+      'GIT_COMMITTER_NAME',
+      'GIT_COMMITTER_EMAIL',
+    ],
+  });
 }
 
 /** 检查 ~/.lattice 是否启用了 Git 管理 */
@@ -231,12 +239,12 @@ export async function syncAll(): Promise<{
 
 /** 初始化 Git 仓库（init + 首次 commit + 添加 remote） */
 export async function initLatticeGit(root: string, remoteUrl?: string): Promise<GitOpResult> {
-  const git = simpleGit(root);
+  const repository = git(root);
   // 显式 -b main：不依赖 git 全局 init.defaultBranch（可能默认 master）
-  await git.raw(['init', '-b', 'main']);
-  await git.add('.');
+  await repository.raw(['init', '-b', 'main']);
+  await repository.add('.');
   // --allow-empty：空数据根也能产生 HEAD，否则后续 status/push/set-url 无法工作
-  await git.raw([
+  await repository.raw([
     '-c',
     'user.name=lattice',
     '-c',
@@ -248,7 +256,7 @@ export async function initLatticeGit(root: string, remoteUrl?: string): Promise<
     'chore: 初始化 lattice',
   ]);
   if (remoteUrl) {
-    await git.addRemote('origin', remoteUrl);
+    await repository.addRemote('origin', remoteUrl);
   }
   return { success: true, message: 'Git 仓库已初始化' };
 }
