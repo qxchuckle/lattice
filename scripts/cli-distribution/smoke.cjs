@@ -8,7 +8,18 @@ const { setTimeout: delay } = require('timers/promises');
 const { pathToFileURL } = require('url');
 const { hostTarget } = require('./config.cjs');
 const { read, write, run, inventory } = require('./build.cjs');
+const { pack } = require('./archive.cjs');
 const { verify } = require('./verify.cjs');
+
+function extract(archive, destination) {
+  // GNU tar interprets a Windows drive letter in -f as a remote host.
+  const input = fs.openSync(archive, 'r');
+  try {
+    run('tar', ['-xzf', '-'], { cwd: destination, stdio: [input, 'pipe', 'pipe'] });
+  } finally {
+    fs.closeSync(input);
+  }
+}
 
 function fixture(temporary) {
   const home = path.join(temporary, 'data');
@@ -274,7 +285,7 @@ async function smoke(options = {}) {
   try {
     const { home, env } = fixture(temporary);
     // Extract and MOVE the physical payload, with no reference to the build directory/store.
-    run('tar', ['-xzf', path.join(output, record.archive), '-C', temporary]);
+    extract(path.join(output, record.archive), temporary);
     const payload = path.join(temporary, "moved payload's path");
     fs.renameSync(path.join(temporary, 'payload'), payload);
     const manifest = verify(payload);
@@ -393,12 +404,7 @@ async function smoke(options = {}) {
       // Use actual tarballs (npm6 treats directory deps as links). No unpublished registry access.
       const fixtureDir = path.join(temporary, 'bootstrap');
       fs.mkdirSync(fixtureDir);
-      run('tar', [
-        '-xzf',
-        path.join(output, 'qcqx-lattice-cli-' + record.version + '.tgz'),
-        '-C',
-        fixtureDir,
-      ]);
+      extract(path.join(output, 'qcqx-lattice-cli-' + record.version + '.tgz'), fixtureDir);
       const pkgPath = path.join(fixtureDir, 'package/package.json');
       const pkg = read(pkgPath);
       assert.strictEqual(pkg.scripts, undefined);
@@ -408,7 +414,7 @@ async function smoke(options = {}) {
       };
       write(pkgPath, pkg);
       const localTar = path.join(temporary, 'bootstrap.tgz');
-      run('tar', ['-czf', localTar, '-C', fixtureDir, 'package']);
+      pack(fixtureDir, 'package', localTar);
       const prefix = path.join(temporary, 'npm-global');
       const installArgs = [
         options.npm,
