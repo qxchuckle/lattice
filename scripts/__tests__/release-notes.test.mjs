@@ -24,17 +24,22 @@ test('readChangelogSection：只取当前版本段，不吃掉下一段', () => 
 });
 
 test('buildReleaseBody：含安装命令、包表与站点链接', () => {
-  const body = buildReleaseBody('v1.29.0');
+  const packageVersion = (pkg) =>
+    JSON.parse(readFileSync(join(root, 'packages', pkg, 'package.json'), 'utf8')).version;
+  const cliVersion = packageVersion('cli');
+  const coreVersion = packageVersion('core');
+  const body = buildReleaseBody(cliVersion);
 
   assert.match(body, /npm i -g @qcqx\/lattice-cli/);
   assert.match(body, /ltc web/);
   assert.doesNotMatch(body, /@qcqx\/lattice-web/);
-  assert.match(
-    body,
-    /@qcqx\/lattice-cli\]\(https:\/\/www\.npmjs\.com\/package\/@qcqx\/lattice-cli\) \| 1\.29\.0/,
+  assert.ok(
+    body.includes(
+      `| [@qcqx/lattice-cli](https://www.npmjs.com/package/@qcqx/lattice-cli) | ${cliVersion} |`,
+    ),
   );
   assert.match(body, /lattice\.qcqx\.cn\/demo/);
-  assert.doesNotMatch(body, /not released/);
+  assert.equal(body.match(/not released/g)?.length ?? 0, coreVersion === cliVersion ? 0 : 1);
 });
 
 test('buildReleaseBody：CHANGELOG 缺段时写占位，并把未发布的包标出来', () => {

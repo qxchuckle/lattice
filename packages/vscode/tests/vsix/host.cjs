@@ -9,16 +9,18 @@ async function verifyInstalledExtension() {
   assert.ok(extension, 'the installed VSIX must contain the extension');
   assert.equal(extension.packageJSON.version, process.env.LATTICE_VSIX_VERSION);
   assert.equal(
-    path.dirname(path.resolve(extension.extensionPath)),
-    path.resolve(process.env.LATTICE_VSIX_EXTENSIONS_DIR),
+    path.relative(process.env.LATTICE_VSIX_EXTENSIONS_DIR, path.dirname(extension.extensionPath)),
+    '',
     'the host must load the installed copy of the extension',
   );
   await extension.activate();
 
   await vscode.commands.executeCommand('lattice.spec.openById', 'spec-vsix-fixture');
+  const openedFile = vscode.window.activeTextEditor?.document.uri.fsPath;
+  assert.ok(openedFile, 'the extension must open a spec');
   assert.equal(
-    vscode.window.activeTextEditor?.document.uri.fsPath,
-    path.join(process.env.LATTICE_HOME, 'spec', 'vsix-fixture.md'),
+    path.relative(path.join(process.env.LATTICE_HOME, 'spec', 'vsix-fixture.md'), openedFile),
+    '',
     'the installed extension reads files from the isolated data home',
   );
 
