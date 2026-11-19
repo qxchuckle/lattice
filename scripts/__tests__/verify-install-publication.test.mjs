@@ -60,7 +60,7 @@ function request(failure = '') {
     }
     assert.equal(
       url,
-      'https://api.github.com/repos/qxchuckle/homebrew-lattice/contents/Formula/lattice.rb',
+      'https://raw.githubusercontent.com/qxchuckle/homebrew-lattice/HEAD/Formula/lattice.rb',
     );
     return new Response(
       [
@@ -76,8 +76,19 @@ function request(failure = '') {
   };
 }
 
-test('publication gate accepts independently published channel versions', async () => {
-  await verifyInstallPublication(installation, request());
+test('publication gate accepts independent versions and authenticates only the release API', async () => {
+  const respond = request();
+  await verifyInstallPublication(
+    installation,
+    (url, { headers }) => {
+      assert.equal(
+        headers.authorization,
+        url.startsWith(releaseApi + '/') ? 'Bearer test-token' : undefined,
+      );
+      return respond(url);
+    },
+    'test-token',
+  );
 });
 
 test('publication gate rejects missing npm packages and standalone assets', async () => {

@@ -22,11 +22,17 @@ function verifyReleaseAssets(release, tag, requiredAssets) {
     throw new Error('GitHub Release is missing standalone installation assets: ' + tag);
 }
 
-export async function verifyInstallPublication(config = installation, request = fetch) {
+export async function verifyInstallPublication(
+  config = installation,
+  request = fetch,
+  githubToken,
+) {
   validateChannels(config);
   async function get(url, accept = 'application/json') {
+    const headers = { accept };
+    if (githubToken && url.startsWith(github)) headers.authorization = `Bearer ${githubToken}`;
     const response = await request(url, {
-      headers: { accept },
+      headers,
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) throw new Error('Cannot verify ' + url + ': HTTP ' + response.status);
@@ -69,8 +75,8 @@ export async function verifyInstallPublication(config = installation, request = 
     const [owner, tap] = brew.tap.split('/');
     const formula = await (
       await get(
-        github + owner + '/homebrew-' + tap + '/contents/Formula/lattice.rb',
-        'application/vnd.github.raw+json',
+        `https://raw.githubusercontent.com/${owner}/homebrew-${tap}/HEAD/Formula/lattice.rb`,
+        'text/plain',
       )
     ).text();
     const version = /^\s*version "([^"]+)"\s*$/m.exec(formula)?.[1];
@@ -92,7 +98,7 @@ export async function verifyInstallPublication(config = installation, request = 
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   try {
-    await verifyInstallPublication();
+    await verifyInstallPublication(installation, fetch, process.env.GITHUB_TOKEN);
     console.log('Verified public installation channels');
   } catch (error) {
     console.error(error.message);

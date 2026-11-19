@@ -101,6 +101,8 @@ jobs:
           SITE_BASE: /
       - name: verify public installation channels
         if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-install-publication.mjs
       - name: configure pages
         if: github.event_name != 'pull_request'
