@@ -131,7 +131,10 @@ test('installation docs render the AI setup tab as the default', () => {
     const { content } = transformDoc(source, { locale, item: item('docs/quick-start') });
     assert.match(content, /<lattice-install-tabs/);
     assert.match(content, /data-default-method="ai"/);
-    assert.match(content, /npm install -g @qcqx\/lattice-cli/);
+    assert.match(
+      content,
+      /<span class="ll-install-token">npm<\/span> install -g @qcqx\/lattice-cli/,
+    );
     assert.doesNotMatch(content, /placeholder/);
   }
 });

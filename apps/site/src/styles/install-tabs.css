@@ -34,9 +34,9 @@
   cursor: pointer;
 }
 .ll-install-tablist button[aria-selected='true'] {
-  border-color: var(--ll-line);
-  background: var(--ll-surface);
-  color: var(--ll-text);
+  border-color: var(--sl-color-accent);
+  background: color-mix(in srgb, var(--ll-surface), var(--sl-color-accent) 20%);
+  color: var(--sl-color-accent-high);
   font-weight: 600;
 }
 .ll-install-tabs [data-install-panel] {
@@ -84,6 +84,13 @@
 .ll-install-tabs [data-install-panel='curl'] .ll-install code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.ll-install-token,
+.ll-install-source {
+  color: var(--sl-color-accent-high);
+}
+.ll-install-token {
+  font-weight: 650;
 }
 .ll-install-tabs .ll-install .ll-copy {
   min-height: 40px;

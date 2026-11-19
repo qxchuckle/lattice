@@ -83,6 +83,16 @@ const escape = (s) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+
+const highlightCommand = (command) =>
+  escape(command).replace(
+    /^([ \t]*)(brew|npm|curl|sh|set|trap)(?=[ \t])/gm,
+    '$1<span class="ll-install-token">$2</span>',
+  );
+
+const highlightGuide = (prompt) =>
+  escape(prompt).replace(/\n(https:\/\/[^\n]+)$/, '\n<span class="ll-install-source">$1</span>');
+
 export function renderInstallTabs(id, locale = 'en', config = installation) {
   if (!/^[a-z0-9-]+$/.test(id)) throw new Error('[install:I6] Invalid component id');
   const zh = locale.startsWith('zh');
@@ -102,9 +112,9 @@ export function renderInstallTabs(id, locale = 'en', config = installation) {
       const copy = method.prompt ? (zh ? '复制提示词' : 'Copy prompt') : zh ? '复制' : 'Copy';
       const copyButton = `<button type="button" class="ll-copy" data-install-copy hidden>${copy}</button>`;
       const action = method.prompt
-        ? `<div class="ll-install-prompt"><p data-install-text>${escape(method.prompt)}</p>${copyButton}</div>`
+        ? `<div class="ll-install-prompt"><p data-install-text>${highlightGuide(method.prompt)}</p>${copyButton}</div>`
         : method.command
-          ? `<div class="ll-install"><span aria-hidden="true">$</span><code data-install-text data-install-command>${escape(method.command)}</code>${copyButton}</div>`
+          ? `<div class="ll-install"><span aria-hidden="true">$</span><code data-install-text data-install-command>${highlightCommand(method.command)}</code>${copyButton}</div>`
           : `<button type="button" class="ll-install-alternative" data-install-switch="npm" hidden>${zh ? '查看 npm 安装' : 'View npm installation'} →</button>`;
       const note = method.note ? `<p class="ll-install-note">${escape(method.note)}</p>` : '';
       return `<section id="${id}-panel-${method.id}" aria-labelledby="${id}-tab-${method.id}" data-install-panel="${method.id}">${heading}${action}${note}</section>`;

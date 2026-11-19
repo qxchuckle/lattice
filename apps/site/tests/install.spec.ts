@@ -175,6 +175,8 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
             const text = el.querySelector<HTMLElement>(
               '[data-install-panel]:not([hidden]) [data-install-text]',
             )!;
+            const selected = getComputedStyle(el.querySelector('[aria-selected="true"]')!);
+            const inactive = getComputedStyle(el.querySelector('[aria-selected="false"]')!);
             return {
               right: el.getBoundingClientRect().right,
               font: parseFloat(getComputedStyle(text).fontSize),
@@ -182,11 +184,17 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
               viewport: innerWidth,
               textWidth: text.scrollWidth,
               textBox: text.clientWidth,
+              activeSurface: selected.backgroundColor,
+              inactiveSurface: inactive.backgroundColor,
+              activeBorder: selected.borderColor,
+              inactiveBorder: inactive.borderColor,
             };
           });
           expect(metrics.page).toBeLessThanOrEqual(metrics.viewport + 1);
           expect(metrics.right).toBeLessThanOrEqual(width + 1);
           expect(metrics.font).toBeGreaterThanOrEqual(width <= 640 ? 13.5 : 15);
+          expect(metrics.activeSurface).not.toBe(metrics.inactiveSurface);
+          expect(metrics.activeBorder).not.toBe(metrics.inactiveBorder);
           if (name !== 'npm') expect(metrics.textWidth).toBeLessThanOrEqual(metrics.textBox + 1);
         }
       }

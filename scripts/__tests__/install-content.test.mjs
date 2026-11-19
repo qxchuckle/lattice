@@ -38,8 +38,11 @@ test('pending Homebrew and curl channels keep npm installation available', () =>
     const html = renderInstallTabs('installation-test', locale, config);
     assert.match(html, /data-default-method="ai"/);
     assert.match(html, /id="installation-test-tab-ai"[^>]*aria-selected="true"/);
-    assert.match(html, /data-install-command>npm install -g @qcqx\/lattice-cli/);
-    assert.doesNotMatch(html, /data-install-command>brew install|latest\/download\/install\.sh/);
+    assert.match(
+      html,
+      /data-install-command><span class="ll-install-token">npm<\/span> install -g @qcqx\/lattice-cli/,
+    );
+    assert.doesNotMatch(html, /ll-install-token">brew<|latest\/download\/install\.sh/);
     assert.match(html, /Node.js 14\.14\+/);
     const markdown = renderInstallMarkdown(locale, config);
     assert.match(markdown, /^<details open>\n<summary>Homebrew/);
@@ -57,7 +60,7 @@ test('published platform commands use channel defaults', () => {
   assert.doesNotMatch(entries[2].command, /--version/);
   assert.match(
     renderInstallTabs('future-install', 'en', config),
-    /data-install-command>brew install/,
+    /data-install-command><span class="ll-install-token">brew<\/span> install/,
   );
 });
 
