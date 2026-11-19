@@ -128,21 +128,20 @@ Webview 复用 web 客户端的 Cytoscape 画布：全局 / 任务 / 项目 / �
 
 ```bash
 pnpm build:vscode     # webview 打包（vite）+ 扩展打包（tsup）
-pnpm package:vscode   # 产出 dist-vsix/lattice-<version>.vsix
-pnpm --filter lattice test             # 单测（node --test）
-pnpm --filter lattice test:integration # @vscode/test-cli（进程内 core fixture）
+pnpm package:vscode   # 产出 packages/vscode/dist-vsix/lattice-context-<version>.vsix
+pnpm exec vitest run --project vscode          # 单测
+pnpm --filter lattice-context test:integration # @vscode/test-cli（进程内 core fixture）
 ```
 
 在本目录用 VS Code 打开并按 <kbd>F5</kbd> 启动扩展开发宿主。
 
 ## 发布
 
-双渠道（Open VSX + 微软 Marketplace），token 由维护者发布时提供：
+参照 [.env.release.example](https://github.com/qxchuckle/lattice/blob/master/.env.release.example) 配置 Open VSX 和微软 Marketplace 的令牌。从仓库根目录运行以下命令。
 
 ```bash
-pnpm --filter lattice run release                                  # 构建 + 打包 + sha256
-pnpm dlx ovsx publish dist-vsix/lattice-<version>.vsix -p <TOKEN>  # Open VSX
-pnpm exec vsce publish --packagePath dist-vsix/lattice-<version>.vsix -p <PAT>  # Marketplace
+pnpm --filter lattice-context run release          # 构建、打包并打印 SHA-256 校验和
+pnpm --filter lattice-context run release:publish  # 发布到两个市场
 ```
 
 ## License

@@ -6,60 +6,13 @@ Lattice 是本地优先的研发记忆与工作流层；CLI 是它在终端和 A
 
 ## 安装/更新
 
-<!-- lattice-install:start -->
-
-<details open>
-<summary>Homebrew</summary>
-
-```bash
-brew install qxchuckle/lattice/lattice
-```
-
-macOS / Linux。无需单独安装 Node.js。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>npm</summary>
-
-```bash
-npm install -g @qcqx/lattice-cli
-```
-
-npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。请保留 optional dependencies。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>curl</summary>
-
-```bash
-(
-  set -e
-  installer=$(mktemp)
-  trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
-)
-```
-
-macOS / Linux。下载后运行安装器；无需系统 Node.js。请将 ~/.local/bin 加入 PATH。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<!-- lattice-install:end -->
+在[快速开始指南](https://github.com/qxchuckle/lattice/blob/master/docs/quick-start.zh-CN.md#1-安装)查看 Homebrew、npm、curl 和 AI 安装方式。
 
 安装后可通过 `lattice` 或 `ltc` 调用。
 
 ### 运行时隔离
 
-平台包包含固定 Node、匹配的原生依赖和 Web 工作台。安装后用 `ltc web` 启动，和 CLI 使用同一套运行时。RAG 需要下载或提供所选 embedding 模型，支持自定义本地模型路径，模型缓存保存在安装包之外。各安装方式的发布状态以上方选择器为准。
+平台包包含固定 Node、匹配的原生依赖和 Web 工作台。安装后用 `ltc web` 启动，和 CLI 使用同一套运行时。RAG 需要下载或提供所选 embedding 模型，支持自定义本地模型路径，模型缓存保存在安装包之外。
 
 npm 全局命令位于 npm prefix 内。Node 版本管理器切换后，原 prefix 可能不在 PATH 中。需要稳定入口时可选择已发布的独立渠道。
 

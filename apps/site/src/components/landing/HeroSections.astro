@@ -12,134 +12,62 @@ const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
 const isZh = lang.toLowerCase().startsWith('zh');
 const base = import.meta.env.BASE_URL;
 const demoHref = `${base}demo/`;
-const quickStartHref = `${base}docs/quick-start/`;
+const quickStartHref = `${base}${isZh ? 'zh-cn/' : ''}docs/quick-start/`;
 const githubHref = 'https://github.com/qxchuckle/lattice';
 
 const t = isZh
   ? {
-      gapKicker: '问题',
-      gapTitleA: 'AI 每次都从零开始。',
-      gapTitleB: '无一例外。',
-      gapLede:
-        '换一个仓库、开一个新的会话、换一个同事、换一个 Agent，上下文就被重新拼一遍，然后在结束时丢掉。',
-      gapCards: [
-        ['新仓库', '约定散落在代码、文档和某个人的记忆里。'],
-        ['新会话', '决策沉进聊天记录，下一次要重新解释。'],
-        ['新同事', '同样的问题、同样的边界、同样的坑。'],
-        ['新 Agent', '每个工具都有一套自己的上下文，互不相通。'],
-      ],
-      layersKicker: '三层模型',
-      layersTitle: '记忆、工作流、接入。',
-      layersLede: '不是另一个聊天窗口，而是让研发过程本身可复用。',
+      layersTitle: '功能',
       layers: [
-        {
-          label: 'Memory',
-          title: '记忆层',
-          body: '规范、任务、决策、经验，统一沉淀为可检索、可引用的 artifact。',
-          items: ['分层 Spec', '任务与检查点', '项目关系', 'RAG 检索', '跨会话经验'],
-        },
-        {
-          label: 'Workflow',
-          title: '工作流层',
-          body: '开始时读取，实施时记录，归档时蒸馏。每次工作都让下一次更轻。',
-          items: ['开始前读取', '实施中打点', '归档时总结', '跨项目复用'],
-        },
-        {
-          label: 'Access',
-          title: '接入层',
-          body: '本地文件就是真源。CLI、Web、VS Code 和任何能跑命令的 Agent 都能接入。',
-          items: ['CLI', 'Web 工作台', 'VS Code', '双轨同步', 'Agent 无关'],
-        },
+        ['研发记忆', '按项目查找规范、历史任务和技术决策。'],
+        ['任务管理', '记录进度和检查点，换会话时继续同一个任务。'],
+        ['工具接入', '通过 CLI、Web 工作台或 VS Code 查看同一份项目资料。'],
       ],
-      workbenchKicker: '工作台',
-      workbenchTitle: '工作台就是证明。',
-      workbenchLede:
-        '真实的 Web 工作台，运行在模拟数据上。没有登录、没有后端、没有网络请求。',
+      workbenchTitle: 'Web 工作台',
+      workbenchLede: '在线演示使用示例项目。',
       shots: [
-        ['全局图谱', '项目、任务、规范与关系，在同一张图上。'],
-        ['项目视角', '一个项目的规范、任务和 Git 状态。'],
-        ['任务详情', 'PRD、设计、进度和检查点，按任务聚合。'],
-        ['规范阅读', '分层规范、来源和关联任务。'],
+        ['项目图谱', '查看项目、任务、规范及其关系。'],
+        ['项目概览', '查看一个项目的规范、任务和 Git 状态。'],
+        ['任务详情', '查看需求、设计、进度和检查点。'],
+        ['规范详情', '查看规范的来源和关联任务。'],
       ],
-      demo: '打开在线 Demo',
-      localKicker: '本地优先',
-      localTitle: '你的记忆，属于你。',
-      localLede:
-        '所有数据都在 ~/.lattice 的普通文件里。没有遥测，没有强制云服务，Git 同步是可选项。',
+      demo: '打开演示',
+      localTitle: '本地数据',
+      localLede: '数据保存在 ~/.lattice，可通过 Git 同步。',
       faqTitle: '常见问题',
       faq: [
-        ['数据会被上传吗？', '不会。默认只写本地 ~/.lattice。只有你显式配置 Git 同步时，数据才会离开本机。'],
-        ['支持哪些 AI 客户端？', '任何能运行 CLI 的 Agent 都可以接入。Lattice 不把记忆锁在某个模型或客户端里。'],
-        ['和 wiki / issue tracker 有什么区别？', 'Lattice 面向研发过程：规范、任务、决策和检查点在同一套结构里，并且能被 Agent 直接读取。'],
-        ['免费吗？需要什么运行时？', 'MIT 开源，免费使用。各安装方式的运行时要求见安装面板；CLI 平台包自带 Web 工作台。'],
+        ['支持哪些 AI 工具？', '能运行终端命令的 AI 工具都可以通过 CLI 使用 Lattice。'],
+        ['免费吗？', 'Lattice 采用 MIT 许可，可免费使用。'],
       ],
-      finalKicker: '开始',
-      finalTitle: '从你正在做的仓库开始。',
-      finalLede: '安装 CLI，初始化本地记忆，然后在下一个会话里直接继续。',
-      finalDocs: '阅读文档',
+      finalTitle: '开始使用',
+      finalDocs: '快速开始',
       finalGithub: 'GitHub',
     }
   : {
-      gapKicker: 'THE GAP',
-      gapTitleA: 'AI starts from zero.',
-      gapTitleB: 'Every time.',
-      gapLede:
-        'A new repo. A new session. A new teammate. A new agent. The context is rebuilt from scratch, then thrown away.',
-      gapCards: [
-        ['New repo', 'Conventions live in code, docs and someone’s head.'],
-        ['New session', 'Decisions disappear into chat scrollback.'],
-        ['New teammate', 'The same questions, boundaries and mistakes.'],
-        ['New agent', 'Every tool has its own context, disconnected from the rest.'],
-      ],
-      layersKicker: 'THREE LAYERS',
-      layersTitle: 'Memory, workflow, access.',
-      layersLede: 'Not another chat window. A way to make the work itself reusable.',
+      layersTitle: 'Features',
       layers: [
-        {
-          label: 'Memory',
-          title: 'Memory layer',
-          body: 'Specs, tasks, decisions and experience become typed, searchable artifacts.',
-          items: ['Layered specs', 'Tasks & checkpoints', 'Project relations', 'RAG search', 'Cross-session experience'],
-        },
-        {
-          label: 'Workflow',
-          title: 'Workflow layer',
-          body: 'Read before work, record while working, distill when archiving.',
-          items: ['Read at start', 'Record in flight', 'Distill at archive', 'Reuse across projects'],
-        },
-        {
-          label: 'Access',
-          title: 'Access layer',
-          body: 'Local files are the source of truth. CLI, Web, VS Code and any command-capable agent can read them.',
-          items: ['CLI', 'Web workbench', 'VS Code', 'Dual-track sync', 'Agent agnostic'],
-        },
+        ['Project memory', 'Find specs, past tasks, and technical decisions by project.'],
+        ['Task management', 'Record progress and checkpoints so you can resume a task in a new session.'],
+        ['Tool access', 'View the same project records from the CLI, web workbench, or VS Code.'],
       ],
-      workbenchKicker: 'THE WORKBENCH',
-      workbenchTitle: 'The workbench is the proof.',
-      workbenchLede:
-        'The real web workbench, running on mocked data. No login, no backend, no network requests.',
+      workbenchTitle: 'Web workbench',
+      workbenchLede: 'The demo uses a sample project.',
       shots: [
-        ['Global graph', 'Projects, tasks, specs and relations on one canvas.'],
-        ['Project view', 'Specs, tasks and Git state for one project.'],
-        ['Task detail', 'PRD, design, progress and checkpoints, together.'],
-        ['Spec reader', 'Layered specs with sources and related tasks.'],
+        ['Project graph', 'See how projects, tasks, and specs relate.'],
+        ['Project overview', 'Review specs, tasks, and Git status for a project.'],
+        ['Task details', 'Read requirements, design notes, progress, and checkpoints.'],
+        ['Spec details', 'See a spec’s source and related tasks.'],
       ],
-      demo: 'Open the live demo',
-      localKicker: 'LOCAL-FIRST',
-      localTitle: 'Your memory stays yours.',
-      localLede:
-        'Everything lives as plain files in ~/.lattice. No telemetry, no forced cloud, optional Git sync.',
+      demo: 'Open demo',
+      localTitle: 'Local storage',
+      localLede: 'Lattice stores data in ~/.lattice. Git sync is optional.',
       faqTitle: 'FAQ',
       faq: [
-        ['Is my data uploaded?', 'No. Lattice writes to ~/.lattice by default. Data leaves your machine only when you explicitly enable Git sync.'],
-        ['Which AI clients are supported?', 'Any agent that can run a CLI command. Lattice does not lock memory into one model or client.'],
-        ['How is this different from a wiki or issue tracker?', 'Lattice models the engineering process — specs, tasks, decisions and checkpoints — in one structure that agents can read directly.'],
-        ['Is it free? What runtime does it need?', 'MIT open source and free to use. Runtime requirements appear with each installation method; the CLI platform package includes the Web workbench.'],
+        ['Which AI tools can I use?', 'Any AI tool with terminal access can use the Lattice CLI.'],
+        ['Is it free?', 'Lattice is free to use under the MIT license.'],
       ],
-      finalKicker: 'GET STARTED',
-      finalTitle: 'Start with the repo you are in.',
-      finalLede: 'Install the CLI, initialize local memory, then continue in the next session.',
-      finalDocs: 'Read the docs',
+      finalTitle: 'Get started',
+      finalDocs: 'Quick start',
       finalGithub: 'GitHub',
     };
 
@@ -152,38 +80,17 @@ const shots: Array<[ImageMetadata, [string, string], boolean]> = [
 ---
 
 <div class='ll-sections not-content'>
-  <section class='ll-section ll-gap' id='why' aria-labelledby='ll-gap-title'>
-    <div class='ll-section-head' data-reveal>
-      <p class='ll-kicker'>{t.gapKicker}</p>
-      <h2 id='ll-gap-title'>{t.gapTitleA}<br />{t.gapTitleB}</h2>
-      <p class='ll-section-lede'>{t.gapLede}</p>
-    </div>
-    <div class='ll-gap-grid'>
-      {t.gapCards.map(([title, body], index) => (
-        <article class='ll-gap-card' data-reveal>
-          <span class='ll-index'>0{index + 1}</span>
-          <h3>{title}</h3>
-          <p>{body}</p>
-        </article>
-      ))}
-    </div>
-  </section>
-
   <WorkflowDemo />
 
   <section class='ll-section ll-layers' id='layers' aria-labelledby='ll-layers-title'>
     <div class='ll-section-head' data-reveal>
-      <p class='ll-kicker'>{t.layersKicker}</p>
       <h2 id='ll-layers-title'>{t.layersTitle}</h2>
-      <p class='ll-section-lede'>{t.layersLede}</p>
     </div>
     <div class='ll-layer-grid'>
-      {t.layers.map((layer, index) => (
+      {t.layers.map(([title, body]) => (
         <article class='ll-layer-card' data-reveal>
-          <div class='ll-layer-top'><span class='ll-index'>0{index + 1}</span><span class='ll-mono'>{layer.label}</span></div>
-          <h3>{layer.title}</h3>
-          <p>{layer.body}</p>
-          <ul>{layer.items.map((item) => <li>{item}</li>)}</ul>
+          <h3>{title}</h3>
+          <p>{body}</p>
         </article>
       ))}
     </div>
@@ -192,7 +99,6 @@ const shots: Array<[ImageMetadata, [string, string], boolean]> = [
   <section class='ll-section ll-workbench' id='workbench' aria-labelledby='ll-workbench-title'>
     <div class='ll-workbench-head' data-reveal>
       <div>
-        <p class='ll-kicker'>{t.workbenchKicker}</p>
         <h2 id='ll-workbench-title'>{t.workbenchTitle}</h2>
         <p class='ll-section-lede'>{t.workbenchLede}</p>
       </div>
@@ -224,7 +130,6 @@ const shots: Array<[ImageMetadata, [string, string], boolean]> = [
   <section class='ll-section ll-local' id='local-first' aria-labelledby='ll-local-title'>
     <div class='ll-local-card' data-reveal>
       <div class='ll-local-copy'>
-        <p class='ll-kicker'>{t.localKicker}</p>
         <h2 id='ll-local-title'>{t.localTitle}</h2>
         <p class='ll-section-lede'>{t.localLede}</p>
       </div>
@@ -240,7 +145,6 @@ const shots: Array<[ImageMetadata, [string, string], boolean]> = [
 
   <section class='ll-section ll-faq' id='faq' aria-labelledby='ll-faq-title'>
     <div class='ll-section-head' data-reveal>
-      <p class='ll-kicker'>FAQ</p>
       <h2 id='ll-faq-title'>{t.faqTitle}</h2>
     </div>
     <div class='ll-faq-list' data-reveal>
@@ -256,9 +160,7 @@ const shots: Array<[ImageMetadata, [string, string], boolean]> = [
   <section class='ll-final' id='get-started' aria-labelledby='ll-final-title'>
     <div class='ll-final-mark' aria-hidden='true'><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
     <div data-reveal>
-      <p class='ll-kicker'>{t.finalKicker}</p>
       <h2 id='ll-final-title'>{t.finalTitle}</h2>
-      <p class='ll-section-lede'>{t.finalLede}</p>
       <div class='ll-actions'>
         <a class='ll-button ll-button--primary' href={quickStartHref}>{t.finalDocs} <ArrowRight size={15} /></a>
         <a class='ll-button ll-button--ghost' href={githubHref} target='_blank' rel='noreferrer'>{t.finalGithub} <span aria-hidden='true'>↗</span></a>

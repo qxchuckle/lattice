@@ -1,4 +1,4 @@
-import type { Node, Edge } from '@xyflow/react';
+import type { CSSProperties } from 'react';
 
 export type EntityType = 'task' | 'project' | 'spec';
 
@@ -47,5 +47,20 @@ export interface SpecNodeData {
 
 export type LatticeNodeData = TaskNodeData | ProjectNodeData | SpecNodeData;
 
-export type LatticeNode = Node<LatticeNodeData>;
-export type LatticeEdge = Edge<{ relationType?: string; label?: string }>;
+export interface LatticeNode {
+  id: string;
+  position: { x: number; y: number };
+  data: LatticeNodeData;
+  type?: string;
+}
+
+export interface LatticeEdge {
+  id: string;
+  source: string;
+  target: string;
+  type?: string;
+  label?: string;
+  style?: CSSProperties;
+  animated?: boolean;
+  data?: { relationType?: string; label?: string };
+}

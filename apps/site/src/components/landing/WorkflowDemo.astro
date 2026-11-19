@@ -1,11 +1,10 @@
 ---
-import InstallTabs from '../InstallTabs.astro';
 import { ArrowRight, Zap } from 'lucide-astro';
 
 const lang = Astro.locals.starlightRoute?.entryMeta?.lang ?? 'en';
 const isZh = lang.toLowerCase().startsWith('zh');
 const base = import.meta.env.BASE_URL;
-const quickStartHref = `${base}docs/quick-start/`;
+const quickStartHref = `${base}${isZh ? 'zh-cn/' : ''}docs/quick-start/`;
 
 type Checkpoint = { type: string; title: string };
 type Memory = {
@@ -28,15 +27,8 @@ type Step = {
 
 const copy = isZh
   ? {
-      kicker: '工作流 / 闭环',
-      title: '一个任务，走完整个闭环。',
-      lede:
-        '安装一次 CLI，然后在 Agent 里完成从开始、读取上下文、记录决策，到归档和沉淀规范的完整流程。下一次会话，记忆已经在这里。',
-      installLabel: '01 / 安装一次',
-      agentLabel: '02 / 在 Agent 输入框调用',
-      installNote: '无需账号 · 数据在本地',
-      userInput: '用户输入',
-      exampleCommand: 'lattice:task:start',
+      title: '任务工作流',
+      lede: '开始任务时查阅规范，实施中记录决策，完成后归档。',
       windowTitle: 'agent · acme-portal',
       windowStatus: '本地 · 模拟',
       memoryTitle: '任务记忆',
@@ -61,7 +53,7 @@ const copy = isZh
       steps: [
         {
           short: '开始',
-          title: '从任务开始，而不是空白对话',
+          title: '开始任务',
           user: '继续 auth-guard 这个任务，保持公共 API 约定不变。',
           userCommand: 'lattice:task:start',
           command: 'ltc task start auth-guard',
@@ -98,7 +90,7 @@ const copy = isZh
         },
         {
           short: '决策',
-          title: '趁决策还新鲜，把它记下来',
+          title: '记录决策',
           user: '把 token 移出浏览器，轮换仍然由 API 负责。',
           command:
             'ltc task checkpoint auth-guard --type decision \\\n  --title "Move tokens to HttpOnly cookies"',
@@ -226,15 +218,8 @@ const copy = isZh
       ],
     }
   : {
-      kicker: 'WORKFLOW / END TO END',
-      title: 'One task. A full loop.',
-      lede:
-        'Install the CLI once. Then run the whole workflow from your agent — start, load context, record decisions, archive, and distill a spec. The next session starts with the memory already in place.',
-      installLabel: '01 / INSTALL ONCE',
-      agentLabel: '02 / CALL IT FROM YOUR AGENT',
-      installNote: 'no account · local files',
-      userInput: 'Ask your agent…',
-      exampleCommand: 'lattice:task:start',
+      title: 'Task workflow',
+      lede: 'Read the specs, record decisions as you work, and archive the task when it’s done.',
       windowTitle: 'agent · acme-portal',
       windowStatus: 'local · simulated',
       memoryTitle: 'TASK MEMORY',
@@ -259,7 +244,7 @@ const copy = isZh
       steps: [
         {
           short: 'Start',
-          title: 'Start with the task, not a blank chat',
+          title: 'Start a task',
           user: 'Continue auth-guard. Keep the public API contract unchanged.',
           userCommand: 'lattice:task:start',
           command: 'ltc task start auth-guard',
@@ -296,7 +281,7 @@ const copy = isZh
         },
         {
           short: 'Decide',
-          title: 'Record the decision while it is fresh',
+          title: 'Record the decision',
           user: 'Move tokens out of the browser. Let the API own rotation.',
           command:
             'ltc task checkpoint auth-guard --type decision \\\n  --title "Move tokens to HttpOnly cookies"',
@@ -465,32 +450,8 @@ const timeline: TimelineEntry[] = steps.flatMap((step, stepIndex) => {
 
 <section class='ll-section ll-workflow' id='workflow' aria-labelledby='ll-workflow-title'>
   <div class='ll-section-head' data-reveal>
-    <p class='ll-kicker'>{copy.kicker}</p>
     <h2 id='ll-workflow-title'>{copy.title}</h2>
     <p class='ll-section-lede'>{copy.lede}</p>
-  </div>
-
-  <div class='ll-flow-setup' data-reveal>
-    <div class='ll-flow-setup-block'>
-      <p class='ll-flow-label'>{copy.installLabel}</p>
-      <InstallTabs id='workflow-install' locale={isZh ? 'zh' : 'en'} />
-      <p class='ll-flow-note'>{copy.installNote}</p>
-    </div>
-    <div class='ll-flow-setup-block'>
-      <p class='ll-flow-label'>{copy.agentLabel}</p>
-      <div class='ll-flow-agent-command ll-flow-agent-command--input'>
-        <span class='ll-flow-command-chip'>
-          <Zap size={12} aria-hidden='true' />
-          {copy.exampleCommand}
-        </span>
-        <span class='ll-flow-input-placeholder'>{copy.userInput}</span>
-      </div>
-      <p class='ll-flow-note'>
-        {isZh
-          ? '在 Agent 输入框开头输入 / 或 @ 唤起命令；CLI 会在后台读写 ~/.lattice。'
-          : 'Type / or @ at the start of your agent input to invoke it; the CLI reads and writes ~/.lattice underneath.'}
-      </p>
-    </div>
   </div>
 
   <div class='ll-flow-shell' data-workflow data-reveal>

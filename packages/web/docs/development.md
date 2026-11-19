@@ -110,11 +110,6 @@ URL 变化由 `RouteSync` 组件监听并同步到 Valtio store，组件自动�
 
 `packages/cli/tsup.config.ts` 中必须配置 `external: ['@qcqx/lattice-web']`，否则 tsup 会将 web 包代码内联到 CLI dist 中，导致使用旧版本代码。
 
-### @xyflow/react v12
-
-- 没有 `EdgeStyle` 导出，边样式用 `CSSProperties`
-- 节点 `data` 需要自定义类型标注
-
 ### antd v6
 
 - `Skeleton` 不支持 `size` 属性

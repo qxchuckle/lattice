@@ -22,9 +22,7 @@ This guide walks you through installing, initializing and using Lattice from scr
 brew install qxchuckle/lattice/lattice
 ```
 
-macOS / Linux. No separate Node.js installation required.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
+macOS / Linux · Runtime included
 
 </details>
 
@@ -35,9 +33,7 @@ macOS / Linux. No separate Node.js installation required.
 npm install -g @qcqx/lattice-cli
 ```
 
-The npm launcher requires Node.js 14.14+. The platform package includes its runtime and Web workbench. Keep optional dependencies enabled.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
+Requires Node.js 14.14+. Keep npm optional dependencies enabled.
 
 </details>
 
@@ -49,14 +45,22 @@ The npm launcher requires Node.js 14.14+. The platform package includes its runt
   set -e
   installer=$(mktemp)
   trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
+  curl -fsSL https://github.com/qxchuckle/lattice/releases/latest/download/install.sh -o "$installer"
+  sh "$installer"
 )
 ```
 
-macOS / Linux. Download and run the installer; no system Node.js required. Add ~/.local/bin to PATH.
+macOS / Linux · Runtime included. Add ~/.local/bin to PATH.
 
-[View releases](https://github.com/qxchuckle/lattice/releases)
+</details>
+
+<details>
+<summary>AI setup</summary>
+
+```text
+Read “1. Install” below. Use the Homebrew, npm, or curl command that suits this system to install Lattice CLI. Verify with ltc --version.
+https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/quick-start.md
+```
 
 </details>
 

@@ -18,7 +18,6 @@ import {
 import { syncInstallDocs } from '../sync-install-docs.mjs';
 function unpublishedCatalog() {
   const config = structuredClone(installation);
-  config.npmRuntime = 'host';
   config.channels = [
     { id: 'brew', available: false },
     { id: 'npm', available: true },
@@ -27,7 +26,7 @@ function unpublishedCatalog() {
   return config;
 }
 
-test('default Homebrew indicates unpublished channels and npm describes its host runtime', () => {
+test('pending Homebrew and curl channels keep npm installation available', () => {
   const config = unpublishedCatalog();
   for (const locale of ['en', 'zh']) {
     const entries = methods(locale, config);
@@ -37,26 +36,25 @@ test('default Homebrew indicates unpublished channels and npm describes its host
     );
     for (const entry of entries) assert.equal(!!entry.command, entry.available);
     const html = renderInstallTabs('installation-test', locale, config);
-    assert.match(html, /data-default-method="brew"/);
-    assert.match(html, /id="installation-test-tab-brew"[^>]*aria-selected="true"/);
+    assert.match(html, /data-default-method="ai"/);
+    assert.match(html, /id="installation-test-tab-ai"[^>]*aria-selected="true"/);
     assert.match(html, /data-install-command>npm install -g @qcqx\/lattice-cli/);
     assert.doesNotMatch(html, /data-install-command>brew install|latest\/download\/install\.sh/);
-    assert.match(html, /Node.js 18\+/);
+    assert.match(html, /Node.js 14\.14\+/);
     const markdown = renderInstallMarkdown(locale, config);
     assert.match(markdown, /^<details open>\n<summary>Homebrew/);
     assert.match(markdown, /npm install -g @qcqx\/lattice-cli/);
   }
 });
-test('published platform commands derive from one catalog rather than page literals', () => {
+test('published platform commands use channel defaults', () => {
   const config = unpublishedCatalog();
-  config.publishedVersion = '2.3.4';
-  config.npmRuntime = 'bundled';
   config.channels[0] = { id: 'brew', available: true, tap: 'qxchuckle/tap' };
   config.channels[2].available = true;
   const entries = methods('en', config);
   assert.equal(entries[0].command, 'brew install qxchuckle/tap/lattice');
   assert.match(entries[1].note, /14.14/);
-  assert.match(entries[2].command, /\/download\/v2\.3\.4\/install\.sh/);
+  assert.match(entries[2].command, /\/latest\/download\/install\.sh/);
+  assert.doesNotMatch(entries[2].command, /--version/);
   assert.match(
     renderInstallTabs('future-install', 'en', config),
     /data-install-command>brew install/,
@@ -69,11 +67,7 @@ test(
   () => {
     const root = mkdtempSync(join(tmpdir(), 'lattice-curl-command-'));
     try {
-      const config = unpublishedCatalog();
-      config.publishedVersion = '2.3.4';
-      config.npmRuntime = 'bundled';
-      config.channels.find((channel) => channel.id === 'curl').available = true;
-      const command = methods('en', config).find((method) => method.id === 'curl').command;
+      const command = methods('en').find((method) => method.id === 'curl').command;
       writeFileSync(
         join(root, 'curl'),
         `#!/bin/sh\nprintf 'printf "installer: %%s\\\\n" "$*"\\n' > "$4"\nexit "$CURL_STATUS"\n`,
@@ -90,7 +84,7 @@ test(
           encoding: 'utf8',
         });
         assert.equal(result.status, status, result.stderr);
-        assert.equal(result.stdout.trim(), status ? '' : 'installer: --version 2.3.4');
+        assert.equal(result.stdout.trim(), status ? '' : 'installer:');
         assert.deepEqual(readdirSync(root), ['curl']);
       }
     } finally {
@@ -104,18 +98,6 @@ test('catalog gate rejects every invalid class and restores the clean configurat
       'I1',
       (c) => {
         c.defaultMethod = 'npm';
-      },
-    ],
-    [
-      'I2',
-      (c) => {
-        c.publishedVersion = 'invalid';
-      },
-    ],
-    [
-      'I2',
-      (c) => {
-        c.npmRuntime = 'unknown';
       },
     ],
     [
@@ -146,12 +128,6 @@ test('catalog gate rejects every invalid class and restores the clean configurat
       'I4',
       (c) => {
         c.channels[0].available = true;
-      },
-    ],
-    [
-      'I5',
-      (c) => {
-        c.channels[2].available = true;
       },
     ],
   ];

@@ -3,22 +3,11 @@ import configuration from './installation-channels.json' with { type: 'json' };
 export const startMarker = '<!-- lattice-install:start -->';
 export const endMarker = '<!-- lattice-install:end -->';
 export const releasesUrl = 'https://github.com/qxchuckle/lattice/releases';
-export const installDocuments = [
-  'README.md',
-  'README.zh-CN.md',
-  'packages/cli/README.md',
-  'packages/cli/README.zh-CN.md',
-  'docs/quick-start.md',
-  'docs/quick-start.zh-CN.md',
-];
+export const installDocuments = ['docs/quick-start.md', 'docs/quick-start.zh-CN.md'];
 const labels = { brew: 'Homebrew', npm: 'npm', curl: 'curl' };
 export function validateChannels(config) {
-  if (config.defaultMethod !== 'brew') throw new Error('[install:I1] Homebrew must be the default');
-  if (
-    !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(config.publishedVersion) ||
-    !['host', 'bundled'].includes(config.npmRuntime)
-  )
-    throw new Error('[install:I2] Invalid public release metadata');
+  if (config.defaultMethod !== 'brew')
+    throw new Error('[install:I1] Homebrew must be the default Markdown section');
   if (
     !Array.isArray(config.channels) ||
     config.channels.length !== Object.keys(labels).length ||
@@ -30,13 +19,8 @@ export function validateChannels(config) {
   if (!config.channels.find((c) => c.id === 'npm').available)
     throw new Error('[install:I3] npm fallback must be available');
   const brew = config.channels.find((c) => c.id === 'brew');
-  if (
-    brew.available &&
-    (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(brew.tap || '') || config.npmRuntime !== 'bundled')
-  )
-    throw new Error('[install:I4] Released Homebrew requires a real tap and platform release');
-  if (config.channels.find((c) => c.id === 'curl').available && config.npmRuntime !== 'bundled')
-    throw new Error('[install:I5] Standalone assets require the platform release');
+  if (brew.available && !/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(brew.tap || ''))
+    throw new Error('[install:I4] Homebrew requires a valid tap');
   return config;
 }
 export const installation = validateChannels(configuration);
@@ -47,37 +31,28 @@ export function methods(locale = 'en', config = installation) {
     let command = null;
     let note;
     if (!channel.available) {
-      note = zh
-        ? `${labels[channel.id]} 安装渠道正在准备中，当前请使用 npm。`
-        : `${labels[channel.id]} installation is being prepared. Use npm for the current release.`;
+      note = zh ? '当前可用 npm 安装。' : 'Use npm to install the current release.';
     } else if (channel.id === 'brew') {
       command = `brew install ${channel.tap}/lattice`;
-      note = zh
-        ? 'macOS / Linux。无需单独安装 Node.js。'
-        : 'macOS / Linux. No separate Node.js installation required.';
+      note = zh ? 'macOS / Linux · 自带运行时' : 'macOS / Linux · Runtime included';
     } else if (channel.id === 'npm') {
       command = 'npm install -g @qcqx/lattice-cli';
-      note =
-        config.npmRuntime === 'bundled'
-          ? zh
-            ? 'npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。请保留 optional dependencies。'
-            : 'The npm launcher requires Node.js 14.14+. The platform package includes its runtime and Web workbench. Keep optional dependencies enabled.'
-          : zh
-            ? `当前公开版本 v${config.publishedVersion} 需要 Node.js 18+，使用安装时的 Node 环境。切换 Node 后可能需要重装。内置 Web 工作台随下一版平台包提供。`
-            : `The current public release v${config.publishedVersion} requires Node.js 18+ and uses the installation Node environment. Switching Node may require reinstalling. The bundled Web workbench ships with the upcoming platform release.`;
+      note = zh
+        ? '需要 Node.js 14.14+。请保留 npm 可选依赖。'
+        : 'Requires Node.js 14.14+. Keep npm optional dependencies enabled.';
     } else {
       command = [
         '(',
         '  set -e',
         '  installer=$(mktemp)',
         '  trap \'rm -f "$installer"\' 0',
-        `  curl -fsSL ${releasesUrl}/download/v${config.publishedVersion}/install.sh -o "$installer"`,
-        `  sh "$installer" --version ${config.publishedVersion}`,
+        `  curl -fsSL ${releasesUrl}/latest/download/install.sh -o "$installer"`,
+        '  sh "$installer"',
         ')',
       ].join('\n');
       note = zh
-        ? 'macOS / Linux。下载后运行安装器；无需系统 Node.js。请将 ~/.local/bin 加入 PATH。'
-        : 'macOS / Linux. Download and run the installer; no system Node.js required. Add ~/.local/bin to PATH.';
+        ? 'macOS / Linux · 自带运行时。将 ~/.local/bin 加入 PATH。'
+        : 'macOS / Linux · Runtime included. Add ~/.local/bin to PATH.';
     }
     return {
       id: channel.id,
@@ -88,6 +63,19 @@ export function methods(locale = 'en', config = installation) {
     };
   });
 }
+
+function aiInstall(zh) {
+  const guide = `https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/quick-start${zh ? '.zh-CN' : ''}.md`;
+  return {
+    id: 'ai',
+    label: zh ? 'AI 安装' : 'AI setup',
+    available: true,
+    prompt: zh
+      ? `读取下方文档的「1. 安装」，选适合当前系统的 Homebrew、npm 或 curl 命令安装 Lattice CLI。运行 ltc --version 验证。\n${guide}`
+      : `Read “1. Install” below. Use the Homebrew, npm, or curl command that suits this system to install Lattice CLI. Verify with ltc --version.\n${guide}`,
+  };
+}
+
 const escape = (s) =>
   String(s)
     .replaceAll('&', '&amp;')
@@ -98,28 +86,45 @@ const escape = (s) =>
 export function renderInstallTabs(id, locale = 'en', config = installation) {
   if (!/^[a-z0-9-]+$/.test(id)) throw new Error('[install:I6] Invalid component id');
   const zh = locale.startsWith('zh');
-  const channels = methods(locale, config);
+  const channels = [aiInstall(zh), ...methods(locale, config)];
+  const defaultMethod = channels[0].id;
   const tabs = channels
     .map(
       (m) =>
-        `<button type="button" role="tab" id="${id}-tab-${m.id}" aria-controls="${id}-panel-${m.id}" aria-selected="${m.id === config.defaultMethod}" tabindex="${m.id === config.defaultMethod ? 0 : -1}" data-install-method="${m.id}">${m.label}</button>`,
+        `<button type="button" role="tab" id="${id}-tab-${m.id}" aria-controls="${id}-panel-${m.id}" aria-selected="${m.id === defaultMethod}" tabindex="${m.id === defaultMethod ? 0 : -1}" data-install-method="${m.id}">${m.label}</button>`,
     )
     .join('');
   const panels = channels
-    .map(
-      (m) =>
-        `<section id="${id}-panel-${m.id}" aria-labelledby="${id}-tab-${m.id}" data-install-panel="${m.id}"><p class="ll-install-channel"><strong>${m.label}</strong>${!m.available ? `<span class="ll-install-pending">${zh ? '即将提供' : 'Coming soon'}</span>` : ''}</p>${m.command ? `<div class="ll-install"><span aria-hidden="true">$</span><code data-install-command>${escape(m.command)}</code><button type="button" class="ll-copy" data-install-copy hidden>${zh ? '复制' : 'Copy'}</button></div>` : ''}<p class="ll-install-note">${escape(m.note)}</p>${!m.available ? `<button type="button" class="ll-install-alternative" data-install-switch="npm" hidden>${zh ? '查看 npm 安装' : 'View npm installation'} →</button>` : ''}<a class="ll-install-release" href="${releasesUrl}">${zh ? '查看发布版本' : 'View releases'} ↗</a></section>`,
-    )
+    .map((method) => {
+      const heading = method.available
+        ? `<p class="ll-install-channel ll-install-channel--available"><strong>${method.label}</strong></p>`
+        : `<p class="ll-install-channel"><strong>${method.label}</strong><span class="ll-install-pending">${zh ? '即将提供' : 'Coming soon'}</span></p>`;
+      const copy = method.prompt ? (zh ? '复制提示词' : 'Copy prompt') : zh ? '复制' : 'Copy';
+      const copyButton = `<button type="button" class="ll-copy" data-install-copy hidden>${copy}</button>`;
+      const action = method.prompt
+        ? `<div class="ll-install-prompt"><p data-install-text>${escape(method.prompt)}</p>${copyButton}</div>`
+        : method.command
+          ? `<div class="ll-install"><span aria-hidden="true">$</span><code data-install-text data-install-command>${escape(method.command)}</code>${copyButton}</div>`
+          : `<button type="button" class="ll-install-alternative" data-install-switch="npm" hidden>${zh ? '查看 npm 安装' : 'View npm installation'} →</button>`;
+      const note = method.note ? `<p class="ll-install-note">${escape(method.note)}</p>` : '';
+      return `<section id="${id}-panel-${method.id}" aria-labelledby="${id}-tab-${method.id}" data-install-panel="${method.id}">${heading}${action}${note}</section>`;
+    })
     .join('');
-  return `<lattice-install-tabs class="ll-install-tabs not-content" data-default-method="${config.defaultMethod}" data-locale="${zh ? 'zh' : 'en'}"><div class="ll-install-tablist" role="tablist" aria-label="${zh ? '安装方式' : 'Installation method'}" hidden>${tabs}</div>${panels}<span class="ll-install-feedback" role="status" aria-live="polite"></span></lattice-install-tabs>`;
+  return `<lattice-install-tabs class="ll-install-tabs not-content" data-default-method="${defaultMethod}" data-locale="${zh ? 'zh' : 'en'}"><div class="ll-install-tablist" role="tablist" aria-label="${zh ? '安装方式' : 'Installation method'}" hidden>${tabs}</div>${panels}<span class="ll-install-feedback" role="status" aria-live="polite"></span></lattice-install-tabs>`;
 }
 export function renderInstallMarkdown(locale = 'en', config = installation) {
   const zh = locale.startsWith('zh');
-  return methods(locale, config)
-    .map(
-      (m) =>
-        `<details${m.id === config.defaultMethod ? ' open' : ''}>\n<summary>${m.label}${!m.available ? ` · ${zh ? '即将提供' : 'Coming soon'}` : ''}</summary>\n\n${m.command ? '```bash\n' + m.command + '\n```\n\n' : ''}${m.note}\n\n[${zh ? '查看发布版本' : 'View releases'}](${releasesUrl})\n\n</details>`,
-    )
+  return [...methods(locale, config), aiInstall(zh)]
+    .map((method) => {
+      const summary =
+        method.label + (!method.available ? (zh ? ' · 即将提供' : ' · Coming soon') : '');
+      const text = method.prompt
+        ? '```text\n' + method.prompt + '\n```'
+        : method.command
+          ? '```bash\n' + method.command + '\n```\n\n' + method.note
+          : method.note;
+      return `<details${method.id === config.defaultMethod ? ' open' : ''}>\n<summary>${summary}</summary>\n\n${text}\n\n</details>`;
+    })
     .join('\n\n');
 }
 export function replaceInstallBlock(

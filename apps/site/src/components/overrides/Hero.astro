@@ -8,50 +8,35 @@ const docsHref = `${base}${isZh ? 'zh-cn/' : ''}docs/quick-start/`;
 
 const copy = isZh
   ? {
-      eyebrow: '本地优先的研发记忆与工作流层',
-      titleA: '代码库之上，',
-      titleBPrefix: '',
-      accent: '会话之外。',
-      lede:
-        'Lattice 把规范、任务、决策和经验沉淀在本地，让它们在项目、会话和 Agent 之间持续复用。',
-      demo: '打开在线 Demo',
+      titleA: '研发记忆',
+      accent: '与工作流',
+      lede: '把规范、任务和决策保存在本地，换项目、会话或 AI 工具时都能接着用。',
+      demo: '在线演示',
       docs: '快速开始',
-      proof: ['MIT', '本地优先', '无遥测', 'Agent 无关'],
       local: '本地 · ~/.lattice',
-      live: '实时格栅 · 模拟数据',
+      live: '示例数据',
       pause: '暂停动效',
-      play: '继续动效',
-      motionOff: '动效已关闭',
       legend: ['规范', '任务', '决策', '检查点'],
-      cardHint: '一条跨越会话的记忆',
     }
   : {
-      eyebrow: 'LOCAL-FIRST ENGINEERING MEMORY',
-      titleA: 'Above the repo.',
-      titleBPrefix: 'Beyond the ',
-      accent: 'session.',
+      titleA: 'Project memory',
+      accent: 'and workflow',
       lede:
-        'Lattice is a local-first engineering memory and workflow layer for AI-assisted development. Specs, tasks, decisions and experience are captured once in ~/.lattice and reused across projects, sessions and agents.',
-      demo: 'Try the live demo',
-      docs: 'Get started',
-      proof: ['MIT', 'Local-first', 'No telemetry', 'Agent-agnostic'],
-      local: 'LOCAL · ~/.lattice',
-      live: 'Live lattice · mock artifacts',
+        'Store specs, tasks, and decisions locally. Pick up where you left off across projects, sessions, and AI tools.',
+      demo: 'Live demo',
+      docs: 'Quick start',
+      local: 'Local · ~/.lattice',
+      live: 'Sample data',
       pause: 'Pause motion',
-      play: 'Play motion',
-      motionOff: 'Motion off',
       legend: ['spec', 'task', 'decision', 'checkpoint'],
-      cardHint: 'A memory that survives the session',
     };
 ---
 
 <section class='ll-hero not-content' aria-labelledby='_top'>
   <div class='ll-hero__copy'>
-    <p class='ll-eyebrow'><span aria-hidden='true'></span>{copy.eyebrow}</p>
-
     <h1 id='_top'>
       <span>{copy.titleA}</span>
-      <span>{copy.titleBPrefix}<span class='ll-accent'>{copy.accent}</span></span>
+      <span><span class='ll-accent'>{copy.accent}</span></span>
     </h1>
 
     <p class='ll-lede'>{copy.lede}</p>
@@ -63,9 +48,6 @@ const copy = isZh
 
     <InstallTabs id='hero-install' locale={isZh ? 'zh' : 'en'} />
 
-    <ul class='ll-proof' aria-label={isZh ? '产品信息' : 'Product facts'}>
-      {copy.proof.map((item) => <li>{item}</li>)}
-    </ul>
   </div>
 
   <div class='ll-visual'>
@@ -85,8 +67,6 @@ const copy = isZh
       <div class='ll-node-card__kind' id='node-card-kind'>SPEC</div>
       <div class='ll-node-card__title' id='node-card-title'>API envelope &amp; error codes</div>
       <div class='ll-node-card__meta' id='node-card-meta'>acme-api · ~/.lattice</div>
-      <div class='ll-node-card__rule'></div>
-      <div class='ll-node-card__hint'>{copy.cardHint}</div>
     </div>
 
     <div class='ll-stage-footer'>

@@ -82,54 +82,7 @@ Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落�
 
 ## 快速开始
 
-<!-- lattice-install:start -->
-
-<details open>
-<summary>Homebrew</summary>
-
-```bash
-brew install qxchuckle/lattice/lattice
-```
-
-macOS / Linux。无需单独安装 Node.js。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>npm</summary>
-
-```bash
-npm install -g @qcqx/lattice-cli
-```
-
-npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。请保留 optional dependencies。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>curl</summary>
-
-```bash
-(
-  set -e
-  installer=$(mktemp)
-  trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
-)
-```
-
-macOS / Linux。下载后运行安装器；无需系统 Node.js。请将 ~/.local/bin 加入 PATH。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<!-- lattice-install:end -->
+按[快速开始指南](./docs/quick-start.zh-CN.md#1-安装)安装 CLI，再用以下命令初始化并登记项目。
 
 ```bash
 ltc init          # 创建 ~/.lattice、选择用户名、注入 AI 客户端工作流

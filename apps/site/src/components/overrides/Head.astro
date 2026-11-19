@@ -1,6 +1,5 @@
 ---
 import Default from '@astrojs/starlight/components/Head.astro';
-import { installation } from '../../../../../scripts/install-content.mjs';
 import '../../styles/install-tabs.css';
 
 const base = import.meta.env.BASE_URL;
@@ -28,7 +27,6 @@ const jsonLd = isLanding
       isAccessibleForFree: true,
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       codeRepository: 'https://github.com/qxchuckle/lattice',
-      softwareVersion: installation.publishedVersion,
       sameAs: ['https://www.npmjs.com/package/@qcqx/lattice-cli'],
     }
   : null;

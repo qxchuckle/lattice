@@ -82,54 +82,7 @@ Lattice is a local-first **engineering memory and workflow layer**. It turns spe
 
 ## Quick start
 
-<!-- lattice-install:start -->
-
-<details open>
-<summary>Homebrew</summary>
-
-```bash
-brew install qxchuckle/lattice/lattice
-```
-
-macOS / Linux. No separate Node.js installation required.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>npm</summary>
-
-```bash
-npm install -g @qcqx/lattice-cli
-```
-
-The npm launcher requires Node.js 14.14+. The platform package includes its runtime and Web workbench. Keep optional dependencies enabled.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>curl</summary>
-
-```bash
-(
-  set -e
-  installer=$(mktemp)
-  trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
-)
-```
-
-macOS / Linux. Download and run the installer; no system Node.js required. Add ~/.local/bin to PATH.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<!-- lattice-install:end -->
+Follow the [quick-start guide](./docs/quick-start.md#1-install) to install the CLI. Use these commands to initialize Lattice and register your projects.
 
 ```bash
 ltc init          # create ~/.lattice, pick a username, inject the Lattice workflow

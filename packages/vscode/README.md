@@ -128,8 +128,8 @@ See the monorepo root. Quick reference:
 
 ```bash
 pnpm build:vscode     # webview bundle (vite) + extension bundle (tsup)
-pnpm package:vscode   # produce dist-vsix/lattice-context-<version>.vsix
-pnpm --filter lattice-context test             # unit tests (node --test)
+pnpm package:vscode   # produce packages/vscode/dist-vsix/lattice-context-<version>.vsix
+pnpm exec vitest run --project vscode          # unit tests
 pnpm --filter lattice-context test:integration # @vscode/test-cli (in-process core fixture)
 ```
 
@@ -137,12 +137,11 @@ Press <kbd>F5</kbd> in VS Code (with this folder open) to launch the Extension D
 
 ## Publishing
 
-Open VSX and the Microsoft Marketplace are both supported; tokens are provided by the maintainer at publish time:
+Configure the Open VSX and Microsoft Marketplace tokens using [.env.release.example](https://github.com/qxchuckle/lattice/blob/master/.env.release.example). Run these commands from the repository root.
 
 ```bash
-pnpm --filter lattice-context run release                                  # build + package + sha256
-pnpm dlx ovsx publish dist-vsix/lattice-context-<version>.vsix -p <TOKEN>  # Open VSX
-pnpm exec vsce publish --packagePath dist-vsix/lattice-context-<version>.vsix -p <PAT>  # Marketplace
+pnpm --filter lattice-context run release          # build, package and print the SHA-256 checksum
+pnpm --filter lattice-context run release:publish  # publish to both marketplaces
 ```
 
 ## License

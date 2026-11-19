@@ -4,14 +4,16 @@ Thanks for your interest in improving Lattice! This document covers everything y
 
 ## Development environment
 
-- **Node.js** 24 (matches CLI distribution and website tooling), **pnpm** ≥ 9 (`corepack enable && corepack prepare pnpm@latest --activate`)
-- Optional: VS Code ≥ 1.85 (for extension development)
+Use Node.js 24 and pnpm 10.30.3. An activated mise shell selects the repository toolchain when you enter the directory. Run `mise install` on first setup.
 
 ```bash
 git clone https://github.com/qxchuckle/lattice.git
 cd lattice
+mise install
 pnpm install
 ```
+
+With nvm, run `nvm install` on first setup and `nvm use` when entering the repository. Install pnpm for that Node version with `npm install -g pnpm@10.30.3`. VS Code ≥ 1.85 is optional for extension development.
 
 ## Monorepo layout
 
@@ -36,7 +38,7 @@ pnpm check-types           # tsc --noEmit per package
 pnpm --filter lattice-context test # extension unit tests (node --test)
 
 # VS Code extension end-to-end
-pnpm verify:vscode             # lint → check-types → unit → build → VSIX
+pnpm verify:vscode             # lint → check-types → unit → package VSIX
 pnpm --filter lattice-context run test:integration   # @vscode/test-cli, in-process core fixture
 pnpm package:vscode            # → packages/vscode/dist-vsix/lattice-context-<version>.vsix
 ```
@@ -59,7 +61,7 @@ The website renders the repository docs — it does not keep a second copy. `app
 
 ## Installation documentation
 
-Installation channels have one catalog: `scripts/installation-channels.json`. Change availability and runtime requirements only after verifying the public npm release, standalone assets and owned Homebrew tap. Unreleased channels stay marked as coming soon. The Pages deployment verifies the published npm version and any enabled standalone assets. If Homebrew is enabled, it also checks the tap’s `Formula/lattice.rb` against the same release. Run `pnpm sync:install` to regenerate the controlled README/quick-start blocks, then `pnpm check:install`, `pnpm check:docs-i18n`, `pnpm sync:docs` and `pnpm check:docs`. The site renders the same catalog as tabs; GitHub Markdown keeps native expandable sections. Never edit generated blocks or duplicate installation commands in landing components.
+`scripts/installation-channels.json` lists the available channels. Edit commands and prompts in `scripts/install-content.mjs`. Run `pnpm sync:install` after changing the catalog or installation content, and commit the regenerated blocks in `docs/quick-start*.md`. Use `pnpm check:install` to verify those blocks. The website renders its tabs from the same content and generates its own pages with `pnpm sync:docs`.
 
 ## Pull requests
 
@@ -96,11 +98,11 @@ Use the [issue templates](https://github.com/qxchuckle/lattice/issues/new/choose
 
 感谢你愿意改进 Lattice！上面同样适用，中文速览：
 
-- 环境：Node 24（与 CLI 分发及站点工具链一致）、pnpm ≥ 9；`pnpm install` 后即可开发。
+- 开发使用 Node 24 和 pnpm 10.30.3。已启用 mise 的终端会在进入仓库时切换工具版本，首次运行 `mise install`。使用 nvm 时，首次运行 `nvm install`，进入仓库后运行 `nvm use`，并为该 Node 版本安装 `pnpm@10.30.3`。准备好版本后运行 `pnpm install`。
 - 提交规范：Conventional Commits（commitlint 强制）；提交前跑 `pnpm lint` 与相关测试。
 - 分层约定：宿主（CLI / Web / 扩展）只调用 `@qcqx/lattice-services`；领域逻辑放 `@qcqx/lattice-core`；扩展数据面必须进程内直连 core，不得起 CLI 子进程。
 - 文案：面向用户的文案必须走 l10n（扩展内 `t()` + `packages/vscode/l10n/`），中英双语。
 - 文档：公开文档英文为默认入口（`docs/foo.md`），中文为 `docs/foo.zh-CN.md`；两边同轮更新，新增文档对登记到 `i18n-manifest.json`，并跑 `pnpm check:docs-i18n`。官网直接渲染仓库文档、不维护第二套：新增页面须在 `apps/site/scripts/docs-nav.mjs` 登记，改完 `docs/` 后跑 `pnpm sync:docs` 与 `pnpm check:docs`；`apps/site/src/content/docs/{,zh-cn/}docs/` 是生成物（已 gitignore），不要手改。`pnpm dev:site` 会基于同一份文档生成开发用 Pagefind 索引，本地不构建生产包也能搜索；生产环境仍使用 Starlight 的 HTML 索引。
-- 安装渠道真源：`scripts/installation-channels.json`。核实公开 npm、独立归档、自有 Homebrew tap 已发布后才启用对应渠道和运行时说明，未发布保持“即将提供”。修改后跑 `pnpm sync:install`、`pnpm check:install`、`pnpm check:docs-i18n`、`pnpm sync:docs` 和 `pnpm check:docs`；官网使用同一配置渲染 Tab，GitHub Markdown 使用原生折叠区，不要手改生成块或在 landing 组件里复制安装命令。
+- `scripts/installation-channels.json` 记录可用渠道，命令和提示词在 `scripts/install-content.mjs` 维护。改动后运行 `pnpm sync:install`，提交 `docs/quick-start*.md` 中重新生成的安装区块，并运行 `pnpm check:install` 校验。官网使用相同来源渲染标签，通过 `pnpm sync:docs` 生成站点页面。
 - PR：小改动直接提；大改动先开 Issue 讨论设计。描述里写清动机与验证方式。
 - 发布：`pnpm release patch|minor|x.y.z` 负责 bump → 写 `CHANGELOG.md` → 构建 → 本地发布 core → tag → 推送；`--no-push` 只准备本地提交和 tag，继续发布用相同目标的 `pnpm release continue`。CLI 由 tag CI 使用固定 Node 构建包含 Web 的平台成品，完整验证后先发平台包、再发薄入口。不要直接发布 workspace CLI。首次发布需配置各 npm 包的 trusted publisher，或准备 `NPM_TOKEN`；不在产物里分发凭据。独立归档、SHA-256 清单、shell 安装器和自有 tap 配方由同一目录生成，tap 仍需单独发布。改分发脚本后跑 `pnpm check:release` 注入自测，性能数据用 `pnpm cli:distribution:benchmark`，没有实测热点证据不引入 Rust。推 tag 后 `.github/workflows/release.yml` 先确认该提交在 master 上且 CI 绿色，再从同一个 tag 构建 VSIX 并建 GitHub Release（正文取 `CHANGELOG.md` 对应版本段）。扩展市场仍走本地 `pnpm --filter lattice-context run release:publish`，版本与 `packages/vscode/CHANGELOG.md` 独立维护。

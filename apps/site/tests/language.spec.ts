@@ -7,7 +7,7 @@ test.describe('automatic language detection', () => {
   test('a fresh Chinese browser is sent to the Chinese landing page', async ({ page }) => {
     await page.goto(siteUrl('/'));
     await expect(page).toHaveURL(siteUrl('/zh-cn/'));
-    await expect(page.locator('h1')).toContainText('代码库之上');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   });
 
   test('an explicit Chinese URL is never redirected away', async ({ page }) => {
@@ -20,7 +20,7 @@ test.describe('automatic language detection', () => {
     await page.addInitScript(() => localStorage.setItem('lattice-language-choice', 'en'));
     await page.goto(siteUrl('/'));
     await expect(page).toHaveURL(siteUrl('/'));
-    await expect(page.locator('h1')).toContainText('Above the repo.');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 });
 
@@ -30,14 +30,14 @@ test.describe('English browser', () => {
   test('a fresh English browser stays on the English landing page', async ({ page }) => {
     await page.goto(siteUrl('/'));
     await expect(page).toHaveURL(siteUrl('/'));
-    await expect(page.locator('h1')).toContainText('Above the repo.');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 
   test('a remembered Chinese choice is applied to unprefixed URLs', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('lattice-language-choice', 'zh'));
     await page.goto(siteUrl('/'));
     await expect(page).toHaveURL(siteUrl('/zh-cn/'));
-    await expect(page.locator('h1')).toContainText('代码库之上');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   });
 
   test('reading the language you are already on does not pin a preference', async ({ page }) => {

@@ -6,60 +6,13 @@ Lattice is a local-first engineering memory and workflow layer; the CLI is its e
 
 ## Install / update
 
-<!-- lattice-install:start -->
-
-<details open>
-<summary>Homebrew</summary>
-
-```bash
-brew install qxchuckle/lattice/lattice
-```
-
-macOS / Linux. No separate Node.js installation required.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>npm</summary>
-
-```bash
-npm install -g @qcqx/lattice-cli
-```
-
-The npm launcher requires Node.js 14.14+. The platform package includes its runtime and Web workbench. Keep optional dependencies enabled.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<details>
-<summary>curl</summary>
-
-```bash
-(
-  set -e
-  installer=$(mktemp)
-  trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
-)
-```
-
-macOS / Linux. Download and run the installer; no system Node.js required. Add ~/.local/bin to PATH.
-
-[View releases](https://github.com/qxchuckle/lattice/releases)
-
-</details>
-
-<!-- lattice-install:end -->
+See the [quick-start guide](https://github.com/qxchuckle/lattice/blob/master/docs/quick-start.md#1-install) for Homebrew, npm, curl and AI setup.
 
 After installation, invoke it through `lattice` or `ltc`.
 
 ### Runtime isolation
 
-The platform package contains a fixed Node runtime, matching native dependencies and the Web workbench. Run `ltc web` to open the workbench with the same runtime. RAG requires the selected embedding model, downloaded or supplied locally. Custom model paths are supported and the model cache lives outside the installation. The selector above reports channel availability.
+The platform package contains a fixed Node runtime, matching native dependencies and the Web workbench. Run `ltc web` to open the workbench with the same runtime. RAG requires the selected embedding model, downloaded or supplied locally. Custom model paths are supported and the model cache lives outside the installation.
 
 npm global commands live in the npm prefix. A version-manager switch may remove that prefix from PATH. Choose an available standalone channel for a stable entry point.
 

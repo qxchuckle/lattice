@@ -21,6 +21,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'package.json'
       - 'pnpm-workspace.yaml'
+      - '.node-version'
       - '.github/workflows/site.yml'
   pull_request:
     paths:
@@ -41,6 +42,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'package.json'
       - 'pnpm-workspace.yaml'
+      - '.node-version'
       - '.github/workflows/site.yml'
   workflow_dispatch:
 
@@ -52,7 +54,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: 24
   ONNXRUNTIME_NODE_INSTALL_CUDA: skip
   SITE_URL: https://lattice.qcqx.cn
   # CI builds and tests at the project sub-path; the deploy artifact is rebuilt at the domain root.
@@ -70,7 +71,7 @@ jobs:
           version: 10
       - uses: actions/setup-node@v7
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: '.node-version'
           cache: pnpm
       - name: install
         run: pnpm install --frozen-lockfile

@@ -6,16 +6,14 @@ class InstallTabs extends HTMLElement {
     const panels = [...this.querySelectorAll<HTMLElement>('[data-install-panel]')];
     const tablist = this.querySelector<HTMLElement>('[role="tablist"]');
     const feedback = this.querySelector<HTMLElement>('[role="status"]');
-    if (!tabs.length || !panels.length || !tablist) return;
+    if (!tabs.length || !panels.length || !tablist || !feedback) return;
+    document.body.append(feedback);
     const zh = this.dataset.locale === 'zh';
     let generation = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const select = (method: string, focus = false) => {
       const selected = tabs.find((tab) => tab.dataset.installMethod === method);
       if (!selected) return;
-      generation++;
-      clearTimeout(timer);
-      if (feedback) feedback.textContent = '';
       tabs.forEach((tab) => {
         tab.setAttribute('aria-selected', String(tab === selected));
         tab.tabIndex = tab === selected ? 0 : -1;
@@ -49,21 +47,24 @@ class InstallTabs extends HTMLElement {
       button.hidden = false;
       button.addEventListener('click', async () => {
         const panel = button.closest<HTMLElement>('[data-install-panel]');
-        const command = panel?.querySelector<HTMLElement>('[data-install-command]')?.textContent;
-        if (!command || panel?.hidden) return;
+        const text = panel?.querySelector<HTMLElement>('[data-install-text]')?.textContent;
+        if (!text || panel?.hidden) return;
+        const isPrompt = panel?.dataset.installPanel === 'ai';
         const request = ++generation;
-        clearTimeout(timer);
         let copied: boolean;
         try {
-          await navigator.clipboard.writeText(command);
+          await navigator.clipboard.writeText(text);
           copied = true;
         } catch {
           const previous = document.activeElement;
           const textarea = document.createElement('textarea');
-          textarea.value = command;
+          textarea.value = text;
           textarea.style.position = 'fixed';
           textarea.style.opacity = '0';
-          textarea.setAttribute('aria-label', zh ? '安装命令' : 'Install command');
+          textarea.setAttribute(
+            'aria-label',
+            isPrompt ? (zh ? '安装提示词' : 'Install prompt') : zh ? '安装命令' : 'Install command',
+          );
           document.body.appendChild(textarea);
           try {
             textarea.select();
@@ -75,17 +76,26 @@ class InstallTabs extends HTMLElement {
             if (previous instanceof HTMLElement) previous.focus();
           }
         }
-        if (request !== generation || !feedback) return;
+        if (request !== generation) return;
+        clearTimeout(timer);
+        feedback.dataset.result = copied ? 'success' : 'error';
         feedback.textContent = copied
-          ? zh
-            ? '安装命令已复制'
-            : 'Install command copied'
+          ? isPrompt
+            ? zh
+              ? '提示词已复制'
+              : 'Prompt copied'
+            : zh
+              ? '命令已复制'
+              : 'Command copied'
           : zh
-            ? '复制失败，请手动选择命令'
-            : 'Copy failed. Select the command manually.';
-        timer = setTimeout(() => {
-          if (feedback) feedback.textContent = '';
-        }, 2500);
+            ? '复制失败，请手动选择文本。'
+            : 'Copy failed. Select the text to copy it manually.';
+        timer = setTimeout(
+          () => {
+            feedback.textContent = '';
+          },
+          copied ? 2500 : 4500,
+        );
       });
     });
     select(this.dataset.defaultMethod || tabs[0].dataset.installMethod!);

@@ -22,9 +22,7 @@ Lattice 是本地优先的研发记忆与工作流层。它把规范、任务、
 brew install qxchuckle/lattice/lattice
 ```
 
-macOS / Linux。无需单独安装 Node.js。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+macOS / Linux · 自带运行时
 
 </details>
 
@@ -35,9 +33,7 @@ macOS / Linux。无需单独安装 Node.js。
 npm install -g @qcqx/lattice-cli
 ```
 
-npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。请保留 optional dependencies。
-
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+需要 Node.js 14.14+。请保留 npm 可选依赖。
 
 </details>
 
@@ -49,14 +45,22 @@ npm 入口需要 Node.js 14.14+；平台包自带运行时和 Web 工作台。�
   set -e
   installer=$(mktemp)
   trap 'rm -f "$installer"' 0
-  curl -fsSL https://github.com/qxchuckle/lattice/releases/download/v1.30.0/install.sh -o "$installer"
-  sh "$installer" --version 1.30.0
+  curl -fsSL https://github.com/qxchuckle/lattice/releases/latest/download/install.sh -o "$installer"
+  sh "$installer"
 )
 ```
 
-macOS / Linux。下载后运行安装器；无需系统 Node.js。请将 ~/.local/bin 加入 PATH。
+macOS / Linux · 自带运行时。将 ~/.local/bin 加入 PATH。
 
-[查看发布版本](https://github.com/qxchuckle/lattice/releases)
+</details>
+
+<details>
+<summary>AI 安装</summary>
+
+```text
+读取下方文档的「1. 安装」，选适合当前系统的 Homebrew、npm 或 curl 命令安装 Lattice CLI。运行 ltc --version 验证。
+https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/quick-start.zh-CN.md
+```
 
 </details>
 

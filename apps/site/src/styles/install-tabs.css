@@ -41,7 +41,9 @@
 }
 .ll-install-tabs [data-install-panel] {
   padding: 16px;
-  min-height: 154px;
+}
+.ll-install-tabs[data-enhanced] .ll-install-channel--available {
+  display: none;
 }
 .ll-install-channel {
   display: flex;
@@ -61,7 +63,7 @@
 .ll-install-tabs .ll-install {
   display: flex;
   width: 100%;
-  margin-top: 12px;
+  margin-top: 0;
   padding: 0;
   gap: 10px;
   border: 0;
@@ -87,8 +89,30 @@
   min-height: 40px;
   color: var(--ll-muted);
 }
+.ll-install-prompt {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+.ll-install-prompt p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.ll-install-tabs .ll-install-prompt .ll-copy {
+  min-height: 40px;
+  border-color: var(--ll-line);
+  color: var(--ll-text);
+}
+.ll-install-tabs:not([data-enhanced]) .ll-install,
+.ll-install-tabs:not([data-enhanced]) .ll-install-prompt {
+  margin-top: 8px;
+}
 .ll-install-note {
-  margin: 12px 0 0;
+  margin: 6px 0 0;
   color: var(--ll-muted);
   font-size: 14px;
   line-height: 1.6;
@@ -104,21 +128,49 @@
   font-size: 14px;
   cursor: pointer;
 }
-.ll-install-tabs .ll-install-release {
-  display: inline-block;
-  margin-top: 10px;
-  color: var(--sl-color-accent-high);
-  font-size: 13px;
-}
 .ll-install-feedback {
-  display: block;
-  min-height: 20px;
-  padding: 0 16px 5px;
-  color: var(--ll-muted);
-  font-size: 13px;
+  position: fixed;
+  z-index: 1000;
+  inset-block-start: calc(var(--sl-nav-height, 3.5rem) + 12px);
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  margin-inline: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--ll-line);
+  border-radius: 8px;
+  background: var(--ll-surface);
+  color: var(--ll-text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  font: 500 14px/1.5 var(--sl-font);
+  pointer-events: none;
 }
-.ll-install-tabs button:focus-visible,
-.ll-install-tabs a:focus-visible {
+.ll-install-feedback:empty {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.ll-install-feedback::before {
+  flex: 0 0 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: var(--sl-color-green-high);
+  content: '';
+}
+.ll-install-feedback[data-result='error']::before {
+  background: var(--sl-color-red-high);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ll-install-feedback {
+    transition:
+      opacity 140ms ease,
+      transform 140ms ease;
+  }
+}
+.ll-install-tabs button:focus-visible {
   outline: 2px solid var(--sl-color-text-accent);
   outline-offset: 3px;
 }
@@ -129,7 +181,6 @@
   }
   .ll-install-tabs [data-install-panel] {
     padding: 14px;
-    min-height: 172px;
   }
   .ll-install-tabs .ll-install {
     font-size: 13.5px;

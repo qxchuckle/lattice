@@ -41,21 +41,17 @@ async function resetWorkflow(page: Page): Promise<void> {
     .toBe(0);
 }
 
-test('landing page renders the memory story and eager workbench shots', async ({ page }) => {
+test('landing page renders the project tools and eagerly loads workbench shots', async ({
+  page,
+}) => {
   const external: string[] = [];
   page.on('request', (request) => {
     if (!request.url().startsWith('http://127.0.0.1:4321/')) external.push(request.url());
   });
 
   await page.goto(siteUrl('/'));
-  await expect(page.locator('h1')).toContainText('Above the repo.');
+  await expect(page.locator('h1')).toContainText('Project memory');
   await expect(page.locator('.ll-shot img')).toHaveCount(4);
-  await expect(page.locator('.ll-flow-agent-command--input .ll-flow-command-chip')).toContainText(
-    'lattice:task:start',
-  );
-  await expect(page.locator('.ll-flow-agent-command--input .ll-flow-input-placeholder')).toHaveText(
-    'Ask your agent…',
-  );
   await expect(page.locator('.ll-flow-bubble .ll-flow-command-chip').first()).toContainText(
     'lattice:task:start',
   );
@@ -78,12 +74,10 @@ test('landing typography keeps metadata and workflow text readable', async ({ pa
     };
 
     return {
-      proof: read('.ll-proof'),
       install: read('.ll-install'),
-      kicker: read('.ll-kicker'),
       lede: read('.ll-lede'),
       sectionLede: read('.ll-section-lede'),
-      cardBody: read('.ll-gap-card p'),
+      cardBody: read('.ll-layer-card p'),
       workflowLabel: read('.ll-flow-label'),
       workflowBody: read('.ll-flow-bubble p'),
       workflowCommand: read('.ll-flow-command'),
@@ -346,7 +340,7 @@ test('language picker is a custom menu and remembers the selected locale', async
   await picker.getByRole('link', { name: /简体中文/ }).click();
 
   await expect(page).toHaveURL(siteUrl('/zh-cn/'));
-  await expect(page.locator('h1')).toContainText('代码库之上');
+  await expect(page.locator('h1')).toContainText('研发记忆');
   expect(await page.evaluate(() => localStorage.getItem('lattice-language-choice'))).toBe('zh');
 });
 

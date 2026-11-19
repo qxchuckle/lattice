@@ -124,13 +124,13 @@ test('every repo doc is mapped to both locales and generated paths are unique', 
   assert.equal(paths.size, docItems.length * 2);
 });
 
-test('installation docs render the same accessible default-brew tabs as the landing', () => {
+test('installation docs render the AI setup tab as the default', () => {
   const source =
     '# Quick start\n\nIntro.\n\n<!-- lattice-install:start -->\nplaceholder\n<!-- lattice-install:end -->';
   for (const locale of ['root', 'zh-cn']) {
     const { content } = transformDoc(source, { locale, item: item('docs/quick-start') });
     assert.match(content, /<lattice-install-tabs/);
-    assert.match(content, /data-default-method="brew"/);
+    assert.match(content, /data-default-method="ai"/);
     assert.match(content, /npm install -g @qcqx\/lattice-cli/);
     assert.doesNotMatch(content, /placeholder/);
   }

@@ -19,20 +19,43 @@ test.beforeEach(async ({ page }) => {
   });
 });
 for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-start/']) {
-  test(`installation tabs are accessible and copy only the selected command: ${route}`, async ({
-    page,
-  }) => {
+  test(`installation tabs copy the selected command or prompt: ${route}`, async ({ page }) => {
     await page.goto(siteUrl(route));
     const widget = page.locator('lattice-install-tabs').first();
+    const feedback = page.locator('.ll-install-feedback');
     const command = widget.locator('[data-install-command]:visible');
     const copy = widget.locator('[data-install-copy]:visible');
-    const pendingLabel = route.includes('zh-cn') ? '即将提供' : 'Coming soon';
-    await expect(widget).toHaveAttribute('data-active-method', 'brew');
-    const brew = widget.getByRole('tab', { name: 'Homebrew', exact: true });
-    await expect(brew).toHaveAttribute('aria-selected', 'true');
+    const zh = route.includes('zh-cn');
+    const pendingLabel = zh ? '即将提供' : 'Coming soon';
+    const aiLabel = zh ? 'AI 安装' : 'AI setup';
+    const ai = widget.getByRole('tab', { name: aiLabel, exact: true });
+    await expect(widget.getByRole('tab')).toHaveText([aiLabel, 'Homebrew', 'npm', 'curl']);
+    await expect(widget).toHaveAttribute('data-active-method', 'ai');
+    await expect(ai).toHaveAttribute('aria-selected', 'true');
     await expect(widget.getByRole('tabpanel')).toHaveCount(1);
-    await brew.focus();
-    await expect(brew).toHaveCSS('outline-style', 'solid');
+    await ai.focus();
+    await expect(ai).toHaveCSS('outline-style', 'solid');
+    const prompt = widget.getByRole('tabpanel').locator('[data-install-text]');
+    await expect(prompt).toContainText('ltc --version');
+    await expect(prompt).toContainText(
+      `https://raw.githubusercontent.com/qxchuckle/lattice/master/docs/quick-start${zh ? '.zh-CN' : ''}.md`,
+    );
+    await expect(command).toHaveCount(0);
+    const heightBeforeCopy = (await widget.boundingBox())?.height;
+    await widget.getByRole('button', { name: zh ? '复制提示词' : 'Copy prompt' }).click();
+    expect(await page.evaluate(() => (window as any).__installClipboard)).toBe(
+      await prompt.textContent(),
+    );
+    await expect(feedback).toHaveText(zh ? '提示词已复制' : 'Prompt copied');
+    await expect(feedback).toHaveAttribute('role', 'status');
+    await expect(feedback).toHaveCSS('position', 'fixed');
+    await expect(feedback).toHaveCSS('opacity', '1');
+    expect((await widget.boundingBox())?.height).toBe(heightBeforeCopy);
+    await ai.focus();
+    await page.keyboard.press('ArrowRight');
+    const brew = widget.getByRole('tab', { name: 'Homebrew', exact: true });
+    await expect(brew).toBeFocused();
+    await expect(brew).toHaveAttribute('aria-selected', 'true');
     if (brewChannel.available) {
       await expect(command).toHaveText(`brew install ${brewChannel.tap}/lattice`);
       await copy.click();
@@ -53,35 +76,37 @@ for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-st
     expect(await page.evaluate(() => (window as any).__installClipboard)).toBe(
       'npm install -g @qcqx/lattice-cli',
     );
-    await expect(widget.getByRole('status')).toContainText(
-      route.includes('zh-cn') ? '已复制' : 'copied',
-    );
+    await expect(feedback).toHaveText(zh ? '命令已复制' : 'Command copied');
     await npm.focus();
     await page.keyboard.press('End');
-    await expect(widget.getByRole('tab', { name: 'curl', exact: true })).toBeFocused();
+    const curl = widget.getByRole('tab', { name: 'curl', exact: true });
+    await expect(curl).toBeFocused();
     if (curlChannel.available) {
-      await expect(command).toContainText(`/download/v${catalog.publishedVersion}/install.sh`);
-      await expect(command).toContainText(`--version ${catalog.publishedVersion}`);
+      await expect(command).toContainText('/latest/download/install.sh');
+      await expect(command).not.toContainText('--version');
       await expect(copy).toHaveCount(1);
     } else {
       await expect(widget.getByRole('tabpanel')).toContainText(pendingLabel);
       await expect(copy).toHaveCount(0);
     }
     await page.keyboard.press('Home');
-    await expect(brew).toBeFocused();
+    await expect(ai).toBeFocused();
     await page.keyboard.press('ArrowLeft');
-    await expect(widget.getByRole('tab', { name: 'curl', exact: true })).toBeFocused();
+    await expect(curl).toBeFocused();
   });
 }
-test('landing instances remain independent and quick-start link keeps the language/base', async ({
-  page,
-}) => {
+test('landing has one installer and uses the localized quick-start links', async ({ page }) => {
   await page.goto(siteUrl('/zh-cn/'));
-  const widgets = page.locator('lattice-install-tabs');
-  await expect(widgets).toHaveCount(2);
-  await widgets.first().getByRole('tab', { name: 'npm', exact: true }).click();
-  await expect(widgets.nth(1)).toHaveAttribute('data-active-method', 'brew');
+  await expect(page.locator('lattice-install-tabs')).toHaveCount(1);
   await expect(page.locator('.ll-actions a').nth(1)).toHaveAttribute(
+    'href',
+    siteUrl('/zh-cn/docs/quick-start/'),
+  );
+  await expect(page.locator('.ll-flow-footnote a')).toHaveAttribute(
+    'href',
+    siteUrl('/zh-cn/docs/quick-start/'),
+  );
+  await expect(page.locator('#get-started a').first()).toHaveAttribute(
     'href',
     siteUrl('/zh-cn/docs/quick-start/'),
   );
@@ -91,6 +116,8 @@ test('landing instances remain independent and quick-start link keeps the langua
   expect(duplicates).toEqual([]);
 });
 test('copy failure is reported without claiming success', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.clock.install();
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -106,8 +133,14 @@ test('copy failure is reported without claiming success', async ({ page }) => {
   const widget = page.locator('lattice-install-tabs');
   await widget.getByRole('tab', { name: 'npm', exact: true }).click();
   await widget.locator('[data-install-copy]:visible').click();
-  await expect(widget.getByRole('status')).toContainText('Copy failed');
-  await expect(widget.getByRole('status')).not.toContainText('copied');
+  const feedback = page.locator('.ll-install-feedback');
+  await expect(feedback).toHaveAttribute('data-result', 'error');
+  await expect(feedback).toHaveText('Copy failed. Select the text to copy it manually.');
+  const bounds = (await feedback.boundingBox())!;
+  expect(bounds.x).toBeGreaterThanOrEqual(16);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(344);
+  await page.clock.fastForward(4500);
+  await expect(feedback).toBeEmpty();
 });
 test('no-JavaScript pages keep every method readable in both languages', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
@@ -120,6 +153,9 @@ test('no-JavaScript pages keep every method readable in both languages', async (
       await expect(npmPanel.locator('[data-install-command]')).toHaveText(
         'npm install -g @qcqx/lattice-cli',
       );
+      const aiPanel = page.locator('[data-install-panel="ai"]');
+      await expect(aiPanel).toBeVisible();
+      await expect(aiPanel.locator('[data-install-text]')).toContainText('ltc --version');
     }
   } finally {
     await context.close();
@@ -131,18 +167,28 @@ for (const width of [1440, 1280, 1024, 768, 390, 360]) {
     for (const route of ['/', '/zh-cn/', '/docs/quick-start/', '/zh-cn/docs/quick-start/']) {
       await page.goto(siteUrl(route));
       const widget = page.locator('lattice-install-tabs').first();
-      await widget.getByRole('tab', { name: 'npm', exact: true }).click();
-      for (const theme of ['dark', 'light']) {
-        await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
-        const metrics = await widget.evaluate((el) => ({
-          right: el.getBoundingClientRect().right,
-          font: parseFloat(getComputedStyle(el.querySelector('[data-install-command]')!).fontSize),
-          page: document.documentElement.scrollWidth,
-          viewport: innerWidth,
-        }));
-        expect(metrics.page).toBeLessThanOrEqual(metrics.viewport + 1);
-        expect(metrics.right).toBeLessThanOrEqual(width + 1);
-        expect(metrics.font).toBeGreaterThanOrEqual(width <= 640 ? 13.5 : 15);
+      for (const name of ['npm', route.includes('zh-cn') ? 'AI 安装' : 'AI setup']) {
+        await widget.getByRole('tab', { name, exact: true }).click();
+        for (const theme of ['dark', 'light']) {
+          await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+          const metrics = await widget.evaluate((el) => {
+            const text = el.querySelector<HTMLElement>(
+              '[data-install-panel]:not([hidden]) [data-install-text]',
+            )!;
+            return {
+              right: el.getBoundingClientRect().right,
+              font: parseFloat(getComputedStyle(text).fontSize),
+              page: document.documentElement.scrollWidth,
+              viewport: innerWidth,
+              textWidth: text.scrollWidth,
+              textBox: text.clientWidth,
+            };
+          });
+          expect(metrics.page).toBeLessThanOrEqual(metrics.viewport + 1);
+          expect(metrics.right).toBeLessThanOrEqual(width + 1);
+          expect(metrics.font).toBeGreaterThanOrEqual(width <= 640 ? 13.5 : 15);
+          if (name !== 'npm') expect(metrics.textWidth).toBeLessThanOrEqual(metrics.textBox + 1);
+        }
       }
     }
   });
