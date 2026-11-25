@@ -16,6 +16,12 @@ whose body is the matching section of this file.
 
 ## [Unreleased]
 
+## [1.30.2] - 2026-11-25
+
+### Added
+
+- **release**: publish CI-verified CLI artifacts
+
 ## [1.30.1] - 2026-11-25
 
 ### Added
