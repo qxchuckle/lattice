@@ -310,9 +310,10 @@ if (isContinue) {
   updateChangelog(newVersion);
 
   // --- 构建 ---
-  console.log('\n🔨 构建...');
-  if (targets.includes('cli')) run('pnpm run build:cli');
-  else run('pnpm run build:core');
+  if (targets.includes('core')) {
+    console.log('\n🔨 构建 core...');
+    run('pnpm run build:core');
+  }
 }
 
 // --- 发布 ---

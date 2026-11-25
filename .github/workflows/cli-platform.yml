@@ -1,6 +1,10 @@
 name: CLI platform artifacts
 on:
   workflow_call:
+    inputs:
+      scope:
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
@@ -13,8 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - id: catalog
         shell: bash
+        env:
+          PLATFORM_SCOPE: ${{ inputs.scope }}
         run: |
-          node -e 'const c=require("./scripts/cli-distribution/config.cjs");const fs=require("fs");fs.appendFileSync(process.env.GITHUB_OUTPUT,"matrix="+JSON.stringify({include:c.PLATFORMS})+"\nnode="+c.NODE_VERSION+"\n")'
+          node -e 'const c=require("./scripts/cli-distribution/config.cjs");const fs=require("fs");const scope=process.env.PLATFORM_SCOPE;const include=scope==="full"?c.PLATFORMS:c.PLATFORMS.filter(p=>p.id===scope);if(!include.length)throw Error("Invalid platform scope: "+scope);fs.appendFileSync(process.env.GITHUB_OUTPUT,"matrix="+JSON.stringify({include})+"\nnode="+c.NODE_VERSION+"\n")'
   build:
     needs: catalog
     runs-on: ${{ matrix.runner }}
@@ -65,11 +71,13 @@ jobs:
           unset LATTICE_TEST_NPM
           node scripts/ci-cli-runtime-smoke.cjs
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && inputs.scope == 'full'
         with:
           name: lattice-cli-${{ matrix.id }}
           path: |
-            dist-cli/*.tgz
+            dist-cli/qcqx-lattice-cli-${{ matrix.id }}-*.tgz
             dist-cli/*.tar.gz
             dist-cli/${{ matrix.id }}.json
           if-no-files-found: error
-          retention-days: 7
+          compression-level: 0
+          retention-days: 14

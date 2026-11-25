@@ -86,11 +86,25 @@ test(
     const f = fixture(t);
     const result = f.run(['patch', '--no-push']);
     assert.equal(result.status, 0, result.stderr);
-    assert.match(f.calls(), /pnpm run build:cli/);
+    assert.match(f.calls(), /pnpm run build:core/);
+    assert.doesNotMatch(f.calls(), /build:cli/);
     assert.doesNotMatch(f.calls(), /publish|npm view|gh run/);
     assert.equal(f.git('tag', '-l'), 'v1.29.2');
     assert.equal(f.remoteRefs(), '');
     assert.match(result.stdout, /pnpm release continue/);
+  },
+);
+
+test(
+  'CLI release preparation leaves the candidate build to the tagged commit CI',
+  { skip },
+  (t) => {
+    const f = fixture(t);
+    const result = f.run(['patch', '--cli', '--no-push']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(f.calls(), /build:|publish|gh run/);
+    assert.equal(f.git('tag', '-l'), 'v1.29.2');
+    assert.equal(f.remoteRefs(), '');
   },
 );
 

@@ -39,6 +39,8 @@ async function main() {
         ? output
         : path.join(output, 'work', hostTarget().id, 'package/payload'),
     );
+  if (command === 'smoke-legacy')
+    return require('./cli-distribution/smoke.cjs').legacySmoke({ ...options, output });
   if (command === 'smoke' || command === 'benchmark')
     return require('./cli-distribution/' + command + '.cjs')[command]({ ...options, output });
   if (command === 'refuse-workspace-publish')
@@ -46,7 +48,7 @@ async function main() {
       'Publish the generated platform and bootstrap tarballs from tag CI, not the workspace CLI dependency tree. See CONTRIBUTING.md.',
     );
   throw new Error(
-    'Usage: cli-distribution.cjs matrix|build|assemble|verify|smoke|benchmark|publish',
+    'Usage: cli-distribution.cjs matrix|build|assemble|verify|smoke|smoke-legacy|benchmark|publish',
   );
 }
 main()

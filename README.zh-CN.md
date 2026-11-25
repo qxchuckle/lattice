@@ -11,12 +11,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm cli" src="https://img.shields.io/npm/v/@qcqx/lattice-cli?label=cli"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-core"><img alt="npm core" src="https://img.shields.io/npm/v/@qcqx/lattice-core?label=core"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
-  <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a>
+  <a href="https://github.com/qxchuckle/lattice/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qxchuckle/lattice/actions/workflows/ci.yml/badge.svg?branch=master&amp;event=push"></a>
 </p>
 
 <p align="center">
@@ -78,9 +75,11 @@ Lattice 是一个本地优先的 **研发记忆与工作流层**。它把散落�
 | [`@qcqx/lattice-cli`](./packages/cli) | 命令行（`lattice` / `ltc`） | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
 | [`@qcqx/lattice-web`](./packages/web) | Web 服务端（HTTP API + 静态资源） | — |
 | [`@qcqx/lattice-web-ui`](./packages/web-ui) | 共享 React UI（web 客户端与扩展 Webview 共用） | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
-| [`lattice`（VS Code）](./packages/vscode) | VS Code 扩展（进程内 core + Webview） | 0.1.1（VSIX） |
+| [`lattice`（VS Code）](./packages/vscode) | VS Code 扩展（进程内 core + Webview） | <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a> <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a> |
 
 ## 快速开始
+
+<a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
 
 按[快速开始指南](./docs/quick-start.zh-CN.md#1-安装)安装 CLI，再用以下命令初始化并登记项目。
 

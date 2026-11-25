@@ -47,7 +47,14 @@ const copy = isZh
     </div>
 
     <InstallTabs id='hero-install' locale={isZh ? 'zh' : 'en'} />
-
+    <div class='ll-release-links'>
+      <a href='https://github.com/qxchuckle/lattice/releases/latest' data-cli-release>
+        {isZh ? '发布记录' : 'Release notes'}
+      </a>
+      <a href='https://github.com/qxchuckle/lattice'>
+        GitHub <span data-github-stars hidden></span>
+      </a>
+    </div>
   </div>
 
   <div class='ll-visual'>
@@ -75,6 +82,59 @@ const copy = isZh
     </div>
   </div>
 </section>
+
+<style>
+  .ll-release-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+  }
+  .ll-release-links a {
+    color: var(--ll-muted);
+    text-underline-offset: 0.2em;
+  }
+</style>
+
+<script>
+  const repository = 'https://github.com/qxchuckle/lattice';
+  const api = 'https://api.github.com/repos/qxchuckle/lattice';
+
+  async function readPublicData(path: string) {
+    try {
+      const response = await fetch(api + path, { signal: AbortSignal.timeout(5000) });
+      return response.ok ? await response.json() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const releaseLink = document.querySelector<HTMLAnchorElement>('[data-cli-release]');
+  if (releaseLink) {
+    void readPublicData('/releases/latest').then((release) => {
+      const tag = release?.tag_name;
+      if (typeof tag !== 'string' || !/^v\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(tag)) return;
+      if (
+        !Array.isArray(release.assets) ||
+        !release.assets.some((asset: { name?: string }) => asset?.name === 'release-version.txt')
+      ) return;
+      releaseLink.textContent = tag;
+      releaseLink.href = repository + '/releases/tag/' + tag;
+    });
+  }
+
+  const starCount = document.querySelector<HTMLElement>('[data-github-stars]');
+  if (starCount) {
+    void readPublicData('').then((repo) => {
+      const stars = repo?.stargazers_count;
+      if (typeof stars !== 'number' || !Number.isSafeInteger(stars) || stars < 0) return;
+      const count = new Intl.NumberFormat(document.documentElement.lang).format(stars);
+      starCount.textContent = '· ' + count + ' ★';
+      starCount.hidden = false;
+    });
+  }
+</script>
 
 <script>
   import { initHeroLattice } from '../../scripts/hero-lattice';

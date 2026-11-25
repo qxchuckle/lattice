@@ -5,6 +5,42 @@ import catalog from '../../../scripts/installation-channels.json' with { type: '
 const brewChannel = catalog.channels.find(({ id }) => id === 'brew')!;
 const curlChannel = catalog.channels.find(({ id }) => id === 'curl')!;
 
+const repoApi = 'https://api.github.com/repos/qxchuckle/lattice';
+
+test('landing page presents the current CLI release and GitHub stars', async ({ page }) => {
+  await page.route(repoApi, (route) => route.fulfill({ json: { stargazers_count: 1234 } }));
+  await page.route(repoApi + '/releases/latest', (route) =>
+    route.fulfill({ json: { tag_name: 'v9.8.7', assets: [{ name: 'release-version.txt' }] } }),
+  );
+  await page.goto(siteUrl('/'));
+  const version = page.locator('[data-cli-release]');
+  await expect(version).toHaveText('v9.8.7');
+  await expect(version).toHaveAttribute(
+    'href',
+    'https://github.com/qxchuckle/lattice/releases/tag/v9.8.7',
+  );
+  await expect(page.locator('[data-github-stars]')).toHaveText('· 1,234 ★');
+});
+
+test('landing page keeps release and repository links when metadata is unavailable', async ({
+  page,
+}) => {
+  await page.route(repoApi, (route) => route.fulfill({ status: 403 }));
+  await page.route(repoApi + '/releases/latest', (route) =>
+    route.fulfill({ json: { tag_name: 'v9.8.7', assets: [] } }),
+  );
+  await page.goto(siteUrl('/zh-cn/'));
+  const version = page.locator('[data-cli-release]');
+  await expect(version).toHaveText('发布记录');
+  await expect(version).toHaveAttribute(
+    'href',
+    'https://github.com/qxchuckle/lattice/releases/latest',
+  );
+  const stars = page.locator('[data-github-stars]');
+  await expect(stars).toBeHidden();
+  await expect(stars.locator('..')).toHaveAttribute('href', 'https://github.com/qxchuckle/lattice');
+});
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('lattice-language-choice', 'en');

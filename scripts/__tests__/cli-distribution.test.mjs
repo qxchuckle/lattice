@@ -19,7 +19,7 @@ const {
 } = require('../cli-distribution/build.cjs');
 const { integrity } = require('../cli-distribution/verify.cjs');
 const { PLATFORMS, NODE_VERSION } = require('../cli-distribution/config.cjs');
-const { assemble, waitForPublishedPackages } = require('../cli-distribution/release.cjs');
+const { assemble, publish, waitForPublishedPackages } = require('../cli-distribution/release.cjs');
 const { materialize, compatible, keepFile } = require('../cli-distribution/dependencies.cjs');
 const { repairPlatformArchive } = require('../cli-distribution/repair-platform-metadata.cjs');
 const repo = path.resolve(
@@ -266,6 +266,63 @@ function releaseFixture(root) {
     });
   }
 }
+test(
+  'npm publishes the CLI entry only after all platform archives are available',
+  { skip: process.platform === 'win32' },
+  async (t) => {
+    const root = temporary(t);
+    releaseFixture(root);
+    const npm = path.join(root, 'npm.cjs');
+    fs.writeFileSync(
+      npm,
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+const [command, arg] = process.argv.slice(2);
+const file = command === 'view'
+  ? 'qcqx-' + arg.slice('@qcqx/'.length).replace('@', '-') + '.tgz'
+  : path.basename(arg);
+const receipt = path.join(__dirname, file + '.published');
+if (command === 'view') {
+  if (!fs.existsSync(receipt)) {
+    console.error('E404');
+    process.exit(1);
+  }
+  console.log(JSON.stringify({
+    integrity: 'sha512-' + createHash('sha512').update(fs.readFileSync(path.join(__dirname, file))).digest('base64'),
+    tarball: 'https://registry.example/' + file,
+  }));
+} else {
+  fs.writeFileSync(receipt, '');
+  fs.appendFileSync(path.join(__dirname, 'events'), 'publish ' + file + '\\n');
+}
+`,
+      { mode: 0o700 },
+    );
+    t.mock.method(globalThis, 'fetch', async (url) => {
+      fs.appendFileSync(
+        path.join(root, 'events'),
+        'ready ' + new URL(url).pathname.slice(1) + '\n',
+      );
+      return { ok: true };
+    });
+    await publish(root, { npm });
+    const events = fs.readFileSync(path.join(root, 'events'), 'utf8').trim().split('\n');
+    const entry = 'qcqx-lattice-cli-1.29.0.tgz';
+    assert.deepEqual(events.slice(-2), ['publish ' + entry, 'ready ' + entry]);
+    assert.equal(events.indexOf('publish ' + entry), PLATFORMS.length * 2);
+    assert.deepEqual(
+      events.slice(PLATFORMS.length, -2).sort(),
+      PLATFORMS.map(({ id }) => 'ready qcqx-lattice-cli-' + id + '-1.29.0.tgz').sort(),
+    );
+    await publish(root, { npm });
+    assert.equal(
+      fs.readFileSync(path.join(root, 'events'), 'utf8').match(/^publish /gm).length,
+      PLATFORMS.length + 1,
+    );
+  },
+);
 test('release gate injects missing/mixed/development/runtime/catalog/hash errors and restores clean state', (t) => {
   const root = temporary(t);
   releaseFixture(root);

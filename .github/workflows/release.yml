@@ -3,7 +3,7 @@ name: Release
 # tag 推送后自动发布 GitHub Release：
 # - 正文取自 CHANGELOG.md 对应版本段（scripts/release-notes.mjs）
 # - 附件是从同一个 tag 构建的 VSIX（不是本地工作树的产物）
-# CLI平台包从tag构建并发布；core及扩展市场仍在本地发布。
+# CLI 和 VSIX 复用同一提交在 master CI 中验证的产物。
 on:
   push:
     tags:
@@ -15,75 +15,80 @@ on:
         required: true
         type: string
       build_run:
-        description: Failed Release workflow run with the complete tagged platform artifacts
+        description: Failed Release workflow run for the selected tag
         required: true
         type: string
 
 permissions:
-  contents: write
-  actions: read # 等 CI 结果需要读 workflow run
+  contents: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
-env:
-  NODE_VERSION: 20
-  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-
 jobs:
   release:
     name: release ${{ github.ref_name }}
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     outputs:
       cli-release: ${{ steps.versions.outputs.cli-release }}
+      ci-run: ${{ steps.ci.outputs.run }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 需要完整历史才能判断 tag 是否在 master 上
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: install
-        run: pnpm install --frozen-lockfile
-
-      - name: check release scripts
-        run: pnpm check:release
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
+          fetch-depth: 0
+      - name: verify recovery tag and failed release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          FAILED_RUN: ${{ inputs.build_run }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$FAILED_RUN" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$FAILED_RUN" |
+            jq -e --arg tag "$RELEASE_TAG" --arg sha "$(git rev-parse HEAD)" '
+              .event == "push" and .path == ".github/workflows/release.yml" and
+              .head_branch == $tag and .head_sha == $sha and
+              .status == "completed" and .conclusion == "failure"'
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
 
       # 只允许给 master 上的提交发版，避免把分支试验的 tag 发出去
       - name: tag must point at a commit on master
         run: |
           git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/master; then
-            echo "::error::$GITHUB_SHA 不在 master 上，拒绝发版"
+          sha=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/master; then
+            echo "::error::$sha 不在 master 上，拒绝发版"
             exit 1
           fi
 
       # 堵住“CI 红了照样发版”：等该提交的 CI 结论，未出结果就轮询，红/取消即失败
-      - name: wait for CI to pass on this commit
+      - name: select successful master CI for the tagged commit
+        id: ci
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          SHA="$GITHUB_SHA"
+          SHA=$(git rev-parse HEAD)
           for i in $(seq 1 120); do
-            STATE=$(gh run list --workflow=ci.yml --commit "$SHA" --event push --limit 1 \
-              --json status,conclusion \
-              --jq 'if length == 0 then "none" else .[0] | if .status == "completed" then (if .conclusion == "success" then "ok" else "fail:" + (.conclusion // "unknown") end) else "running" end end')
-            echo "CI: $STATE（第 $i 次）"
+            STATE=$(gh run list --workflow=ci.yml --commit "$SHA" --branch master --event push --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq 'if length == 0 then "none" else .[0] | if .status == "completed" then (if .conclusion == "success" then "ok:" + (.databaseId | tostring) else "fail:" + (.conclusion // "unknown") end) else "running" end end') || STATE=unavailable
             case "$STATE" in
-              ok) echo "CI 已通过"; exit 0 ;;
-              fail:*) echo "::error::该提交的 CI 未通过（$STATE），先修 CI 再发版"; exit 1 ;;
+              ok:*) echo "run=${STATE#ok:}" >> "$GITHUB_OUTPUT"; exit 0 ;;
+              fail:*) echo "::error::Tag CI did not pass: $STATE"; exit 1 ;;
               *) sleep 20 ;;
             esac
           done
-          echo "::error::等待 CI 超时：未找到 $SHA 的 CI 运行或一直未完成"
+          echo "::error::Timed out waiting for master CI on $SHA"
           exit 1
 
       # tag 至少要能对上 core/cli 中的一个版本：都不匹配说明 tag 打错了；
@@ -91,7 +96,7 @@ jobs:
       - name: verify tag matches package versions
         id: versions
         run: |
-          TAG="$GITHUB_REF_NAME"
+          TAG="$RELEASE_TAG"
           CORE=$(node -p "require('./packages/core/package.json').version")
           CLI=$(node -p "require('./packages/cli/package.json').version")
           echo "tag=$TAG core=$CORE cli=$CLI"
@@ -107,11 +112,16 @@ jobs:
             echo "::warning::局部发布：只有 $MATCHED/2 个包是 $TAG"
           fi
 
-      # 按目录过滤，不依赖扩展包名（改过名：lattice → lattice-context）
-      - name: build vsix from tag
-        run: pnpm --dir packages/vscode run package
+      - uses: actions/download-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: lattice-vsix
+          path: packages/vscode/dist-vsix
+          run-id: ${{ steps.ci.outputs.run }}
+          github-token: ${{ github.token }}
 
       - name: locate vsix
+        if: github.event_name == 'push'
         id: vsix
         run: |
           NAME=$(node -p "require('./packages/vscode/package.json').name")
@@ -127,18 +137,21 @@ jobs:
           echo "ext=$EXT" >> "$GITHUB_OUTPUT"
 
       - name: write release notes
+        if: github.event_name == 'push'
         env:
           VSIX_ASSET: ${{ steps.vsix.outputs.file }}
-        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" --out .release-notes.md --asset "$VSIX_ASSET"
-
+        run: node scripts/release-notes.mjs "$RELEASE_TAG" --out .release-notes.md --asset "$VSIX_ASSET"
 
       # 幂等：已存在就改正文，不存在才创建；附件始终覆盖，便于重跑
       - name: create or update release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLI_RELEASE: ${{ steps.versions.outputs.cli-release }}
+          VSIX_ASSET: ${{ steps.vsix.outputs.file }}
         run: |
-          TAG="$GITHUB_REF_NAME"
-          if [ "${{ steps.versions.outputs.cli-release }}" = true ]; then
+          TAG="$RELEASE_TAG"
+          if [ "$CLI_RELEASE" = true ]; then
             # Keep the previous complete CLI release as latest until all platform assets exist.
             if gh release view "$TAG" >/dev/null 2>&1; then
               gh release edit "$TAG" --title "$TAG" --notes-file .release-notes.md
@@ -152,28 +165,25 @@ jobs:
               gh release create "$TAG" --title "$TAG" --notes-file .release-notes.md --verify-tag --latest=false
             fi
           fi
-          gh release upload "$TAG" "${{ steps.vsix.outputs.file }}" --clobber
+          gh release upload "$TAG" "$VSIX_ASSET" --clobber
 
       - name: summarize
+        if: github.event_name == 'push'
+        env:
+          VSIX_NAME: ${{ steps.vsix.outputs.name }}
+          VSIX_VERSION: ${{ steps.vsix.outputs.ext }}
         run: |
           {
-            echo "### Release ${{ github.ref_name }}"
+            echo "### Release $RELEASE_TAG"
             echo ""
-            echo "- 正文：CHANGELOG.md 的 \`[${{ github.ref_name }}]\` 段"
-            echo "- 附件：\`${{ steps.vsix.outputs.name }}\`（扩展 ${{ steps.vsix.outputs.ext }}，由该 tag 构建）"
-            echo "- 页面：https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+            echo "- 正文：CHANGELOG.md 的 [$RELEASE_TAG] 段"
+            echo "- 附件：$VSIX_NAME（扩展 $VSIX_VERSION，来自该提交的 CI）"
+            echo "- 页面：https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  cli-platform:
+  cli-publish:
     needs: release
     if: needs.release.outputs.cli-release == 'true'
-    uses: ./.github/workflows/cli-platform.yml
-
-  cli-publish:
-    needs: [release, cli-platform]
-    if: >-
-      ${{ !cancelled() && ((needs.release.result == 'success' && needs.cli-platform.result == 'success')
-      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     permissions:
@@ -186,25 +196,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
-      - name: verify recovery tag, failed run and draft release
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_RUN: ${{ inputs.build_run }}
-        run: |
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-          [[ "$BUILD_RUN" =~ ^[1-9][0-9]*$ ]]
-          sha=$(git rev-parse HEAD)
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" |
-            jq -e --arg tag "$RELEASE_TAG" --arg sha "$sha" '
-              .event == "push" and .path == ".github/workflows/release.yml" and
-              .head_branch == $tag and .head_sha == $sha and
-              .status == "completed" and .conclusion == "failure"'
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
-      - uses: actions/checkout@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          path: release-tools
       - name: read fixed runtime from the catalog
         id: runtime
         run: node -e 'require("fs").appendFileSync(process.env.GITHUB_OUTPUT,"node="+require("./scripts/cli-distribution/config.cjs").NODE_VERSION+"\n")'
@@ -217,17 +208,12 @@ jobs:
           pattern: lattice-cli-*
           path: dist-cli
           merge-multiple: true
-          run-id: ${{ inputs.build_run || github.run_id }}
-          github-token: ${{ inputs.build_run && github.token || '' }}
+          run-id: ${{ needs.release.outputs.ci-run }}
+          github-token: ${{ github.token }}
       - name: verify the complete release and source identity
         run: |
           node scripts/cli-distribution.cjs assemble
           RELEASE_COMMIT="$(git rev-parse HEAD)" node -e 'const m=require("./dist-cli/release-manifest.json");if("v"+m.version!==process.env.RELEASE_TAG||m.sourceCommit!==process.env.RELEASE_COMMIT)throw Error("Release tag/source mismatch")'
-      - name: repair provenance metadata on the verified tagged packages
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          node release-tools/scripts/cli-distribution/repair-platform-metadata.cjs dist-cli packages/cli/package.json
-          node scripts/cli-distribution.cjs assemble
       - name: publish platforms first, bootstrap last
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -238,3 +224,44 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" dist-cli/*.tar.gz dist-cli/release-manifest.json dist-cli/release-version.txt dist-cli/SHA256SUMS dist-cli/install.sh dist-cli/lattice.rb --clobber
           gh release edit "$RELEASE_TAG" --draft=false --latest
+
+  homebrew:
+    needs: cli-publish
+    if: github.repository == 'qxchuckle/lattice'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: homebrew-software
+      cancel-in-progress: false
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: download and verify the latest CLI formula
+        id: formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "Homebrew sync requires HOMEBREW_TAP_TOKEN. Publish lattice.rb to the tap manually." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" != "$RELEASE_TAG" ]; then
+            echo "Skipping Homebrew sync because $RELEASE_TAG is no longer the latest CLI release."
+            exit 0
+          fi
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern lattice.rb --pattern SHA256SUMS
+          awk '$2 == "lattice.rb" { print }' SHA256SUMS | sha256sum --check
+          ruby -c lattice.rb
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - name: publish the formula to the shared tap
+        if: steps.formula.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          endpoint='repos/qxchuckle/homebrew-software/contents/Formula/lattice.rb'
+          current=$(gh api "$endpoint" --jq .sha)
+          if [ "$current" = "$(git hash-object lattice.rb)" ]; then exit 0; fi
+          jq -n --arg sha "$current" --arg message "release: distribute Lattice ${RELEASE_TAG#v}" \
+            --arg content "$(base64 -w0 lattice.rb)" '{sha: $sha, message: $message, content: $content}' |
+            gh api --method PUT "$endpoint" --input - --jq .commit.html_url >> "$GITHUB_STEP_SUMMARY"

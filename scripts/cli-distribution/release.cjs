@@ -1,8 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const { execFile, spawnSync } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
+const { promisify } = require('node:util');
 const { NODE_VERSION, PLATFORMS } = require('./config.cjs');
-const { read, write, sha, bootstrap, run } = require('./build.cjs');
+const { read, write, sha, bootstrap } = require('./build.cjs');
+
+const execFileAsync = promisify(execFile);
 
 function formula(records, version) {
   const stanza = (r) =>
@@ -173,7 +177,7 @@ async function publish(output, options = {}) {
   );
   const entry = packageFromFile('@qcqx/lattice-cli', manifest.bootstrap.filename);
   function inspect(pkg) {
-    const view = require('child_process').spawnSync(
+    const view = spawnSync(
       npm,
       [
         'view',
@@ -196,17 +200,34 @@ async function publish(output, options = {}) {
       throw new Error('Registry version already exists with different content: ' + pkg.name);
     return dist;
   }
-  function publishPackage(pkg) {
+  async function publishPackage(pkg) {
     if (inspect(pkg)) return;
-    run(npm, ['publish', pkg.file, '--access', 'public', '--provenance'], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-    });
+    const { stdout, stderr } = await execFileAsync(
+      npm,
+      ['publish', pkg.file, '--access', 'public', '--provenance'],
+      {
+        timeout: 120000,
+        shell: process.platform === 'win32',
+      },
+    );
+    process.stdout.write(stdout);
+    process.stderr.write(stderr);
   }
-  platforms.forEach(publishPackage);
+  // Start registry processing for several independent platforms at once. Let
+  // all in-flight uploads finish before reporting any failure for safe retries.
+  const parallelUploads = 3;
+  for (let start = 0; start < platforms.length; start += parallelUploads) {
+    const results = await Promise.allSettled(
+      platforms.slice(start, start + parallelUploads).map(publishPackage),
+    );
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length) {
+      throw new Error(failures.map(({ reason }) => reason.stderr || reason.message).join('\n'));
+    }
+  }
   // Registry publish-time scans can expose metadata before the tarball is downloadable.
   await waitForPublishedPackages(platforms, inspect);
-  publishPackage(entry);
+  await publishPackage(entry);
   await waitForPublishedPackages([entry], inspect);
   return manifest;
 }

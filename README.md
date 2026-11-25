@@ -11,12 +11,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm cli" src="https://img.shields.io/npm/v/@qcqx/lattice-cli?label=cli"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-core"><img alt="npm core" src="https://img.shields.io/npm/v/@qcqx/lattice-core?label=core"></a>
-  <a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
   <a href="./LICENSE"><img alt="license" src="https://img.shields.io/github/license/qxchuckle/lattice"></a>
   <a href="https://github.com/qxchuckle/lattice/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/qxchuckle/lattice"></a>
-  <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a>
-    <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a>
+  <a href="https://github.com/qxchuckle/lattice/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qxchuckle/lattice/actions/workflows/ci.yml/badge.svg?branch=master&amp;event=push"></a>
 </p>
 
 <p align="center">
@@ -78,9 +75,11 @@ Lattice is a local-first **engineering memory and workflow layer**. It turns spe
 | [`@qcqx/lattice-cli`](./packages/cli) | Command line (`lattice` / `ltc`) | [![cli](https://img.shields.io/npm/v/@qcqx/lattice-cli?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-cli) |
 | [`@qcqx/lattice-web`](./packages/web) | Web server (HTTP API + static assets) | — |
 | [`@qcqx/lattice-web-ui`](./packages/web-ui) | Shared React UI (web client & extension webview) | [![web-ui](https://img.shields.io/npm/v/@qcqx/lattice-web-ui?label=%20)](https://www.npmjs.com/package/@qcqx/lattice-web-ui) |
-| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | [View releases](https://github.com/qxchuckle/lattice/releases) |
+| [`lattice` (VS Code)](./packages/vscode) | VS Code extension (in-process core + webview) | <a href="https://open-vsx.org/extension/qcqx/lattice-context"><img alt="Open VSX" src="https://img.shields.io/open-vsx/v/qcqx/lattice-context?label=Open%20VSX"></a> <a href="https://marketplace.visualstudio.com/items?itemName=qcqx.lattice-context"><img alt="VS Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/qcqx.lattice-context?label=VS%20Marketplace"></a> |
 
 ## Quick start
+
+<a href="https://www.npmjs.com/package/@qcqx/lattice-cli"><img alt="npm downloads" src="https://img.shields.io/npm/dm/@qcqx/lattice-cli"></a>
 
 Follow the [quick-start guide](./docs/quick-start.md#1-install) to install the CLI. Use these commands to initialize Lattice and register your projects.
 

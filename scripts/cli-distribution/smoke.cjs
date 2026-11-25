@@ -274,6 +274,87 @@ function modelFlow(caller, entry, baselineNode, repo, temporary, modelPath) {
   };
 }
 
+function installNpmFixture({ output, target, record, temporary, caller, npm, env }) {
+  // Use actual tarballs (npm6 treats directory deps as links). No unpublished registry access.
+  const fixtureDir = path.join(temporary, 'bootstrap');
+  fs.mkdirSync(fixtureDir);
+  extract(path.join(output, 'qcqx-lattice-cli-' + record.version + '.tgz'), fixtureDir);
+  const pkgPath = path.join(fixtureDir, 'package/package.json');
+  const pkg = read(pkgPath);
+  assert.strictEqual(pkg.scripts, undefined);
+  assert.strictEqual(pkg.dependencies, undefined);
+  pkg.optionalDependencies = {
+    [target.packageName]: 'file:' + path.join(output, record.npmFile),
+  };
+  write(pkgPath, pkg);
+  const localTar = path.join(temporary, 'bootstrap.tgz');
+  pack(fixtureDir, 'package', localTar);
+  const prefix = path.join(temporary, 'npm-global');
+  const installArgs = [
+    npm,
+    'install',
+    '--global',
+    '--prefix',
+    prefix,
+    '--cache',
+    path.join(temporary, 'npm-cache'),
+    '--offline',
+    '--ignore-scripts',
+    '--engine-strict',
+    '--no-audit',
+    '--no-fund',
+    localTar,
+  ];
+  run(caller, installArgs, { env, cwd: temporary });
+  const installed = path.join(
+    prefix,
+    target.os === 'win32' ? 'node_modules' : 'lib/node_modules',
+    '@qcqx/lattice-cli/bin/ltc.cjs',
+  );
+  const shimEnv = { ...env, PATH: path.dirname(caller) + path.delimiter + env.PATH };
+  const shimVersion =
+    target.os === 'win32'
+      ? run('cmd.exe', ['/d', '/c', path.join(prefix, 'ltc.cmd'), '--version'], {
+          env: shimEnv,
+          cwd: temporary,
+        })
+      : run(path.join(prefix, 'bin/ltc'), ['--version'], { env: shimEnv, cwd: temporary });
+  assert.strictEqual(shimVersion.trim(), record.version);
+  assert.strictEqual(
+    run(caller, [installed, '--version'], { env, cwd: temporary }).trim(),
+    record.version,
+  );
+  return { installed, installArgs, prefix, pkg };
+}
+
+function legacySmoke(options = {}) {
+  const target = hostTarget();
+  const output = path.resolve(options.output || 'dist-cli');
+  const record = read(path.join(output, target.id + '.json'));
+  const caller = options.callerNode || process.execPath;
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'lattice-legacy-smoke-'));
+  try {
+    const { env } = fixture(temporary);
+    if (options.npm) {
+      installNpmFixture({ output, target, record, temporary, caller, npm: options.npm, env });
+    } else {
+      extract(path.join(output, record.archive), temporary);
+      const entry = path.join(temporary, 'payload/bin/ltc.cjs');
+      assert.strictEqual(
+        run(caller, [entry, '--version'], { env, cwd: temporary }).trim(),
+        record.version,
+      );
+    }
+    return {
+      target: target.id,
+      caller: run(caller, ['--version']).trim(),
+      npmInstalled: !!options.npm,
+    };
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
 async function smoke(options = {}) {
   const repo = path.resolve(__dirname, '../..');
   const output = path.resolve(options.output || 'dist-cli');
@@ -401,61 +482,21 @@ async function smoke(options = {}) {
     let npmVerified = false;
     let npmRepairVerified = false;
     if (options.npm) {
-      // Use actual tarballs (npm6 treats directory deps as links). No unpublished registry access.
-      const fixtureDir = path.join(temporary, 'bootstrap');
-      fs.mkdirSync(fixtureDir);
-      extract(path.join(output, 'qcqx-lattice-cli-' + record.version + '.tgz'), fixtureDir);
-      const pkgPath = path.join(fixtureDir, 'package/package.json');
-      const pkg = read(pkgPath);
-      assert.strictEqual(pkg.scripts, undefined);
-      assert.strictEqual(pkg.dependencies, undefined);
-      pkg.optionalDependencies = {
-        [target.packageName]: 'file:' + path.join(output, record.npmFile),
-      };
-      write(pkgPath, pkg);
-      const localTar = path.join(temporary, 'bootstrap.tgz');
-      pack(fixtureDir, 'package', localTar);
-      const prefix = path.join(temporary, 'npm-global');
-      const installArgs = [
-        options.npm,
-        'install',
-        '--global',
-        '--prefix',
-        prefix,
-        '--cache',
-        path.join(temporary, 'npm-cache'),
-        '--offline',
-        '--ignore-scripts',
-        '--engine-strict',
-        '--no-audit',
-        '--no-fund',
-        localTar,
-      ];
-      run(caller, installArgs, { env, cwd: temporary });
-      const installed = path.join(
-        prefix,
-        target.os === 'win32' ? 'node_modules' : 'lib/node_modules',
-        '@qcqx/lattice-cli/bin/ltc.cjs',
-      );
-      assert.strictEqual(
-        run(caller, [installed, '--version'], { env, cwd: temporary }).trim(),
-        record.version,
-      );
+      const { installed, installArgs, prefix, pkg } = installNpmFixture({
+        output,
+        target,
+        record,
+        temporary,
+        caller,
+        npm: options.npm,
+        env,
+      });
       assert.deepStrictEqual(
         JSON.parse(
           run(caller, [installed, 'search', 'compatibility', '--json'], { env, cwd: temporary }),
         ),
         baseline,
       );
-      const shimEnv = { ...env, PATH: path.dirname(caller) + path.delimiter + env.PATH };
-      const shimVersion =
-        target.os === 'win32'
-          ? run('cmd.exe', ['/d', '/c', path.join(prefix, 'ltc.cmd'), '--version'], {
-              env: shimEnv,
-              cwd: temporary,
-            })
-          : run(path.join(prefix, 'bin/ltc'), ['--version'], { env: shimEnv, cwd: temporary });
-      assert.strictEqual(shimVersion.trim(), record.version);
       lifecycle(caller, installed, path.join(temporary, 'npm-lifecycle'));
       const npmRoot = path.dirname(path.dirname(installed));
       const npmPayload = require(path.join(npmRoot, 'scripts/runtime.cjs')).resolvePayload(
@@ -649,4 +690,4 @@ async function smoke(options = {}) {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
 }
-module.exports = { smoke, fixture, seed, sourceCore, payloadCore };
+module.exports = { smoke, legacySmoke, fixture, seed, sourceCore, payloadCore };

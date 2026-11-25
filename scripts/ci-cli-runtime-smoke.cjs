@@ -5,11 +5,9 @@ const node = process.env.LATTICE_TEST_INSTALL_NODE;
 if (!node) throw new Error('Set LATTICE_TEST_INSTALL_NODE to the fixed build Node');
 const args = [
   path.join(__dirname, 'cli-distribution.cjs'),
-  'smoke',
+  'smoke-legacy',
   '--caller-node',
   process.execPath,
-  '--node',
-  node,
 ];
 if (process.env.LATTICE_TEST_NPM) args.push('--npm', process.env.LATTICE_TEST_NPM);
 const result = childProcess.spawnSync(node, args, { env: process.env, stdio: 'inherit' });

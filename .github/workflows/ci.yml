@@ -20,7 +20,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release: v') && github.sha || 'latest' }}
+
   cancel-in-progress: true
 
 env:
@@ -28,6 +30,20 @@ env:
   ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 jobs:
+  cli-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: echo "scope=$(node scripts/ci-cli-scope.mjs "$BASE_SHA" "$HEAD_SHA")" >> "$GITHUB_OUTPUT"
+
   # ── 线 1：静态检查 + 构建 + 全量测试 + 覆盖率门槛 ──
   quality:
     name: quality (lint / types / build / coverage)
@@ -124,10 +140,21 @@ jobs:
       - name: installed VSIX (stable, windows)
         if: runner.os == 'Windows'
         run: pnpm --filter lattice-context run test:vsix stable
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && runner.os == 'Linux'
+        with:
+          name: lattice-vsix
+          path: packages/vscode/dist-vsix/*.vsix
+          if-no-files-found: error
+          retention-days: 14
 
   # ── 线 3：固定运行时平台产物与旧 Node/npm 入口验收 ──
   cli-platform:
+    needs: cli-scope
+    if: needs.cli-scope.outputs.scope != 'none'
     uses: ./.github/workflows/cli-platform.yml
+    with:
+      scope: ${{ needs.cli-scope.outputs.scope }}
 
   # ── 线 4：playwright 浏览器 E2E（构建产物 webServer + 隔离 fixture 数据根）──
   e2e:
