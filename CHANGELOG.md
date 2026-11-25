@@ -16,6 +16,25 @@ whose body is the matching section of this file.
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-11-25
+
+### Added
+
+- **site**: streamline installation and developer tooling
+- **site**: highlight the active installation method
+
+### Fixed
+
+- **release**: preserve npm provenance on platform packages
+- **release**: wait for downloadable npm platform archives
+- **site**: authenticate release verification in Pages CI
+- **cli**: deduplicate bundled runtime dependencies
+
+### Documentation
+
+- activate Lattice 1.30.0 installation channels
+- switch Lattice to the shared Homebrew tap
+
 ## [1.30.0] - 2026-11-18
 
 ### Added
