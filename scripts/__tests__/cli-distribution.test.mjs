@@ -176,6 +176,40 @@ test('physical closure preserves shared packages, version conflicts, cycles and 
     /Review.*pruning/,
   );
 });
+test('physical closure reuses a native library declared after its binding', (t) => {
+  const root = temporary(t);
+  const cli = path.join(root, 'packages/cli');
+  const app = path.join(root, 'app');
+  const sharp = path.join(cli, 'node_modules/sharp');
+  const binding = '@img/sharp-darwin-arm64';
+  const library = '@img/sharp-libvips-darwin-arm64';
+  makePackage(cli, 'fixture-cli', '1', { sharp: '*' });
+  makePackage(
+    sharp,
+    'sharp',
+    '1',
+    {},
+    {
+      optionalDependencies: { [binding]: '*', [library]: '*' },
+    },
+  );
+  makePackage(
+    path.join(sharp, 'node_modules', binding),
+    binding,
+    '1',
+    {},
+    {
+      optionalDependencies: { [library]: '*' },
+    },
+  );
+  makePackage(path.join(sharp, 'node_modules', library), library, '1');
+
+  const components = materialize(cli, app, { os: 'darwin', arch: 'arm64' });
+  assert.deepEqual(
+    components.filter((component) => component.name === library).map((component) => component.path),
+    ['node_modules/sharp/node_modules/' + library],
+  );
+});
 test('pruning keeps mandatory assets/licenses and rejects other platforms', () => {
   assert.equal(
     keepFile({ name: '@huggingface/transformers' }, 'dist/transformers.node.mjs', {}, false),

@@ -159,6 +159,7 @@ function materialize(cliRoot, appRoot, target, executable) {
     components.push(stats);
     const dependencies = runtimeDependencies(pkg);
     const optional = pkg.optionalDependencies || {};
+    const pending = [];
     for (const name of new Set([...Object.keys(dependencies), ...Object.keys(optional)])) {
       let dependency;
       try {
@@ -187,8 +188,12 @@ function materialize(cliRoot, appRoot, target, executable) {
       }
       const existing = nearest(destination, name);
       if (existing && installed.get(existing) === dependency) continue;
-      add(dependency, path.join(destination, 'node_modules', name));
+      const child = path.join(destination, 'node_modules', name);
+      installed.set(child, dependency);
+      pending.push(child);
     }
+    // Reserve siblings first so their dependents can reuse them regardless of traversal order.
+    for (const child of pending) add(installed.get(child), child);
   }
 
   // Reserve all direct packages before recursion, so a shared root dependency is never copied twice.
