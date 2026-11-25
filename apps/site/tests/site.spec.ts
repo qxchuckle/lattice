@@ -45,8 +45,15 @@ test('landing page renders the project tools and eagerly loads workbench shots',
   page,
 }) => {
   const external: string[] = [];
+  const repoApi = 'https://api.github.com/repos/qxchuckle/lattice';
+  const metadata = new Set([repoApi, repoApi + '/releases/latest']);
+  await page.route(
+    (url) => metadata.has(url.href),
+    (route) => route.abort(),
+  );
   page.on('request', (request) => {
-    if (!request.url().startsWith('http://127.0.0.1:4321/')) external.push(request.url());
+    const url = request.url();
+    if (!url.startsWith('http://127.0.0.1:4321/') && !metadata.has(url)) external.push(url);
   });
 
   await page.goto(siteUrl('/'));
