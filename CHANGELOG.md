@@ -16,6 +16,12 @@ whose body is the matching section of this file.
 
 ## [Unreleased]
 
+## [1.30.3] - 2026-11-25
+
+### Changed
+
+- **release**: start CLI releases without waiting for source CI
+
 ## [1.30.2] - 2026-11-25
 
 ### Added
