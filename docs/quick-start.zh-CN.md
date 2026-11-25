@@ -19,7 +19,7 @@ Lattice 是本地优先的研发记忆与工作流层。它把规范、任务、
 <summary>Homebrew</summary>
 
 ```bash
-brew install qxchuckle/lattice/lattice
+brew install qxchuckle/software/lattice
 ```
 
 macOS / Linux · 自带运行时

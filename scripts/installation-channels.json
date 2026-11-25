@@ -1,7 +1,7 @@
 {
   "defaultMethod": "brew",
   "channels": [
-    { "id": "brew", "available": true, "tap": "qxchuckle/lattice" },
+    { "id": "brew", "available": true, "tap": "qxchuckle/software" },
     { "id": "npm", "available": true },
     { "id": "curl", "available": true }
   ]

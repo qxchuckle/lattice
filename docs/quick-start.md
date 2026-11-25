@@ -19,7 +19,7 @@ This guide walks you through installing, initializing and using Lattice from scr
 <summary>Homebrew</summary>
 
 ```bash
-brew install qxchuckle/lattice/lattice
+brew install qxchuckle/software/lattice
 ```
 
 macOS / Linux · Runtime included

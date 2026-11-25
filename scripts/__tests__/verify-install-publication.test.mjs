@@ -60,7 +60,7 @@ function request(failure = '') {
     }
     assert.equal(
       url,
-      'https://raw.githubusercontent.com/qxchuckle/homebrew-lattice/HEAD/Formula/lattice.rb',
+      'https://raw.githubusercontent.com/qxchuckle/homebrew-software/HEAD/Formula/lattice.rb',
     );
     return new Response(
       [
