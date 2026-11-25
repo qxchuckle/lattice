@@ -65,6 +65,7 @@ const isContinue = versionArg === 'continue';
 const targets = ['core', 'cli'].filter(
   (name) => (!onlyCore && !onlyCli) || (name === 'core' && onlyCore) || (name === 'cli' && onlyCli),
 );
+const publishesCoreLocally = !skipPush && targets.includes('core');
 const releasePaths = [...targets.map((name) => `packages/${name}/package.json`), 'CHANGELOG.md'];
 assertReleaseSource();
 
@@ -92,7 +93,7 @@ if (!isContinue) {
     console.error('❌ CHANGELOG.md 缺少 `## [Unreleased]` 段落，无法写入新版本');
     process.exit(1);
   }
-  if (!skipPush) assertCiGreenBeforePublish();
+  if (publishesCoreLocally) assertCiGreenBeforePublish();
 }
 
 function assertReleaseSource() {
@@ -279,7 +280,7 @@ if (isContinue) {
     process.exit(1);
   }
   assertReleaseTag(newVersion, true);
-  if (!skipPush) {
+  if (publishesCoreLocally) {
     // A locally prepared version commit has no CI run yet. Check its source commit.
     const prepared = git('git log -1 --format=%s') === `release: v${newVersion}`;
     assertCiGreenBeforePublish(prepared ? 'HEAD^' : 'HEAD');
@@ -324,7 +325,7 @@ for (const name of targets) {
     continue;
   }
   if (name === 'cli') {
-    console.log('  CLI平台包与薄入口由tag CI构建，验证后按拓扑发布');
+    console.log('  Release 等待标签对应提交的 CI 通过，再发布已验证的平台包与薄入口');
     continue;
   }
   const cmd = `pnpm --filter @qcqx/lattice-${name} publish --no-git-checks`;

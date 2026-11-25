@@ -108,6 +108,48 @@ test(
   },
 );
 
+test('CLI-only release pushes the tag without waiting for source CI', { skip }, (t) => {
+  const f = fixture(t);
+  const result = f.run(['patch', '--cli'], { RELEASE_TEST_CI_STATUS: '1' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(f.calls(), /gh run|publish/);
+  assert.match(f.remoteRefs(), /refs\/heads\/master/);
+  assert.match(f.remoteRefs(), /refs\/tags\/v1\.29\.2/);
+  assert.equal(f.git('rev-parse', 'HEAD'), f.git('rev-parse', 'v1.29.2'));
+});
+
+test(
+  'CLI-only continue pushes the prepared version while source CI is unavailable',
+  { skip },
+  (t) => {
+    const f = fixture(t);
+    const local = f.run(['patch', '--cli', '--no-push']);
+    assert.equal(local.status, 0, local.stderr);
+    const prepared = f.git('rev-parse', 'HEAD');
+    const result = f.run(['continue', '--cli'], { RELEASE_TEST_CI_STATUS: '1' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(f.calls(), /gh run|publish/);
+    assert.equal(f.git('rev-parse', 'HEAD'), prepared);
+    assert.match(f.remoteRefs(), /refs\/tags\/v1\.29\.2/);
+  },
+);
+
+test(
+  'a release that includes Core still requires green source CI before making changes',
+  { skip },
+  (t) => {
+    const f = fixture(t);
+    const result = f.run(['patch'], { RELEASE_TEST_CI_STATUS: '1' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /查不到 CI 状态/);
+    assert.match(f.calls(), /gh run list/);
+    assert.doesNotMatch(f.calls(), /build:|publish/);
+    assert.equal(f.git('status', '--porcelain'), '');
+    assert.equal(f.git('tag', '-l'), '');
+    assert.equal(f.remoteRefs(), '');
+  },
+);
+
 test(
   'release continue resumes a locally prepared tag and checks its source commit',
   { skip },

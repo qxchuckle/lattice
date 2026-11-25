@@ -4,6 +4,7 @@ const os = require('os');
 const assert = require('assert');
 const { spawn } = require('child_process');
 const { createServer } = require('net');
+const { performance } = require('node:perf_hooks');
 const { setTimeout: delay } = require('timers/promises');
 const { pathToFileURL } = require('url');
 const { hostTarget } = require('./config.cjs');
@@ -363,6 +364,15 @@ async function smoke(options = {}) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'lattice-distribution-smoke-'));
   const caller = options.callerNode || process.execPath;
   const baselineNode = options.node || process.env.LATTICE_TEST_INSTALL_NODE || process.execPath;
+  const timingsMs = {};
+  let last = performance.now();
+  function recordTiming(phase) {
+    const now = performance.now();
+    const milliseconds = Math.round(now - last);
+    timingsMs[phase] = milliseconds;
+    process.stderr.write(`[smoke] ${phase}: ${milliseconds} ms\n`);
+    last = now;
+  }
   try {
     const { home, env } = fixture(temporary);
     // Extract and MOVE the physical payload, with no reference to the build directory/store.
@@ -395,11 +405,13 @@ async function smoke(options = {}) {
         record.version,
       );
     }
+    recordTiming('relocationAndIntegrity');
     const lifecycleVerified = lifecycle(
       caller,
       entry,
       path.join(temporary, 'standalone-lifecycle'),
     );
+    recordTiming('standaloneLifecycle');
     seed(baselineNode, sourceCore(repo), env, temporary);
     const baseline = JSON.parse(
       run(
@@ -443,6 +455,7 @@ async function smoke(options = {}) {
     assert.strictEqual(rejected.stdout, '');
     assert.deepStrictEqual(fs.readFileSync(db), before);
     write(path.join(payload, 'manifest.json'), manifest);
+    recordTiming('searchAndIncrementalRag');
     let standalone = null;
     if (target.os !== 'win32') {
       const release = path.join(temporary, 'release');
@@ -472,12 +485,14 @@ async function smoke(options = {}) {
         run(standalone, ['--version'], { env, cwd: temporary }).trim(),
         record.version,
       );
+      recordTiming('standaloneInstall');
     }
     const webVerified = await smokeWeb(
       standalone || node,
       target.os === 'win32' ? [entry] : [],
       path.join(temporary, 'standalone-web'),
     );
+    recordTiming('standaloneWeb');
     let npmWebVerified = false;
     let npmVerified = false;
     let npmRepairVerified = false;
@@ -491,6 +506,7 @@ async function smoke(options = {}) {
         npm: options.npm,
         env,
       });
+      recordTiming('npmInstall');
       assert.deepStrictEqual(
         JSON.parse(
           run(caller, [installed, 'search', 'compatibility', '--json'], { env, cwd: temporary }),
@@ -498,6 +514,7 @@ async function smoke(options = {}) {
         baseline,
       );
       lifecycle(caller, installed, path.join(temporary, 'npm-lifecycle'));
+      recordTiming('npmLifecycle');
       const npmRoot = path.dirname(path.dirname(installed));
       const npmPayload = require(path.join(npmRoot, 'scripts/runtime.cjs')).resolvePayload(
         npmRoot,
@@ -543,8 +560,10 @@ async function smoke(options = {}) {
         baseline,
       );
       npmRepairVerified = true;
+      recordTiming('npmRepair');
 
       npmWebVerified = await smokeWeb(caller, [installed], path.join(temporary, 'npm-web'));
+      recordTiming('npmWeb');
       npmVerified = true;
     }
     let embedding;
@@ -668,6 +687,7 @@ async function smoke(options = {}) {
         maxDifference,
       };
     }
+    if (options.modelPath) recordTiming('localModel');
     return {
       target: target.id,
       caller: run(caller, ['--version']).trim(),
@@ -685,9 +705,12 @@ async function smoke(options = {}) {
       lifecycleVerified,
       embedding,
       realModelCli,
+      timingsMs,
     };
   } finally {
+    last = performance.now();
     fs.rmSync(temporary, { recursive: true, force: true });
+    recordTiming('cleanup');
   }
 }
 module.exports = { smoke, legacySmoke, fixture, seed, sourceCore, payloadCore };
